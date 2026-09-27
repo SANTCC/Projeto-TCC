@@ -157,6 +157,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const navio = naviosListLocal.find(n => n.nome === navioNome);
 
+      // Tarefa 9.3: Bloqueio de duplicidade de pedido de manutenção para o mesmo navio
+      const osExistente = osList.find(o => o.equipamento.includes(navioNome) && o.status !== 'CONCLUIDA' && o.status !== 'REPROVADA');
+      if (osExistente) {
+        const msgBloqueio = `BLOQUEIO DE DUPLICIDADE (Tarefa 9): O navio "${navioNome}" já possui uma solicitação ou ordem de serviço de manutenção ativa (${osExistente.id} - ${osExistente.status}). Não é permitido abrir solicitações duplicadas!`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Manutenção Ativa', msgBloqueio);
+        return;
+      }
+
       // Item 17: Regra da Manutenção Geral (Requer >= 3 anos de uso / 1095 dias)
       if (tipoManut === 'GERAL') {
         const agora = Date.now();
@@ -280,6 +288,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!descricao) return;
 
     const gnd = guindastesList.find(x => x.identificacao === identificacao);
+
+    // Tarefa 9.3: Não permite pedir mais de uma manutenção para o mesmo guindaste
+    if (gnd && gnd.estado === 'EM_MANUTENCAO') {
+      const msg = `BLOQUEIO DE DUPLICIDADE (Tarefa 9): O guindaste "${identificacao}" já se encontra em manutenção. Não é permitido solicitar manutenção duplicada!`;
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Guindaste em Manutenção', msg);
+      return;
+    }
+
     if (gnd) gnd.estado = 'EM_MANUTENCAO';
 
     const newOsId = `OS-2026-${Math.floor(100 + Math.random() * 900)}`;
@@ -417,6 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
               prioridade: prioridade,
               descricao: descLimpa,
               status: statusLocal,
+              data: m.created_at ? new Date(m.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
               rawDbId: m.id
             };
           });
@@ -455,6 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }">${os.prioridade}</span>
         </td>
         <td class="p-3 text-xs">${os.descricao}</td>
+        <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${os.data || 'N/A'}</td>
         <td class="p-3 font-mono text-xs">
           <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
             os.status === 'EM_MANUTENCAO' ? 'bg-amber-100 text-amber-800' :
@@ -523,13 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
         osSelect.innerHTML += '</optgroup>';
       }
 
-      if (navs.length > 0) {
-        osSelect.innerHTML += '<optgroup label="Embarcações (Navios)">';
-        navs.forEach(n => {
-          osSelect.innerHTML += `<option value="Navio ${n.nome}">Navio ${n.nome}</option>`;
-        });
-        osSelect.innerHTML += '</optgroup>';
-      }
+      // Tarefa 9.2: Opção de pedir manutenção de navios REMOVIDA de Ordens de Serviço (deixada apenas em Solicitação de Manutenção de Embarcações)
     }
 
     if (alertaList) {
@@ -566,6 +578,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!equipamento) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Selecione um equipamento para abrir a Ordem de Serviço.');
+        return;
+      }
+
+      // Tarefa 9.3: Bloqueio de duplicidade de pedido de manutenção para o mesmo equipamento
+      const osExistente = osList.find(o => o.equipamento === equipamento && o.status !== 'CONCLUIDA' && o.status !== 'REPROVADA');
+      if (osExistente) {
+        const msgBloqueio = `BLOQUEIO DE DUPLICIDADE (Tarefa 9): O equipamento "${equipamento}" já possui uma ordem de serviço de manutenção ativa (${osExistente.id} - ${osExistente.status}). Não é permitido abrir solicitações duplicadas!`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Equipamento em Manutenção', msgBloqueio);
         return;
       }
 

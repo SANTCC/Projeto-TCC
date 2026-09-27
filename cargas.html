@@ -80,25 +80,6 @@
           </button>
         </div>
 
-        <!-- Painel de Berços de Descarga do Terminal STS-01 (Point 3) -->
-        <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
-          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500 text-[22px]">dock</span>
-              <div>
-                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Painel de Berços de Descarga do Terminal STS-01</h3>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400">Direcionamento obrigatório das cargas aos berços livres na chegada (Point 3 / RF 2)</p>
-              </div>
-            </div>
-            <span id="bercosLivresCountTag" class="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-mono text-xs font-bold">
-              -- Berços Livres
-            </span>
-          </div>
-
-          <div id="bercosGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            <!-- Renderizado via JS -->
-          </div>
-        </div>
 
         <!-- Formulário de Agendamento com Trava de Pré-requisito (RF 2 / RN 13 / RF 17.1) -->
         <form id="agendamentoCargaForm" class="hidden bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
@@ -132,9 +113,12 @@
             <input type="text" id="agNatureza" required placeholder="Ex: Agrícola / Perecível" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
           </div>
           <div>
-            <label class="block font-bold text-slate-500 mb-1">Ponto de Descarga (Berço Livre - Point 3)</label>
+            <label class="block font-bold text-slate-500 mb-1">Setor do Pátio (Ponto de Descarga)</label>
             <select id="agPortoDescarga" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-nexus-900 dark:text-white">
-              <option value="">Selecione um Berço Livre...</option>
+              <option value="Pátio Principal (Setor A)">Pátio Principal (Setor A)</option>
+              <option value="Pátio STS-01 (Setor B)">Pátio STS-01 (Setor B)</option>
+              <option value="Pátio STS-01 (Setor C)">Pátio STS-01 (Setor C)</option>
+              <option value="Pátio STS-01 (Setor Refrigeração)">Pátio STS-01 (Setor Refrigeração)</option>
             </select>
           </div>
           <div>

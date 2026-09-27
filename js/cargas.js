@@ -47,56 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Gestão e Painel de Berços Livres
-  const bercosGrid = document.getElementById('bercosGrid');
-  const bercosLivresTag = document.getElementById('bercosLivresCountTag');
-  const selectPortoDescarga = document.getElementById('agPortoDescarga');
-
-  let bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-
-  function renderBercosPanel() {
-    bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-    const livres = bercosList.filter(b => b.estado === 'LIVRE');
-
-    if (bercosLivresTag) {
-      bercosLivresTag.textContent = `${livres.length} Berço(s) Livre(s)`;
-    }
-
-    if (bercosGrid) {
-      bercosGrid.innerHTML = bercosList.map(b => `
-        <div class="p-3 rounded-xl border ${
-          b.estado === 'LIVRE' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60' :
-          b.estado === 'OCUPADO' ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60' :
-          'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'
-        } flex flex-col gap-1 text-xs">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-nexus-900 dark:text-white">${b.nome}</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-              b.estado === 'LIVRE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
-              b.estado === 'OCUPADO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
-              'bg-slate-200 text-slate-800'
-            }">${b.estado}</span>
-          </div>
-          <span class="text-[11px] text-slate-500 font-mono">
-            ${b.estado === 'OCUPADO' ? `Alocado: <strong class="text-nexus-500">${b.carga_id || 'Carga Ativa'}</strong>` : 'Pronto para atracação'}
-          </span>
-        </div>
-      `).join('');
-    }
-
-    if (selectPortoDescarga) {
-      selectPortoDescarga.innerHTML = '<option value="">Selecione um Berço Livre (Point 3)...</option>';
-      if (livres.length === 0) {
-        selectPortoDescarga.innerHTML = '<option value="" disabled>Nenhum Berço Livre disponível no momento</option>';
-      } else {
-        livres.forEach(b => {
-          selectPortoDescarga.innerHTML += `<option value="${b.nome}">${b.nome} (Livre)</option>`;
-        });
-      }
-    }
-  }
-
-  renderBercosPanel();
+  function renderBercosPanel() {}
 
   let currentEntityData = null;
 
@@ -323,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (!portoDescarga) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Ponto de Descarga', 'BLOQUEIO: É obrigatório selecionar um Berço Livre como Ponto de Descarga na chegada da carga!');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Ponto de Descarga', 'BLOQUEIO: É obrigatório selecionar o Setor do Pátio para descarga!');
         return;
       }
 
@@ -356,14 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
         qrCode: newQrCode
       };
 
-      // Ocupa o Berço Livre selecionado para a carga (Point 3)
-      const targetBerco = bercosList.find(b => b.nome === portoDescarga);
-      if (targetBerco) {
-        targetBerco.estado = 'OCUPADO';
-        targetBerco.carga_id = newId;
-        localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-        renderBercosPanel();
-      }
 
       cargasFluxoList.push(novaCarga);
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
@@ -771,16 +714,6 @@ document.addEventListener('DOMContentLoaded', () => {
         carga.navio = '';
         carga.navio_id = null;
 
-        // Ocupa novamente o berço para a carga cancelada
-        bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-        const bercoLivre = bercosList.find(b => b.estado === 'LIVRE');
-        if (bercoLivre) {
-          bercoLivre.estado = 'OCUPADO';
-          bercoLivre.carga_id = `${idCarga} (CANCELADA)`;
-          carga.portoDescarga = bercoLivre.nome;
-          localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-          renderBercosPanel();
-        }
 
         if (window.registrarTrailDecisao) {
           await window.registrarTrailDecisao('CANCELOU_ENTREGA', idCarga, motivo);
