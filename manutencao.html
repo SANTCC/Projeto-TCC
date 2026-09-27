@@ -162,45 +162,17 @@
           </form>
         </div>
 
-        <!-- Seção de Guindastes do Porto (Point 2 / Spec.md RF 2, T2.7) -->
+        <!-- Seção de Solicitação de Manutenção de Guindastes (Point 2 / Spec.md RF 2, T2.7 / Tarefa 10) -->
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500 text-[22px]">precision_manufacturing</span>
               <div>
-                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Guindastes e Pórticos de Pátio (Ship-to-Shore)</h3>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400">Cadastro (Inspetor) e solicitação de manutenção (Supervisor) - RF 2 / T2.7</p>
+                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Solicitações de Manutenção de Guindastes e Pórticos</h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">Solicitação de manutenção (Supervisor) e conclusão de serviços - Tarefa 10</p>
               </div>
             </div>
-            <button id="toggleGuindasteFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
-              <span class="material-symbols-outlined text-[16px]">add</span>
-              <span>+ Novo Guindaste (Inspetor)</span>
-            </button>
           </div>
-
-          <form id="guindasteForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div>
-              <label class="block font-bold text-slate-500 mb-1">Número de Identificação</label>
-              <input type="text" id="gndNumero" required placeholder="Ex: GND-03-STS" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold" />
-            </div>
-            <div>
-              <label class="block font-bold text-slate-500 mb-1">Data da Última Manutenção</label>
-              <input type="date" id="gndDataManut" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
-            </div>
-            <div>
-              <label class="block font-bold text-slate-500 mb-1">Estado Inicial</label>
-              <select id="gndEstado" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
-                <option value="OPERANTE">OPERANTE</option>
-                <option value="EM_MANUTENCAO">EM MANUTENÇÃO</option>
-              </select>
-            </div>
-            <div class="sm:col-span-3 flex justify-end">
-              <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">save</span>
-                <span>Cadastrar Guindaste</span>
-              </button>
-            </div>
-          </form>
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
@@ -266,6 +238,7 @@
                   <th class="p-3">Equipamento</th>
                   <th class="p-3">Prioridade</th>
                   <th class="p-3">Descrição da Falha</th>
+                  <th class="p-3">Data Manutenção</th>
                   <th class="p-3">Status OS</th>
                   <th class="p-3 text-right">Ações do Supervisor</th>
                 </tr>

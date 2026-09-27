@@ -124,10 +124,22 @@
           </div>
 
           <!-- Formulário de Designação de Substituto -->
-          <form id="delegacaoForm" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-2">
+          <form id="delegacaoForm" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs pt-2">
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Funcionário Substituto (Matrícula)</label>
-              <input type="text" id="delegSubstitutoMatricula" required placeholder="Ex: MAT-6090 (Inspetor)" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+              <label class="block font-bold text-slate-500 mb-1">Matrícula do Funcionário Substituído</label>
+              <input type="text" id="delegSubstituidoMatricula" required placeholder="Ex: MAT-2001 (Supervisor)" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-500 mb-1">Nome do Funcionário Substituto</label>
+              <input type="text" id="delegSubstitutoNome" required placeholder="Ex: Carlos Eduardo Silva" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-500 mb-1">CPF do Funcionário Substituto</label>
+              <input type="text" id="delegSubstitutoCpf" required placeholder="Ex: 000.000.000-00" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-500 mb-1">Data de Nasc. do Substituto</label>
+              <input type="date" id="delegSubstitutoDataNasc" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
             </div>
             <div>
               <label class="block font-bold text-slate-500 mb-1">Início da Vigência</label>
@@ -137,7 +149,7 @@
               <label class="block font-bold text-slate-500 mb-1">Fim da Vigência</label>
               <input type="datetime-local" id="delegDataFim" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
             </div>
-            <div class="sm:col-span-3 flex justify-end pt-2">
+            <div class="sm:col-span-2 md:col-span-3 flex justify-end pt-2">
               <button type="submit" class="px-5 py-2.5 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm">
                 <span class="material-symbols-outlined text-[18px]">how_to_reg</span>
                 <span>Designar Substituto Temporário</span>

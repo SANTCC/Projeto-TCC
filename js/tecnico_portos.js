@@ -574,8 +574,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const nome = document.getElementById('visNome').value.trim();
       const documento = document.getElementById('visDocumento').value.trim();
       const motivo = document.getElementById('visMotivo').value.trim();
-      const statusElem = document.getElementById('visStatus');
-      const status = statusElem ? statusElem.value : 'EM_VISITA';
+      // Tarefa 13: Status inicial automático em "EM_VISITA"
+      const status = 'EM_VISITA';
 
       // Item 15: Validação do CPF com dígitos verificadores
       const docClean = documento.replace(/\D/g, '');

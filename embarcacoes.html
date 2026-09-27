@@ -107,6 +107,26 @@
           </div>
         </div>
 
+        <!-- Painel de Berços de Descarga do Terminal STS-01 (15 Berços para Navios) -->
+        <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-nexus-500 text-[22px]">dock</span>
+              <div>
+                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Painel de Berços de Descarga do Terminal STS-01</h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">Total de 15 berços disponíveis para atracação exclusiva de navios (1 navio por berço)</p>
+              </div>
+            </div>
+            <span id="bercosLivresCountTag" class="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-mono text-xs font-bold">
+              -- Berços Livres
+            </span>
+          </div>
+
+          <div id="bercosGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            <!-- Renderizado via JS -->
+          </div>
+        </div>
+
         <!-- Tabela de Rastreamento GPS Marítimo e Cadastro de Embarcações (RF 2 / RF 5 / RN 8) -->
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between pb-3 border-b border-nexus-border dark:border-nexus-dark-border">
@@ -212,8 +232,14 @@
               <input type="date" id="contFabricacao" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Data Última Manutenção</label>
-              <input type="date" id="contManutencao" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
+              <div class="flex items-center justify-between mb-1">
+                <label class="block font-bold text-slate-500">Data Última Manut.</label>
+                <label class="flex items-center gap-1 text-[11px] text-slate-500 font-normal cursor-pointer">
+                  <input type="checkbox" id="contSemManutencaoCheckbox" class="rounded border-slate-300" />
+                  Sem Manutenção
+                </label>
+              </div>
+              <input type="date" id="contManutencao" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
               <label class="block font-bold text-slate-500 mb-1">Ref. Tempo de Uso (Supervisor - RN 7)</label>
@@ -241,9 +267,66 @@
                   <th class="p-3">Referência Tempo Uso (RN 7)</th>
                   <th class="p-3">Navio Vinculado</th>
                   <th class="p-3">Estado Operacional</th>
+                  <th class="p-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody id="containersTableBody" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">
+                <!-- Renderizado via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Cadastro de Guindastes e Pórticos de Pátio (Ship-to-Shore) (Tarefa 10) -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-nexus-500 text-[22px]">precision_manufacturing</span>
+              <div>
+                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Cadastro de Guindastes e Pórticos de Pátio (Ship-to-Shore)</h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">Cadastro oficial de equipamentos e maquinários portuários (Inspetor) - Tarefa 10</p>
+              </div>
+            </div>
+            <button id="toggleGuindasteFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">add</span>
+              <span>+ Novo Guindaste (Inspetor)</span>
+            </button>
+          </div>
+
+          <form id="guindasteForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label class="block font-bold text-slate-500 mb-1">Número de Identificação</label>
+              <input type="text" id="gndNumero" required placeholder="Ex: GND-03-STS" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-500 mb-1">Data da Última Manutenção</label>
+              <input type="date" id="gndDataManut" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-500 mb-1">Estado Inicial</label>
+              <select id="gndEstado" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
+                <option value="OPERANTE">OPERANTE</option>
+                <option value="EM_MANUTENCAO">EM MANUTENÇÃO</option>
+              </select>
+            </div>
+            <div class="sm:col-span-3 flex justify-end">
+              <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px]">save</span>
+                <span>Cadastrar Guindaste</span>
+              </button>
+            </div>
+          </form>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">
+                <tr>
+                  <th class="p-3">Identificação</th>
+                  <th class="p-3">Estado</th>
+                  <th class="p-3">Última Manutenção</th>
+                </tr>
+              </thead>
+              <tbody id="guindastesTableBody" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">
                 <!-- Renderizado via JS -->
               </tbody>
             </table>

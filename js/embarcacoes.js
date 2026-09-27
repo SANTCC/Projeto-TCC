@@ -17,6 +17,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let naviosList = [];
 
+  // Gestão e Painel de Berços Livres do Terminal STS-01 (15 Berços para Navios)
+  const bercosGrid = document.getElementById('bercosGrid');
+  const bercosLivresTag = document.getElementById('bercosLivresCountTag');
+
+  let bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+  if (!Array.isArray(bercosList) || bercosList.length < 15) {
+    const existingMap = new Map();
+    if (Array.isArray(bercosList)) {
+      bercosList.forEach(b => existingMap.set(b.nome, b));
+    }
+    bercosList = Array.from({ length: 15 }, (_, i) => {
+      const num = String(i + 1).padStart(2, '0');
+      const nomeBerco = `Berço ${num}`;
+      return existingMap.get(nomeBerco) || {
+        id: `BERCO-${num}`,
+        nome: nomeBerco,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null
+      };
+    });
+    localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+  }
+
+  function renderBercosPanel() {
+    bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+    // Garante 15 berços
+    if (bercosList.length < 15) {
+      const existingMap = new Map(bercosList.map(b => [b.nome, b]));
+      bercosList = Array.from({ length: 15 }, (_, i) => {
+        const num = String(i + 1).padStart(2, '0');
+        const nomeBerco = `Berço ${num}`;
+        return existingMap.get(nomeBerco) || { id: `BERCO-${num}`, nome: nomeBerco, estado: 'LIVRE', navio_nome: null, navio_imo: null };
+      });
+      localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+    }
+
+    const livres = bercosList.filter(b => b.estado === 'LIVRE');
+
+    if (bercosLivresTag) {
+      bercosLivresTag.textContent = `${livres.length} Berço(s) Livre(s)`;
+    }
+
+    if (bercosGrid) {
+      bercosGrid.innerHTML = bercosList.map(b => `
+        <div class="p-3 rounded-xl border ${
+          b.estado === 'LIVRE' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60' :
+          b.estado === 'OCUPADO' ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60' :
+          'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'
+        } flex flex-col gap-1 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-nexus-900 dark:text-white">${b.nome}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+              b.estado === 'LIVRE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+              b.estado === 'OCUPADO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+              'bg-slate-200 text-slate-800'
+            }">${b.estado}</span>
+          </div>
+          <span class="text-[11px] text-slate-500 font-mono">
+            ${b.estado === 'OCUPADO' ? `Navio: <strong class="text-nexus-500">${b.navio_nome || b.carga_id || 'Navio Alocado'}</strong>` : 'Pronto para atracação'}
+          </span>
+        </div>
+      `).join('');
+    }
+  }
+
+  renderBercosPanel();
+
   // Cálculo de ETA a 33 km/h
   function calcularETA(distanciaKm) {
     if (!distanciaKm || distanciaKm <= 0) return 'Atracado / Viagem Concluída';
@@ -159,17 +227,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // RN 3: Liberação de saída de navios é competência do Supervisor de Operações e Direção
       const podeLiberarNavio = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
-      let acoesHtml = '';
+
+      let acoesHtml = '<div class="flex items-center justify-end gap-1.5 font-mono text-[11px] flex-wrap">';
+
+      // Botão Vincular a Berço (Tarefa 6)
+      acoesHtml += `<button type="button" onclick="window.vincularNavioABerco('${n.imo}')" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
 
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
-          acoesHtml = `<button type="button" onclick="window.liberarNavioPeloDiretor('${n.imo}')" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px]">Liberar Saída</button>`;
-        } else if (n.localizacao === 'FORA_DO_PORTO' || n.localizacao === 'NO_PORTO_DE_DESTINO') {
-          acoesHtml = `<button type="button" onclick="window.autorizarRetornoNavio('${n.imo}')" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px]">Autorizar Retorno</button>`;
+          acoesHtml += `<button type="button" onclick="window.liberarNavioPeloDiretor('${n.imo}')" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Liberar Saída</button>`;
+        } else if (n.localizacao === 'NO_PORTO_DE_DESTINO') {
+          acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio('${n.imo}')" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Autorizar Retorno</button>`;
+        } else if (n.localizacao === 'FORA_DO_PORTO') {
+          acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio('${n.imo}')" class="px-2.5 py-1 rounded bg-slate-400 text-white font-bold cursor-not-allowed" title="Navio precisa chegar ao porto de destino antes de autorizar retorno">Autorizar Retorno</button>`;
         }
-      } else {
-        acoesHtml = `<span class="text-slate-400 font-mono italic text-[10px]">Exclusivo Supervisor/Diretor</span>`;
       }
+
+      // Botão Excluir Navio (Tarefa 6)
+      acoesHtml += `<button type="button" onclick="window.excluirNavio('${n.imo}')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>`;
+
+      acoesHtml += '</div>';
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -297,6 +374,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
+
+    // Tarefa 7: A autorização de retorno só é permitida se o navio já tiver chegado ao porto de destino
+    if (navio.localizacao !== 'NO_PORTO_DE_DESTINO') {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', 'Retorno Não Permitido', `O retorno do navio "${navio.nome}" para o porto de origem só pode ser autorizado quando ele já estiver chegado ao porto de destino! Status atual: ${navio.localizacao}.`);
+      }
+      return;
+    }
 
     // RN 9: Bloqueia saída se NÃO houver rota cadastrada entre a origem e o destino do navio
     const origBusca = (navio.origem || 'Porto de Santos').trim().toLowerCase();
@@ -430,6 +515,110 @@ document.addEventListener('DOMContentLoaded', () => {
       renderGpsTable();
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Retorno Autorizado', `Retorno do navio ${navio.nome} ao porto ${navio.destino} autorizado com sucesso!`);
+      }
+    }
+  };
+
+  // Vincular Navio a um dos 15 Berços (Tarefa 6)
+  window.vincularNavioABerco = async function(imo) {
+    const navio = naviosList.find(n => n.imo === imo);
+    if (!navio) return;
+
+    bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+    const bercosLivres = bercosList.filter(b => b.estado === 'LIVRE');
+
+    if (bercosLivres.length === 0) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Berços Indisponíveis', 'Nenhum berço desocupado disponível no momento para vinculação do navio.');
+      }
+      return;
+    }
+
+    const optionsText = bercosLivres.map((b, idx) => `${idx + 1} - ${b.nome}`).join('\n');
+    const selecao = await window.nexusPrompt('Vincular Navio a Berço', `Selecione um Berço Desocupado para o navio ${navio.nome} (${navio.imo}):\n${optionsText}`);
+
+    if (!selecao) return;
+
+    const idxSel = parseInt(selecao, 10) - 1;
+    if (!isNaN(idxSel) && bercosLivres[idxSel]) {
+      const bercoAlvo = bercosLivres[idxSel];
+
+      // Desocupa berço anterior do navio se houver
+      bercosList.forEach(b => {
+        if (b.navio_imo === imo || b.navio_nome === navio.nome) {
+          b.estado = 'LIVRE';
+          b.navio_nome = null;
+          b.navio_imo = null;
+        }
+      });
+
+      const bercoReal = bercosList.find(b => b.nome === bercoAlvo.nome);
+      if (bercoReal) {
+        bercoReal.estado = 'OCUPADO';
+        bercoReal.navio_nome = navio.nome;
+        bercoReal.navio_imo = navio.imo;
+      }
+
+      localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+      renderBercosPanel();
+      renderGpsTable();
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Navio ${navio.nome} vinculado ao ${bercoAlvo.nome}`);
+      }
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Navio Vinculado', `Navio ${navio.nome} vinculado com sucesso ao ${bercoAlvo.nome}!`);
+      }
+    } else {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Seleção de berço inválida.');
+    }
+  };
+
+  // Excluir Navio (Tarefa 6)
+  window.excluirNavio = async function(imo) {
+    const navio = naviosList.find(n => n.imo === imo);
+    if (!navio) return;
+
+    const confirmou = window.nexusConfirm
+      ? await window.nexusConfirm('Excluir Navio', `Tem certeza que deseja EXCLUIR o navio ${navio.nome} (${navio.imo})? essa ação desocupará berços e removerá o navio do sistema.`)
+      : true;
+
+    if (confirmou) {
+      naviosList = naviosList.filter(n => n.imo !== imo);
+      localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+
+      // Desocupa o navio de qualquer berço
+      bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+      bercosList.forEach(b => {
+        if (b.navio_imo === imo || b.navio_nome === navio.nome) {
+          b.estado = 'LIVRE';
+          b.navio_nome = null;
+          b.navio_imo = null;
+        }
+      });
+      localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+
+      if (window.nexusSupabase) {
+        try {
+          await window.nexusSupabase.from('navios').delete().eq('numero_imo', imo);
+        } catch (e) {
+          console.warn('Erro ao excluir navio no Supabase:', e);
+        }
+      }
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EXCLUSAO', 'navios', navio.id || null, `Navio ${navio.nome} (${imo}) excluído do sistema`);
+      }
+
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('navios');
+      }
+
+      renderBercosPanel();
+      renderGpsTable();
+
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Navio Excluído', `Navio ${navio.nome} (${imo}) excluído com sucesso do sistema.`);
       }
     }
   };
@@ -621,19 +810,144 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join(' ');
       }
 
+      const manutDisplay = c.dataManut || 'Sem Manutenção';
+
+      let contAcoesHtml = `
+        <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
+          <button type="button" onclick="window.vincularContainerANavio('${c.identificacao}')" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>
+          <button type="button" onclick="window.excluirContainer('${c.identificacao}')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+        </div>
+      `;
+
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
           <td class="p-3 font-mono font-bold text-nexus-500">${c.identificacao}</td>
           <td class="p-3 font-bold">${c.tipo}</td>
           <td class="p-3 font-mono text-xs">${cargasVinculadasHtml}</td>
-          <td class="p-3 font-mono text-xs">Fab: ${c.dataFabr}<br>Manut: ${c.dataManut}</td>
+          <td class="p-3 font-mono text-xs">Fab: ${c.dataFabr}<br>Manut: ${manutDisplay}</td>
           <td class="p-3 font-mono text-xs"><span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-bold">${c.refTempo}</span></td>
           <td class="p-3 font-bold text-xs">${c.navio || 'Não Vinculado'}</td>
           <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[10px] font-bold">${c.estado}</span></td>
+          <td class="p-3 text-right whitespace-nowrap">${contAcoesHtml}</td>
         </tr>
       `;
     }).join('');
   }
+
+  // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
+  window.vincularContainerANavio = async function(contIdentificacao) {
+    const cont = containersList.find(c => (c.identificacao || '').toUpperCase() === contIdentificacao.toUpperCase());
+    if (!cont) return;
+
+    if (naviosList.length === 0) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Navios Indisponíveis', 'Nenhum navio cadastrado no sistema para vinculação de contêiner.');
+      }
+      return;
+    }
+
+    const optionsText = naviosList.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo}) [${n.localizacao}]`).join('\n');
+    const selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao}:\n${optionsText}`);
+
+    if (!selecao) return;
+
+    const idxSel = parseInt(selecao, 10) - 1;
+    if (!isNaN(idxSel) && naviosList[idxSel]) {
+      const navioAlvo = naviosList[idxSel];
+
+      // Validação de Capacidade Rígida (OBS Tarefa 8): max 15.000 toneladas e ~300 metros de espaço
+      // Calcula peso e quantidade de contêineres atualmente alocados ao navioAlvo
+      const contsDoNavio = containersList.filter(c => (c.navio || '').toLowerCase() === navioAlvo.nome.toLowerCase() || c.navio_id === navioAlvo.id);
+
+      const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      let pesoTotalNavioTons = 0;
+
+      cargasFluxo.filter(crg => crg.navio && crg.navio.toLowerCase() === navioAlvo.nome.toLowerCase()).forEach(crg => {
+        pesoTotalNavioTons += parseFloat(crg.peso) || 0;
+      });
+
+      // Cada contêiner ocupa aproximadamente 12m de comprimento e em média 25t
+      const espacoOcupadoMetros = (contsDoNavio.length + 1) * 12; // 300m max => aprox 25 contêineres
+      const pesoEstimadoComNovo = pesoTotalNavioTons + 25; // 25t por contêiner padrão
+
+      const LIMITE_PESO_TONS = 15000;
+      const LIMITE_ESPACO_METROS = 300;
+
+      if (pesoEstimadoComNovo > LIMITE_PESO_TONS || espacoOcupadoMetros > LIMITE_ESPACO_METROS) {
+        const msgErro = `BLOQUEIO DE CAPACIDADE (Tarefa 8): O navio "${navioAlvo.nome}" não possui suporte para vincular este contêiner! Capacidade limite excedida: O navio suporta no máximo 15.000 toneladas e 300 metros de espaço.`;
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Capacidade Excedida', msgErro);
+        }
+        return;
+      }
+
+      cont.navio = navioAlvo.nome;
+      cont.navio_id = navioAlvo.id;
+
+      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+
+      if (window.nexusSupabase) {
+        try {
+          await window.nexusSupabase.from('containers')
+            .update({ navio_id: navioAlvo.id })
+            .eq('numero_identificacao', cont.identificacao);
+        } catch (e) {
+          console.warn('Erro ao atualizar vinculação de contêiner no Supabase:', e);
+        }
+      }
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EDICAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} vinculado ao navio ${navioAlvo.nome}`);
+      }
+
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('containers');
+      }
+
+      renderContainersTable();
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Contêiner Vinculado', `Contêiner ${cont.identificacao} vinculado com sucesso ao navio ${navioAlvo.nome}!`);
+      }
+    } else {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Seleção de navio inválida.');
+    }
+  };
+
+  // Excluir Contêiner (Tarefa 8)
+  window.excluirContainer = async function(contIdentificacao) {
+    const cont = containersList.find(c => (c.identificacao || '').toUpperCase() === contIdentificacao.toUpperCase());
+    if (!cont) return;
+
+    const confirmou = window.nexusConfirm
+      ? await window.nexusConfirm('Excluir Contêiner', `Tem certeza que deseja EXCLUIR o contêiner ${cont.identificacao}? Essa ação o removerá do sistema.`)
+      : true;
+
+    if (confirmou) {
+      containersList = containersList.filter(c => (c.identificacao || '').toUpperCase() !== contIdentificacao.toUpperCase());
+      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+
+      if (window.nexusSupabase) {
+        try {
+          await window.nexusSupabase.from('containers').delete().eq('numero_identificacao', contIdentificacao);
+        } catch (e) {
+          console.warn('Erro ao excluir contêiner no Supabase:', e);
+        }
+      }
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EXCLUSAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} excluído do sistema`);
+      }
+
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('containers');
+      }
+
+      renderContainersTable();
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Contêiner Excluído', `Contêiner ${contIdentificacao} excluído com sucesso do sistema.`);
+      }
+    }
+  };
 
   carregarContainersSupabase();
 
@@ -650,6 +964,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const semManutCheckbox = document.getElementById('contSemManutencaoCheckbox');
+  const contManutInput = document.getElementById('contManutencao');
+
+  if (semManutCheckbox && contManutInput) {
+    semManutCheckbox.addEventListener('change', () => {
+      if (semManutCheckbox.checked) {
+        contManutInput.value = '';
+        contManutInput.disabled = true;
+      } else {
+        contManutInput.disabled = false;
+      }
+    });
+  }
+
   if (containerForm) {
     containerForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -662,7 +990,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const identificacao = document.getElementById('contIdentificacao').value.trim().toUpperCase();
       const tipo = document.getElementById('contTipo').value.trim();
       const dataFabr = document.getElementById('contFabricacao').value;
-      const dataManut = document.getElementById('contManutencao').value;
+      let dataManut = document.getElementById('contManutencao').value;
+      if (semManutCheckbox && semManutCheckbox.checked) {
+        dataManut = 'Sem Manutenção';
+      } else if (!dataManut) {
+        dataManut = 'Sem Manutenção';
+      }
       const refTempo = document.getElementById('contRefTempo').value;
 
       // Item 13: Validação de unicidade do código de contêiner
@@ -725,9 +1058,132 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // CRUD e Cadastro de Guindastes na página Embarcações & GPS (Tarefa 10)
+  const toggleGuindasteBtn = document.getElementById('toggleGuindasteFormBtn');
+  const guindasteForm = document.getElementById('guindasteForm');
+  const guindastesTableBody = document.getElementById('guindastesTableBody');
+
+  let guindastesList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+
+  async function carregarGuindastesSupabase() {
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('guindastes').select('*');
+        if (!error && Array.isArray(data)) {
+          guindastesList = data.map(g => ({
+            id: g.id || g.numero_identificacao,
+            identificacao: g.numero_identificacao,
+            estado: g.estado || 'OPERANTE',
+            dataManut: g.data_ultima_manutencao || ''
+          }));
+          localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+          renderGuindastesTable();
+          return;
+        }
+      } catch (err) {
+        console.warn('[NexusPort] Erro ao carregar guindastes do Supabase:', err);
+      }
+    }
+    renderGuindastesTable();
+  }
+
+  function renderGuindastesTable() {
+    if (!guindastesTableBody) return;
+
+    if (guindastesList.length === 0) {
+      guindastesTableBody.innerHTML = `
+        <tr>
+          <td colspan="3" class="p-4 text-center text-slate-400 italic">Nenhum guindaste cadastrado no banco de dados.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    guindastesTableBody.innerHTML = guindastesList.map(g => `
+      <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+        <td class="p-3 font-mono font-bold text-nexus-500">${g.identificacao}</td>
+        <td class="p-3">
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+            g.estado === 'OPERANTE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+            'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+          }">${g.estado}</span>
+        </td>
+        <td class="p-3 font-mono text-xs">${g.dataManut || 'N/A'}</td>
+      </tr>
+    `).join('');
+  }
+
+  carregarGuindastesSupabase();
+
+  if (toggleGuindasteBtn && guindasteForm) {
+    if (!isInspetorRole) toggleGuindasteBtn.classList.add('hidden');
+    toggleGuindasteBtn.addEventListener('click', () => {
+      if (!isInspetorRole) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos guindastes!');
+        }
+        return;
+      }
+      guindasteForm.classList.toggle('hidden');
+    });
+  }
+
+  if (guindasteForm) {
+    guindasteForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!isInspetorRole) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Cadastro de guindastes é de responsabilidade do Inspetor!');
+        return;
+      }
+
+      const identificacao = document.getElementById('gndNumero').value.trim().toUpperCase();
+      const dataManut = document.getElementById('gndDataManut').value;
+      const estado = document.getElementById('gndEstado').value;
+
+      const gndExistente = guindastesList.find(g => (g.identificacao || '').toUpperCase() === identificacao);
+      if (gndExistente) {
+        const msg = `O guindaste "${identificacao}" já está cadastrado no sistema.`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Guindaste Duplicado', msg);
+        return;
+      }
+
+      const novoGnd = { id: identificacao, identificacao, estado, dataManut };
+      guindastesList.push(novoGnd);
+      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+
+      if (window.nexusSupabase) {
+        try {
+          const { data: insGnd } = await window.nexusSupabase.from('guindastes').insert({
+            numero_identificacao: identificacao,
+            estado,
+            data_ultima_manutencao: dataManut || null
+          }).select('id').single();
+
+          if (window.registrarLogAlteracao) {
+            await window.registrarLogAlteracao('CRIACAO', 'guindastes', insGnd ? insGnd.id : null, { numero_identificacao: identificacao, estado });
+          }
+          if (window.NexusRepository && window.NexusRepository.notifyChange) {
+            window.NexusRepository.notifyChange('guindastes');
+          }
+        } catch (err) {
+          console.warn('[NexusPort] Erro ao sincronizar guindaste com Supabase:', err);
+        }
+      }
+
+      renderGuindastesTable();
+      guindasteForm.reset();
+      guindasteForm.classList.add('hidden');
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Guindaste Cadastrado', `Guindaste ${identificacao} cadastrado com sucesso pelo Inspetor!`);
+      }
+    });
+  }
+
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {
     carregarNaviosSupabase();
     carregarContainersSupabase();
+    carregarGuindastesSupabase();
+    renderBercosPanel();
   });
 });
