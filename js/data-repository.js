@@ -26,11 +26,12 @@
       const client = this.getSupabase();
       if (client) {
         try {
-          const { data, error } = await client
+          const { data, error, count } = await client
             .from('funcionarios')
-            .select('*')
+            .select('*', { count: 'exact' })
             .order('nome', { ascending: true });
-          if (!error && data) {
+          if (!error && Array.isArray(data)) {
+            localStorage.setItem('nexus_func_list', JSON.stringify(data));
             return data;
           }
         } catch (err) {
@@ -50,21 +51,13 @@
           if (funcionario.id) {
             await client.from('funcionarios').update(funcionario).eq('id', funcionario.id);
           } else {
-            await client.from('funcionarios').insert(funcionario);
+            const { data } = await client.from('funcionarios').insert(funcionario).select().maybeSingle();
+            if (data && data.id) funcionario.id = data.id;
           }
         } catch (err) {
           console.warn('[NexusRepository] Erro ao salvar funcionario no Supabase:', err);
         }
       }
-      // Atualiza local state
-      let list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
-      const idx = list.findIndex(f => f.matricula === funcionario.matricula || (funcionario.id && f.id === funcionario.id));
-      if (idx >= 0) {
-        list[idx] = { ...list[idx], ...funcionario };
-      } else {
-        list.push(funcionario);
-      }
-      localStorage.setItem('nexus_func_list', JSON.stringify(list));
       return funcionario;
     },
 
@@ -92,9 +85,9 @@
       const client = this.getSupabase();
       if (client) {
         try {
-          const { data, error } = await client.from('cargas').select('*');
-          if (!error && data) {
-            return data.map((c, i) => ({
+          const { data, error, count } = await client.from('cargas').select('*, navios(id, nome)', { count: 'exact' });
+          if (!error && Array.isArray(data)) {
+            const mapped = data.map((c) => ({
               id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
               tipo: c.natureza || 'Carga Geral',
               peso: `${c.peso || 0} t`,
@@ -105,11 +98,14 @@
               destino: c.destino || 'Destino Geral',
               status: c.status_fluxo || 'AGENDAMENTO',
               container: c.container_id || '',
-              navio: c.navio || '',
+              navio: (c.navios && c.navios.nome) ? c.navios.nome : '',
+              navioId: c.navio_id || null,
               qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
               motivoCancelamento: c.motivo_recusa || null,
               rawDbId: c.id
             }));
+            localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
+            return mapped;
           }
         } catch (err) {
           console.warn('[NexusRepository] Erro ao buscar cargas do Supabase:', err);
@@ -135,6 +131,7 @@
             status_fluxo: carga.status,
             qr_code_url: carga.qrCode || `QR-${carga.id}`,
             container_id: carga.container || null,
+            navio_id: carga.navioId || carga.navio_id || null,
             motivo_recusa: carga.motivoCancelamento || null
           };
 
@@ -185,18 +182,20 @@
       if (client) {
         try {
           const { data, error } = await client.from('navios').select('*');
-          if (!error && data) {
-            return data.map(n => ({
+          if (!error && Array.isArray(data)) {
+            const mapped = data.map(n => ({
               id: n.id,
               nome: n.nome,
               imo: n.numero_imo || n.imo,
               estado: n.estado_operacional || n.estado || 'OPERANTE',
               localizacao: n.localizacao || 'DENTRO_DO_PORTO',
-              origem: n.porto_origem || n.origem || 'Origem',
+              origem: n.porto_origem || n.origem || 'Porto de Santos',
               destino: n.porto_destino || n.destino || 'Destino',
-              operacoes: n.operacoes || 0,
+              operacoes: n.quantidade_cargas_realizadas || n.operacoes || 0,
               data_saida: n.data_saida || null
             }));
+            localStorage.setItem('nexus_navios_list', JSON.stringify(mapped));
+            return mapped;
           }
         } catch (err) {
           console.warn('[NexusRepository] Erro ao buscar navios do Supabase:', err);
@@ -213,15 +212,18 @@
       if (client) {
         try {
           const { data, error } = await client.from('visitantes').select('*');
-          if (!error && data) {
-            return data.map(v => ({
+          if (!error && Array.isArray(data)) {
+            const mapped = data.map(v => ({
               id: v.id,
               nome: v.nome,
               documento: v.documento,
               motivo: v.motivo,
               registrado_por: v.registrado_por,
-              data: v.created_at ? new Date(v.created_at).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')
+              data: v.data_hora_entrada ? new Date(v.data_hora_entrada).toLocaleDateString('pt-BR') : (v.created_at ? new Date(v.created_at).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')),
+              data_saida: v.data_hora_saida ? new Date(v.data_hora_saida).toLocaleDateString('pt-BR') : null
             }));
+            localStorage.setItem('nexus_vis_list', JSON.stringify(mapped));
+            return mapped;
           }
         } catch (err) {
           console.warn('[NexusRepository] Erro ao buscar visitantes do Supabase:', err);
@@ -268,6 +270,206 @@
       let list = JSON.parse(localStorage.getItem('nexus_vis_list') || '[]');
       list = list.filter(v => v.documento !== docOuId && v.id !== docOuId);
       localStorage.setItem('nexus_vis_list', JSON.stringify(list));
+    },
+
+    /**
+     * BUSCAR CARGAS RECUSADAS E CANCELADAS (Função Única - Item 1.2)
+     */
+    buscarCargasRecusadas: async function () {
+      const client = this.getSupabase();
+      let cargasRecusadas = [];
+      let cargasCanceladas = [];
+
+      if (client) {
+        try {
+          const { data, error } = await client
+            .from('cargas')
+            .select('*')
+            .in('status_fluxo', ['RECUSADA', 'CANCELADA']);
+
+          if (!error && Array.isArray(data)) {
+            data.forEach(c => {
+              const item = {
+                id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
+                rawDbId: c.id,
+                tipo: c.natureza || 'Carga Geral',
+                peso: `${c.peso || 0} t`,
+                volume: `${c.volume || 0} m³`,
+                status: c.status_fluxo,
+                motivo: c.motivo_recusa || 'Sem motivo registrado',
+                portoDescarga: c.porto_descarga || 'Terminal STS-01'
+              };
+              if (c.status_fluxo === 'RECUSADA') cargasRecusadas.push(item);
+              else cargasCanceladas.push(item);
+            });
+            return {
+              recusadas: cargasRecusadas,
+              canceladas: cargasCanceladas,
+              totalRecusadas: cargasRecusadas.length,
+              totalCanceladas: cargasCanceladas.length,
+              totalGeral: cargasRecusadas.length + cargasCanceladas.length
+            };
+          }
+        } catch (err) {
+          console.warn('[NexusRepository] Erro ao buscar cargas recusadas do Supabase:', err);
+        }
+      }
+
+      const localCargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      localCargas.forEach(c => {
+        if (c.status === 'RECUSADA') cargasRecusadas.push(c);
+        else if (c.status === 'CANCELADA') cargasCanceladas.push(c);
+      });
+
+      return {
+        recusadas: cargasRecusadas,
+        canceladas: cargasCanceladas,
+        totalRecusadas: cargasRecusadas.length,
+        totalCanceladas: cargasCanceladas.length,
+        totalGeral: cargasRecusadas.length + cargasCanceladas.length
+      };
+    },
+
+    /**
+     * BUSCAR EQUIPAMENTOS PREVENTIVA SUGERIDA (> 3 ANOS) (Função Única - Item 1.8)
+     * Reutilizada obrigatoriamente tanto no Painel Geral quanto em Manutenção & OS.
+     */
+    buscarEquipamentosPreventivaSugerida: async function () {
+      const client = this.getSupabase();
+      const tresAnosMs = 3 * 365 * 24 * 60 * 60 * 1000;
+      const agora = Date.now();
+      const equipamentos = [];
+
+      let dbConts = [];
+      let dbGuindastes = [];
+      let dbNavios = [];
+
+      if (client) {
+        try {
+          const [resCont, resGnd, resNav] = await Promise.all([
+            client.from('containers').select('*'),
+            client.from('guindastes').select('*'),
+            client.from('navios').select('*')
+          ]);
+          if (!resCont.error && Array.isArray(resCont.data)) dbConts = resCont.data;
+          if (!resGnd.error && Array.isArray(resGnd.data)) dbGuindastes = resGnd.data;
+          if (!resNav.error && Array.isArray(resNav.data)) dbNavios = resNav.data;
+        } catch (e) {
+          console.warn('[NexusRepository] Erro ao buscar dados para preventiva sugerida:', e);
+        }
+      }
+
+      // 1. Contêineres
+      dbConts.forEach(c => {
+        const dStr = c.data_ultima_manutencao || c.data_fabricacao;
+        if (dStr) {
+          const diff = agora - new Date(dStr).getTime();
+          if (diff >= tresAnosMs) {
+            equipamentos.push({
+              tipo: 'CONTAINER',
+              identificacao: c.numero_identificacao || `CONT-${c.id}`,
+              dataReferencia: dStr,
+              motivo: `Última manutenção/fabricação em ${new Date(dStr).toLocaleDateString('pt-BR')} (> 3 anos de uso)`,
+              rawObj: c
+            });
+          }
+        }
+      });
+
+      // 2. Guindastes
+      dbGuindastes.forEach(g => {
+        const dStr = g.data_ultima_manutencao;
+        if (dStr) {
+          const diff = agora - new Date(dStr).getTime();
+          if (diff >= tresAnosMs) {
+            equipamentos.push({
+              tipo: 'GUINDASTE',
+              identificacao: g.numero_identificacao || `GND-${g.id}`,
+              dataReferencia: dStr,
+              motivo: `Última manutenção registrada em ${new Date(dStr).toLocaleDateString('pt-BR')} (> 3 anos sem manutenção)`,
+              rawObj: g
+            });
+          }
+        }
+      });
+
+      // 3. Navios
+      dbNavios.forEach(n => {
+        const dStr = n.data_registro_sistema || n.data_saida || n.created_at;
+        if (dStr) {
+          const diff = agora - new Date(dStr).getTime();
+          if (diff >= tresAnosMs) {
+            equipamentos.push({
+              tipo: 'NAVIO',
+              identificacao: n.nome,
+              dataReferencia: dStr,
+              motivo: `Registro/reforma em ${new Date(dStr).toLocaleDateString('pt-BR')} (> 3 anos)`,
+              rawObj: n
+            });
+          }
+        }
+      });
+
+      return {
+        equipamentos,
+        total: equipamentos.length
+      };
+    },
+
+    /**
+     * BUSCAR INDICADORES OPERACIONAIS CONSOLIDADOS (Função Única - Item 1.1)
+     */
+    buscarIndicadoresOperacionais: async function () {
+      const client = this.getSupabase();
+      let cargas = [];
+      let navios = [];
+      let osList = [];
+
+      if (client) {
+        try {
+          const [resCargas, resNavios, resManut] = await Promise.all([
+            client.from('cargas').select('*'),
+            client.from('navios').select('*'),
+            client.from('manutencoes').select('*')
+          ]);
+          if (!resCargas.error && Array.isArray(resCargas.data)) cargas = resCargas.data;
+          if (!resNavios.error && Array.isArray(resNavios.data)) navios = resNavios.data;
+          if (!resManut.error && Array.isArray(resManut.data)) osList = resManut.data;
+        } catch (e) {
+          console.warn('[NexusRepository] Erro ao buscar indicadores operacionais:', e);
+        }
+      }
+
+      const recusadasObj = await this.buscarCargasRecusadas();
+      const preventivaObj = await this.buscarEquipamentosPreventivaSugerida();
+
+      const naviosFora = navios.filter(n => n.localizacao === 'FORA_DO_PORTO' || n.localizacao === 'NO_PORTO_DE_DESTINO');
+      const cargasArmazenagem = cargas.filter(c => c.status_fluxo === 'ARMAZENAGEM');
+      const cargasProntas = cargas.filter(c => c.status_fluxo === 'PRONTA_PARA_ENTREGA');
+
+      const naviosManut = navios.filter(n => n.estado_operacional === 'EM_MANUTENCAO' || n.estado_operacional === 'AGENDADO_PARA_REFORMA');
+      const osEmManut = osList.filter(o => o.status === 'SOLICITADA' || o.status === 'APROVADA');
+
+      const CAPACIDADE_MAXIMA_PATIO = 100;
+      const taxaOcupacao = Math.min(100, Math.round((cargasArmazenagem.length / CAPACIDADE_MAXIMA_PATIO) * 100));
+
+      return {
+        recusadas: recusadasObj,
+        preventiva: preventivaObj,
+        naviosFora: { lista: naviosFora, total: naviosFora.length },
+        cargasArmazenagem: { lista: cargasArmazenagem, total: cargasArmazenagem.length },
+        cargasProntas: { lista: cargasProntas, total: cargasProntas.length },
+        manutencao: {
+          navios: naviosManut,
+          ordens: osEmManut,
+          total: naviosManut.length + osEmManut.length
+        },
+        ocupacaoPatio: {
+          capacidade: CAPACIDADE_MAXIMA_PATIO,
+          ocupados: cargasArmazenagem.length,
+          taxa: taxaOcupacao
+        }
+      };
     },
 
     /**

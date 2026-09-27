@@ -12,11 +12,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const gerarPdfBtn = document.getElementById('gerarPdfBtn');
   const prodTableBody = document.getElementById('produtividadeTableBody');
 
-  const cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+  let cargas = [];
 
-  function popularCargas() {
+  async function popularCargas() {
     if (!selectCarga) return;
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('cargas').select('*');
+        if (!error && Array.isArray(data)) {
+          cargas = data.map(c => ({
+            id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
+            tipo: c.natureza || 'Carga Geral',
+            status: c.status_fluxo || 'AGENDAMENTO',
+            navio: c.navio || '',
+            container: c.container_id || '',
+            destino: c.destino || '',
+            portoDescarga: c.porto_descarga || '',
+            rawDbId: c.id
+          }));
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar cargas para relatório:', e);
+      }
+    }
+    if (cargas.length === 0 && window.NexusRepository) {
+      try { cargas = await window.NexusRepository.getCargas(); } catch (e) {}
+    }
     selectCarga.innerHTML = '<option value="">Selecione a Carga para Emitir PDF A4...</option>';
+    if (cargas.length === 0) {
+      selectCarga.innerHTML = '<option value="" disabled>Nenhuma carga cadastrada no sistema</option>';
+      return;
+    }
     cargas.forEach(c => {
       selectCarga.innerHTML += `<option value="${c.id}">${c.id} — ${c.tipo} (${c.status})</option>`;
     });
@@ -32,9 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const idCarga = selectCarga ? selectCarga.value : '';
       if (!idCarga) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Seleção Necessária', 'Por favor, selecione uma carga operacional para gerar o relatório PDF A4.');
-        } else {
-          alert('Por favor, selecione uma carga para gerar o relatório PDF A4.');
+          window.mostrarFeedback('atencao', 'Seleção Necessária', 'Por favor, selecione uma carga operacional para gerar o relatório PDF A4.');
         }
         return;
       }
@@ -59,58 +83,24 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const { data: dbCarga } = await window.nexusSupabase
           .from('cargas')
-          .select('*')
+          .select('*, navios:navio_id(id, nome, numero_imo, porto_origem, porto_destino), containers:container_id(id, numero_identificacao, material_carregado, estado)')
           .or(`id.eq.${idCarga},qr_code_url.eq.QR-${idCarga},qr_code_url.eq.${idCarga}`)
           .maybeSingle();
 
         if (dbCarga) {
-          let navioNome = (c ? c.navio : 'Não Vinculado');
-          let navioImo = 'Não Informado';
-          let containerIdent = (c ? c.container : 'Não Alocado');
-
-          if (dbCarga.container_id) {
-            const { data: dbCont } = await window.nexusSupabase
-              .from('containers')
-              .select('id, numero_identificacao, navio_id')
-              .eq('id', dbCarga.container_id)
-              .maybeSingle();
-            if (dbCont) {
-              containerIdent = dbCont.numero_identificacao;
-              if (dbCont.navio_id) {
-                const { data: dbNav } = await window.nexusSupabase
-                  .from('navios')
-                  .select('id, nome, numero_imo')
-                  .eq('id', dbCont.navio_id)
-                  .maybeSingle();
-                if (dbNav) {
-                  navioNome = dbNav.nome;
-                  navioImo = dbNav.numero_imo;
-                }
-              }
-            }
-          }
-
-          if (navioImo === 'Não Informado' && navioNome && navioNome !== 'Não Vinculado') {
-            const { data: dbNav } = await window.nexusSupabase
-              .from('navios')
-              .select('nome, numero_imo')
-              .eq('nome', navioNome)
-              .maybeSingle();
-            if (dbNav) {
-              navioNome = dbNav.nome;
-              navioImo = dbNav.numero_imo;
-            }
-          }
+          const navioNome = dbCarga.navios?.nome || (c ? c.navio : 'Não Vinculado');
+          const navioImo = dbCarga.navios?.numero_imo || 'Não Informado';
+          const containerIdent = dbCarga.containers?.numero_identificacao || (c ? c.container : 'Não Alocado');
 
           c = {
             id: idCarga,
-            tipo: dbCarga.natureza || (c ? c.tipo : 'Carga Geral'),
-            peso: `${dbCarga.peso || 25} t`,
+            tipo: dbCarga.natureza || dbCarga.containers?.material_carregado || (c ? c.tipo : 'Carga Geral'),
+            peso: `${dbCarga.peso || dbCarga.peso_toneladas || 25} t`,
             volume: `${dbCarga.volume || 40} m³`,
             valor: `R$ ${(dbCarga.valor_declarado || 100000).toLocaleString('pt-BR')}`,
             natureza: dbCarga.natureza || 'Geral',
             portoDescarga: dbCarga.porto_descarga || (c ? c.portoDescarga : 'Porto de Santos'),
-            destino: dbCarga.destino || (c ? c.destino : 'Destino Internacional'),
+            destino: dbCarga.destino || dbCarga.navios?.porto_destino || (c ? c.destino : 'Destino Internacional'),
             status: dbCarga.status_fluxo || (c ? c.status : 'ARMAZENAGEM'),
             container: containerIdent,
             navio: navioNome,
@@ -125,6 +115,10 @@ document.addEventListener('DOMContentLoaded', () => {
         id: idCarga, tipo: 'Carga Geral', peso: '25.0 t', volume: '40 m³', valor: 'R$ 100.000', natureza: 'Geral',
         portoDescarga: 'Porto de Santos', destino: 'Destino Internacional', status: 'ARMAZENAGEM', container: 'Não Alocado', navio: 'Não Vinculado', imo: 'Não Informado'
       };
+    }
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EXPORTACAO', 'cargas', null, { carga_id: c.id, tipo_exportacao: 'PDF_A4', exportado_por: session.nome || session.cargo });
     }
 
     if (window.jspdf && window.jspdf.jsPDF) {
@@ -212,9 +206,13 @@ document.addEventListener('DOMContentLoaded', () => {
       doc.text(`Validade da Auditoria: ${dataAtualReal.toLocaleDateString('pt-BR')} 23:59:59`, 110, y);
 
       doc.save(`Relatorio_A4_${c.id}.pdf`);
-      alert(`Relatório PDF A4 em 4 seções gerado com sucesso para a carga ${c.id}!`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'PDF Emitido', `Relatório PDF A4 em 4 seções gerado com sucesso para a carga ${c.id}!`);
+      }
     } else {
-      alert(`Relatório A4 Gerado:\n1. Carga: ${c.id}\n2. Navio: ${c.navio}\n3. Contêiner: ${c.container}\n4. Status: ${c.status}`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('info', 'Relatório Gerado', `Relatório da Carga ${c.id}:\n• Navio: ${c.navio}\n• Contêiner: ${c.container}\n• Status: ${c.status}`);
+      }
     }
   }
 
@@ -222,13 +220,14 @@ document.addEventListener('DOMContentLoaded', () => {
   async function renderProdutividadeTable() {
     if (!prodTableBody) return;
 
-    let funcionariosList = [];
-    let logsList = [];
-
+    let funcsLoaded = false;
     if (window.nexusSupabase) {
       try {
-        const { data: funcs } = await window.nexusSupabase.from('funcionarios').select('*').eq('ativo', true);
-        if (funcs && funcs.length > 0) funcionariosList = funcs;
+        const { data: funcs, error: fErr } = await window.nexusSupabase.from('funcionarios').select('*').eq('ativo', true);
+        if (!fErr && Array.isArray(funcs)) {
+          funcionariosList = funcs;
+          funcsLoaded = true;
+        }
 
         const { data: logs } = await window.nexusSupabase.from('logs_alteracoes').select('*');
         if (logs) logsList = logs;
@@ -237,7 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    if (funcionariosList.length === 0) {
+    if (!funcsLoaded && funcionariosList.length === 0) {
       funcionariosList = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
     }
 

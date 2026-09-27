@@ -47,22 +47,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Gestão e Painel de Berços Livres (Point 3)
+  // Gestão e Painel de Berços Livres
   const bercosGrid = document.getElementById('bercosGrid');
   const bercosLivresTag = document.getElementById('bercosLivresCountTag');
   const selectPortoDescarga = document.getElementById('agPortoDescarga');
 
-  let bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || 'null');
-  if (!bercosList) {
-    bercosList = [
-      { id: 'BERCO-01', nome: 'Berço 01 - STS', estado: 'LIVRE', carga_id: null },
-      { id: 'BERCO-02', nome: 'Berço 02 - STS', estado: 'LIVRE', carga_id: null },
-      { id: 'BERCO-03', nome: 'Berço 03 - STS', estado: 'LIVRE', carga_id: null },
-      { id: 'BERCO-04', nome: 'Berço 04 - STS', estado: 'LIVRE', carga_id: null },
-      { id: 'BERCO-05', nome: 'Berço 05 - STS', estado: 'LIVRE', carga_id: null }
-    ];
-    localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-  }
+  let bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
 
   function renderBercosPanel() {
     bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
@@ -151,24 +141,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterDataInicioVal = (document.getElementById('filterDataInicio')?.value || '').trim();
     const filterDataFimVal = (document.getElementById('filterDataFim')?.value || '').trim();
 
-    // C10: Atualiza status "ENTREGUE" AUTOMATICAMENTE se o navio chegou ao porto de destino
-    const naviosLocais = [
-      { nome: 'MV Santos Star', localizacao: 'DENTRO_DO_PORTO' },
-      { nome: 'MV Pacific Giant', localizacao: 'FORA_DO_PORTO' },
-      { nome: 'MV Atlantic Breeze', localizacao: 'NO_PORTO_DE_DESTINO' }
-    ];
+    // Atualiza status "ENTREGUE" AUTOMATICAMENTE se o navio chegou ao porto de destino
+    const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
 
     cargasFluxoList.forEach(c => {
       if (c.navio && c.status !== 'CANCELADA') {
-        const navObj = naviosLocais.find(n => n.nome.toLowerCase() === c.navio.toLowerCase());
-        if (navObj && navObj.localizacao === 'NO_PORTO_DE_DESTINO') {
+        const navObj = naviosLocais.find(n => n.nome && n.nome.toLowerCase() === c.navio.toLowerCase());
+        if (navObj && (navObj.localizacao === 'NO_PORTO_DE_DESTINO' || navObj.estado === 'NO_PORTO_DE_DESTINO')) {
           c.status = 'ENTREGUE';
         }
       }
     });
 
     // Exibe cargas ativas aplicando Visão Própria / Visão Operacional (RF 1.3)
-    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA' && Boolean(c.container) && Boolean(c.navio));
+    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA');
     if (window.NexusVision && window.NexusVision.filterCargasForUser) {
       cargasAtivas = window.NexusVision.filterCargasForUser(cargasAtivas, session);
     }
@@ -318,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
     agendamentoForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!isSupervisorRole && !isInspetorRole) {
-        alert('Acesso Restrito: Apenas Supervisores ou Inspetores podem registrar/agendar novas cargas!');
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Acesso Restrito: Apenas Supervisores ou Inspetores podem registrar/agendar novas cargas!');
         return;
       }
 
@@ -332,12 +318,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Item 16: Validação de valores estritamente positivos em peso, volume e valor declarado
       if (pesoVal <= 0 || volumeVal <= 0 || valorVal <= 0) {
-        alert('VALORES INVÁLIDOS (Item 16): Os campos de Peso, Volume e Valor Declarado não aceitam valores negativos ou iguais a zero. Informe apenas valores estritamente maiores que zero!');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Valores Inválidos', 'VALORES INVÁLIDOS (Item 16): Os campos de Peso, Volume e Valor Declarado não aceitam valores negativos ou iguais a zero. Informe apenas valores estritamente maiores que zero!');
         return;
       }
 
       if (!portoDescarga) {
-        alert('BLOQUEIO (Point 3): É obrigatório selecionar um Berço Livre como Ponto de Descarga na chegada da carga!');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Ponto de Descarga', 'BLOQUEIO: É obrigatório selecionar um Berço Livre como Ponto de Descarga na chegada da carga!');
         return;
       }
 
@@ -347,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const tipoEncontradoLocal = tiposCadastrados.find(t => t.nome === tipo);
 
       if (!tipoCompartilhado && !tipoEncontradoLocal) {
-        alert('BLOQUEIO DE SEGURANÇA (RN 13): O agendamento só é permitido se o Tipo de Carga possuir checklist pré-cadastrado pelo Supervisor!');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Checklist Obrigatório', 'BLOQUEIO DE SEGURANÇA (RN 13): O agendamento só é permitido se o Tipo de Carga possuir checklist pré-cadastrado pelo Supervisor!');
         return;
       }
 
@@ -503,28 +489,25 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     });
 
-    // Buscar Navios do Supabase / Local
-    let navios = [
-      { nome: 'MV Santos Star', imo: 'IMO-9821034', localizacao: 'DENTRO_DO_PORTO' },
-      { nome: 'MV Pacific Giant', imo: 'IMO-9742110', localizacao: 'FORA_DO_PORTO' },
-      { nome: 'MV Atlantic Breeze', imo: 'IMO-9651002', localizacao: 'NO_PORTO_DE_DESTINO' }
-    ];
+    // Buscar Navios do Supabase / Repositório
+    let navios = [];
     if (window.nexusSupabase) {
       try {
         const { data } = await window.nexusSupabase.from('navios').select('*');
-        if (data && data.length > 0) {
-          const mapNavs = data.map(n => ({ nome: n.nome, imo: n.numero_imo, localizacao: n.localizacao || 'DENTRO_DO_PORTO' }));
-          const imoSet = new Set(mapNavs.map(x => x.imo));
-          navios.forEach(item => { if (!imoSet.has(item.imo)) mapNavs.push(item); });
-          navios = mapNavs;
+        if (data && Array.isArray(data)) {
+          navios = data.map(n => ({ id: n.id, nome: n.nome, imo: n.numero_imo, localizacao: n.localizacao || 'DENTRO_DO_PORTO' }));
         }
       } catch (e) { console.warn('Erro ao carregar navios para modal:', e); }
+    }
+    if (navios.length === 0) {
+      const localNavs = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+      navios = localNavs.map(n => ({ id: n.id, nome: n.nome, imo: n.imo, localizacao: n.localizacao || 'DENTRO_DO_PORTO' }));
     }
 
     vincularNavioSelect.innerHTML = '<option value="">Selecione o Navio...</option>';
     navios.forEach(nav => {
       vincularNavioSelect.innerHTML += `
-        <option value="${nav.nome}">
+        <option value="${nav.nome}" data-uuid="${nav.id || ''}">
           ${nav.nome} (${nav.imo}) - Status: ${nav.localizacao}
         </option>
       `;
@@ -547,10 +530,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const selectedContOpt = vincularContainerSelect.options[vincularContainerSelect.selectedIndex];
       const contUuid = vincularContainerSelect.value;
       const contIdentificacao = selectedContOpt ? (selectedContOpt.getAttribute('data-identificacao') || contUuid) : contUuid;
+      const selectedNavOpt = vincularNavioSelect.options[vincularNavioSelect.selectedIndex];
       const navVal = vincularNavioSelect.value;
+      const navUuid = selectedNavOpt ? (selectedNavOpt.getAttribute('data-uuid') || null) : null;
 
       if (!contUuid || !navVal) {
-        alert('A6 REGRA OBRIGATÓRIA: Todas as cargas devem obrigatoriamente estar vinculadas a um contêiner e a um navio!');
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', 'Todas as cargas devem obrigatoriamente estar vinculadas a um contêiner e a um navio!');
+        }
         return;
       }
 
@@ -559,53 +546,66 @@ document.addEventListener('DOMContentLoaded', () => {
       const estadoCont = selectedContOpt.getAttribute('data-estado');
 
       if (estadoCont && estadoCont !== 'OPERANTE') {
-        alert(`BLOQUEIO DE SEGURANÇA: Contêiner selecionado está no estado ${estadoCont} e não pode ser vinculado!`);
+        if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Contêiner Indisponível', `BLOQUEIO DE SEGURANÇA: Contêiner selecionado está no estado ${estadoCont} e não pode ser vinculado!`);
         return;
       }
 
       if (cargaVol > dispVol) {
-        alert(`A7 REGRA DE CAPACIDADE: Volume da carga (${cargaVol} m³) excede a capacidade disponível do contêiner (${dispVol.toFixed(1)} m³ de no máximo 75 m³)!`);
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Capacidade Excedida', `A7 REGRA DE CAPACIDADE: Volume da carga (${cargaVol} m³) excede a capacidade disponível do contêiner (${dispVol.toFixed(1)} m³ de no máximo 75 m³)!`);
         return;
       }
 
       targetCargaParaVinculacao.container = contIdentificacao;
       targetCargaParaVinculacao.container_id = contUuid;
       targetCargaParaVinculacao.navio = navVal;
+      targetCargaParaVinculacao.navioId = navUuid;
+      targetCargaParaVinculacao.navio_id = navUuid;
 
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
 
       if (window.nexusSupabase) {
         try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contUuid);
-          if (isUuid) {
-            const targetQr = targetCargaParaVinculacao.qrCode || `QR-${targetCargaParaVinculacao.id}`;
-            const targetDbId = targetCargaParaVinculacao.rawDbId || targetCargaParaVinculacao.id;
-            const targetIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetDbId);
-            
-            let query = window.nexusSupabase.from('cargas').update({ container_id: contUuid });
-            if (targetIsUuid) {
-              query = query.eq('id', targetDbId);
-            } else {
-              query = query.eq('qr_code_url', targetQr);
-            }
-            const { error: upErr } = await query;
-            if (upErr) {
-              console.error('[NexusPort] Erro ao atualizar container_id no Supabase:', upErr);
-            }
+          const isUuidCont = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(contUuid);
+          const isUuidNav = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(navUuid);
+          const targetQr = targetCargaParaVinculacao.qrCode || `QR-${targetCargaParaVinculacao.id}`;
+          const targetDbId = targetCargaParaVinculacao.rawDbId || targetCargaParaVinculacao.id;
+          const targetIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetDbId);
+
+          const updatePayload = {};
+          if (isUuidCont) updatePayload.container_id = contUuid;
+          if (isUuidNav) updatePayload.navio_id = navUuid;
+
+          let query = window.nexusSupabase.from('cargas').update(updatePayload);
+          if (targetIsUuid) {
+            query = query.eq('id', targetDbId);
+          } else {
+            query = query.eq('qr_code_url', targetQr);
           }
+          await query;
         } catch (e) { console.warn('Erro ao atualizar vinculação no Supabase:', e); }
+      }
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao(targetCargaParaVinculacao.id, 'EDICAO', `Carga vinculada ao Contêiner ${contIdentificacao} e Navio ${navVal}`);
       }
 
       renderTable();
       fecharVincularModal();
-      alert(`Carga ${targetCargaParaVinculacao.id} vinculada ao Contêiner ${contIdentificacao} e Navio ${navVal} com sucesso!`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Vinculação Concluída', `Carga ${targetCargaParaVinculacao.id} vinculada ao Contêiner ${contIdentificacao} e Navio ${navVal} com sucesso!`);
+      }
     });
   }
 
   if (printEtiquetaBtn) {
-    printEtiquetaBtn.addEventListener('click', () => {
+    printEtiquetaBtn.addEventListener('click', async () => {
       if (!currentEntityData) return;
       const entityId = currentEntityData.id || currentEntityData.codigo;
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao(entityId, 'REIMPRESSAO_ETIQUETA', `Reimpressão de etiqueta física gerada para ${entityId}`);
+      }
+
       if (window.jspdf && window.jspdf.jsPDF) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ unit: 'mm', format: [100, 100] });
@@ -632,7 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (acao === 'MOVIMENTAR') {
       if (!isEstivadorRole) {
-        alert('Acesso Restrito: Apenas Estivadores podem registrar movimentação e estado de carregamento de cargas!');
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Estivadores podem registrar movimentação e estado de carregamento de cargas!');
         return;
       }
       // C1 & C2: Exibe opções de berços disponíveis e opções para onde a carga deve ser levada
@@ -644,7 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (opcaoBerco.toUpperCase() === 'NAVIO') {
         if (!carga.navio) {
-          alert(`Carga ${idCarga} ainda não tem um navio vinculado. Vincule a carga a um navio antes de transportá-la.`);
+          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Navio Não Vinculado', `Carga ${idCarga} ainda não tem um navio vinculado. Vincule a carga a um navio antes de transportá-la.`);
           return;
         }
         // Desocupa o berço atual da carga
@@ -664,13 +664,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }).then().catch(e => console.warn(e));
           } catch (e) {}
         }
-        alert(`Carga ${idCarga} transportada com sucesso do berço para o navio "${carga.navio}"!`);
+        if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao(idCarga, 'EDICAO', `Carga transportada do berço para o navio "${carga.navio}"`);
+        }
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('sucesso', 'Movimentação Concluída', `Carga ${idCarga} transportada com sucesso do berço para o navio "${carga.navio}"!`);
+        }
       } else {
         const idxSel = parseInt(opcaoBerco, 10) - 1;
         if (!isNaN(idxSel) && bercosList[idxSel]) {
           const bercoAlvo = bercosList[idxSel];
           if (bercoAlvo.estado === 'OCUPADO' && bercoAlvo.carga_id !== idCarga) {
-            alert(`O ${bercoAlvo.nome} já está ocupado por outra carga (${bercoAlvo.carga_id}). Escolha um berço livre.`);
+            if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Berço Ocupado', `O ${bercoAlvo.nome} já está ocupado por outra carga (${bercoAlvo.carga_id}). Escolha um berço livre.`);
             return;
           }
           // Desocupa berço anterior
@@ -684,44 +689,74 @@ document.addEventListener('DOMContentLoaded', () => {
           carga.portoDescarga = bercoAlvo.nome;
           localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
           renderBercosPanel();
-          alert(`Carga ${idCarga} movimentada com sucesso para o ${bercoAlvo.nome}!`);
+
+          if (window.registrarLogAlteracao) {
+            await window.registrarLogAlteracao(idCarga, 'EDICAO', `Carga movimentada para o ${bercoAlvo.nome}`);
+          }
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('sucesso', 'Movimentação Concluída', `Carga ${idCarga} movimentada com sucesso para o ${bercoAlvo.nome}!`);
+          }
         } else {
-          alert('Opção de berço inválida.');
+          if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Opção de berço inválida.');
           return;
         }
       }
     } else if (acao === 'RECEBER') {
       if (!isConferenteRole) {
-        alert('Acesso Restrito: Apenas Conferentes de Carga podem registrar o recebimento físico!');
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Conferentes de Carga podem registrar o recebimento físico!');
         return;
       }
       carga.status = 'RECEBIMENTO_INSPECAO';
       carga.dataChegada = new Date().toLocaleString('pt-BR');
       carga.conferenteMatricula = session.matricula;
-      alert(`Recebimento físico da carga ${idCarga} registrado pelo Conferente em ${carga.dataChegada}.`);
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao(idCarga, 'EDICAO', 'Recebimento físico registrado pelo Conferente de Carga');
+      }
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Recebimento Registrado', `Recebimento físico da carga ${idCarga} registrado pelo Conferente em ${carga.dataChegada}.`);
+      }
     } else if (acao === 'PRONTA') {
       if (!isArrumadorRole) {
-        alert('Acesso Restrito (RF 1.8): Apenas Arrumadores e Consertadores (ou Supervisão/Direção) podem alterar o status da carga para Pronta para Entrega!');
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Acesso Restrito (RF 1.8): Apenas Arrumadores e Consertadores (ou Supervisão/Direção) podem alterar o status da carga para Pronta para Entrega!');
+        }
         return;
       }
       carga.status = 'PRONTA_PARA_ENTREGA';
-      alert(`Carga ${idCarga} marcada como Pronta para Entrega.`);
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao(idCarga, 'EDICAO', 'Carga marcada como Pronta para Entrega pelo Arrumador');
+      }
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Carga Pronta', `Carga ${idCarga} marcada como Pronta para Entrega.`);
+      }
     } else if (acao === 'VINCULAR') {
       // C4, A6, A7: Modal centralizado de vinculação com trava de capacidade max 75 m³
       window.abrirModalVinculacao(idCarga);
     } else if (acao === 'LIBERAR') {
       // C17 & Regra A6: Carga não pode sair do porto ou ir para trânsito sem vincular a contêiner e navio
       if (!carga.container || !carga.navio) {
-        alert(`BLOQUEIO DE SEGURANÇA (Regra A6 / C17): A carga ${idCarga} não pode ser liberada para saída ou trânsito sem estar vinculada obrigatoriamente a um contêiner e a um navio! Use o botão "Vincular" primeiro.`);
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Bloqueio de Segurança', `BLOQUEIO DE SEGURANÇA (Regra A6 / C17): A carga ${idCarga} não pode ser liberada para saída ou trânsito sem estar vinculada obrigatoriamente a um contêiner e a um navio! Use o botão "Vincular" primeiro.`);
+        }
         return;
       }
       const destinoCarga = carga.portoDescarga || carga.destino || 'Porto de Roterdã';
       carga.status = 'EM_TRANSITO';
-      alert(`Carga ${idCarga} liberada pelo Supervisor para saída com destino a ${destinoCarga}. Vínculos validados: Contêiner ${carga.container} / Navio ${carga.navio}.`);
+
+      if (window.registrarTrailDecisao) {
+        await window.registrarTrailDecisao('LIBEROU_CARGA', idCarga, `Liberada para saída pelo Supervisor com destino a ${destinoCarga}. Vínculos: Contêiner ${carga.container} / Navio ${carga.navio}`);
+      }
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Saída Liberada', `Carga ${idCarga} liberada pelo Supervisor para saída com destino a ${destinoCarga}. Vínculos validados: Contêiner ${carga.container} / Navio ${carga.navio}.`);
+      }
     } else if (acao === 'CANCELAR') {
       const statusPermitidos = ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'];
       if (!statusPermitidos.includes(carga.status)) {
-        alert(`REGRA DE NEGÓCIO (RN 16): O cancelamento só é permitido para cargas em Agendamento, Armazenagem ou Pronta para Entrega! O status atual "${carga.status}" não permite cancelamento.`);
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Regra de Negócio', `REGRA DE NEGÓCIO (RN 16): O cancelamento só é permitido para cargas em Agendamento, Armazenagem ou Pronta para Entrega! O status atual "${carga.status}" não permite cancelamento.`);
+        }
         return;
       }
 
@@ -730,8 +765,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // C9: Carga cancelada sai da tabela principal, desocupa contêiner e navio e retorna ao berço
         carga.status = 'CANCELADA';
         carga.motivoCancelamento = motivo;
+        carga.motivo_recusa = motivo;
         carga.container = '';
+        carga.container_id = null;
         carga.navio = '';
+        carga.navio_id = null;
 
         // Ocupa novamente o berço para a carga cancelada
         bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
@@ -744,7 +782,12 @@ document.addEventListener('DOMContentLoaded', () => {
           renderBercosPanel();
         }
 
-        alert(`Entrega da carga ${idCarga} CANCELADA pelo Supervisor. A carga retornou ao ${carga.portoDescarga} e foi movida para a tabela de canceladas. Motivo: "${motivo}".`);
+        if (window.registrarTrailDecisao) {
+          await window.registrarTrailDecisao('CANCELOU_ENTREGA', idCarga, motivo);
+        }
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('sucesso', 'Entrega Cancelada', `Entrega da carga ${idCarga} CANCELADA pelo Supervisor. A carga retornou ao ${carga.portoDescarga} e foi movida para a tabela de canceladas. Motivo: "${motivo}".`);
+        }
       }
     }
 
@@ -752,15 +795,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (window.nexusSupabase) {
       try {
-        await window.nexusSupabase.from('cargas')
-          .update({
-            status_fluxo: carga.status,
-            motivo_recusa: carga.motivoCancelamento || carga.motivo_recusa || null
-          })
-          .eq('qr_code_url', carga.qrCode || `QR-${carga.id}`);
+        const updateData = {
+          status_fluxo: carga.status,
+          motivo_recusa: carga.motivoCancelamento || carga.motivoRecusa || carga.motivo_recusa || null
+        };
+        if (acao === 'CANCELAR') {
+          updateData.container_id = null;
+          updateData.navio_id = null;
+        }
+
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(carga.rawDbId || carga.id);
+        let q = window.nexusSupabase.from('cargas').update(updateData);
+        if (isUuid) {
+          q = q.eq('id', carga.rawDbId || carga.id);
+        } else {
+          q = q.eq('qr_code_url', carga.qrCode || `QR-${carga.id}`);
+        }
+        await q;
       } catch (err) {
         console.warn('[NexusPort] Erro ao atualizar status da carga no Supabase:', err);
       }
+    }
+
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('cargas');
     }
 
     renderTable();

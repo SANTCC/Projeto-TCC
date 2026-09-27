@@ -16,6 +16,26 @@
     }
   } catch (e) {}
 
+  // Higienização obrigatória de dados fantasmas (Regra 0.1 do Backlog)
+  try {
+    if (localStorage.getItem('nexus_ghost_clean_v1') !== 'true') {
+      const keysToRemove = [
+        'nexus_navios_list',
+        'nexus_containers_list',
+        'nexus_cargas_fluxo',
+        'nexus_vis_list',
+        'nexus_func_list',
+        'nexus_os_list',
+        'nexus_bercos_list',
+        'nexus_audit_logs',
+        'nexus_trail_decisoes',
+        'nexus_guindastes_list'
+      ];
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('nexus_ghost_clean_v1', 'true');
+    }
+  } catch (e) {}
+
   const SESSION_KEY = 'nexus_session';
 
   // Matriz de Ações x Cargos com base no Spec.md RF 1
@@ -133,7 +153,9 @@
       if (effectiveAllowed && Array.isArray(effectiveAllowed) && effectiveAllowed.length > 0) {
         if (!effectiveAllowed.includes(session.cargo)) {
           console.warn(`[NexusAuth] Acesso restrito: Cargo ${session.cargo} não autorizado para a rota ${pageName}.`);
-          alert(`Acesso Restrito: Seu cargo (${session.cargo_nome || session.cargo}) não tem permissão para acessar esta página (${pageName}).`);
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Acesso Restrito', `Seu cargo (${session.cargo_nome || session.cargo}) não tem permissão para acessar esta página (${pageName}).`);
+          }
           window.location.href = 'dashboard.html';
           return null;
         }

@@ -178,22 +178,40 @@
      * Retorna indicadores executivos consolidados para a Visão Estratégica (T1.6 / RF 1)
      */
     getEstrategicoMetrics: function () {
+      const cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      const navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+      const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+
+      const total = cargas.length;
+      const recusadas = cargas.filter(c => c.status === 'RECUSADA').length;
+      const aprovadas = cargas.filter(c => c.status !== 'RECUSADA' && c.status !== 'CANCELADA').length;
+
+      const taxaAprovacao = total > 0 ? Number(((aprovadas / total) * 100).toFixed(1)) : 0;
+      const taxaRecusa = total > 0 ? Number(((recusadas / total) * 100).toFixed(1)) : 0;
+
+      const naviosMaisUtilizados = navios.map(n => ({
+        nome: n.nome,
+        operacoes: n.operacoes || 0
+      })).sort((a, b) => b.operacoes - a.operacoes).slice(0, 5);
+
+      const cargoCounts = {};
+      logs.forEach(l => {
+        const c = l.cargo || 'Operador';
+        cargoCounts[c] = (cargoCounts[c] || 0) + 1;
+      });
+
+      const produtividadePorCargo = Object.keys(cargoCounts).map(cargo => ({
+        cargo: cargo,
+        operacoes: cargoCounts[cargo]
+      }));
+
       return {
-        taxaAprovacao: 94.2, // % de cargas aprovadas
-        taxaRecusa: 5.8,   // % de cargas recusadas
-        tempoMedioPermanenciaDias: 3.8, // dias
-        totalCargasAno: 12480,
-        naviosMaisUtilizados: [
-          { nome: 'MV Santos Star', operacoes: 142 },
-          { id: 'MV Pacific Giant', operacoes: 115 },
-          { id: 'MV Atlantic Breeze', operacoes: 98 }
-        ],
-        produtividadePorCargo: [
-          { cargo: 'Conferente de Carga', operacoes: 4820 },
-          { cargo: 'Inspetor', vistorias: 1240 },
-          { cargo: 'Estivador', movimentacoes: 6390 },
-          { cargo: 'Arrumador e Consertador', entregas: 3810 }
-        ]
+        taxaAprovacao,
+        taxaRecusa,
+        tempoMedioPermanenciaDias: 0,
+        totalCargasAno: total,
+        naviosMaisUtilizados,
+        produtividadePorCargo
       };
     },
 

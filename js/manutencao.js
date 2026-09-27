@@ -33,21 +33,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase.from('guindastes').select('*');
-        if (!error && data && data.length > 0) {
-          const supGnds = data.map(g => ({
+        if (!error && Array.isArray(data)) {
+          guindastesList = data.map(g => ({
             id: g.id || g.numero_identificacao,
             identificacao: g.numero_identificacao,
             estado: g.estado || 'OPERANTE',
-            dataManut: g.data_ultima_manutencao || '2025-01-01'
+            dataManut: g.data_ultima_manutencao || ''
           }));
-
-          const idSet = new Set(supGnds.map(x => x.identificacao));
-          guindastesList.forEach(defG => {
-            if (!idSet.has(defG.identificacao)) supGnds.push(defG);
-          });
-
-          guindastesList = supGnds;
           localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+          renderGuindastesTable();
+          return;
         }
       } catch (err) {
         console.warn('[NexusPort] Erro ao carregar guindastes do Supabase:', err);
@@ -94,7 +89,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (toggleGuindasteBtn && guindasteForm) {
     toggleGuindasteBtn.addEventListener('click', () => {
       if (!isInspetor) {
-        alert('Acesso Restrito: Apenas Inspetores têm permissão para cadastrar novos guindastes (Spec.md RF 1)!');
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos guindastes (Spec.md RF 1)!');
+        }
         return;
       }
       guindasteForm.classList.toggle('hidden');
@@ -110,21 +107,31 @@ document.addEventListener('DOMContentLoaded', () => {
   async function carregarNaviosParaManutencao() {
     if (!navioManutSelect) return;
     let navs = [];
-    if (window.NexusRepository) {
+    if (window.nexusSupabase) {
+      try {
+        const { data } = await window.nexusSupabase.from('navios').select('*');
+        if (data && Array.isArray(data)) {
+          navs = data.map(n => ({
+            id: n.id,
+            nome: n.nome,
+            imo: n.numero_imo || n.imo,
+            data_construcao: n.data_registro_sistema || '',
+            data_ultima_manutencao_geral: ''
+          }));
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar navios no módulo de manutenção:', e);
+      }
+    }
+    if (navs.length === 0 && window.NexusRepository) {
       try { navs = await window.NexusRepository.getNavios(); } catch (e) {}
-    }
-    if (!navs || navs.length === 0) {
-      navs = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
-    }
-    if (navs.length === 0) {
-      navs = [
-        { nome: 'MV Santos Star', imo: 'IMO-9823412', data_construcao: '2021-01-01', data_ultima_manutencao_geral: '2021-01-01' },
-        { nome: 'MV Pacific Giant', imo: 'IMO-9742110', data_construcao: '2025-01-01', data_ultima_manutencao_geral: '2025-01-01' },
-        { nome: 'MV Atlantic Breeze', imo: 'IMO-9651002', data_construcao: '2024-06-01', data_ultima_manutencao_geral: '2024-06-01' }
-      ];
     }
     naviosListLocal = navs;
     navioManutSelect.innerHTML = '<option value="">Selecione a Embarcação...</option>';
+    if (navs.length === 0) {
+      navioManutSelect.innerHTML = '<option value="" disabled>Nenhuma embarcação cadastrada no sistema</option>';
+      return;
+    }
     navs.forEach(n => {
       navioManutSelect.innerHTML += `<option value="${n.nome}">${n.nome} (${n.imo || n.id})</option>`;
     });
@@ -144,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const descricao = document.getElementById('navioDescManut').value.trim();
 
       if (!navioNome) {
-        alert('Selecione uma embarcação para a manutenção.');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Selecione uma embarcação para a manutenção.');
         return;
       }
 
@@ -158,7 +165,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const diffMs = agora - new Date(dataRef).getTime();
 
         if (diffMs < tresAnosMs) {
-          alert(`OPÇÃO BLOQUEADA (Item 17): A opção "Manutenção Geral" só pode ser selecionada se o navio estiver em uso há 3 anos ou mais (ou se a última manutenção geral tiver ocorrido há 3 anos ou mais). A embarcação "${navioNome}" possui histórico recente (${new Date(dataRef).toLocaleDateString('pt-BR')}). Selecione Preventiva, Corretiva ou Preditiva.`);
+          const msgBloqueio = `OPÇÃO BLOQUEADA (Item 17): A opção "Manutenção Geral" só pode ser selecionada se o navio estiver em uso há 3 anos ou mais (ou se a última manutenção geral tiver ocorrido há 3 anos ou mais). A embarcação "${navioNome}" possui histórico recente (${new Date(dataRef).toLocaleDateString('pt-BR')}). Selecione Preventiva, Corretiva ou Preditiva.`;
+          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Manutenção Bloqueada', msgBloqueio);
           return;
         }
       }
@@ -169,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         equipamento: `Navio ${navioNome}`,
         prioridade: tipoManut === 'CORRETIVA' ? 'ALTA' : 'MEDIA',
         descricao: `[${tipoManut}] ${descricao}`,
-        status: 'EM_MANUTENCAO',
+        status: 'PENDENTE_APROVACAO',
         data: new Date().toISOString().split('T')[0]
       });
 
@@ -177,12 +185,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('manutencoes').insert({
+          const { data: insOs } = await window.nexusSupabase.from('manutencoes').insert({
             entidade_tipo: 'NAVIO',
             descricao: `[${newOsId}][${tipoManut}] Navio: ${navioNome} - ${descricao}`,
             status: 'SOLICITADA'
-          });
+          }).select('id').single();
+
           await window.nexusSupabase.from('navios').update({ estado_operacional: 'AGENDADO_PARA_REFORMA' }).eq('nome', navioNome);
+
+          if (window.registrarTrailDecisao) {
+            await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_NAVIO', 'navios', navio ? navio.id : null, `Solicitada manutenção [${tipoManut}] para o navio ${navioNome} por ${session.nome || session.cargo}. Motivo: ${descricao}`);
+          }
+
+          if (window.registrarLogAlteracao) {
+            await window.registrarLogAlteracao('CRIACAO', 'manutencoes', insOs ? insOs.id : null, { navio: navioNome, tipo: tipoManut, descricao });
+          }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar manutenção de navio no Supabase:', err);
         }
@@ -190,12 +207,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('manutencoes');
+        window.NexusRepository.notifyChange('navios');
       }
 
       renderOsTable();
       navioManutForm.reset();
       navioManutForm.classList.add('hidden');
-      alert(`Solicitação de Manutenção (${tipoManut}) registrada com sucesso para o navio ${navioNome}! Ordem de Serviço ${newOsId} criada.`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Manutenção Solicitada', `Solicitação de Manutenção (${tipoManut}) registrada com sucesso para o navio ${navioNome}! Ordem de Serviço ${newOsId} criada.`);
+      }
     });
   }
 
@@ -203,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     guindasteForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!isInspetor) {
-        alert('Acesso Restrito: Cadastro de guindastes é de responsabilidade exclusiva do Inspetor!');
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Cadastro de guindastes é de responsabilidade exclusiva do Inspetor!');
         return;
       }
 
@@ -211,17 +231,31 @@ document.addEventListener('DOMContentLoaded', () => {
       const dataManut = document.getElementById('gndDataManut').value;
       const estado = document.getElementById('gndEstado').value;
 
+      const gndExistente = guindastesList.find(g => (g.identificacao || '').toUpperCase() === identificacao);
+      if (gndExistente) {
+        const msg = `O guindaste "${identificacao}" já está cadastrado no sistema.`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Guindaste Duplicado', msg);
+        return;
+      }
+
       const novoGnd = { id: identificacao, identificacao, estado, dataManut };
       guindastesList.push(novoGnd);
       localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
 
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('guindastes').insert({
+          const { data: insGnd } = await window.nexusSupabase.from('guindastes').insert({
             numero_identificacao: identificacao,
             estado,
             data_ultima_manutencao: dataManut || null
-          });
+          }).select('id').single();
+
+          if (window.registrarLogAlteracao) {
+            await window.registrarLogAlteracao('CRIACAO', 'guindastes', insGnd ? insGnd.id : null, { numero_identificacao: identificacao, estado });
+          }
+          if (window.NexusRepository && window.NexusRepository.notifyChange) {
+            window.NexusRepository.notifyChange('guindastes');
+          }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar guindaste com Supabase:', err);
         }
@@ -230,17 +264,19 @@ document.addEventListener('DOMContentLoaded', () => {
       renderGuindastesTable();
       guindasteForm.reset();
       guindasteForm.classList.add('hidden');
-      alert(`Guindaste ${identificacao} cadastrado com sucesso pelo Inspetor!`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Guindaste Cadastrado', `Guindaste ${identificacao} cadastrado com sucesso pelo Inspetor!`);
+      }
     });
   }
 
   window.solicitarManutencaoGuindaste = async function(identificacao) {
     if (!isSupervisor) {
-      alert('Acesso Restrito: Apenas o Supervisor pode solicitar manutenção de guindastes!');
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor pode solicitar manutenção de guindastes!');
       return;
     }
 
-    const descricao = await window.nexusPrompt('Solicitar Manutenção de Guindaste', `Informe a justificativa/falha para solicitar manutenção do Guindaste ${identificacao}:`, 'Revisão periódica dos cabos de aço e motores');
+    const descricao = window.nexusPrompt ? await window.nexusPrompt('Solicitar Manutenção de Guindaste', `Informe a justificativa/falha para solicitar manutenção do Guindaste ${identificacao}:`, 'Revisão periódica dos cabos de aço e motores') : 'Revisão periódica';
     if (!descricao) return;
 
     const gnd = guindastesList.find(x => x.identificacao === identificacao);
@@ -249,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const newOsId = `OS-2026-${Math.floor(100 + Math.random() * 900)}`;
     osList.unshift({
       id: newOsId,
-      equipamento: identificacao,
+      equipamento: `Guindaste ${identificacao}`,
       prioridade: 'ALTA',
       descricao: `Manutenção de Guindaste: ${descricao}`,
       status: 'EM_MANUTENCAO',
@@ -264,6 +300,23 @@ document.addEventListener('DOMContentLoaded', () => {
         await window.nexusSupabase.from('guindastes')
           .update({ estado: 'EM_MANUTENCAO' })
           .eq('numero_identificacao', identificacao);
+
+        await window.nexusSupabase.from('manutencoes').insert({
+          entidade_tipo: 'GUINDASTE',
+          descricao: `[${newOsId}][ALTA] Guindaste: ${identificacao} - ${descricao}`,
+          status: 'APROVADA'
+        });
+
+        if (window.registrarTrailDecisao) {
+          await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_CONTAINER', 'guindastes', null, `Solicitou manutenção do Guindaste ${identificacao}: ${descricao}`);
+        }
+        if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'guindastes', null, { estado: 'EM_MANUTENCAO', justificativa: descricao });
+        }
+        if (window.NexusRepository && window.NexusRepository.notifyChange) {
+          window.NexusRepository.notifyChange('guindastes');
+          window.NexusRepository.notifyChange('manutencoes');
+        }
       } catch (err) {
         console.warn('[NexusPort] Erro ao atualizar guindaste no Supabase:', err);
       }
@@ -271,12 +324,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderGuindastesTable();
     renderOsTable();
-    alert(`Manutenção solicitada para o Guindaste ${identificacao}! Ordem de Serviço ${newOsId} criada.`);
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Manutenção Solicitada', `Manutenção solicitada para o Guindaste ${identificacao}! Ordem de Serviço ${newOsId} criada.`);
+    }
   };
 
   window.concluirManutencaoGuindaste = async function(identificacao) {
     if (!isSupervisor) {
-      alert('Acesso Restrito: Apenas o Supervisor pode aprovar/concluir manutenção de guindastes!');
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor pode aprovar/concluir manutenção de guindastes!');
       return;
     }
 
@@ -287,7 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
       gnd.dataManut = todayStr;
     }
 
-    const os = osList.find(o => o.equipamento === identificacao && o.status === 'EM_MANUTENCAO');
+    const os = osList.find(o => o.equipamento.includes(identificacao) && o.status === 'EM_MANUTENCAO');
     if (os) os.status = 'CONCLUIDA';
 
     localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
@@ -298,6 +353,26 @@ document.addEventListener('DOMContentLoaded', () => {
         await window.nexusSupabase.from('guindastes')
           .update({ estado: 'OPERANTE', data_ultima_manutencao: todayStr })
           .eq('numero_identificacao', identificacao);
+
+        await window.nexusSupabase.from('historico_manutencoes').insert({
+          data_manutencao: todayStr,
+          descricao_servicos: `Conclusão da manutenção do Guindaste ${identificacao}`
+        });
+
+        await window.nexusSupabase.from('manutencoes')
+          .update({ status: 'CONCLUIDA' })
+          .ilike('descricao', `%${identificacao}%`);
+
+        if (window.registrarTrailDecisao) {
+          await window.registrarTrailDecisao('APROVOU_MANUTENCAO', 'guindastes', null, `Concluiu manutenção do Guindaste ${identificacao} e reativou para OPERANTE`);
+        }
+        if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'guindastes', null, { estado: 'OPERANTE', data_ultima_manutencao: todayStr });
+        }
+        if (window.NexusRepository && window.NexusRepository.notifyChange) {
+          window.NexusRepository.notifyChange('guindastes');
+          window.NexusRepository.notifyChange('manutencoes');
+        }
       } catch (err) {
         console.warn('[NexusPort] Erro ao atualizar guindaste no Supabase:', err);
       }
@@ -305,10 +380,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderGuindastesTable();
     renderOsTable();
-    alert(`Manutenção do Guindaste ${identificacao} CONCLUÍDA! Equipamento reativado e no estado OPERANTE.`);
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Manutenção Concluída', `Manutenção do Guindaste ${identificacao} CONCLUÍDA! Equipamento reativado e no estado OPERANTE.`);
+    }
   };
 
   let osList = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
+
+  async function carregarOsSupabase() {
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('manutencoes').select('*');
+        if (!error && Array.isArray(data)) {
+          osList = data.map(m => {
+            let statusLocal = 'PENDENTE_APROVACAO';
+            if (m.status === 'APROVADA') statusLocal = 'EM_MANUTENCAO';
+            else if (m.status === 'RECUSADA') statusLocal = 'REPROVADA';
+            else if (m.status === 'CONCLUIDA') statusLocal = 'CONCLUIDA';
+
+            // Extrai equipamento e prioridade da descrição se houver formato [ID][PRIORIDADE]
+            let equip = 'Equipamento Geral';
+            let prioridade = 'MEDIA';
+            let descLimpa = m.descricao || '';
+            const matchDesc = m.descricao ? m.descricao.match(/^\[(.*?)\]\[(.*?)\]\s*(.*)$/) : null;
+            if (matchDesc) {
+              prioridade = matchDesc[2];
+              descLimpa = matchDesc[3];
+            }
+            if (m.entidade_tipo === 'NAVIO') equip = 'Navio';
+            else if (m.entidade_tipo === 'GUINDASTE') equip = 'Guindaste';
+            else if (m.entidade_tipo === 'CONTAINER') equip = 'Contêiner';
+
+            return {
+              id: m.id ? `OS-${m.id.substring(0, 8)}` : `OS-${Date.now()}`,
+              equipamento: equip,
+              prioridade: prioridade,
+              descricao: descLimpa,
+              status: statusLocal,
+              rawDbId: m.id
+            };
+          });
+          localStorage.setItem('nexus_os_list', JSON.stringify(osList));
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar ordens de serviço do Supabase:', e);
+      }
+    }
+    renderOsTable();
+  }
+
+  carregarOsSupabase();
 
   function renderOsTable() {
     if (!osTableBody) return;
@@ -380,7 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (conts.length === 0) {
-      conts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]').map(c => ({ identificacao: c.identificacao || c.id, dataManut: c.data_ultima_manutencao || '2024-01-01' }));
+      conts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]').map(c => ({ identificacao: c.identificacao || c.id, dataManut: c.data_ultima_manutencao || '' }));
     }
 
     if (osSelect) {
@@ -412,43 +533,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (alertaList) {
-      const tresAnosMs = 3 * 365 * 24 * 60 * 60 * 1000;
-      const agora = Date.now();
-      const alertas = [];
-
-      navs.forEach(n => {
-        if (n.dataManut) {
-          const diff = agora - new Date(n.dataManut).getTime();
-          if (diff >= tresAnosMs) {
-            alertas.push(`<strong>Navio ${n.nome} (${n.imo || 'Sem IMO'}):</strong> Registrado/Manutenção em ${new Date(n.dataManut).toLocaleDateString('pt-BR')} — Ciclo preventivo recomendado (>3 anos) vencido.`);
-          }
+      let equipamentos = [];
+      if (window.NexusRepository && window.NexusRepository.buscarEquipamentosPreventivaSugerida) {
+        const res = await window.NexusRepository.buscarEquipamentosPreventivaSugerida();
+        if (res && Array.isArray(res.equipamentos)) {
+          equipamentos = res.equipamentos;
         }
-      });
+      }
 
-      gnds.forEach(g => {
-        const d = g.dataManut || g.data_ultima_manutencao;
-        if (d) {
-          const diff = agora - new Date(d).getTime();
-          if (diff >= tresAnosMs) {
-            alertas.push(`<strong>Guindaste ${g.identificacao || g.id}:</strong> Última manutenção registrada em ${new Date(d).toLocaleDateString('pt-BR')} — Ciclo de 3 anos excedido.`);
-          }
-        }
-      });
-
-      conts.forEach(c => {
-        const d = c.dataManut;
-        if (d) {
-          const diff = agora - new Date(d).getTime();
-          if (diff >= tresAnosMs) {
-            alertas.push(`<strong>Contêiner ${c.identificacao}:</strong> Última manutenção em ${new Date(d).toLocaleDateString('pt-BR')} — Ciclo preventivo recomendado (>3 anos) vencido.`);
-          }
-        }
-      });
-
-      if (alertas.length > 0) {
-        alertaList.innerHTML = alertas.map((a, idx) => `${idx + 1}. ${a}`).join('<br>');
+      if (equipamentos.length > 0) {
+        alertaList.innerHTML = equipamentos.map((e, idx) => 
+          `<div class="py-1"><strong>${idx + 1}. [${e.tipo}] ${e.identificacao}:</strong> ${e.motivo}</div>`
+        ).join('');
       } else {
-        alertaList.innerHTML = 'Nenhum equipamento com ciclo de preventiva vencido (> 3 anos) no momento. Todos os ativos operam dentro do ciclo recomendado.';
+        alertaList.innerHTML = '<span class="text-slate-400 italic">Nenhum equipamento com ciclo de preventiva vencido (> 3 anos) no momento. Todos os ativos operam dentro do ciclo recomendado.</span>';
       }
     }
   }
@@ -466,6 +564,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const prioridade = document.getElementById('osPrioridade').value;
       const descricao = document.getElementById('osDescricao').value.trim();
 
+      if (!equipamento) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Selecione um equipamento para abrir a Ordem de Serviço.');
+        return;
+      }
+
+      let entidadeTipo = 'CONTAINER';
+      if (equipamento.startsWith('Navio')) entidadeTipo = 'NAVIO';
+      else if (equipamento.startsWith('Guindaste')) entidadeTipo = 'GUINDASTE';
+
       const newId = `OS-2026-${Math.floor(100 + Math.random() * 900)}`;
       osList.push({
         id: newId, equipamento, prioridade, descricao,
@@ -476,40 +583,66 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
-          window.nexusSupabase.from('manutencoes').insert({
-            entidade_tipo: 'CONTAINER',
+          const { data: insOs } = await window.nexusSupabase.from('manutencoes').insert({
+            entidade_tipo: entidadeTipo,
             descricao: `[${newId}][${prioridade}] Equipamento: ${equipamento} - ${descricao}`,
             status: 'SOLICITADA'
-          }).then().catch(err => console.warn('[NexusPort] Erro ao sincronizar OS com Supabase:', err));
+          }).select('id').single();
+
+          if (window.registrarLogAlteracao) {
+            await window.registrarLogAlteracao('CRIACAO', 'manutencoes', insOs ? insOs.id : null, { equipamento, prioridade, descricao });
+          }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar OS com Supabase:', err);
         }
       }
 
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('manutencoes');
+      }
+
       renderOsTable();
       osForm.reset();
       osForm.classList.add('hidden');
-      alert(`Ordem de Serviço ${newId} criada com sucesso para ${equipamento}! Enviada para aprovação.`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Ordem de Serviço Criada', `Ordem de Serviço ${newId} criada com sucesso para ${equipamento}! Enviada para aprovação do Supervisor.`);
+      }
     });
   }
 
   window.executarAcaoOS = async function(idOS, acao) {
+    const isSupervisor = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
+    if (!isSupervisor) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor de Operações ou Diretor pode aprovar/reprovar Ordens de Serviço!');
+      return;
+    }
+
     const os = osList.find(o => o.id === idOS);
     if (!os) return;
 
     let supabaseStatus = 'SOLICITADA';
+    let feedbackTitulo = '';
+    let feedbackMsg = '';
+    let tipoTrail = 'APROVOU_MANUTENCAO';
+
     if (acao === 'APROVAR') {
       os.status = 'EM_MANUTENCAO';
       supabaseStatus = 'APROVADA';
-      alert(`Ordem de Serviço ${idOS} APROVADA pelo Supervisor! Equipamento ${os.equipamento} no estado EM_MANUTENCAO.`);
+      tipoTrail = 'APROVOU_MANUTENCAO';
+      feedbackTitulo = 'OS Aprovada';
+      feedbackMsg = `Ordem de Serviço ${idOS} APROVADA pelo Supervisor! Equipamento ${os.equipamento} no estado EM_MANUTENCAO.`;
     } else if (acao === 'REPROVAR') {
       os.status = 'REPROVADA';
       supabaseStatus = 'RECUSADA';
-      alert(`Ordem de Serviço ${idOS} REPROVADA pelo Supervisor.`);
+      tipoTrail = 'RECUSOU_MANUTENCAO';
+      feedbackTitulo = 'OS Reprovada';
+      feedbackMsg = `Ordem de Serviço ${idOS} REPROVADA pelo Supervisor.`;
     } else if (acao === 'CONCLUIR') {
       os.status = 'CONCLUIDA';
       supabaseStatus = 'CONCLUIDA';
-      alert(`Manutenção da OS ${idOS} CONCLUÍDA! Equipamento ${os.equipamento} reativado e no estado OPERANTE.`);
+      tipoTrail = 'APROVOU_MANUTENCAO';
+      feedbackTitulo = 'Manutenção Concluída';
+      feedbackMsg = `Manutenção da OS ${idOS} CONCLUÍDA! Equipamento ${os.equipamento} reativado e no estado OPERANTE.`;
     }
 
     localStorage.setItem('nexus_os_list', JSON.stringify(osList));
@@ -520,40 +653,93 @@ document.addEventListener('DOMContentLoaded', () => {
           .update({ status: supabaseStatus })
           .ilike('descricao', `%${idOS}%`);
 
-        if (acao === 'APROVAR') {
-          await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).eq('nome', os.equipamento);
-        } else if (acao === 'CONCLUIR') {
+        const limpaNome = os.equipamento.replace(/^(Navio|Guindaste|Contêiner)\s+/, '').trim();
+
+        if (os.equipamento.startsWith('Navio')) {
+          if (acao === 'APROVAR') {
+            await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).eq('nome', limpaNome);
+          } else if (acao === 'CONCLUIR') {
+            await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).eq('nome', limpaNome);
+          }
+        } else if (os.equipamento.startsWith('Guindaste')) {
+          if (acao === 'APROVAR') {
+            await window.nexusSupabase.from('guindastes').update({ estado: 'EM_MANUTENCAO' }).eq('numero_identificacao', limpaNome);
+          } else if (acao === 'CONCLUIR') {
+            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).eq('numero_identificacao', limpaNome);
+          }
+        } else if (os.equipamento.startsWith('Contêiner')) {
+          if (acao === 'APROVAR') {
+            await window.nexusSupabase.from('containers').update({ estado: 'EM_MANUTENCAO' }).eq('numero_identificacao', limpaNome);
+          } else if (acao === 'CONCLUIR') {
+            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).eq('numero_identificacao', limpaNome);
+          }
+        }
+
+        if (acao === 'CONCLUIR') {
           await window.nexusSupabase.from('historico_manutencoes').insert({
             data_manutencao: new Date().toISOString().split('T')[0],
             descricao_servicos: `Conclusão da Ordem de Serviço ${idOS} para ${os.equipamento}: ${os.descricao}`
           });
-          await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).eq('nome', os.equipamento);
+        }
+
+        if (window.registrarTrailDecisao) {
+          await window.registrarTrailDecisao(tipoTrail, 'manutencoes', os.rawDbId || null, `${feedbackMsg} (Decisão registrada por ${session.nome || session.cargo})`);
+        }
+
+        if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'manutencoes', os.rawDbId || null, { idOS, acao, status: supabaseStatus });
         }
       } catch (err) {
         console.warn('[NexusPort] Erro ao atualizar status da OS no Supabase:', err);
       }
     }
 
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('manutencoes');
+      window.NexusRepository.notifyChange('navios');
+      window.NexusRepository.notifyChange('guindastes');
+      window.NexusRepository.notifyChange('containers');
+    }
+
     renderOsTable();
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', feedbackTitulo, feedbackMsg);
+    }
   };
 
   // Botão de Pânico
   if (panicBtn) {
     panicBtn.addEventListener('click', async () => {
-      if (await window.nexusConfirm('DECLARAÇÃO DE EMERGÊNCIA', 'ATENÇÃO: Deseja acionar o BOTÃO DE PÂNICO e declarar EMERGÊNCIA CRÍTICA no Terminal STS-01?')) {
+      const confirmou = window.nexusConfirm ? await window.nexusConfirm('DECLARAÇÃO DE EMERGÊNCIA', 'ATENÇÃO: Deseja acionar o BOTÃO DE PÂNICO e declarar EMERGÊNCIA CRÍTICA no Terminal STS-01?') : true;
+      if (confirmou) {
         localStorage.setItem('nexus_emergency_active', 'true');
         if (emergencyBanner) emergencyBanner.classList.remove('hidden');
-        alert('EMERGÊNCIA CRÍTICA DECLARADA! Pátio STS-01 bloqueado temporariamente.');
+
+        if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'emergencia', null, { estado: 'EMERGENCIA_CRITICA_ATIVADA', acionado_por: session.nome || session.cargo });
+        }
+
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'EMERGÊNCIA CRÍTICA DECLARADA', 'Alarme de emergência acionado! Operações do pátio STS-01 bloqueadas temporariamente.');
+        }
       }
     });
   }
 
   if (resetEmergencyBtn) {
     resetEmergencyBtn.addEventListener('click', async () => {
-      if (await window.nexusConfirm('Desativar Emergência', 'Confirmar desativação do alarme de emergência?')) {
+      const confirmou = window.nexusConfirm ? await window.nexusConfirm('Desativar Emergência', 'Confirmar desativação do alarme de emergência?') : true;
+      if (confirmou) {
         localStorage.removeItem('nexus_emergency_active');
         if (emergencyBanner) emergencyBanner.classList.add('hidden');
-        alert('Alarme de emergência desativado com sucesso.');
+
+        if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'emergencia', null, { estado: 'EMERGENCIA_DESATIVADA', desativado_por: session.nome || session.cargo });
+        }
+
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('sucesso', 'Emergência Desativada', 'Alarme de emergência desativado com sucesso. Operações normalizadas.');
+        }
       }
     });
   }

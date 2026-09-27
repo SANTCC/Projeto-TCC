@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     carregarBtn.addEventListener('click', () => {
       const val = selectCarga.value;
       if (!val) {
-        alert('Por favor, selecione uma carga para carregar o checklist.');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Seleção Obrigatória', 'Por favor, selecione uma carga para carregar o checklist.');
         return;
       }
       carregarChecklistParaCarga(val);
@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cargaAtual = cargas.find(c => c.id === idCarga);
 
     if (!cargaAtual) {
-      alert(`Carga "${idCarga}" não foi localizada.`);
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Carga Não Localizada', `Carga "${idCarga}" não foi localizada.`);
       return;
     }
 
@@ -202,6 +202,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
   // Aprovar Carga (RN 14)
   if (aprovarBtn) {
     aprovarBtn.addEventListener('click', async () => {
@@ -211,6 +213,13 @@ document.addEventListener('DOMContentLoaded', () => {
       cargaAtual.resultadoInspecao = 'APROVADA';
 
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
+
+      let inspetorId = isUUID(session.id) ? session.id : null;
+      if (!inspetorId) {
+        const list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+        const match = list.find(f => f.codigo_individual === session.codigo_individual || f.matricula === session.matricula);
+        if (match && isUUID(match.id)) inspetorId = match.id;
+      }
 
       if (window.nexusSupabase) {
         try {
@@ -225,16 +234,19 @@ document.addEventListener('DOMContentLoaded', () => {
             .maybeSingle();
 
           if (cargaDb) {
-            const { data: inspDb } = await window.nexusSupabase.from('inspecoes').insert({
+            const payloadInspecao = {
               carga_id: cargaDb.id,
+              data_inspecao: new Date().toISOString(),
               resultado: 'APROVADA',
               observacoes: '100% dos itens críticos do checklist verificados em CONFORME'
-            }).select().maybeSingle();
+            };
+            if (inspetorId) payloadInspecao.inspetor_id = inspetorId;
+
+            const { data: inspDb } = await window.nexusSupabase.from('inspecoes').insert(payloadInspecao).select().maybeSingle();
 
             if (inspDb) {
-              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
               const itemRows = Object.keys(itemsEstado)
-                .filter(itemId => uuidRegex.test(itemId))
+                .filter(itemId => isUUID(itemId))
                 .map(itemId => ({
                   inspecao_id: inspDb.id,
                   checklist_item_id: itemId,
@@ -253,11 +265,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Grava no Trail de Decisões Imutável (T7.3)
       if (window.registrarTrailDecisao) {
-        window.registrarTrailDecisao(`Aprovou Carga ${cargaAtual.id}`, cargaAtual.id, '100% dos itens críticos do checklist verificados em CONFORME');
+        await window.registrarTrailDecisao('APROVOU_CARGA', cargaAtual.id, '100% dos itens críticos do checklist verificados em CONFORME');
       }
 
-      alert(`Sucesso! Carga ${cargaAtual.id} APROVADA na inspeção técnica. Status atualizado para ARMAZENAGEM no pátio.`);
-      window.location.href = 'cargas.html';
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('cargas');
+      }
+
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Inspeção Concluída', `Sucesso! Carga ${cargaAtual.id} APROVADA na inspeção técnica. Status atualizado para ARMAZENAGEM no pátio.`);
+      }
+      setTimeout(() => { window.location.href = 'cargas.html'; }, 1000);
     });
   }
 
@@ -275,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (!motivo) {
-        alert('ATENÇÃO: É obrigatório informar o MOTIVO FORMAL da recusa.');
+        if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Motivo Obrigatório', 'ATENÇÃO: É obrigatório informar o MOTIVO FORMAL da recusa.');
         if (motivoInput) motivoInput.focus();
         return;
       }
@@ -283,8 +301,16 @@ document.addEventListener('DOMContentLoaded', () => {
       cargaAtual.status = 'RECUSADA';
       cargaAtual.resultadoInspecao = 'RECUSADA';
       cargaAtual.motivoRecusa = motivo;
+      cargaAtual.motivo_recusa = motivo;
 
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
+
+      let inspetorId = isUUID(session.id) ? session.id : null;
+      if (!inspetorId) {
+        const list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+        const match = list.find(f => f.codigo_individual === session.codigo_individual || f.matricula === session.matricula);
+        if (match && isUUID(match.id)) inspetorId = match.id;
+      }
 
       if (window.nexusSupabase) {
         try {
@@ -298,16 +324,19 @@ document.addEventListener('DOMContentLoaded', () => {
             .maybeSingle();
 
           if (cargaDb) {
-            const { data: inspDb } = await window.nexusSupabase.from('inspecoes').insert({
+            const payloadInspecao = {
               carga_id: cargaDb.id,
+              data_inspecao: new Date().toISOString(),
               resultado: 'RECUSADA',
               observacoes: motivo
-            }).select().maybeSingle();
+            };
+            if (inspetorId) payloadInspecao.inspetor_id = inspetorId;
+
+            const { data: inspDb } = await window.nexusSupabase.from('inspecoes').insert(payloadInspecao).select().maybeSingle();
 
             if (inspDb) {
-              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
               const itemRows = Object.keys(itemsEstado)
-                .filter(itemId => uuidRegex.test(itemId))
+                .filter(itemId => isUUID(itemId))
                 .map(itemId => ({
                   inspecao_id: inspDb.id,
                   checklist_item_id: itemId,
@@ -326,11 +355,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Grava no Trail de Decisões Imutável (T7.3)
       if (window.registrarTrailDecisao) {
-        window.registrarTrailDecisao(`Recusou Carga ${cargaAtual.id}`, cargaAtual.id, motivo);
+        await window.registrarTrailDecisao('RECUSOU_CARGA', cargaAtual.id, motivo);
       }
 
-      alert(`Carga ${cargaAtual.id} RECUSADA na inspeção técnica. Motivo registrado: "${motivo}". Status mantido em RECUSADA.`);
-      window.location.href = 'cargas.html';
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('cargas');
+      }
+
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Inspeção Registrada', `Carga ${cargaAtual.id} RECUSADA na inspeção técnica. Motivo registrado: "${motivo}". Status mantido em RECUSADA.`);
+      }
+      setTimeout(() => { window.location.href = 'cargas.html'; }, 1000);
     });
   }
 

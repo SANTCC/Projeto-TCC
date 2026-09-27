@@ -6,73 +6,175 @@
  */
 
 // Funções utilitárias globais exigidas para integração (T7.1, T7.3, T8.3 - T8.6, T6.8)
-window.registrarLogAlteracao = function(entidade, tipoAlteracao, detalhes = '') {
+window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes = '') {
   const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null) || {};
-  const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
-  const newLog = {
-    data_hora: new Date().toISOString(),
-    nome_funcionario: session.nome || 'Operador Porto',
-    cargo: session.cargo_nome || session.cargo || 'Operador',
-    codigo_usuario: session.codigo_individual || session.codigo || '--',
-    entidade: entidade,
-    tipo_alteracao: tipoAlteracao,
-    detalhes: detalhes
-  };
-  logs.unshift(newLog);
-  localStorage.setItem('nexus_audit_logs', JSON.stringify(logs));
+  const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+  let funcId = isUUID(session.id) ? session.id : null;
+  if (!funcId) {
+    const list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+    const match = list.find(f => f.codigo_individual === session.codigo_individual || f.matricula === session.matricula);
+    if (match && isUUID(match.id)) funcId = match.id;
+  }
+
+  const validTipos = ['CRIACAO', 'EDICAO', 'EXCLUSAO', 'REIMPRESSAO_ETIQUETA'];
+  let tipoEnum = 'EDICAO';
+  const tipoUpper = String(tipoAlteracao || '').toUpperCase();
+  if (validTipos.includes(tipoUpper)) {
+    tipoEnum = tipoUpper;
+  } else if (tipoUpper.includes('CRI')) tipoEnum = 'CRIACAO';
+  else if (tipoUpper.includes('EXCLU') || tipoUpper.includes('DELET')) tipoEnum = 'EXCLUSAO';
+  else if (tipoUpper.includes('ETIQUETA')) tipoEnum = 'REIMPRESSAO_ETIQUETA';
+
+  let entidadeTipo = 'CARGA';
+  let entidadeId = String(entidade || '').trim();
+  const entUpper = entidadeId.toUpperCase();
+  if (entUpper.startsWith('NAVIO') || entUpper.includes('NAVIO')) entidadeTipo = 'NAVIO';
+  else if (entUpper.startsWith('CONT') || entUpper.includes('CONTAINER')) entidadeTipo = 'CONTAINER';
+  else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
+  else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
+  else if (entUpper.startsWith('VIS') || entUpper.includes('VISITANTE')) entidadeTipo = 'VISITANTE';
+
+  const validCargos = [
+    'ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 
+    'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS', 'SUPERVISOR_GERENTE_OPERACOES', 
+    'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 
+    'CONSELHO_ADMINISTRACAO'
+  ];
+  let cargoEnum = 'ESTIVADOR';
+  if (validCargos.includes(session.cargo)) cargoEnum = session.cargo;
+
+  const nowIso = new Date().toISOString();
 
   if (window.nexusSupabase) {
     try {
-      window.nexusSupabase.from('logs_alteracoes').insert({
-        data_hora: newLog.data_hora,
-        cargo: session.cargo || 'ESTIVADOR',
-        codigo_individual: newLog.codigo_usuario,
-        entidade_tipo: 'CARGA',
-        entidade_id: String(entidade),
-        tipo_alteracao: 'EDICAO',
+      const payload = {
+        data_hora: nowIso,
+        cargo: cargoEnum,
+        codigo_individual: session.codigo_individual || session.codigo || '--',
+        entidade_tipo: entidadeTipo,
+        entidade_id: entidadeId || 'N/A',
+        tipo_alteracao: tipoEnum,
         detalhes: typeof detalhes === 'object' ? detalhes : { descricao: detalhes }
-      }).then().catch(err => console.warn('[NexusPort] Erro ao sincronizar log com Supabase:', err));
+      };
+      if (funcId) payload.funcionario_id = funcId;
+
+      await window.nexusSupabase.from('logs_alteracoes').insert(payload);
     } catch (err) {
       console.warn('[NexusPort] Erro ao invocar log Supabase:', err);
     }
   }
+
+  const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+  const newLog = {
+    data_hora: nowIso,
+    nome_funcionario: session.nome || 'Operador Porto',
+    cargo: session.cargo_nome || session.cargo || 'Operador',
+    codigo_usuario: session.codigo_individual || session.codigo || '--',
+    entidade: `${entidadeTipo} ${entidadeId}`,
+    tipo_alteracao: tipoEnum,
+    detalhes: detalhes
+  };
+  logs.unshift(newLog);
+  localStorage.setItem('nexus_audit_logs', JSON.stringify(logs));
 };
 
-window.registrarTrailDecisao = function(decisao, entidade, motivo = '') {
+window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
   const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null) || {};
+  const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+  let funcId = isUUID(session.id) ? session.id : null;
+  if (!funcId) {
+    const list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+    const match = list.find(f => f.codigo_individual === session.codigo_individual || f.matricula === session.matricula);
+    if (match && isUUID(match.id)) funcId = match.id;
+  }
+
+  const validDecisoes = [
+    'APROVOU_CARGA', 'RECUSOU_CARGA', 'SOLICITOU_MANUTENCAO_NAVIO', 
+    'SOLICITOU_MANUTENCAO_CONTAINER', 'LIBEROU_NAVIO', 'CANCELOU_ENTREGA', 
+    'APROVOU_MANUTENCAO', 'RECUSOU_MANUTENCAO', 'DESIGNOU_SUBSTITUTO'
+  ];
+  let decisaoEnum = 'APROVOU_CARGA';
+  const decUpper = String(decisao || '').toUpperCase();
+  if (validDecisoes.includes(decUpper)) {
+    decisaoEnum = decUpper;
+  } else if (decUpper.includes('RECUS') && decUpper.includes('CARGA')) {
+    decisaoEnum = 'RECUSOU_CARGA';
+  } else if (decUpper.includes('CANCEL')) {
+    decisaoEnum = 'CANCELOU_ENTREGA';
+  } else if (decUpper.includes('NAVIO') && decUpper.includes('LIBER')) {
+    decisaoEnum = 'LIBEROU_NAVIO';
+  } else if (decUpper.includes('MANUT') && decUpper.includes('APROV')) {
+    decisaoEnum = 'APROVOU_MANUTENCAO';
+  } else if (decUpper.includes('MANUT') && decUpper.includes('RECUS')) {
+    decisaoEnum = 'RECUSOU_MANUTENCAO';
+  } else if (decUpper.includes('SUBSTITUT')) {
+    decisaoEnum = 'DESIGNOU_SUBSTITUTO';
+  }
+
+  let entidadeTipo = 'CARGA';
+  let entidadeId = String(entidade || '').trim();
+  const entUpper = entidadeId.toUpperCase();
+  if (entUpper.startsWith('NAVIO') || entUpper.includes('NAVIO')) entidadeTipo = 'NAVIO';
+  else if (entUpper.startsWith('CONT') || entUpper.includes('CONTAINER')) entidadeTipo = 'CONTAINER';
+  else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
+  else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
+
+  const validCargos = [
+    'ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 
+    'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS', 'SUPERVISOR_GERENTE_OPERACOES', 
+    'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 
+    'CONSELHO_ADMINISTRACAO'
+  ];
+  let cargoEnum = 'SUPERVISOR_GERENTE_OPERACOES';
+  if (validCargos.includes(session.cargo)) cargoEnum = session.cargo;
+
+  const nowIso = new Date().toISOString();
+  let insertedDbId = null;
+
+  if (window.nexusSupabase) {
+    try {
+      const payload = {
+        data_hora: nowIso,
+        cargo: cargoEnum,
+        codigo_individual: session.codigo_individual || session.codigo || 'SUP-2001',
+        tipo_decisao: decisaoEnum,
+        entidade_tipo: entidadeTipo,
+        entidade_id: entidadeId,
+        motivo: motivo || 'Decisão homologada conforme fluxo operacional'
+      };
+      if (funcId) payload.funcionario_id = funcId;
+
+      const { data, error } = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
+      if (!error && data) {
+        insertedDbId = data.id;
+      }
+    } catch (err) {
+      console.warn('[NexusPort] Erro ao invocar trail Supabase:', err);
+    }
+  }
+
   const trail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
-  const idReg = `TRL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+  const idReg = insertedDbId ? `TRL-${insertedDbId.substring(0, 8)}` : `TRL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
   const newEntry = {
     id: idReg,
-    data_hora: new Date().toISOString(),
+    dbId: insertedDbId,
+    data_hora: nowIso,
     responsavel: `${session.nome || 'Operador'} (${session.cargo_nome || session.cargo || 'Supervisor'}) - ${session.codigo_individual || session.codigo || '--'}`,
-    decisao: decisao,
-    entidade: entidade,
+    decisao: decisaoEnum,
+    entidade: `${entidadeTipo} ${entidadeId}`,
     motivo: motivo || 'Decisão homologada conforme fluxo operacional',
     retificacao: null
   };
   trail.unshift(newEntry);
   localStorage.setItem('nexus_trail_decisoes', JSON.stringify(trail));
 
-  if (window.nexusSupabase) {
-    try {
-      window.nexusSupabase.from('trail_decisoes').insert({
-        data_hora: newEntry.data_hora,
-        cargo: session.cargo || 'SUPERVISOR_GERENTE_OPERACOES',
-        codigo_individual: session.codigo_individual || session.codigo || 'SUP-2001',
-        tipo_decisao: 'APROVOU_CARGA',
-        entidade_tipo: 'CARGA',
-        entidade_id: String(entidade),
-        motivo: newEntry.motivo
-      }).then().catch(err => console.warn('[NexusPort] Erro ao sincronizar trail com Supabase:', err));
-    } catch (err) {
-      console.warn('[NexusPort] Erro ao invocar trail Supabase:', err);
-    }
+  if (window.registrarLogAlteracao) {
+    await window.registrarLogAlteracao(entidadeId, `Decisão Crítica: ${decisaoEnum}`, motivo);
   }
 
-  if (window.registrarLogAlteracao) {
-    window.registrarLogAlteracao(entidade, `Decisão Crítica: ${decisao}`, motivo);
-  }
+  window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'trail_decisoes' } }));
 };
 
 window.calcularEstimativaChegada = function(distanciaKm) {
@@ -105,7 +207,9 @@ window.calcularTempoForaPorto = function(dataSaidaStr) {
 };
 
 window.gerarRelatorioPdfA4 = function(idCarga) {
-  alert(`Relatório PDF A4 emitido para a carga ${idCarga}`);
+  if (window.mostrarFeedback) {
+    window.mostrarFeedback('sucesso', 'Relatório PDF A4', `Relatório PDF A4 emitido com sucesso para a carga ${idCarga}`);
+  }
 };
 
 function initQrCodeEtiquetas() {}
@@ -161,34 +265,46 @@ document.addEventListener('DOMContentLoaded', () => {
     renderEstrategicoCharts();
   }
 
-  // Renderiza Planilha Consolidada de Desempenho Operacional por Categoria (A3)
+  // Renderiza Planilha Consolidada de Desempenho Operacional por Categoria (A3 / Item 1.5)
   async function renderIndicadoresExecutivosTable() {
     const execTableBody = document.getElementById('indicadoresExecutivosTableBody');
     if (!execTableBody) return;
 
-    let cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-    let containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+    let cargas = [];
+    let containers = [];
+    let navios = [];
+    let manutencoes = [];
 
     if (window.nexusSupabase) {
       try {
-        const { data: dbCargas } = await window.nexusSupabase.from('cargas').select('*');
-        if (dbCargas && dbCargas.length > 0) {
-          cargas = dbCargas.map(c => ({
-            id: c.id,
-            tipo: c.natureza || 'Carga Geral',
-            volume: `${c.volume || 0} m³`,
-            status: c.status_fluxo
-          }));
-        }
+        const [resCargas, resConts, resNavs, resManut] = await Promise.all([
+          window.nexusSupabase.from('cargas').select('*'),
+          window.nexusSupabase.from('containers').select('*'),
+          window.nexusSupabase.from('navios').select('*'),
+          window.nexusSupabase.from('manutencoes').select('*')
+        ]);
+        if (Array.isArray(resCargas.data)) cargas = resCargas.data;
+        if (Array.isArray(resConts.data)) containers = resConts.data;
+        if (Array.isArray(resNavs.data)) navios = resNavs.data;
+        if (Array.isArray(resManut.data)) manutencoes = resManut.data;
       } catch (e) { console.warn('Erro ao carregar dados do Supabase para planilha:', e); }
+    } else {
+      cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+      navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+      manutencoes = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
     }
 
     const totalCargas = cargas.length;
     const totalConts = containers.length;
+    const naviosNoPorto = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
+    const osAtivas = manutencoes.filter(m => m.status === 'SOLICITADA' || m.status === 'APROVADA' || m.status === 'EM_MANUTENCAO').length;
 
     const indicadores = [
-      { categoria: 'Contêineres Alocados', volume: totalConts, meta: 50, atingimento: Math.round((totalConts / 50) * 100), tempo: 1.5, status: 'OPERACIONAL' },
-      { categoria: 'Cargas Geral no Fluxo', volume: totalCargas, meta: 100, atingimento: Math.round((totalCargas / 100) * 100), tempo: 2.1, status: 'OPERACIONAL' }
+      { categoria: 'Contêineres Cadastrados e Alocados', volume: totalConts, meta: 20, atingimento: Math.min(100, Math.round((totalConts / 20) * 100)), tempo: 1.5, status: totalConts > 0 ? 'OPERACIONAL' : 'SEM_MOVIMENTO' },
+      { categoria: 'Cargas Gerais no Fluxo Operacional', volume: totalCargas, meta: 30, atingimento: Math.min(100, Math.round((totalCargas / 30) * 100)), tempo: 2.1, status: totalCargas > 0 ? 'OPERACIONAL' : 'AGENDADO' },
+      { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto, meta: 5, atingimento: Math.min(100, Math.round((naviosNoPorto / 5) * 100)), tempo: 18.4, status: naviosNoPorto > 0 ? 'ATRACADO' : 'AGENDADO' },
+      { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas, meta: 5, atingimento: osAtivas === 0 ? 100 : Math.max(10, 100 - (osAtivas * 10)), tempo: 4.8, status: osAtivas > 0 ? 'EM_REVISAO' : 'CONCLUIDA' }
     ];
 
     execTableBody.innerHTML = indicadores.map((i, idx) => `
@@ -199,72 +315,24 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${i.atingimento}%</td>
         <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${i.tempo} h</td>
         <td class="p-3 text-center">
-          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">${i.status}</span>
+          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+            i.status === 'OPERACIONAL' || i.status === 'ATRACADO' || i.status === 'CONCLUIDA'
+              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+          }">${i.status}</span>
         </td>
       </tr>
     `).join('');
   }
 
-  // 1. Renderiza os 7 Cards Indicadores Operacionais (RF 7 / A1 / A9) com dados em tempo real do Supabase
+  // 1. Renderiza os 7 Cards Indicadores Operacionais (RF 7 / A1 / A9) com dados unificados do Supabase (Item 1.1)
   async function renderCardsOperacionais() {
-    let cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-    let osList = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
-    let dbNavios = [];
-
-    if (window.nexusSupabase) {
-      try {
-        const { data: cData } = await window.nexusSupabase.from('cargas').select('*');
-        if (cData && cData.length > 0) {
-          cargas = cData.map(c => ({ status: c.status_fluxo }));
-        }
-        const { data: mData } = await window.nexusSupabase.from('manutencoes').select('*');
-        if (mData && mData.length > 0) {
-          osList = mData.map(m => ({ status: m.status }));
-        }
-        const { data: nData } = await window.nexusSupabase.from('navios').select('*');
-        if (nData) dbNavios = nData;
-      } catch (e) {
-        console.warn('[NexusPort] Aviso ao carregar cards do Supabase:', e);
-      }
+    let indic = null;
+    if (window.NexusRepository && window.NexusRepository.buscarIndicadoresOperacionais) {
+      indic = await window.NexusRepository.buscarIndicadoresOperacionais();
     }
 
-    let guindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
-    let containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
-
-    if (window.nexusSupabase) {
-      try {
-        const { data: gData } = await window.nexusSupabase.from('guindastes').select('*');
-        if (gData && gData.length > 0) guindastes = gData;
-        const { data: contData } = await window.nexusSupabase.from('containers').select('*');
-        if (contData && contData.length > 0) containers = contData;
-      } catch (e) {}
-    }
-
-    const emManutencaoNavios = dbNavios.filter(n => n.estado_operacional === 'EM_MANUTENCAO' || n.estado_operacional === 'AGENDADO_PARA_REFORMA').length;
-    const emManutencaoOS = osList.filter(o => o.status === 'EM_MANUTENCAO').length;
-    const totalEmManutencao = emManutencaoNavios + emManutencaoOS;
-
-    const CAPACIDADE_MAXIMA_PATIO = 100; // Capacidade regulamentar total de posições do pátio STS-01
-
-    const foraPortoNavios = dbNavios.filter(n => n.localizacao === 'FORA_DO_PORTO').length;
-    const armazenagem = cargas.filter(c => c.status === 'ARMAZENAGEM' || c.status_fluxo === 'ARMAZENAGEM').length;
-    const prontas = cargas.filter(c => c.status === 'PRONTA_PARA_ENTREGA' || c.status_fluxo === 'PRONTA_PARA_ENTREGA').length;
-    const recusadas = cargas.filter(c => c.status === 'RECUSADA' || c.status_fluxo === 'RECUSADA').length;
-    const canceladas = cargas.filter(c => c.status === 'CANCELADA' || c.status_fluxo === 'CANCELADA').length;
-
-    // Cálculo exato da preventiva sugerida (equipamentos/navios com mais de 3 anos / 1095 dias)
-    const agora = Date.now();
-    const tresAnosMs = 3 * 365 * 24 * 60 * 60 * 1000;
-    let countPreventiva = 0;
-
-    containers.forEach(ct => {
-      const d = ct.data_ultima_manutencao || ct.dataManut || ct.data_fabricacao || ct.dataFabr;
-      if (d && (agora - new Date(d).getTime()) >= tresAnosMs) countPreventiva++;
-    });
-    guindastes.forEach(g => {
-      const d = g.data_ultima_manutencao || g.dataManut;
-      if (d && (agora - new Date(d).getTime()) >= tresAnosMs) countPreventiva++;
-    });
+    if (!indic) return;
 
     const elNaviosManut = document.getElementById('cardNaviosManutencaoVal');
     const elNaviosFora = document.getElementById('cardNaviosForaVal');
@@ -274,19 +342,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const elOcupacao = document.getElementById('cardOcupacaoPatioVal');
     const elPreventiva = document.getElementById('cardPreventivaVal');
 
-    if (elNaviosManut) elNaviosManut.textContent = totalEmManutencao;
-    if (elNaviosFora) elNaviosFora.textContent = foraPortoNavios;
-    if (elCargasArmaz) elCargasArmaz.textContent = armazenagem;
-    if (elCargasProntas) elCargasProntas.textContent = prontas;
-    if (elCargasRecusadas) elCargasRecusadas.textContent = `${recusadas} (${canceladas} Canc.)`;
-    if (elOcupacao) elOcupacao.textContent = `${Math.min(100, Math.round((armazenagem / CAPACIDADE_MAXIMA_PATIO) * 100))}% (${armazenagem}/${CAPACIDADE_MAXIMA_PATIO})`;
-    if (elPreventiva) elPreventiva.textContent = `${countPreventiva} Equipamento(s)`;
-    if (elPreventiva) elPreventiva.textContent = `${countPreventiva} Equipamento(s)`;
+    if (elNaviosManut) elNaviosManut.textContent = indic.manutencao.total;
+    if (elNaviosFora) elNaviosFora.textContent = indic.naviosFora.total;
+    if (elCargasArmaz) elCargasArmaz.textContent = indic.cargasArmazenagem.total;
+    if (elCargasProntas) elCargasProntas.textContent = indic.cargasProntas.total;
+    if (elCargasRecusadas) elCargasRecusadas.textContent = `${indic.recusadas.totalRecusadas} (${indic.recusadas.totalCanceladas} Canc.)`;
+    if (elOcupacao) elOcupacao.textContent = `${indic.ocupacaoPatio.taxa}% (${indic.ocupacaoPatio.ocupados}/${indic.ocupacaoPatio.capacidade})`;
+    if (elPreventiva) elPreventiva.textContent = `${indic.preventiva.total} Equipamento(s)`;
   }
 
   renderCardsOperacionais();
 
-  // Modal Centralizado para Detalhamento de Indicadores Operacionais (Item 1 Correções)
+  // Modal Centralizado para Detalhamento de Indicadores Operacionais (Item 1.2 & Backlog Erro 1)
   const cardModal = document.getElementById('cardDetailModal');
   const modalCardTitle = document.getElementById('modalCardTitle');
   const modalCardDetailContent = document.getElementById('modalCardDetailContent');
@@ -316,51 +383,56 @@ document.addEventListener('DOMContentLoaded', () => {
     let detalhe = '';
     let icone = 'info';
 
-    let cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-    let osList = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
-    let navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    let indic = null;
+    if (window.NexusRepository && window.NexusRepository.buscarIndicadoresOperacionais) {
+      indic = await window.NexusRepository.buscarIndicadoresOperacionais();
+    }
 
-    if (window.NexusRepository) {
-      try {
-        cargas = await window.NexusRepository.getCargas();
-        navios = await window.NexusRepository.getNavios();
-      } catch (e) {}
+    if (!indic) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('info', 'Indicadores', 'Carregando dados dos indicadores operacionais...');
+      }
+      return;
     }
 
     if (tipo === 'NAVIOS_MANUTENCAO') {
       titulo = 'Navios e Equipamentos em Manutenção';
       icone = 'build';
-      const gnds = osList.filter(o => o.status === 'EM_MANUTENCAO').map(o => `• ${o.equipamento} (${o.descricao})`);
-      const navs = navios.filter(n => n.estado === 'AGENDADO_PARA_REFORMA' || n.estado === 'EM_MANUTENCAO').map(n => `• ${n.nome} (${n.estado})`);
-      detalhe = [...navs, ...gnds].join('\n') || 'Nenhum equipamento ou navio em manutenção no momento.';
+      const navs = indic.manutencao.navios.map(n => `• Navio: ${n.nome} (${n.estado_operacional || n.estado})`);
+      const ords = indic.manutencao.ordens.map(o => `• Ordem: ${o.descricao || 'Manutenção geral'} [${o.status}]`);
+      detalhe = [...navs, ...ords].join('\n') || 'Nenhum equipamento ou navio em manutenção no momento.';
     } else if (tipo === 'NAVIOS_FORA') {
-      titulo = 'Navios Fora do Porto (Em Trânsito)';
+      titulo = 'Navios Fora do Porto (Em Trânsito / Destino)';
       icone = 'sailing';
-      const emTransito = navios.filter(n => n.localizacao === 'FORA_DO_PORTO' || n.localizacao === 'EM_TRANSITO').map(n => `• ${n.nome} (Destino: ${n.destino || 'Destino Geral'})`);
+      const emTransito = indic.naviosFora.lista.map(n => `• ${n.nome} (Destino: ${n.porto_destino || n.destino || 'Destino Geral'} | Status: ${n.localizacao})`);
       detalhe = emTransito.join('\n') || 'Nenhum navio fora do porto no momento.';
     } else if (tipo === 'CARGAS_ARMAZENAGEM') {
-      titulo = 'Cargas em Armazenagem no Pátio';
+      titulo = 'Cargas em Armazenagem no Pátio STS-01';
       icone = 'inventory_2';
-      const arm = cargas.filter(c => c.status === 'ARMAZENAGEM').map(c => `• ${c.id} (Tipo: ${c.tipo})`);
+      const arm = indic.cargasArmazenagem.lista.map(c => `• Carga ${c.qr_code_url ? c.qr_code_url.replace('QR-', '') : c.id}: ${c.natureza || 'Geral'} (${c.peso || 0} t, ${c.volume || 0} m³)`);
       detalhe = arm.join('\n') || 'Nenhuma carga em armazenagem no momento.';
     } else if (tipo === 'CARGAS_PRONTAS') {
       titulo = 'Cargas Prontas Aguardando Liberação';
       icone = 'verified';
-      const pr = cargas.filter(c => c.status === 'PRONTA_PARA_ENTREGA').map(c => `• ${c.id} (Tipo: ${c.tipo})`);
+      const pr = indic.cargasProntas.lista.map(c => `• Carga ${c.qr_code_url ? c.qr_code_url.replace('QR-', '') : c.id}: ${c.natureza || 'Geral'} (${c.peso || 0} t)`);
       detalhe = pr.join('\n') || 'Nenhuma carga pronta para entrega no momento.';
     } else if (tipo === 'CARGAS_RECUSADAS') {
-      titulo = 'Cargas Recusadas na Inspeção';
+      // Item 1.2: Usa O MESMO RETORNO de buscarCargasRecusadas()
+      titulo = 'Cargas Recusadas e Canceladas';
       icone = 'cancel';
-      const rec = cargas.filter(c => c.status === 'RECUSADA' || c.status === 'CANCELADA').map(c => `• ${c.id} (${c.motivoCancelamento || 'Recusada/Cancelada'})`);
-      detalhe = rec.join('\n') || 'Nenhuma carga recusada no momento.';
+      const rec = indic.recusadas.recusadas.map(c => `• [RECUSADA] Carga ${c.id} (${c.tipo}): ${c.motivo}`);
+      const canc = indic.recusadas.canceladas.map(c => `• [CANCELADA] Carga ${c.id} (${c.tipo}): ${c.motivo}`);
+      detalhe = [...rec, ...canc].join('\n') || 'Nenhuma carga recusada ou cancelada no momento.';
     } else if (tipo === 'OCUPACAO_PATIO') {
       titulo = 'Taxa de Ocupação do Pátio STS-01';
       icone = 'pie_chart';
-      detalhe = `Capacidade Total do Terminal: 10.000 TEUs\nCargas Ativas: ${cargas.length}\nOcupação Atual Calculada: ${Math.min(100, Math.round((cargas.length / 20) * 100))}%`;
+      detalhe = `Capacidade Máxima Regulamentar: ${indic.ocupacaoPatio.capacidade} posições (100 Hectares / 1.000.000 m²)\nCargas em Armazenagem Ativa: ${indic.ocupacaoPatio.ocupados}\nTaxa de Ocupação Atual: ${indic.ocupacaoPatio.taxa}%`;
     } else if (tipo === 'PREVENTIVA_SUGERIDA') {
+      // Item 1.8: Usa O MESMO RETORNO de buscarEquipamentosPreventivaSugerida()
       titulo = 'Manutenções Preventivas Sugeridas (> 3 Anos de Uso)';
       icone = 'warning';
-      detalhe = 'Alertas dinâmicos calculados a partir dos dados do terminal.';
+      const prev = indic.preventiva.equipamentos.map(e => `• [${e.tipo}] ${e.identificacao}: ${e.motivo}`);
+      detalhe = prev.join('\n') || 'Nenhum equipamento com ciclo de preventiva vencido (> 3 anos) no momento. Todos os ativos operam dentro do ciclo recomendado.';
     }
 
     const modalCardIcon = document.getElementById('modalCardIcon');
@@ -370,10 +442,44 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cardModal) cardModal.classList.remove('hidden');
   };
 
-  // 2. Renderiza Log Geral de Alterações com Nome do Funcionário (Item 2 Correções)
-  function renderAuditLogTable() {
+  // 2. Renderiza Log Geral de Alterações com Nome do Funcionário Real (Item 2 Correções)
+  async function renderAuditLogTable() {
     if (!auditTableBody) return;
-    let logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+    let logs = [];
+
+    if (window.nexusSupabase) {
+      try {
+        const { data: dbLogs, error } = await window.nexusSupabase
+          .from('logs_alteracoes')
+          .select('*, funcionarios(nome, cargo)')
+          .order('data_hora', { ascending: false });
+
+        if (!error && Array.isArray(dbLogs)) {
+          const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+          logs = dbLogs.map(l => {
+            let nomeFunc = l.funcionarios ? l.funcionarios.nome : null;
+            let cargoFunc = l.funcionarios && l.funcionarios.cargo ? l.funcionarios.cargo : l.cargo;
+            if (!nomeFunc && l.codigo_individual) {
+              const match = localFuncs.find(f => f.codigo_individual === l.codigo_individual || f.matricula === l.codigo_individual);
+              if (match) {
+                nomeFunc = match.nome;
+                cargoFunc = match.cargo || cargoFunc;
+              }
+            }
+            return {
+              data_hora: l.data_hora,
+              nome_funcionario: nomeFunc || 'Operador do Sistema',
+              cargo: cargoFunc || 'OPERACIONAL',
+              codigo_usuario: l.codigo_individual || '--',
+              entidade: `${l.entidade_tipo || ''} ${l.entidade_id || ''}`.trim(),
+              tipo_alteracao: l.tipo_alteracao
+            };
+          });
+        }
+      } catch (err) {
+        console.warn('Erro ao consultar logs_alteracoes no Supabase:', err);
+      }
+    }
 
     if (logs.length === 0) {
       auditTableBody.innerHTML = `
@@ -387,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
     auditTableBody.innerHTML = logs.map(l => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <td class="p-2.5 text-slate-500 whitespace-nowrap">${new Date(l.data_hora).toLocaleString('pt-BR')}</td>
-        <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${l.nome_funcionario || 'Operador Porto'}</td>
+        <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${l.nome_funcionario}</td>
         <td class="p-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">${l.cargo}</td>
         <td class="p-2.5 text-nexus-500 font-bold whitespace-nowrap">${l.codigo_usuario}</td>
         <td class="p-2.5 font-bold whitespace-nowrap">${l.entidade}</td>
@@ -400,12 +506,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderAuditLogTable();
 
-  // 3. Renderiza Trail de Decisões Críticas Imutável Organizado (Item 3 Correções)
-  function renderTrailDecisoesTable() {
+  // 3. Renderiza Trail de Decisões Críticas Imutável Organizado a partir do Supabase (Item 1.4)
+  async function renderTrailDecisoesTable() {
     const trailContainer = document.getElementById('trailDecisoesContainer');
     if (!trailContainer) return;
 
-    let trail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
+    let trail = [];
+
+    if (window.nexusSupabase) {
+      try {
+        const { data: dbTrail, error } = await window.nexusSupabase
+          .from('trail_decisoes')
+          .select('*, funcionarios(nome, cargo), retificacoes_trail(*)')
+          .order('data_hora', { ascending: false });
+
+        if (!error && Array.isArray(dbTrail)) {
+          const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+          trail = dbTrail.map(t => {
+            let respNome = t.funcionarios ? t.funcionarios.nome : null;
+            let respCargo = t.funcionarios && t.funcionarios.cargo ? t.funcionarios.cargo : t.cargo;
+            if (!respNome && t.codigo_individual) {
+              const match = localFuncs.find(f => f.codigo_individual === t.codigo_individual || f.matricula === t.codigo_individual);
+              if (match) {
+                respNome = match.nome;
+                respCargo = match.cargo || respCargo;
+              }
+            }
+            const retificacaoTxt = t.retificacoes_trail && t.retificacoes_trail.length > 0 
+              ? t.retificacoes_trail.map(r => r.retificacao).join(' | ') 
+              : null;
+
+            return {
+              id: `TRL-${t.id.substring(0, 8)}`,
+              dbId: t.id,
+              data_hora: t.data_hora,
+              responsavel: `${respNome || 'Responsável'} (${respCargo || 'Supervisor'}) - ${t.codigo_individual}`,
+              decisao: t.tipo_decisao,
+              entidade: `${t.entidade_tipo} ${t.entidade_id}`,
+              motivo: t.motivo || 'Decisão homologada conforme fluxo operacional',
+              retificacao: retificacaoTxt
+            };
+          });
+        }
+      } catch (err) {
+        console.warn('Erro ao consultar trail_decisoes no Supabase:', err);
+      }
+    }
 
     if (trail.length === 0) {
       trailContainer.innerHTML = `
@@ -446,7 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
               ${t.retificacao || '<span class="text-slate-400 not-italic">Nenhuma retificação vinculada.</span>'}
             </span>
           </div>
-          <button type="button" onclick="window.anexarRetificacaoTrail('${t.id}')" class="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] shrink-0 transition-colors">
+          <button type="button" onclick="window.anexarRetificacaoTrail('${t.id}', '${t.dbId || ''}')" class="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] shrink-0 transition-colors">
             + Anexar Retificação
           </button>
         </div>
@@ -454,55 +600,78 @@ document.addEventListener('DOMContentLoaded', () => {
     `).join('');
   }
 
-  window.anexarRetificacaoTrail = async function(idTrail) {
-    const trail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
-    const item = trail.find(t => t.id === idTrail);
-    if (!item) return;
-
+  window.anexarRetificacaoTrail = async function(idTrail, dbId) {
     const textoRetificacao = await window.nexusPrompt('Anexar Retificação', `Informe a RETIFICAÇÃO a ser vinculada ao registro imutável ${idTrail}:\n(O registro original permanecerá inalterado)`);
-    if (textoRetificacao) {
-      item.retificacao = `[Retificação em ${new Date().toLocaleString('pt-BR')} por ${session.codigo_individual}]: ${textoRetificacao}`;
-      localStorage.setItem('nexus_trail_decisoes', JSON.stringify(trail));
+    if (!textoRetificacao) return;
 
-      if (window.nexusSupabase) {
-        try {
-          window.nexusSupabase.from('retificacoes_trail').insert({
-            retificacao: textoRetificacao
-          }).then().catch(err => console.warn('[NexusPort] Erro ao sincronizar retificação com Supabase:', err));
-        } catch (err) {
-          console.warn('[NexusPort] Erro ao sincronizar retificação com Supabase:', err);
-        }
+    const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    let funcId = isUUID(session.id) ? session.id : null;
+    if (!funcId) {
+      const list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+      const match = list.find(f => f.codigo_individual === session.codigo_individual || f.matricula === session.matricula);
+      if (match && isUUID(match.id)) funcId = match.id;
+    }
+
+    const nowIso = new Date().toISOString();
+    const retificacaoFormatada = `[Retificação em ${new Date().toLocaleString('pt-BR')} por ${session.codigo_individual || 'Operador'}]: ${textoRetificacao}`;
+
+    if (window.nexusSupabase && dbId && isUUID(dbId)) {
+      try {
+        const payload = {
+          trail_id: dbId,
+          retificacao: retificacaoFormatada,
+          data_hora: nowIso
+        };
+        if (funcId) payload.funcionario_id = funcId;
+
+        const { error } = await window.nexusSupabase.from('retificacoes_trail').insert(payload);
+        if (error) console.warn('[NexusPort] Erro ao sincronizar retificação com Supabase:', error);
+      } catch (err) {
+        console.warn('[NexusPort] Erro ao sincronizar retificação com Supabase:', err);
       }
+    }
 
-      renderTrailDecisoesTable();
-      alert(`Retificação vinculada com sucesso ao registro imutável ${idTrail}!`);
+    const trail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
+    const item = trail.find(t => t.id === idTrail || t.dbId === dbId);
+    if (item) {
+      item.retificacao = retificacaoFormatada;
+      localStorage.setItem('nexus_trail_decisoes', JSON.stringify(trail));
+    }
+
+    await renderTrailDecisoesTable();
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Retificação Vinculada', `Retificação vinculada com sucesso ao registro imutável ${idTrail}!`);
     }
   };
 
   renderTrailDecisoesTable();
 
-  // C7 & C8: Gráficos Estratégicos alimentados dinamicamente com dados reais do Supabase
+  // C7 & C8: Gráficos Estratégicos alimentados dinamicamente com dados reais do Supabase (Item 1.6 & 1.7)
   async function renderEstrategicoCharts() {
-    let logsAuditoria = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+    let logsAuditoria = [];
     let dbNavios = [];
     let dbCargas = [];
+    let dbFuncionarios = [];
 
     if (window.nexusSupabase) {
       try {
         const { data: dbLogs } = await window.nexusSupabase.from('logs_alteracoes').select('*');
-        if (dbLogs && dbLogs.length > 0) logsAuditoria = dbLogs;
+        if (Array.isArray(dbLogs)) logsAuditoria = dbLogs;
 
         const { data: nData } = await window.nexusSupabase.from('navios').select('*');
-        if (nData) dbNavios = nData;
+        if (Array.isArray(nData)) dbNavios = nData;
 
-        const { data: cData } = await window.nexusSupabase.from('cargas').select('*');
-        if (cData) dbCargas = cData;
+        const { data: cData } = await window.nexusSupabase.from('cargas').select('*, navios(id, nome)');
+        if (Array.isArray(cData)) dbCargas = cData;
+
+        const { data: fData } = await window.nexusSupabase.from('funcionarios').select('id, codigo_individual, cargo').eq('ativo', true);
+        if (Array.isArray(fData)) dbFuncionarios = fData;
       } catch (err) {
         console.warn('[NexusPort] Erro ao consultar banco para os gráficos:', err);
       }
     }
 
-    // C8: Produtividade por cargo baseada no número real de alterações/operações efetuadas
+    // C8: Produtividade por cargo baseada no número real de alterações/operações efetuadas por funcionários reais (Item 1.6)
     const cargosOps = {
       'Estivador': 0,
       'Conferente': 0,
@@ -512,7 +681,13 @@ document.addEventListener('DOMContentLoaded', () => {
       'Supervisor': 0
     };
 
+    const activeUserCodes = new Set(dbFuncionarios.map(f => f.codigo_individual));
+    const activeUserIds = new Set(dbFuncionarios.map(f => f.id));
+
     logsAuditoria.forEach(l => {
+      if (dbFuncionarios.length > 0 && !activeUserCodes.has(l.codigo_individual) && !activeUserIds.has(l.funcionario_id)) {
+        return; // Item 1.6: Ignora logs de funcionários que não existem ou estão inativos no Supabase
+      }
       const cargo = String(l.cargo || l.cargo_nome || '').toUpperCase();
       if (cargo.includes('ESTIVADOR')) cargosOps['Estivador']++;
       else if (cargo.includes('CONFERENTE')) cargosOps['Conferente']++;
@@ -524,7 +699,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const ctxProdutividade = document.getElementById('chartProdutividade');
     if (ctxProdutividade && typeof Chart !== 'undefined') {
-      new Chart(ctxProdutividade, {
+      if (window._chartProdutividadeInstance) {
+        window._chartProdutividadeInstance.destroy();
+      }
+      window._chartProdutividadeInstance = new Chart(ctxProdutividade, {
         type: 'bar',
         data: {
           labels: Object.keys(cargosOps),
@@ -544,19 +722,26 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // C7: Embarcações mais utilizadas gerado a partir de agregação real de cargas e navios
+    // C7: Embarcações mais utilizadas gerado a partir de agregação real de cargas e navios (Item 1.7)
     const naviosCountMap = {};
     if (dbNavios.length > 0) {
       dbNavios.forEach(n => {
-        naviosCountMap[n.nome] = 0;
+        naviosCountMap[n.nome] = parseInt(n.quantidade_cargas_realizadas, 10) || 0;
       });
 
       dbCargas.forEach(c => {
-        const navName = c.navio || (c.navios ? c.navios.nome : null);
-        if (navName) {
-          const matching = dbNavios.find(n => n.nome.toLowerCase() === String(navName).toLowerCase());
-          const key = matching ? matching.nome : navName;
-          naviosCountMap[key] = (naviosCountMap[key] || 0) + 1;
+        let matching = null;
+        if (c.navio_id) {
+          matching = dbNavios.find(n => n.id === c.navio_id);
+        }
+        if (!matching && (c.navio || (c.navios && c.navios.nome))) {
+          const navName = c.navio || c.navios.nome;
+          matching = dbNavios.find(n => n.nome.toLowerCase() === String(navName).toLowerCase());
+        }
+        if (matching) {
+          naviosCountMap[matching.nome] = (naviosCountMap[matching.nome] || 0) + 1;
+        } else if (c.navio) {
+          naviosCountMap[c.navio] = (naviosCountMap[c.navio] || 0) + 1;
         }
       });
     } else {
@@ -573,7 +758,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const ctxNavios = document.getElementById('chartNavios');
     if (ctxNavios && typeof Chart !== 'undefined') {
-      new Chart(ctxNavios, {
+      if (window._chartNaviosInstance) {
+        window._chartNaviosInstance.destroy();
+      }
+      window._chartNaviosInstance = new Chart(ctxNavios, {
         type: 'doughnut',
         data: {
           labels: labelsNavios,
@@ -597,5 +785,8 @@ document.addEventListener('DOMContentLoaded', () => {
     renderIndicadoresExecutivosTable();
     renderAuditLogTable();
     renderTrailDecisoesTable();
+    if (isDiretor && estrategicoPanel && !estrategicoPanel.classList.contains('hidden')) {
+      renderEstrategicoCharts();
+    }
   });
 });

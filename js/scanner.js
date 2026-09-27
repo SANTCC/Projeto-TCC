@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
         () => {}
       ).catch(err => {
         console.warn("Câmera indisponível ou permissão negada:", err);
-        alert("Câmera indisponível. Utilize o campo de simulação manual abaixo para testar a leitura de QR Code.");
+        if (window.mostrarFeedback) window.mostrarFeedback('info', 'Câmera Indisponível', "Câmera indisponível. Utilize o campo de simulação manual abaixo para testar a leitura de QR Code.");
       });
     }
   }
@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     simulateBtn.addEventListener('click', () => {
       const val = simulatedInput.value.trim();
       if (!val) {
-        alert('Informe o texto do QR Code para simular.');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campo Obrigatório', 'Informe o texto do QR Code para simular.');
         return;
       }
       processarScan(val);
@@ -84,21 +84,46 @@ document.addEventListener('DOMContentLoaded', () => {
     let match = null;
     if (window.nexusSupabase) {
       try {
-        const { data: cDb } = await window.nexusSupabase.from('cargas').select('*').or(`qr_code_url.eq.${rawCode},qr_code_url.eq.QR-${rawCode}`).maybeSingle();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawCode);
+        let q = window.nexusSupabase.from('cargas').select('*, navios(id, nome), containers(id, numero_identificacao)');
+        if (isUuid) {
+          q = q.or(`id.eq.${rawCode},qr_code_url.eq.${rawCode},qr_code_url.eq.QR-${rawCode}`);
+        } else {
+          q = q.or(`qr_code_url.eq.${rawCode},qr_code_url.eq.QR-${rawCode}`);
+        }
+        const { data: cDb } = await q.maybeSingle();
+
         if (cDb) {
           match = {
-            id: cDb.qr_code_url ? cDb.qr_code_url.replace('QR-', '') : cDb.id,
+            id: cDb.qr_code_url ? cDb.qr_code_url.replace('QR-', '') : `CRG-${cDb.id}`,
             tipo: cDb.natureza || 'Carga Geral',
             natureza: cDb.natureza || 'Geral',
-            peso: `${cDb.peso || 20} t`,
-            volume: `${cDb.volume || 30} m³`,
-            valor: `R$ ${(cDb.valor_declarado || 100000).toLocaleString('pt-BR')}`,
-            portoDescarga: cDb.porto_descarga || 'Porto de Santos',
-            destino: cDb.destino || 'Destino Internacional',
+            peso: `${cDb.peso || 0} t`,
+            volume: `${cDb.volume || 0} m³`,
+            valor: `R$ ${(cDb.valor_declarado || 0).toLocaleString('pt-BR')}`,
+            portoDescarga: cDb.porto_descarga || 'Terminal STS-01',
+            destino: cDb.destino || 'Destino Geral',
             status: cDb.status_fluxo || 'AGENDAMENTO',
-            container: cDb.container_id || '',
-            navio: ''
+            container: cDb.containers ? cDb.containers.numero_identificacao : (cDb.container_id || ''),
+            navio: cDb.navios ? cDb.navios.nome : ''
           };
+        } else if (rawCode.toUpperCase().includes('CONT') || rawCode.toUpperCase().includes('GND')) {
+          const { data: contDb } = await window.nexusSupabase.from('containers').select('*').or(`numero_identificacao.eq.${rawCode},numero_identificacao.eq.${rawCode.replace('CONT-', '')}`).maybeSingle();
+          if (contDb) {
+            match = {
+              id: contDb.numero_identificacao,
+              tipo: contDb.material_carregado || 'Contêiner Padrão',
+              natureza: `Status: ${contDb.estado || 'OPERANTE'}`,
+              peso: `${contDb.capacidade_peso || 30} t`,
+              volume: `${contDb.capacidade_volume || 75} m³`,
+              valor: 'Ativo Operacional',
+              portoDescarga: 'Pátio STS-01',
+              destino: 'Pátio / Berço',
+              status: contDb.estado || 'OPERANTE',
+              container: contDb.numero_identificacao,
+              navio: ''
+            };
+          }
         }
       } catch (err) { console.warn('Erro ao consultar scanner no Supabase:', err); }
     }
@@ -109,15 +134,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const displayId = match ? match.id : rawCode;
-    const displayTipo = match ? match.tipo : 'Carga Geral / Contêiner';
-    const displayNatureza = match ? (match.natureza || 'Agrícola / Industrial') : 'Carga Geral';
-    const displayPeso = match ? `${match.peso} / ${match.volume}` : '25.5 t / 40 m³';
-    const displayValor = match ? (match.valor || 'R$ 150.000,00') : 'R$ 100.000,00';
-    const displayPorto = match ? (match.portoDescarga || 'Porto de Roterdã') : 'Porto de Santos';
-    const displayDestino = match ? (match.destino || 'Destino Internacional') : 'Destino Geral';
-    const displayContainer = match ? (match.container || 'CONT-991') : 'CONT-991';
-    const displayNavio = match ? (match.navio || 'MV Santos Star') : 'MV Santos Star';
-    const displayStatus = match ? (match.status || 'RECEBIMENTO_INSPECAO') : 'ARMAZENAGEM';
+    const displayTipo = match ? match.tipo : 'Não identificado';
+    const displayNatureza = match ? (match.natureza || 'Geral') : 'Não informada';
+    const displayPeso = match ? `${match.peso || '--'} / ${match.volume || '--'}` : '-- / --';
+    const displayValor = match ? (match.valor || 'R$ 0,00') : 'R$ 0,00';
+    const displayPorto = match ? (match.portoDescarga || 'Não informado') : 'Não informado';
+    const displayDestino = match ? (match.destino || 'Não informado') : 'Não informado';
+    const displayContainer = match ? (match.container || 'Não vinculado') : 'Não vinculado';
+    const displayNavio = match ? (match.navio || 'Não vinculado') : 'Não vinculado';
+    const displayStatus = match ? (match.status || 'NÃO_LOCALIZADO') : 'NÃO_LOCALIZADO';
 
     targetChecklistUrl = `inspecao.html?carga=${displayId}`;
 

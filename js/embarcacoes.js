@@ -27,49 +27,36 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${dias}d ${horas}h (Distância: ${distanciaKm} km @ 33 km/h)`;
   }
 
-  // Carrega navios mantendo persistência rigorosa de dataSaida do Supabase / Local
+  // Carrega navios mantendo persistência rigorosa do Supabase / Local
   async function carregarNaviosSupabase() {
-    const savedNaviosRaw = localStorage.getItem('nexus_navios_list');
-    let savedNavios = savedNaviosRaw ? JSON.parse(savedNaviosRaw) : null;
-
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase
           .from('navios')
           .select('*');
 
-        if (!error && data && data.length > 0) {
-          const mapSupabase = data.map(n => {
-            const matchLocal = savedNavios ? savedNavios.find(l => l.imo === n.numero_imo) : null;
-            return {
-              nome: n.nome,
-              imo: n.numero_imo,
-              gps: n.coordenadas_gps || '23.9608° S, 46.3022° W',
-              localizacao: n.localizacao || 'DENTRO_DO_PORTO',
-              origem: n.porto_origem || 'Porto de Santos',
-              destino: n.porto_destino || 'Porto de Roterdã',
-              distancia: 10200,
-              dataSaida: n.data_saida || (matchLocal ? matchLocal.dataSaida : (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null))
-            };
-          });
-
-          const imoSet = new Set(mapSupabase.map(x => x.imo));
-          naviosList.forEach(defaultNavio => {
-            if (!imoSet.has(defaultNavio.imo)) {
-              mapSupabase.push(defaultNavio);
-            }
-          });
-
-          naviosList = mapSupabase;
+        if (!error && Array.isArray(data)) {
+          naviosList = data.map(n => ({
+            id: n.id,
+            nome: n.nome,
+            imo: n.numero_imo || n.imo,
+            gps: n.coordenadas_gps || '23.9608° S, 46.3022° W',
+            localizacao: n.localizacao || 'DENTRO_DO_PORTO',
+            origem: n.porto_origem || 'Porto de Santos',
+            destino: n.porto_destino || 'Porto de Roterdã',
+            distancia: 10200,
+            dataSaida: n.data_saida || (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null)
+          }));
           localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+          renderGpsTable();
+          return;
         }
       } catch (err) {
         console.warn('[NexusPort] Erro ao carregar navios do Supabase:', err);
       }
-    } else if (savedNavios) {
-      naviosList = savedNavios;
     }
-
+    const savedNaviosRaw = localStorage.getItem('nexus_navios_list');
+    naviosList = savedNaviosRaw ? JSON.parse(savedNaviosRaw) : [];
     renderGpsTable();
   }
 
@@ -278,6 +265,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.nexusSupabase) {
         try {
           await window.nexusSupabase.from('rotas_maritimas').insert(novaRota);
+          if (window.registrarLogAlteracao) {
+            await window.registrarLogAlteracao('CRIACAO', 'rotas_maritimas', null, { origem, destino, distancia_km });
+          }
+          if (window.NexusRepository && window.NexusRepository.notifyChange) {
+            window.NexusRepository.notifyChange('rotas_maritimas');
+          }
         } catch (e) {
           console.warn('Erro ao salvar rota marítima no Supabase:', e);
         }
@@ -286,7 +279,9 @@ document.addEventListener('DOMContentLoaded', () => {
       renderRotasTable();
       rotaForm.reset();
       rotaForm.classList.add('hidden');
-      alert(`Rota Marítima "${origem} ➔ ${destino}" (${distancia_km} km) cadastrada com sucesso pelo Supervisor!`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Rota Cadastrada', `Rota Marítima "${origem} ➔ ${destino}" (${distancia_km} km) cadastrada com sucesso!`);
+      }
     });
   }
 
@@ -294,7 +289,9 @@ document.addEventListener('DOMContentLoaded', () => {
   window.liberarNavioPeloDiretor = async function(imo) {
     const podeLiberar = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     if (!podeLiberar) {
-      alert('Acesso Negado: Apenas o Supervisor de Operações ou Diretor pode autorizar a liberação de navios!');
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Acesso Negado', 'Apenas o Supervisor de Operações ou Diretor pode autorizar a liberação de navios!');
+      }
       return;
     }
 
@@ -311,18 +308,36 @@ document.addEventListener('DOMContentLoaded', () => {
     );
 
     if (!rotaCadastrada) {
-      alert(`REGRA DE NEGÓCIO (RN 9): A saída do navio "${navio.nome}" foi BLOQUEADA pois não existe uma rota marítima cadastrada entre "${navio.origem || 'Porto de Santos'}" e "${navio.destino}". O Supervisor deve cadastrar a rota na seção "Gestão de Rotas Marítimas" antes da liberação!`);
+      const msgErro = `REGRA DE NEGÓCIO (RN 9): A saída do navio "${navio.nome}" foi BLOQUEADA pois não existe uma rota marítima cadastrada entre "${navio.origem || 'Porto de Santos'}" e "${navio.destino}". O Supervisor deve cadastrar a rota na seção "Gestão de Rotas Marítimas" antes da liberação!`;
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', 'Rota Não Encontrada', msgErro);
+      }
       return;
     }
 
     navio.distancia = parseFloat(rotaCadastrada.distancia_km) || 10200;
 
-    if (await window.nexusConfirm('Liberar Saída de Navio', `Confirmar liberação de saída do navio ${navio.nome} (${navio.imo}) pela rota cadastrada ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km)?`)) {
+    const confirmou = window.nexusConfirm 
+      ? await window.nexusConfirm('Liberar Saída de Navio', `Confirmar liberação de saída do navio ${navio.nome} (${navio.imo}) pela rota cadastrada ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km)?`) 
+      : true;
+
+    if (confirmou) {
       const horaSaida = new Date().toISOString();
       navio.localizacao = 'FORA_DO_PORTO';
       navio.dataSaida = horaSaida;
 
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+
+      // Atualiza status das cargas vinculadas para EM_TRANSITO
+      const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      cargasFluxo.forEach(c => {
+        if ((c.navio && c.navio.toLowerCase() === navio.nome.toLowerCase()) || (c.navio_id && c.navio_id === navio.id)) {
+          if (c.status !== 'ENTREGUE' && c.status !== 'CANCELADA' && c.status !== 'RECUSADA') {
+            c.status = 'EM_TRANSITO';
+          }
+        }
+      });
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
 
       // Sincroniza Supabase
       if (window.nexusSupabase) {
@@ -330,16 +345,35 @@ document.addEventListener('DOMContentLoaded', () => {
           await window.nexusSupabase.from('navios')
             .update({ localizacao: 'FORA_DO_PORTO', data_saida: horaSaida })
             .eq('numero_imo', imo);
+
+          if (navio.id) {
+            await window.nexusSupabase.from('cargas')
+              .update({ status_fluxo: 'EM_TRANSITO' })
+              .eq('navio_id', navio.id)
+              .not('status_fluxo', 'in', '("ENTREGUE","CANCELADA","RECUSADA")');
+          }
         } catch (err) { console.warn('Erro ao liberar navio no Supabase:', err); }
       }
 
       // Registra no Trail de Decisões Críticas
       if (window.registrarTrailDecisao) {
-        window.registrarTrailDecisao(`Liberou Navio ${navio.nome}`, 'NAVIO', `Horário de saída registrado por ${session.nome || session.cargo}: ${new Date(horaSaida).toLocaleString('pt-BR')}`);
+        await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id || null, `Navio ${navio.nome} (${navio.imo}) liberado para saída com destino a ${navio.destino} por ${session.nome || session.cargo}. Horário: ${new Date(horaSaida).toLocaleString('pt-BR')}`);
+      }
+
+      // Registra auditoria
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { localizacao: 'FORA_DO_PORTO', data_saida: horaSaida });
+      }
+
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('navios');
+        window.NexusRepository.notifyChange('cargas');
       }
 
       renderGpsTable();
-      alert(`Navio ${navio.nome} liberado com sucesso pela Rota ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km). Horário de saída: ${new Date(horaSaida).toLocaleString('pt-BR')}.`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Navio Liberado', `Navio ${navio.nome} liberado com sucesso pela Rota ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km). Horário de saída: ${new Date(horaSaida).toLocaleString('pt-BR')}.`);
+      }
     }
   };
 
@@ -347,20 +381,26 @@ document.addEventListener('DOMContentLoaded', () => {
   window.autorizarRetornoNavio = async function(imo) {
     const podeLiberar = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     if (!podeLiberar) {
-      alert('Acesso Negado: Apenas o Supervisor de Operações ou Diretor pode autorizar o retorno de navios!');
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Acesso Negado', 'Apenas o Supervisor de Operações ou Diretor pode autorizar o retorno de navios!');
+      }
       return;
     }
 
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
-    if (await window.nexusConfirm('Autorizar Retorno de Embarcação', `Autorizar o retorno da embarcação ${navio.nome} ao Porto de Origem (${navio.origem})?`)) {
+    const confirmou = window.nexusConfirm ? await window.nexusConfirm('Autorizar Retorno de Embarcação', `Autorizar o retorno da embarcação ${navio.nome} ao Porto de Origem (${navio.origem})?`) : true;
+
+    if (confirmou) {
       // Inverte Origem e Destino para a viagem de regresso
       const antigoDestino = navio.destino;
       navio.destino = navio.origem;
       navio.origem = antigoDestino;
       navio.localizacao = 'FORA_DO_PORTO';
       navio.dataSaida = new Date().toISOString();
+
+      localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
       if (window.nexusSupabase) {
         try {
@@ -376,11 +416,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (window.registrarTrailDecisao) {
-        window.registrarTrailDecisao(`Autorizou Retorno do Navio ${navio.nome}`, 'NAVIO', `Retorno autorizado para ${navio.destino}`);
+        await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id || null, `Retorno autorizado para o porto ${navio.destino} por ${session.nome || session.cargo}`);
+      }
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { porto_origem: navio.origem, porto_destino: navio.destino, localizacao: 'FORA_DO_PORTO' });
+      }
+
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('navios');
       }
 
       renderGpsTable();
-      alert(`Retorno do navio ${navio.nome} ao porto ${navio.destino} autorizado com sucesso pelo Diretor!`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Retorno Autorizado', `Retorno do navio ${navio.nome} ao porto ${navio.destino} autorizado com sucesso!`);
+      }
     }
   };
 
@@ -395,7 +445,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isInspetorRole) toggleNavioBtn.classList.add('hidden');
     toggleNavioBtn.addEventListener('click', () => {
       if (!isInspetorRole) {
-        alert('Acesso Restrito: Apenas Inspetores têm permissão para cadastrar novos navios (Spec.md RF 1)!');
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos navios (Spec.md RF 1)!');
+        }
         return;
       }
       navioForm.classList.toggle('hidden');
@@ -420,7 +472,9 @@ document.addEventListener('DOMContentLoaded', () => {
     navioForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!isInspetorRole) {
-        alert('Acesso Restrito: Cadastro de navios é de responsabilidade do Inspetor!');
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Cadastro de navios é de responsabilidade do Inspetor!');
+        }
         return;
       }
       const nome = document.getElementById('navioNome').value.trim();
@@ -434,27 +488,31 @@ document.addEventListener('DOMContentLoaded', () => {
       // Item 11: Validação do padrão do Número IMO (3 letras + 7 números)
       const imoRegex = /^[A-Z]{3}\d{7}$/;
       if (!imoRegex.test(imo)) {
-        alert('FORMATO DE IMO INVÁLIDO (Item 11): O número IMO deve seguir obrigatoriamente a estrutura fixa de 3 letras + 7 números (ex.: IMO1234567 ou ABC1234567).');
+        const msg = 'FORMATO DE IMO INVÁLIDO (Item 11): O número IMO deve seguir obrigatoriamente a estrutura fixa de 3 letras + 7 números (ex.: IMO1234567 ou ABC1234567).';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Inválido', msg);
         return;
       }
 
       // Item 11: Validação de unicidade do IMO
       const imoExistente = naviosList.find(n => (n.imo || '').toUpperCase().replace(/\s+/g, '') === imo);
       if (imoExistente) {
-        alert(`BLOQUEIO DE DUPLICIDADE (Item 11): Já existe um navio cadastrado com o número IMO "${imo}" (${imoExistente.nome}). Cada embarcação deve possuir IMO único!`);
+        const msg = `BLOQUEIO DE DUPLICIDADE (Item 11): Já existe um navio cadastrado com o número IMO "${imo}" (${imoExistente.nome}). Cada embarcação deve possuir IMO único!`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Duplicado', msg);
         return;
       }
 
       // Item 12: Validação de Coordenada GPS Real
       if (!validarCoordenadaGPS(gps)) {
-        alert('COORDENADA GPS INVÁLIDA (Item 12): Informe uma coordenada geográfica real dentro dos limites válidos (ex.: "-23.9608, -46.3022" ou "23.9608° S, 46.3022° W").');
+        const msg = 'COORDENADA GPS INVÁLIDA (Item 12): Informe uma coordenada geográfica real dentro dos limites válidos (ex.: "-23.9608, -46.3022" ou "23.9608° S, 46.3022° W").';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'GPS Inválido', msg);
         return;
       }
 
       // Item 12: Bloqueio de coordenadas GPS duplicadas
       const gpsExistente = naviosList.find(n => n.gps && n.gps.trim() === gps);
       if (gpsExistente) {
-        alert(`BLOQUEIO DE LOCALIZAÇÃO (Item 12): já existe navio nesta localização (${gpsExistente.nome}). Dois navios não podem ocupar exatamente a mesma coordenada GPS simultaneamente!`);
+        const msg = `BLOQUEIO DE LOCALIZAÇÃO (Item 12): já existe navio nesta localização (${gpsExistente.nome}). Dois navios não podem ocupar exatamente a mesma coordenada GPS simultaneamente!`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Localização Ocupada', msg);
         return;
       }
 
@@ -462,11 +520,10 @@ document.addEventListener('DOMContentLoaded', () => {
         nome, imo, gps, localizacao, origem, destino, distancia, dataSaida: localizacao === 'FORA_DO_PORTO' ? new Date().toISOString() : null
       };
 
-      naviosList.unshift(novoNavio);
-
+      let insertedId = null;
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('navios').insert({
+          const { data, error } = await window.nexusSupabase.from('navios').insert({
             nome,
             numero_imo: imo,
             porto_origem: origem,
@@ -475,16 +532,33 @@ document.addEventListener('DOMContentLoaded', () => {
             coordenadas_gps: gps,
             estado_operacional: 'OPERANTE',
             qr_code_url: `QR-${imo}`
-          });
+          }).select('id').single();
+
+          if (data && data.id) {
+            insertedId = data.id;
+            novoNavio.id = data.id;
+          }
+
+          if (window.registrarLogAlteracao) {
+            await window.registrarLogAlteracao('CRIACAO', 'navios', insertedId, { nome, numero_imo: imo, porto_origem: origem, porto_destino: destino });
+          }
+          if (window.NexusRepository && window.NexusRepository.notifyChange) {
+            window.NexusRepository.notifyChange('navios');
+          }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar navio com Supabase:', err);
         }
       }
 
+      naviosList.unshift(novoNavio);
+      localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+
       renderGpsTable();
       navioForm.reset();
       navioForm.classList.add('hidden');
-      alert(`Navio ${nome} (${imo}) cadastrado e sincronizado com sucesso no Supabase!`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Navio Cadastrado', `Navio ${nome} (${imo}) cadastrado e sincronizado com sucesso no Supabase!`);
+      }
     });
   }
 
@@ -498,27 +572,23 @@ document.addEventListener('DOMContentLoaded', () => {
           .from('containers')
           .select('*');
 
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           const supConts = data.map(c => ({
             id: c.id || `CONT-${c.numero_identificacao}`,
             identificacao: c.numero_identificacao,
             tipo: c.material_carregado || 'Carga Geral',
-            dataFabr: c.data_fabricacao || '2021-01-01',
-            dataManut: c.data_ultima_manutencao || '2025-01-01',
+            dataFabr: c.data_fabricacao || '',
+            dataManut: c.data_ultima_manutencao || '',
             refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
-            navio: 'MV Santos Star',
+            navio_id: c.navio_id || null,
+            navio: c.navio_id ? 'Vinculado' : 'Não Vinculado',
             estado: c.estado || 'OPERANTE'
           }));
 
-          const idSet = new Set(supConts.map(x => x.identificacao));
-          containersList.forEach(defaultCont => {
-            if (!idSet.has(defaultCont.identificacao)) {
-              supConts.push(defaultCont);
-            }
-          });
-
           containersList = supConts;
           localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+          renderContainersTable();
+          return;
         }
       } catch (err) {
         console.warn('[NexusPort] Erro ao carregar contêineres do Supabase:', err);
@@ -571,7 +641,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isInspetorRole) toggleContainerBtn.classList.add('hidden');
     toggleContainerBtn.addEventListener('click', () => {
       if (!isInspetorRole) {
-        alert('Acesso Restrito: Apenas Inspetores têm permissão para cadastrar novos contêineres (Spec.md RF 1)!');
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos contêineres (Spec.md RF 1)!');
+        }
         return;
       }
       containerForm.classList.toggle('hidden');
@@ -582,7 +654,9 @@ document.addEventListener('DOMContentLoaded', () => {
     containerForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!isInspetorRole) {
-        alert('Acesso Restrito: Cadastro de contêineres é de responsabilidade do Inspetor!');
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Cadastro de contêineres é de responsabilidade do Inspetor!');
+        }
         return;
       }
       const identificacao = document.getElementById('contIdentificacao').value.trim().toUpperCase();
@@ -594,13 +668,15 @@ document.addEventListener('DOMContentLoaded', () => {
       // Item 13: Validação de unicidade do código de contêiner
       const contExistente = containersList.find(c => (c.identificacao || '').toUpperCase() === identificacao);
       if (contExistente) {
-        alert(`BLOQUEIO DE DUPLICIDADE (Item 13): O código de contêiner "${identificacao}" já está cadastrado no sistema. Não é permitido duplicar contêineres!`);
+        const msg = `BLOQUEIO DE DUPLICIDADE (Item 13): O código de contêiner "${identificacao}" já está cadastrado no sistema. Não é permitido duplicar contêineres!`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Contêiner Duplicado', msg);
         return;
       }
 
       // Item 14: Validação de coerência entre data de fabricação e manutenção
       if (dataFabr && dataManut && new Date(dataManut) < new Date(dataFabr)) {
-        alert('DATA INCONSISTENTE (Item 14): A data da última manutenção não pode ser anterior à data de fabricação do contêiner!');
+        const msg = 'DATA INCONSISTENTE (Item 14): A data da última manutenção não pode ser anterior à data de fabricação do contêiner!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Inconsistente', msg);
         return;
       }
 
@@ -609,28 +685,43 @@ document.addEventListener('DOMContentLoaded', () => {
         identificacao, tipo, dataFabr, dataManut, refTempo, navio: '', estado: 'DISPONIVEL'
       };
 
-      containersList.push(newCont);
-      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
-
+      let insertedContId = null;
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('containers').insert({
+          const { data, error } = await window.nexusSupabase.from('containers').insert({
             numero_identificacao: identificacao,
             data_fabricacao: dataFabr || null,
             data_ultima_manutencao: dataManut || null,
             tempo_uso_referencia: refTempo,
             estado: 'OPERANTE',
             qr_code_url: `QR-${identificacao}`
-          });
+          }).select('id').single();
+
+          if (data && data.id) {
+            insertedContId = data.id;
+            newCont.id = data.id;
+          }
+
+          if (window.registrarLogAlteracao) {
+            await window.registrarLogAlteracao('CRIACAO', 'containers', insertedContId, { numero_identificacao: identificacao, material_carregado: tipo });
+          }
+          if (window.NexusRepository && window.NexusRepository.notifyChange) {
+            window.NexusRepository.notifyChange('containers');
+          }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar contêiner com Supabase:', err);
         }
       }
 
+      containersList.push(newCont);
+      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+
       renderContainersTable();
       containerForm.reset();
       containerForm.classList.add('hidden');
-      alert(`Contêiner ${identificacao} cadastrado com sucesso com referência de tempo em "${refTempo}" (RN 7)!`);
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Contêiner Cadastrado', `Contêiner ${identificacao} cadastrado com sucesso com referência de tempo em "${refTempo}" (RN 7)!`);
+      }
     });
   }
 
