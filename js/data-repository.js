@@ -476,6 +476,9 @@
      * NOTIFICAÇÃO DE ALTERAÇÃO EM TEMPO REAL (Item 2)
      */
     notifyChange: function (entity) {
+      try {
+        localStorage.setItem('nexus_last_update', String(Date.now()));
+      } catch (e) {}
       if (typeof BroadcastChannel !== 'undefined') {
         try {
           const bc = new BroadcastChannel('nexusport_sync');
