@@ -30,16 +30,31 @@ document.addEventListener('DOMContentLoaded', () => {
   let guindastesList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
 
   async function carregarGuindastesSupabase() {
+    const localGuindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+    const localMap = new Map(localGuindastes.map(g => [g.identificacao, g]));
+
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase.from('guindastes').select('*');
         if (!error && Array.isArray(data)) {
-          guindastesList = data.map(g => ({
-            id: g.id || g.numero_identificacao,
-            identificacao: g.numero_identificacao,
-            estado: g.estado || 'OPERANTE',
-            dataManut: g.data_ultima_manutencao || ''
-          }));
+          guindastesList = data.map(g => {
+            const loc = localMap.get(g.numero_identificacao);
+            return {
+              id: g.id || g.numero_identificacao,
+              identificacao: g.numero_identificacao,
+              estado: loc && loc.estado ? loc.estado : (g.estado || 'OPERANTE'),
+              dataManut: loc && loc.dataManut ? loc.dataManut : (g.data_ultima_manutencao || '')
+            };
+          });
+
+          // Preserva guindastes criados localmente
+          const fetchedIds = new Set(guindastesList.map(g => g.identificacao));
+          localGuindastes.forEach(lg => {
+            if (!fetchedIds.has(lg.identificacao)) {
+              guindastesList.push(lg);
+            }
+          });
+
           localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
           renderGuindastesTable();
           return;
@@ -48,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('[NexusPort] Erro ao carregar guindastes do Supabase:', err);
       }
     }
+    guindastesList = localGuindastes;
     renderGuindastesTable();
   }
 
@@ -404,17 +420,22 @@ document.addEventListener('DOMContentLoaded', () => {
   let osList = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
 
   async function carregarOsSupabase() {
+    const localOs = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
+    const localMap = new Map(localOs.map(o => [o.id, o]));
+
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase.from('manutencoes').select('*');
         if (!error && Array.isArray(data)) {
           osList = data.map(m => {
+            const osId = m.id ? `OS-${m.id.substring(0, 8)}` : `OS-${Date.now()}`;
+            const loc = localMap.get(osId);
+
             let statusLocal = 'PENDENTE_APROVACAO';
             if (m.status === 'APROVADA') statusLocal = 'EM_MANUTENCAO';
             else if (m.status === 'RECUSADA') statusLocal = 'REPROVADA';
             else if (m.status === 'CONCLUIDA') statusLocal = 'CONCLUIDA';
 
-            // Extrai equipamento e prioridade da descrição se houver formato [ID][PRIORIDADE]
             let equip = 'Equipamento Geral';
             let prioridade = 'MEDIA';
             let descLimpa = m.descricao || '';
@@ -428,20 +449,31 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (m.entidade_tipo === 'CONTAINER') equip = 'Contêiner';
 
             return {
-              id: m.id ? `OS-${m.id.substring(0, 8)}` : `OS-${Date.now()}`,
-              equipamento: equip,
-              prioridade: prioridade,
-              descricao: descLimpa,
-              status: statusLocal,
+              id: osId,
+              equipamento: loc && loc.equipamento ? loc.equipamento : equip,
+              prioridade: loc && loc.prioridade ? loc.prioridade : prioridade,
+              descricao: loc && loc.descricao ? loc.descricao : descLimpa,
+              status: loc && loc.status ? loc.status : statusLocal,
               data: m.created_at ? new Date(m.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
               rawDbId: m.id
             };
           });
+
+          // Preserva OS criadas localmente que ainda não estão no Supabase
+          const fetchedIds = new Set(osList.map(o => o.id));
+          localOs.forEach(lo => {
+            if (!fetchedIds.has(lo.id)) {
+              osList.push(lo);
+            }
+          });
+
           localStorage.setItem('nexus_os_list', JSON.stringify(osList));
         }
       } catch (e) {
         console.warn('Erro ao carregar ordens de serviço do Supabase:', e);
       }
+    } else {
+      osList = localOs;
     }
     renderOsTable();
   }

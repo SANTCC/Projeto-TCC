@@ -83,27 +83,45 @@
      */
     getCargas: async function () {
       const client = this.getSupabase();
+      const localCargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      const localMap = new Map(localCargas.map(c => [c.id, c]));
+
       if (client) {
         try {
           const { data, error, count } = await client.from('cargas').select('*, navios(id, nome)', { count: 'exact' });
           if (!error && Array.isArray(data)) {
-            const mapped = data.map((c) => ({
-              id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
-              tipo: c.natureza || 'Carga Geral',
-              peso: `${c.peso || 0} t`,
-              volume: `${c.volume || 0} m³`,
-              valor: `R$ ${(c.valor_declarado || 0).toLocaleString('pt-BR')}`,
-              natureza: c.natureza || 'Geral',
-              portoDescarga: c.porto_descarga || 'Terminal STS-01',
-              destino: c.destino || 'Destino Geral',
-              status: c.status_fluxo || 'AGENDAMENTO',
-              container: c.container_id || '',
-              navio: (c.navios && c.navios.nome) ? c.navios.nome : '',
-              navioId: c.navio_id || null,
-              qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
-              motivoCancelamento: c.motivo_recusa || null,
-              rawDbId: c.id
-            }));
+            const mapped = data.map((c) => {
+              const id = c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`;
+              const loc = localMap.get(id);
+
+              return {
+                id: id,
+                tipo: c.natureza || 'Carga Geral',
+                peso: loc && loc.peso ? loc.peso : `${c.peso || 0} t`,
+                volume: loc && loc.volume ? loc.volume : `${c.volume || 0} m³`,
+                valor: loc && loc.valor ? loc.valor : `R$ ${(c.valor_declarado || 0).toLocaleString('pt-BR')}`,
+                natureza: c.natureza || 'Geral',
+                portoDescarga: loc && loc.portoDescarga ? loc.portoDescarga : (c.porto_descarga || 'Terminal STS-01'),
+                destino: c.destino || 'Destino Geral',
+                status: loc && loc.status ? loc.status : (c.status_fluxo || 'AGENDAMENTO'),
+                container: loc && loc.container ? loc.container : (c.container_id || ''),
+                navio: loc && loc.navio ? loc.navio : ((c.navios && c.navios.nome) ? c.navios.nome : ''),
+                navioId: loc && loc.navioId ? loc.navioId : (c.navio_id || null),
+                navio_id: loc && loc.navio_id ? loc.navio_id : (c.navio_id || null),
+                qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
+                motivoCancelamento: loc && loc.motivoCancelamento ? loc.motivoCancelamento : (c.motivo_recusa || null),
+                rawDbId: c.id
+              };
+            });
+
+            // Preserva cargas criadas localmente que ainda não estão no Supabase
+            const fetchedIds = new Set(mapped.map(m => m.id));
+            localCargas.forEach(lc => {
+              if (!fetchedIds.has(lc.id)) {
+                mapped.push(lc);
+              }
+            });
+
             localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
             return mapped;
           }
@@ -111,7 +129,7 @@
           console.warn('[NexusRepository] Erro ao buscar cargas do Supabase:', err);
         }
       }
-      return JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      return localCargas;
     },
 
     /**
@@ -130,7 +148,7 @@
             destino: carga.destino,
             status_fluxo: carga.status,
             qr_code_url: carga.qrCode || `QR-${carga.id}`,
-            container_id: carga.container || null,
+            container_id: carga.container_id || carga.container || null,
             navio_id: carga.navioId || carga.navio_id || null,
             motivo_recusa: carga.motivoCancelamento || null
           };

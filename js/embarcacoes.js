@@ -97,6 +97,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Carrega navios mantendo persistência rigorosa do Supabase / Local
   async function carregarNaviosSupabase() {
+    const localNavios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    const localMap = new Map(localNavios.map(n => [n.imo || n.nome, n]));
+
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase
@@ -104,17 +107,31 @@ document.addEventListener('DOMContentLoaded', () => {
           .select('*');
 
         if (!error && Array.isArray(data)) {
-          naviosList = data.map(n => ({
-            id: n.id,
-            nome: n.nome,
-            imo: n.numero_imo || n.imo,
-            gps: n.coordenadas_gps || '23.9608° S, 46.3022° W',
-            localizacao: n.localizacao || 'DENTRO_DO_PORTO',
-            origem: n.porto_origem || 'Porto de Santos',
-            destino: n.porto_destino || 'Porto de Roterdã',
-            distancia: 10200,
-            dataSaida: n.data_saida || (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null)
-          }));
+          naviosList = data.map(n => {
+            const imo = n.numero_imo || n.imo;
+            const loc = localMap.get(imo) || localMap.get(n.nome);
+
+            return {
+              id: n.id,
+              nome: n.nome,
+              imo: imo,
+              gps: loc && loc.gps ? loc.gps : (n.coordenadas_gps || '23.9608° S, 46.3022° W'),
+              localizacao: loc && loc.localizacao ? loc.localizacao : (n.localizacao || 'DENTRO_DO_PORTO'),
+              origem: loc && loc.origem ? loc.origem : (n.porto_origem || 'Porto de Santos'),
+              destino: loc && loc.destino ? loc.destino : (n.porto_destino || 'Porto de Roterdã'),
+              distancia: loc && loc.distancia ? loc.distancia : 10200,
+              dataSaida: loc && loc.dataSaida ? loc.dataSaida : (n.data_saida || (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null))
+            };
+          });
+
+          // Preserva navios criados localmente que não estão no Supabase
+          const fetchedImos = new Set(naviosList.map(n => n.imo));
+          localNavios.forEach(ln => {
+            if (ln.imo && !fetchedImos.has(ln.imo)) {
+              naviosList.push(ln);
+            }
+          });
+
           localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
           renderGpsTable();
           return;
@@ -123,8 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('[NexusPort] Erro ao carregar navios do Supabase:', err);
       }
     }
-    const savedNaviosRaw = localStorage.getItem('nexus_navios_list');
-    naviosList = savedNaviosRaw ? JSON.parse(savedNaviosRaw) : [];
+    naviosList = localNavios;
     renderGpsTable();
   }
 
@@ -755,6 +771,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let containersList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
 
   async function carregarContainersSupabase() {
+    const localConts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+    const localMap = new Map(localConts.map(c => [c.identificacao, c]));
+
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase
@@ -762,17 +781,29 @@ document.addEventListener('DOMContentLoaded', () => {
           .select('*');
 
         if (!error && Array.isArray(data)) {
-          const supConts = data.map(c => ({
-            id: c.id || `CONT-${c.numero_identificacao}`,
-            identificacao: c.numero_identificacao,
-            tipo: c.material_carregado || 'Carga Geral',
-            dataFabr: c.data_fabricacao || '',
-            dataManut: c.data_ultima_manutencao || '',
-            refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
-            navio_id: c.navio_id || null,
-            navio: c.navio_id ? 'Vinculado' : 'Não Vinculado',
-            estado: c.estado || 'OPERANTE'
-          }));
+          const supConts = data.map(c => {
+            const loc = localMap.get(c.numero_identificacao);
+
+            return {
+              id: c.id || `CONT-${c.numero_identificacao}`,
+              identificacao: c.numero_identificacao,
+              tipo: loc && loc.tipo ? loc.tipo : (c.material_carregado || 'Carga Geral'),
+              dataFabr: loc && loc.dataFabr ? loc.dataFabr : (c.data_fabricacao || ''),
+              dataManut: loc && loc.dataManut ? loc.dataManut : (c.data_ultima_manutencao || ''),
+              refTempo: loc && loc.refTempo ? loc.refTempo : (c.tempo_uso_referencia || 'DATA_FABRICACAO'),
+              navio_id: loc && loc.navio_id ? loc.navio_id : (c.navio_id || null),
+              navio: loc && loc.navio ? loc.navio : (c.navio_id ? 'Vinculado' : 'Não Vinculado'),
+              estado: loc && loc.estado ? loc.estado : (c.estado || 'OPERANTE')
+            };
+          });
+
+          // Preserva contêineres criados localmente
+          const fetchedIds = new Set(supConts.map(c => c.identificacao));
+          localConts.forEach(lc => {
+            if (lc.identificacao && !fetchedIds.has(lc.identificacao)) {
+              supConts.push(lc);
+            }
+          });
 
           containersList = supConts;
           localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
@@ -783,6 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('[NexusPort] Erro ao carregar contêineres do Supabase:', err);
       }
     }
+    containersList = localConts;
     renderContainersTable();
   }
 
