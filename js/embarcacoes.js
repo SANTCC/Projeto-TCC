@@ -298,19 +298,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase.from('rotas_maritimas').select('*');
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           rotasMaritimasList = data;
         }
       } catch (e) {
         console.warn('Erro ao carregar rotas marítimas do Supabase:', e);
       }
-    }
-    if (rotasMaritimasList.length === 0) {
-      rotasMaritimasList = [
-        { origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 },
-        { origem: 'Porto de Santos', destino: 'Porto de Xangai', distancia_km: 18500 },
-        { origem: 'Porto de Santos', destino: 'Porto de Hamburgo', distancia_km: 10100 }
-      ];
     }
     renderRotasTable();
   }
