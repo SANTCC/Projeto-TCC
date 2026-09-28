@@ -7,10 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
-  const toggleGuindasteBtn = document.getElementById('toggleGuindasteFormBtn');
-  const guindasteForm = document.getElementById('guindasteForm');
-  const guindastesTableBody = document.getElementById('guindastesTableBody');
-
   const toggleOsBtn = document.getElementById('toggleOsFormBtn');
   const osForm = document.getElementById('osForm');
   const osTableBody = document.getElementById('osTableBody');
@@ -22,81 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const isInspetor = ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
   const isSupervisor = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
 
-  if (toggleGuindasteBtn && !isInspetor) {
-    toggleGuindasteBtn.classList.add('hidden');
-  }
-
-  // Lista e CRUD de Guindastes (Point 2 / Spec.md RF 2, T2.7)
   let guindastesList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
-
-  async function carregarGuindastesSupabase() {
-    if (window.nexusSupabase) {
-      try {
-        const { data, error } = await window.nexusSupabase.from('guindastes').select('*');
-        if (!error && Array.isArray(data)) {
-          guindastesList = data.map(g => ({
-            id: g.id || g.numero_identificacao,
-            identificacao: g.numero_identificacao,
-            estado: g.estado || 'OPERANTE',
-            dataManut: g.data_ultima_manutencao || ''
-          }));
-          localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
-          renderGuindastesTable();
-          return;
-        }
-      } catch (err) {
-        console.warn('[NexusPort] Erro ao carregar guindastes do Supabase:', err);
-      }
-    }
-    renderGuindastesTable();
-  }
-
-  function renderGuindastesTable() {
-    if (!guindastesTableBody) return;
-
-    if (guindastesList.length === 0) {
-      guindastesTableBody.innerHTML = `
-        <tr>
-          <td colspan="4" class="p-4 text-center text-slate-400 italic">Nenhum guindaste cadastrado no banco de dados.</td>
-        </tr>
-      `;
-      return;
-    }
-
-    guindastesTableBody.innerHTML = guindastesList.map(g => `
-      <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <td class="p-3 font-mono font-bold text-nexus-500">${g.identificacao}</td>
-        <td class="p-3">
-          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-            g.estado === 'OPERANTE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
-            'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-          }">${g.estado}</span>
-        </td>
-        <td class="p-3 font-mono text-xs">${g.dataManut}</td>
-        <td class="p-3 text-right">
-          ${g.estado === 'OPERANTE' && isSupervisor ? `
-            <button type="button" onclick="window.solicitarManutencaoGuindaste('${g.identificacao}')" class="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs">Solicitar Manutenção</button>
-          ` : g.estado === 'EM_MANUTENCAO' && isSupervisor ? `
-            <button type="button" onclick="window.concluirManutencaoGuindaste('${g.identificacao}')" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs">Concluir Manutenção</button>
-          ` : `<span class="text-slate-400 font-mono italic text-[11px]">Sem Ação Permissível</span>`}
-        </td>
-      </tr>
-    `).join('');
-  }
-
-  carregarGuindastesSupabase();
-
-  if (toggleGuindasteBtn && guindasteForm) {
-    toggleGuindasteBtn.addEventListener('click', () => {
-      if (!isInspetor) {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos guindastes (Spec.md RF 1)!');
-        }
-        return;
-      }
-      guindasteForm.classList.toggle('hidden');
-    });
-  }
 
   // Item 17: Módulo de Solicitação de Manutenção de Navios
   const toggleNavioManutBtn = document.getElementById('toggleNavioManutFormBtn');
@@ -770,7 +692,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {
-    carregarGuindastesSupabase();
     carregarNaviosParaManutencao();
     renderOsTable();
   });

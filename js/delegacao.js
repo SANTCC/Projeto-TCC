@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const { data, error } = await window.nexusSupabase
           .from('delegacoes_supervisor')
-          .select('*, supervisor:supervisor_id(nome, matricula), substituto:substituto_id(nome, matricula)')
+          .select('*, supervisor:supervisor_titular_id(nome, matricula), substituto:substituto_id(nome, matricula)')
           .eq('ativo', true)
           .order('data_inicio', { ascending: false })
           .limit(1)
@@ -41,9 +41,12 @@ document.addEventListener('DOMContentLoaded', () => {
           if (now <= fimDate) {
             activeDeleg = {
               id: data.id,
-              supervisor: data.supervisor?.nome || data.supervisor?.matricula || session.nome,
+              supervisor: data.supervisor?.nome || session.nome,
+              substituidoMatricula: data.supervisor?.matricula || session.matricula,
               substitutoMatricula: data.substituto?.matricula || 'MAT-SUB',
-              substitutoNome: data.substituto?.nome || 'Substituto',
+              substitutoNome: data.substituto_nome || data.substituto?.nome || 'Substituto',
+              substitutoCpf: data.substituto_cpf || '',
+              substitutoDataNasc: data.substituto_data_nascimento || '',
               inicio: data.data_inicio,
               fim: data.data_fim_previsto || data.data_fim,
               rawDbId: data.id
@@ -151,19 +154,22 @@ document.addEventListener('DOMContentLoaded', () => {
           const payload = {
             data_inicio: new Date(inicio).toISOString(),
             data_fim_previsto: new Date(fim).toISOString(),
+            substituto_nome: substitutoNomeInput,
+            substituto_cpf: substitutoCpf,
+            substituto_data_nascimento: substitutoDataNasc || null,
             ativo: true
           };
-          if (supervisorId) payload.supervisor_id = supervisorId;
+          if (supervisorId) payload.supervisor_titular_id = supervisorId;
           if (substitutoId) payload.substituto_id = substitutoId;
 
-          const { data: insData } = await window.nexusSupabase.from('delegacoes_supervisor').insert(payload).select('id').single();
-          if (insData) {
+          const { data: insData, error: insErr } = await window.nexusSupabase.from('delegacoes_supervisor').insert(payload).select('id').single();
+          if (!insErr && insData) {
             insertedDelegId = insData.id;
             newDeleg.rawDbId = insData.id;
           }
 
           if (window.registrarLogAlteracao) {
-            await window.registrarLogAlteracao('CRIACAO', 'delegacoes_supervisor', insertedDelegId, { substituto: substitutoMatricula, inicio, fim });
+            await window.registrarLogAlteracao('CRIACAO', 'delegacoes_supervisor', insertedDelegId, { substituto: substitutoNomeInput, cpf: substitutoCpf, inicio, fim });
           }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar delegação com Supabase:', err);
