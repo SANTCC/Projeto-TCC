@@ -320,7 +320,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.nexusSupabase) {
         try {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          let tipoCargaUuid = (tipoCompartilhado && isUuid.test(tipoCompartilhado.id)) ? tipoCompartilhado.id : null;
+          let tipoCargaUuid = null;
+          if (window.getNexusTipoCarga) {
+            const tc = window.getNexusTipoCarga(tipo);
+            if (tc && tc.id && isUuid.test(tc.id)) tipoCargaUuid = tc.id;
+          }
 
           if (!tipoCargaUuid) {
             const { data: dbTipo } = await window.nexusSupabase.from('tipos_carga').select('id').eq('nome', tipo).maybeSingle();
