@@ -188,8 +188,12 @@ document.addEventListener('DOMContentLoaded', () => {
         etaText = 'Atracado no Destino (Concluído)';
         tempoForaText = '0d 0h 0s (Atracado no Destino)';
       } else {
-        // C6 & A4: Cálculo de ETA e tempo decorrido dinâmico baseado em tempo real
-        const horaSaidaTime = n.dataSaida ? new Date(n.dataSaida).getTime() : Date.now();
+        // C6 & A4: Cálculo de ETA e tempo decorrido dinâmico baseado em tempo real com parsing seguro
+        let horaSaidaTime = Date.now();
+        if (n.dataSaida) {
+          const parsed = new Date(n.dataSaida).getTime();
+          if (!isNaN(parsed)) horaSaidaTime = parsed;
+        }
         const diffMs = Math.max(0, Date.now() - horaSaidaTime);
 
         const diasDecorridos = Math.floor(diffMs / (1000 * 60 * 60 * 24));

@@ -159,12 +159,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (window.nexusSupabase) {
       try {
-        await window.nexusSupabase.from('leituras_qr_code').insert({
+        const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+        let funcId = isUuid(session.id) ? session.id : null;
+        if (!funcId) {
+          const list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+          const match = list.find(f => f.codigo_individual === session.codigo_individual || f.matricula === session.matricula);
+          if (match && isUuid(match.id)) funcId = match.id;
+        }
+
+        const leituraPayload = {
           entidade_tipo: displayId.startsWith('CONT') ? 'CONTAINER' : 'CARGA',
           entidade_id: displayId,
           data_hora: new Date().toISOString()
-        });
-        await window.nexusSupabase.from('logs_alteracoes').insert({
+        };
+        if (funcId) leituraPayload.funcionario_id = funcId;
+
+        const { error: errL } = await window.nexusSupabase.from('leituras_qr_code').insert(leituraPayload);
+        if (errL && leituraPayload.funcionario_id) {
+          delete leituraPayload.funcionario_id;
+          await window.nexusSupabase.from('leituras_qr_code').insert(leituraPayload);
+        }
+
+        const logPayload = {
           data_hora: new Date().toISOString(),
           cargo: session.cargo || 'ESTIVADOR',
           codigo_individual: session.codigo_individual || session.codigo || '--',
@@ -172,7 +188,14 @@ document.addEventListener('DOMContentLoaded', () => {
           entidade_id: displayId,
           tipo_alteracao: 'REIMPRESSAO_ETIQUETA',
           detalhes: { acao: 'Leitura QR Code no Pátio' }
-        });
+        };
+        if (funcId) logPayload.funcionario_id = funcId;
+
+        const { error: errLog } = await window.nexusSupabase.from('logs_alteracoes').insert(logPayload);
+        if (errLog && logPayload.funcionario_id) {
+          delete logPayload.funcionario_id;
+          await window.nexusSupabase.from('logs_alteracoes').insert(logPayload);
+        }
       } catch (err) {
         console.warn('[NexusPort] Erro ao registrar leitura QR Code no Supabase:', err);
       }

@@ -81,16 +81,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (window.nexusSupabase) {
       try {
-        const { data: dbCarga } = await window.nexusSupabase
+        const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+        let query = window.nexusSupabase
           .from('cargas')
-          .select('*, navios:navio_id(id, nome, numero_imo, porto_origem, porto_destino), containers:container_id(id, numero_identificacao, material_carregado, estado)')
-          .or(`id.eq.${idCarga},qr_code_url.eq.QR-${idCarga},qr_code_url.eq.${idCarga}`)
-          .maybeSingle();
+          .select('*, navios:navio_id(id, nome, numero_imo, porto_origem, porto_destino), containers:container_id(id, numero_identificacao, material_carregado, estado)');
+
+        if (isUuid(idCarga)) {
+          query = query.eq('id', idCarga);
+        } else {
+          query = query.or(`qr_code_url.eq.QR-${idCarga},qr_code_url.eq.${idCarga}`);
+        }
+
+        const { data: dbCarga } = await query.maybeSingle();
 
         if (dbCarga) {
-          const navioNome = dbCarga.navios?.nome || (c ? c.navio : 'Não Vinculado');
-          const navioImo = dbCarga.navios?.numero_imo || 'Não Informado';
-          const containerIdent = dbCarga.containers?.numero_identificacao || (c ? c.container : 'Não Alocado');
+          let navioNome = dbCarga.navios?.nome || (c ? c.navio : 'Não Vinculado');
+          let navioImo = dbCarga.navios?.numero_imo || 'Não Informado';
+          let containerIdent = dbCarga.containers?.numero_identificacao || (c ? c.container : 'Não Alocado');
+
+          if (!dbCarga.navios && dbCarga.navio_id) {
+            const { data: nDb } = await window.nexusSupabase.from('navios').select('nome, numero_imo').eq('id', dbCarga.navio_id).maybeSingle();
+            if (nDb) {
+              navioNome = nDb.nome;
+              navioImo = nDb.numero_imo;
+            }
+          }
+
+          if (!dbCarga.containers && dbCarga.container_id) {
+            const { data: cDb } = await window.nexusSupabase.from('containers').select('numero_identificacao').eq('id', dbCarga.container_id).maybeSingle();
+            if (cDb) {
+              containerIdent = cDb.numero_identificacao;
+            }
+          }
 
           c = {
             id: idCarga,
@@ -251,8 +273,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    const localLogs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+    const todosLogs = [...logsList, ...localLogs];
+
     const prodData = targetFuncs.map(func => {
-      const userLogs = logsList.filter(l => l.codigo_individual === func.codigo_individual || l.funcionario_id === func.id);
+      const userLogs = todosLogs.filter(l => l.codigo_individual === func.codigo_individual || l.funcionario_id === func.id || l.codigo_usuario === func.codigo_individual || l.codigo_usuario === func.matricula);
       const count = userLogs.length;
       let lastOpStr = 'Sem operações no histórico';
       if (userLogs.length > 0) {

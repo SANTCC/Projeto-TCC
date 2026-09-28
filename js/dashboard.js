@@ -59,7 +59,11 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
       };
       if (funcId) payload.funcionario_id = funcId;
 
-      await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+      const { error } = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+      if (error && payload.funcionario_id) {
+        delete payload.funcionario_id;
+        await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+      }
     } catch (err) {
       console.warn('[NexusPort] Erro ao invocar log Supabase:', err);
     }
@@ -147,7 +151,13 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
       if (funcId) payload.funcionario_id = funcId;
 
       const { data, error } = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
-      if (!error && data) {
+      if (error && payload.funcionario_id) {
+        delete payload.funcionario_id;
+        const retry = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
+        if (!retry.error && retry.data) {
+          insertedDbId = retry.data.id;
+        }
+      } else if (!error && data) {
         insertedDbId = data.id;
       }
     } catch (err) {
@@ -524,6 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!trailContainer) return;
 
     let trail = [];
+    const localTrail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
 
     if (window.nexusSupabase) {
       try {
@@ -534,7 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!error && Array.isArray(dbTrail)) {
           const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
-          trail = dbTrail.map(t => {
+          const mappedDbTrail = dbTrail.map(t => {
             let respNome = t.funcionarios ? t.funcionarios.nome : null;
             let respCargo = t.funcionarios && t.funcionarios.cargo ? t.funcionarios.cargo : t.cargo;
             if (!respNome && t.codigo_individual) {
@@ -559,11 +570,27 @@ document.addEventListener('DOMContentLoaded', () => {
               retificacao: retificacaoTxt
             };
           });
+
+          // Unir com localTrail para preservar registros inseridos localmente ou offline
+          const keys = new Set(mappedDbTrail.map(x => x.dbId || x.id));
+          localTrail.forEach(lt => {
+            if (!keys.has(lt.dbId) && !keys.has(lt.id)) {
+              mappedDbTrail.push(lt);
+            }
+          });
+          trail = mappedDbTrail;
         }
       } catch (err) {
         console.warn('Erro ao consultar trail_decisoes no Supabase:', err);
       }
     }
+
+    if (trail.length === 0) {
+      trail = localTrail;
+    }
+
+    // Ordenar por data mais recente
+    trail.sort((a, b) => new Date(b.data_hora || 0) - new Date(a.data_hora || 0));
 
     if (trail.length === 0) {
       trailContainer.innerHTML = `
@@ -740,7 +767,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeUserIds = new Set(dbFuncionarios.map(f => f.id));
 
     todosLogs.forEach(l => {
-      if (dbFuncionarios.length > 0 && !activeUserCodes.has(l.codigo_individual) && !activeUserIds.has(l.funcionario_id)) {
+      if (dbFuncionarios.length > 0 && !activeUserCodes.has(l.codigo_individual) && !activeUserIds.has(l.funcionario_id) && !activeUserCodes.has(l.codigo_usuario)) {
         return; // Item 1.6: Ignora logs de funcionários que não existem ou estão inativos no Supabase
       }
       const cargo = String(l.cargo || l.cargo_nome || '').toUpperCase();

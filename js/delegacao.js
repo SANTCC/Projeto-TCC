@@ -120,17 +120,29 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      let supervisorId = null;
+      const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+      let supervisorId = isUUID(session.id) ? session.id : null;
       let substitutoId = null;
       let substituidoNomeStr = session.nome || 'Supervisor Original';
+
+      const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+      const matchSup = localFuncs.find(f => f.matricula === substituidoMatricula || f.codigo_individual === substituidoMatricula);
+      if (matchSup && isUUID(matchSup.id)) supervisorId = matchSup.id;
 
       if (window.nexusSupabase) {
         try {
           const formattedMat = substituidoMatricula.startsWith('MAT-') ? substituidoMatricula : `MAT-${substituidoMatricula}`;
           const { data: supData } = await window.nexusSupabase.from('funcionarios').select('id, nome').or(`matricula.eq.${substituidoMatricula},matricula.eq.${formattedMat}`).maybeSingle();
-          if (supData) {
+          if (supData && supData.id) {
             supervisorId = supData.id;
             substituidoNomeStr = supData.nome;
+          }
+
+          // Resolver ID de substituto na tabela de funcionarios caso cadastrado por nome ou CPF
+          const { data: subData } = await window.nexusSupabase.from('funcionarios').select('id').or(`nome.ilike.%${substitutoNomeInput}%,telefone.eq.${substitutoCpf}`).maybeSingle();
+          if (subData && subData.id) {
+            substitutoId = subData.id;
           }
         } catch (e) {
           console.warn('Erro ao resolver IDs de funcionários para delegação:', e);

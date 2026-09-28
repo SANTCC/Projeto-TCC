@@ -223,15 +223,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('cargas')
-            .update({ status_fluxo: 'ARMAZENAGEM', resultado_inspecao: 'APROVADA' })
-            .eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+          const targetDbId = cargaAtual.rawDbId || cargaAtual.id;
+          const targetIsUuid = isUUID(targetDbId);
+
+          let updateQuery = window.nexusSupabase.from('cargas')
+            .update({ status_fluxo: 'ARMAZENAGEM', resultado_inspecao: 'APROVADA' });
+          if (targetIsUuid) {
+            updateQuery = updateQuery.eq('id', targetDbId);
+          } else {
+            updateQuery = updateQuery.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+          }
+          await updateQuery;
 
           // Busca carga id no Supabase para salvar na tabela inspecoes
-          const { data: cargaDb } = await window.nexusSupabase.from('cargas')
-            .select('id')
-            .eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`)
-            .maybeSingle();
+          let selectQuery = window.nexusSupabase.from('cargas').select('id');
+          if (targetIsUuid) {
+            selectQuery = selectQuery.eq('id', targetDbId);
+          } else {
+            selectQuery = selectQuery.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+          }
+          const { data: cargaDb } = await selectQuery.maybeSingle();
 
           if (cargaDb) {
             const payloadInspecao = {
@@ -245,14 +256,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const { data: inspDb } = await window.nexusSupabase.from('inspecoes').insert(payloadInspecao).select().maybeSingle();
 
             if (inspDb) {
-              const itemRows = Object.keys(itemsEstado)
-                .filter(itemId => isUUID(itemId))
-                .map(itemId => ({
-                  inspecao_id: inspDb.id,
-                  checklist_item_id: itemId,
-                  conforme: itemsEstado[itemId].conforme,
-                  observacao: itemsEstado[itemId].conforme ? 'Conforme' : 'Não Conforme'
-                }));
+              const { data: dbChecklistItens } = await window.nexusSupabase.from('checklist_itens').select('id, ordem');
+              const itemRows = [];
+              const keys = Object.keys(itemsEstado);
+              for (let idx = 0; idx < keys.length; idx++) {
+                const k = keys[idx];
+                let realItemUuid = isUUID(k) ? k : null;
+                if (!realItemUuid && dbChecklistItens && dbChecklistItens.length > 0) {
+                  const match = dbChecklistItens.find(ci => ci.ordem === idx + 1) || dbChecklistItens[idx];
+                  if (match) realItemUuid = match.id;
+                }
+                if (realItemUuid) {
+                  itemRows.push({
+                    inspecao_id: inspDb.id,
+                    checklist_item_id: realItemUuid,
+                    conforme: itemsEstado[k].conforme,
+                    observacao: itemsEstado[k].conforme ? 'Conforme' : 'Não Conforme'
+                  });
+                }
+              }
               if (itemRows.length > 0) {
                 await window.nexusSupabase.from('inspecao_itens').insert(itemRows).catch(e => console.warn('Aviso inspecao_itens:', e));
               }
@@ -314,14 +336,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('cargas')
-            .update({ status_fluxo: 'RECUSADA', resultado_inspecao: 'RECUSADA', motivo_recusa: motivo })
-            .eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+          const targetDbId = cargaAtual.rawDbId || cargaAtual.id;
+          const targetIsUuid = isUUID(targetDbId);
 
-          const { data: cargaDb } = await window.nexusSupabase.from('cargas')
-            .select('id')
-            .eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`)
-            .maybeSingle();
+          let updateQuery = window.nexusSupabase.from('cargas')
+            .update({ status_fluxo: 'RECUSADA', resultado_inspecao: 'RECUSADA', motivo_recusa: motivo });
+          if (targetIsUuid) {
+            updateQuery = updateQuery.eq('id', targetDbId);
+          } else {
+            updateQuery = updateQuery.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+          }
+          await updateQuery;
+
+          let selectQuery = window.nexusSupabase.from('cargas').select('id');
+          if (targetIsUuid) {
+            selectQuery = selectQuery.eq('id', targetDbId);
+          } else {
+            selectQuery = selectQuery.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+          }
+          const { data: cargaDb } = await selectQuery.maybeSingle();
 
           if (cargaDb) {
             const payloadInspecao = {
@@ -335,14 +368,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const { data: inspDb } = await window.nexusSupabase.from('inspecoes').insert(payloadInspecao).select().maybeSingle();
 
             if (inspDb) {
-              const itemRows = Object.keys(itemsEstado)
-                .filter(itemId => isUUID(itemId))
-                .map(itemId => ({
-                  inspecao_id: inspDb.id,
-                  checklist_item_id: itemId,
-                  conforme: itemsEstado[itemId].conforme,
-                  observacao: itemsEstado[itemId].conforme ? 'Conforme' : 'Não Conforme'
-                }));
+              const { data: dbChecklistItens } = await window.nexusSupabase.from('checklist_itens').select('id, ordem');
+              const itemRows = [];
+              const keys = Object.keys(itemsEstado);
+              for (let idx = 0; idx < keys.length; idx++) {
+                const k = keys[idx];
+                let realItemUuid = isUUID(k) ? k : null;
+                if (!realItemUuid && dbChecklistItens && dbChecklistItens.length > 0) {
+                  const match = dbChecklistItens.find(ci => ci.ordem === idx + 1) || dbChecklistItens[idx];
+                  if (match) realItemUuid = match.id;
+                }
+                if (realItemUuid) {
+                  itemRows.push({
+                    inspecao_id: inspDb.id,
+                    checklist_item_id: realItemUuid,
+                    conforme: itemsEstado[k].conforme,
+                    observacao: itemsEstado[k].conforme ? 'Conforme' : 'Não Conforme'
+                  });
+                }
+              }
               if (itemRows.length > 0) {
                 await window.nexusSupabase.from('inspecao_itens').insert(itemRows).catch(e => console.warn('Aviso inspecao_itens:', e));
               }
