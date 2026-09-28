@@ -83,6 +83,7 @@
      */
     getCargas: async function () {
       const client = this.getSupabase();
+      const localCargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       if (client) {
         try {
           const { data, error, count } = await client.from('cargas').select('*, navios(id, nome)', { count: 'exact' });
@@ -104,6 +105,16 @@
               motivoCancelamento: c.motivo_recusa || null,
               rawDbId: c.id
             }));
+
+            // Preserva cargas locais recém-criadas ou pendentes que ainda não estejam no Supabase
+            const remoteIds = new Set(mapped.map(x => x.id));
+            const remoteDbIds = new Set(mapped.map(x => x.rawDbId).filter(Boolean));
+            localCargas.forEach(lc => {
+              if (!remoteIds.has(lc.id) && (!lc.rawDbId || !remoteDbIds.has(lc.rawDbId))) {
+                mapped.push(lc);
+              }
+            });
+
             localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
             return mapped;
           }
@@ -111,7 +122,7 @@
           console.warn('[NexusRepository] Erro ao buscar cargas do Supabase:', err);
         }
       }
-      return JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      return localCargas;
     },
 
     /**

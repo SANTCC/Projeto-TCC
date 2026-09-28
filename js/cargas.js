@@ -122,6 +122,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Exibe cargas ativas aplicando Visão Própria / Visão Operacional (RF 1.3)
     let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA');
+    const isOperacionalRole = ['ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR'].includes(userCargo);
+    const visionScopeBanner = document.getElementById('visionScopeBanner');
+    if (visionScopeBanner) {
+      if (isOperacionalRole) visionScopeBanner.classList.remove('hidden');
+      else visionScopeBanner.classList.add('hidden');
+    }
+
     if (window.NexusVision && window.NexusVision.filterCargasForUser) {
       cargasAtivas = window.NexusVision.filterCargasForUser(cargasAtivas, session);
     }
