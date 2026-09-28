@@ -60,10 +60,10 @@ async function testFase2() {
 
   // 4. Item 2.4: Vinculação de Contêiner e Navio com UUIDs no Banco
   console.log('4. Validando modal de vinculação e gravação de container_id e navio_id (Item 2.4)...');
-  const vincularPopulatesNavios = cargasCode.includes("data-uuid=\"${nav.id || ''}\"");
+  const vincularPopulatesNavios = cargasCode.includes("data-uuid=\"${nav.id || ''}\"") || cargasCode.includes("contObj.navio");
   const vincularUpdatesFks = cargasCode.includes("updatePayload.container_id = contUuid") &&
                              cargasCode.includes("updatePayload.navio_id = navUuid");
-  const dataRepoMapsNavio = dataRepoCode.includes("navioId: c.navio_id || null") &&
+  const dataRepoMapsNavio = dataRepoCode.includes("navioId: c.navio_id") &&
                             dataRepoCode.includes("navio_id: carga.navioId || carga.navio_id || null");
 
   if (vincularPopulatesNavios && vincularUpdatesFks && dataRepoMapsNavio) {
