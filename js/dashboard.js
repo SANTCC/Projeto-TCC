@@ -81,6 +81,12 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
   };
   logs.unshift(newLog);
   localStorage.setItem('nexus_audit_logs', JSON.stringify(logs));
+
+  if (window.NexusRepository && window.NexusRepository.notifyChange) {
+    window.NexusRepository.notifyChange('logs_alteracoes');
+  } else {
+    window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'logs_alteracoes' } }));
+  }
 };
 
 window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
@@ -816,10 +822,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // C7: Embarcações mais utilizadas gerado a partir de agregação real de cargas e navios (Item 1.7)
+    // Item 6: Filtra navios excluídos para que não apareçam no gráfico de pizza
+    const localNavs = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    const activeShipNames = new Set([
+      ...dbNavios.map(n => n.nome ? n.nome.toLowerCase() : ''),
+      ...localNavs.map(n => n.nome ? n.nome.toLowerCase() : '')
+    ].filter(Boolean));
+
     const naviosCountMap = {};
     if (dbNavios.length > 0) {
       dbNavios.forEach(n => {
-        naviosCountMap[n.nome] = parseInt(n.quantidade_cargas_realizadas, 10) || 0;
+        if (n.nome) naviosCountMap[n.nome] = parseInt(n.quantidade_cargas_realizadas, 10) || 0;
       });
 
       dbCargas.forEach(c => {
@@ -829,39 +842,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!matching && (c.navio || (c.navios && c.navios.nome))) {
           const navName = c.navio || c.navios.nome;
-          matching = dbNavios.find(n => n.nome.toLowerCase() === String(navName).toLowerCase());
+          matching = dbNavios.find(n => n.nome && n.nome.toLowerCase() === String(navName).toLowerCase());
         }
-        if (matching) {
+        if (matching && matching.nome) {
           naviosCountMap[matching.nome] = (naviosCountMap[matching.nome] || 0) + 1;
-        } else if (c.navio) {
+        } else if (c.navio && activeShipNames.has(c.navio.toLowerCase())) {
           naviosCountMap[c.navio] = (naviosCountMap[c.navio] || 0) + 1;
         }
       });
     } else {
       const localCargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       localCargas.forEach(c => {
-        if (c.navio) {
+        if (c.navio && activeShipNames.has(c.navio.toLowerCase())) {
           naviosCountMap[c.navio] = (naviosCountMap[c.navio] || 0) + 1;
         }
       });
     }
 
-    // Se nenhum navio for encontrado com cargas, insere frotas operacionais padrão
-    if (Object.keys(naviosCountMap).length === 0) {
-      const localNavs = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
-      if (localNavs.length > 0) {
-        localNavs.forEach((n, idx) => {
-          naviosCountMap[n.nome] = (3 - idx) * 5;
-        });
-      }
-      if (Object.keys(naviosCountMap).length === 0) {
-        naviosCountMap['Navio Alfa'] = 14;
-        naviosCountMap['Navio Beta'] = 9;
-        naviosCountMap['Navio Gama'] = 6;
-      }
+    // Se nenhum navio com carga for encontrado, popula a partir dos navios ativos existentes
+    if (Object.keys(naviosCountMap).length === 0 && localNavs.length > 0) {
+      localNavs.forEach((n, idx) => {
+        if (n.nome) naviosCountMap[n.nome] = (3 - idx) * 5;
+      });
     }
 
-    // Exibe apenas os três navios mais usados (Top 3)
+    // Purga qualquer navio no naviosCountMap que não esteja ativo no sistema (Item 6)
+    Object.keys(naviosCountMap).forEach(shipName => {
+      if (activeShipNames.size > 0 && !activeShipNames.has(shipName.toLowerCase())) {
+        delete naviosCountMap[shipName];
+      }
+    });
+
+    // Exibe apenas os três navios mais usados (Top 3) entre os existentes
     const sortedNavios = Object.entries(naviosCountMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3);

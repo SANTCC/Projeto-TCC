@@ -51,6 +51,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const nomeBerco = `Berço ${num}`;
         return existingMap.get(nomeBerco) || { id: `BERCO-${num}`, nome: nomeBerco, estado: 'LIVRE', navio_nome: null, navio_imo: null };
       });
+    }
+
+    // Item 7: Libera berços ocupados por navios que não existem ou foram excluídos do sistema
+    const currentNavios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    const activeImoSet = new Set(currentNavios.map(n => (n.imo || '').toLowerCase()));
+    const activeNomeSet = new Set(currentNavios.map(n => (n.nome || '').toLowerCase()));
+
+    let bercosAlterados = false;
+    bercosList.forEach(b => {
+      if (b.estado === 'OCUPADO') {
+        const matchImo = b.navio_imo ? activeImoSet.has(b.navio_imo.toLowerCase()) : false;
+        const matchNome = b.navio_nome ? activeNomeSet.has(b.navio_nome.toLowerCase()) : false;
+        if (!matchImo && !matchNome) {
+          b.estado = 'LIVRE';
+          b.navio_nome = null;
+          b.navio_imo = null;
+          bercosAlterados = true;
+        }
+      }
+    });
+
+    if (bercosAlterados || bercosList.length < 15) {
       localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
     }
 

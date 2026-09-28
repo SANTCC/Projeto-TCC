@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('');
   }
 
-  // Processa query string para filtrar carga especificada via URL (ex: cargas.html?carga=CRG-2026-001)
+  // Reset de filtros na inicialização para evitar que valores preenchidos/autofill ocultem cargas
   const urlParams = new URLSearchParams(window.location.search);
   const cargaQueryParam = urlParams.get('carga') || urlParams.get('scan') || urlParams.get('qr');
 
@@ -244,6 +244,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const filterDataInicio = document.getElementById('filterDataInicio');
   const filterDataFim = document.getElementById('filterDataFim');
   const limparFiltrosBtn = document.getElementById('limparFiltrosBtn');
+
+  if (filterNavio) filterNavio.value = '';
+  if (filterContainer) filterContainer.value = '';
+  if (filterTipo) filterTipo.value = '';
+  if (filterStatus) filterStatus.value = '';
+  if (filterDataInicio) filterDataInicio.value = '';
+  if (filterDataFim) filterDataFim.value = '';
 
   if (cargaQueryParam && filterTipo) {
     filterTipo.value = cargaQueryParam.replace('QR-', '');
@@ -667,6 +674,11 @@ document.addEventListener('DOMContentLoaded', () => {
       carga.dataChegada = new Date().toLocaleString('pt-BR');
       carga.conferenteMatricula = session.matricula;
 
+      // Item 3: Remove tarefa do guindaste ao receber a carga
+      let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      tarefasGnd = tarefasGnd.filter(t => t.cargaId !== idCarga && t.id !== `TRF-${idCarga}`);
+      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
+
       if (window.registrarLogAlteracao) {
         await window.registrarLogAlteracao(idCarga, 'EDICAO', 'Recebimento físico registrado pelo Conferente de Carga');
       }
@@ -677,6 +689,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isArrumadorRole) {
         if (window.mostrarFeedback) {
           window.mostrarFeedback('erro', 'Acesso Restrito', 'Acesso Restrito (RF 1.8): Apenas Arrumadores e Consertadores (ou Supervisão/Direção) podem alterar o status da carga para Pronta para Entrega!');
+        }
+        return;
+      }
+      // Item 4: A opção "Pronta" só é permitida se a carga já tiver sido vinculada a um contêiner
+      if (!carga.container && !carga.container_id) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', `BLOQUEIO DE SEGURANÇA (Item 4): A carga ${idCarga} só pode ser alterada para "Pronta" se já tiver sido vinculada a um contêiner! Use o botão "Vincular" primeiro.`);
         }
         return;
       }
@@ -728,6 +747,11 @@ document.addEventListener('DOMContentLoaded', () => {
         carga.navio = '';
         carga.navio_id = null;
 
+        // Item 3: Remove tarefas de guindaste atreladas à carga cancelada
+        let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+        tarefasGnd = tarefasGnd.filter(t => t.cargaId !== idCarga && t.id !== `TRF-${idCarga}`);
+        localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
+
 
         if (window.registrarTrailDecisao) {
           await window.registrarTrailDecisao('CANCELOU_ENTREGA', idCarga, motivo);
@@ -770,6 +794,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderTable();
   };
+
+  // Carregamento inicial ao abrir a página
+  carregarCargasSupabase();
 
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {
