@@ -250,7 +250,13 @@
               </h3>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Histórico hierárquico de decisões operacionais estratégicas e retificações anexadas.</p>
             </div>
-            <span class="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Auditoria RLS Ativa</span>
+            <div class="flex items-center gap-2">
+              <button id="toggleRegistrarTrailBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px]">add</span>
+                <span>+ Registrar Decisão / Trail</span>
+              </button>
+              <span class="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Auditoria RLS Ativa</span>
+            </div>
           </div>
 
           <!-- Timeline Organizada do Trail de Decisões -->
@@ -260,7 +266,7 @@
         </div>
 
         <!-- Painel Estratégico do Diretor (Planilha Consolidada e Gráficos - A3, C7, C8) -->
-        <div id="estrategicoPanel" class="hidden flex flex-col gap-6">
+        <div id="estrategicoPanel" class="flex flex-col gap-6">
 
           <!-- Planilha Consolidada de Desempenho Operacional por Categoria (A3) -->
           <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
@@ -310,6 +316,58 @@
 
       </div>
     </main>
+  </div>
+
+  <!-- Modal de Registro Manual de Decisão Crítica / Trail (Item 10) -->
+  <div id="registrarTrailModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+        <h3 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-nexus-500">gavel</span>
+          Registrar Decisão Crítica / Trail
+        </h3>
+        <button type="button" id="closeRegistrarTrailModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+
+      <form id="registrarTrailForm" class="flex flex-col gap-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Tipo de Decisão</label>
+          <select id="trailTipoDecisao" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold">
+            <option value="APROVOU_CARGA">Aprovou Carga</option>
+            <option value="RECUSOU_CARGA">Recusou Carga</option>
+            <option value="LIBEROU_NAVIO">Liberou Navio</option>
+            <option value="CANCELOU_ENTREGA">Cancelou Entrega</option>
+            <option value="APROVOU_MANUTENCAO">Aprovou Manutenção</option>
+            <option value="RECUSOU_MANUTENCAO">Recusou Manutenção</option>
+            <option value="SOLICITOU_MANUTENCAO_NAVIO">Solicitou Manutenção de Navio</option>
+            <option value="SOLICITOU_MANUTENCAO_CONTAINER">Solicitou Manutenção de Contêiner</option>
+            <option value="DESIGNOU_SUBSTITUTO">Designou Substituto</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Entidade / Identificação</label>
+          <input type="text" id="trailEntidadeInput" required placeholder="Ex: Carga CRG-2026-101 ou Navio Santos Star" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Justificativa / Motivo Formal</label>
+          <textarea id="trailMotivoInput" required rows="3" placeholder="Informe a justificativa formal da decisão..." class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800"></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-nexus-border dark:border-nexus-dark-border">
+          <button type="button" id="cancelRegistrarTrailModalBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs">
+            Cancelar
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors">
+            <span class="material-symbols-outlined text-sm">gavel</span>
+            Registrar Decisão
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- Modal Centralizado para Detalhamento de Indicadores Operacionais (Item 1 Correções) -->

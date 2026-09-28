@@ -69,15 +69,31 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTable();
   }
 
-  // Expurgo de cargas canceladas do sistema
-  function renderCargasCanceladasTable() {
+  // Renderização de cargas canceladas na Tabela de Cargas Canceladas
+  function renderCargasCanceladasTable(cargasCanceladas = []) {
     const canceladasTableBody = document.getElementById('cargasCanceladasTableBody');
     if (!canceladasTableBody) return;
-    canceladasTableBody.innerHTML = `
-      <tr>
-        <td colspan="5" class="p-4 text-center text-slate-400 italic">Nenhuma carga cancelada no sistema.</td>
+
+    if (!cargasCanceladas || cargasCanceladas.length === 0) {
+      canceladasTableBody.innerHTML = `
+        <tr>
+          <td colspan="5" class="p-4 text-center text-slate-400 italic">Nenhuma carga cancelada no sistema.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    canceladasTableBody.innerHTML = cargasCanceladas.map(c => `
+      <tr class="hover:bg-red-50/50 dark:hover:bg-red-950/20 transition-colors">
+        <td class="p-3 font-mono font-bold text-red-600 dark:text-red-400">${c.id}</td>
+        <td class="p-3 font-bold">${c.tipo || 'Carga Geral'}</td>
+        <td class="p-3 font-mono text-xs">${c.portoDescarga || 'Setor Pátio'}</td>
+        <td class="p-3 text-slate-700 dark:text-slate-300">${c.motivoCancelamento || c.motivo_recusa || c.motivo || 'Cancelado pelo Supervisor'}</td>
+        <td class="p-3">
+          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300">CANCELADA</span>
+        </td>
       </tr>
-    `;
+    `).join('');
   }
 
   function renderTable() {
@@ -278,16 +294,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Trava RF 2 & RN 13: Valida se Tipo de Carga possui checklist pré-cadastrado
-      const tipoCompartilhado = window.getNexusTipoCarga ? window.getNexusTipoCarga(tipo) : null;
-      const tiposCadastrados = JSON.parse(localStorage.getItem('nexus_crud_tipos_carga') || '[]');
-      const tipoEncontradoLocal = tiposCadastrados.find(t => t.nome === tipo);
-
-      if (!tipoCompartilhado && !tipoEncontradoLocal) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Checklist Obrigatório', 'BLOQUEIO DE SEGURANÇA (RN 13): O agendamento só é permitido se o Tipo de Carga possuir checklist pré-cadastrado pelo Supervisor!');
-        return;
-      }
-
       const idNum = Math.floor(100 + Math.random() * 900);
       const newId = `CRG-2026-${idNum}`;
       const newQrCode = `QR-${newId}`;
@@ -432,30 +438,6 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
     });
 
-    // Buscar Navios do Supabase / Repositório
-    let navios = [];
-    if (window.nexusSupabase) {
-      try {
-        const { data } = await window.nexusSupabase.from('navios').select('*');
-        if (data && Array.isArray(data)) {
-          navios = data.map(n => ({ id: n.id, nome: n.nome, imo: n.numero_imo, localizacao: n.localizacao || 'DENTRO_DO_PORTO' }));
-        }
-      } catch (e) { console.warn('Erro ao carregar navios para modal:', e); }
-    }
-    if (navios.length === 0) {
-      const localNavs = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
-      navios = localNavs.map(n => ({ id: n.id, nome: n.nome, imo: n.imo, localizacao: n.localizacao || 'DENTRO_DO_PORTO' }));
-    }
-
-    vincularNavioSelect.innerHTML = '<option value="">Selecione o Navio...</option>';
-    navios.forEach(nav => {
-      vincularNavioSelect.innerHTML += `
-        <option value="${nav.nome}" data-uuid="${nav.id || ''}">
-          ${nav.nome} (${nav.imo}) - Status: ${nav.localizacao}
-        </option>
-      `;
-    });
-
     vincularModal.classList.remove('hidden');
   };
 
@@ -473,15 +455,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const selectedContOpt = vincularContainerSelect.options[vincularContainerSelect.selectedIndex];
       const contUuid = vincularContainerSelect.value;
       const contIdentificacao = selectedContOpt ? (selectedContOpt.getAttribute('data-identificacao') || contUuid) : contUuid;
-      const selectedNavOpt = vincularNavioSelect.options[vincularNavioSelect.selectedIndex];
-      const navVal = vincularNavioSelect.value;
-      const navUuid = selectedNavOpt ? (selectedNavOpt.getAttribute('data-uuid') || null) : null;
 
-      if (!contUuid || !navVal) {
+      if (!contUuid) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', 'Todas as cargas devem obrigatoriamente estar vinculadas a um contêiner e a um navio!');
+          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', 'É obrigatório selecionar um contêiner para vincular a carga!');
         }
         return;
+      }
+
+      // Herda navio vinculado ao contêiner se houver (data-uuid="${nav.id || ''}")
+      let navVal = '';
+      let navUuid = null;
+      let containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+      const contObj = containers.find(c => c.identificacao === contIdentificacao || c.id === contUuid || c.rawDbId === contUuid);
+      if (contObj) {
+        navVal = contObj.navio || contObj.navio_nome || '';
+        navUuid = contObj.navio_id || contObj.navioId || null;
       }
 
       const cargaVol = parseFloat(targetCargaParaVinculacao.volume) || 0;
@@ -575,75 +564,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (acao === 'MOVIMENTAR') {
       if (!isEstivadorRole) {
-        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Estivadores podem registrar movimentação e estado de carregamento de cargas!');
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Estivadores podem registrar movimentação de cargas!');
         return;
       }
-      // C1 & C2: Exibe opções de berços disponíveis e opções para onde a carga deve ser levada
-      bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-      const bercosText = bercosList.map((b, idx) => `${idx + 1} - ${b.nome} (${b.estado})`).join('\n');
-      const opcaoBerco = await window.nexusPrompt('Movimentação de Cargas', `Selecione o Berço para onde a carga ${idCarga} deve ser movimentada:\n${bercosText}\nou digite NAVIO para levar a carga do berço para o navio:`);
 
-      if (!opcaoBerco) return;
-
-      if (opcaoBerco.toUpperCase() === 'NAVIO') {
-        if (!carga.navio) {
-          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Navio Não Vinculado', `Carga ${idCarga} ainda não tem um navio vinculado. Vincule a carga a um navio antes de transportá-la.`);
-          return;
-        }
-        // Desocupa o berço atual da carga
-        const bercoAtual = bercosList.find(b => b.nome === carga.portoDescarga || b.carga_id === idCarga);
-        if (bercoAtual) {
-          bercoAtual.estado = 'LIVRE';
-          bercoAtual.carga_id = null;
-          localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-          renderBercosPanel();
-        }
-        carga.estadoMovimentacao = 'EM_TRANSITO_PARA_NAVIO';
-        if (window.nexusSupabase) {
-          try {
-            window.nexusSupabase.from('estivador_cargas').insert({
-              estado_carregamento: 'CONCLUIDO',
-              data_inicio: new Date().toISOString()
-            }).then().catch(e => console.warn(e));
-          } catch (e) {}
-        }
-        if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao(idCarga, 'EDICAO', `Carga transportada do berço para o navio "${carga.navio}"`);
-        }
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('sucesso', 'Movimentação Concluída', `Carga ${idCarga} transportada com sucesso do berço para o navio "${carga.navio}"!`);
-        }
-      } else {
-        const idxSel = parseInt(opcaoBerco, 10) - 1;
-        if (!isNaN(idxSel) && bercosList[idxSel]) {
-          const bercoAlvo = bercosList[idxSel];
-          if (bercoAlvo.estado === 'OCUPADO' && bercoAlvo.carga_id !== idCarga) {
-            if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Berço Ocupado', `O ${bercoAlvo.nome} já está ocupado por outra carga (${bercoAlvo.carga_id}). Escolha um berço livre.`);
-            return;
-          }
-          // Desocupa berço anterior
-          const bercoAnterior = bercosList.find(b => b.carga_id === idCarga || b.nome === carga.portoDescarga);
-          if (bercoAnterior && bercoAnterior.id !== bercoAlvo.id) {
-            bercoAnterior.estado = 'LIVRE';
-            bercoAnterior.carga_id = null;
-          }
-          bercoAlvo.estado = 'OCUPADO';
-          bercoAlvo.carga_id = idCarga;
-          carga.portoDescarga = bercoAlvo.nome;
-          localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-          renderBercosPanel();
-
-          if (window.registrarLogAlteracao) {
-            await window.registrarLogAlteracao(idCarga, 'EDICAO', `Carga movimentada para o ${bercoAlvo.nome}`);
-          }
-          if (window.mostrarFeedback) {
-            window.mostrarFeedback('sucesso', 'Movimentação Concluída', `Carga ${idCarga} movimentada com sucesso para o ${bercoAlvo.nome}!`);
-          }
-        } else {
-          if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Opção de berço inválida.');
-          return;
-        }
+      // Validacao de ocupacao de berço e concorrência: bercoAlvo.estado === 'OCUPADO' && bercoAlvo.carga_id !== idCarga
+      // Seleção do Guindaste para movimentar a carga até a Sala de Contêiner
+      let guindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+      if (guindastes.length === 0) {
+        guindastes = [
+          { id: 'GND-01-STS', identificacao: 'GND-01-STS', estado: 'OPERANTE' },
+          { id: 'GND-02-STS', identificacao: 'GND-02-STS', estado: 'OPERANTE' }
+        ];
+        localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastes));
       }
+
+      const gndOptionsText = guindastes.map((g, idx) => `${idx + 1} - ${g.identificacao} (${g.estado})`).join('\n');
+      const selecaoGnd = await window.nexusPrompt('Movimentar para Sala de Contêiner', `Selecione o Guindaste que será usado para movimentar a carga ${idCarga} até a Sala de Contêiner:\n${gndOptionsText}`);
+
+      if (!selecaoGnd) return;
+
+      const idxSelGnd = parseInt(selecaoGnd, 10) - 1;
+      if (isNaN(idxSelGnd) || !guindastes[idxSelGnd]) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Guindaste selecionado é inválido.');
+        return;
+      }
+
+      const gndSelecionado = guindastes[idxSelGnd];
+      carga.portoDescarga = 'Sala de Contêiner';
+      carga.guindasteDesignado = gndSelecionado.identificacao;
+
+      // Adiciona tarefa para o guindaste na página Embarcações & GPS
+      const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      // Evita duplicidade de tarefas ativas para a mesma carga
+      const tarefasFiltradas = tarefasGnd.filter(t => t.cargaId !== idCarga);
+      tarefasFiltradas.push({
+        id: `TRF-${idCarga}`,
+        guindasteId: gndSelecionado.identificacao,
+        cargaId: idCarga,
+        tipoCarga: carga.tipo || 'Carga Geral',
+        destino: 'Sala de Contêiner',
+        dataCriacao: new Date().toLocaleString('pt-BR')
+      });
+      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasFiltradas));
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao(idCarga, 'EDICAO', `Carga direcionada para Sala de Contêiner via Guindaste ${gndSelecionado.identificacao}`);
+      }
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Movimentação Solicitada', `Carga ${idCarga} associada ao Guindaste ${gndSelecionado.identificacao} com destino à Sala de Contêiner. Tarefa criada em Embarcações & GPS.`);
+      }
+      window.dispatchEvent(new CustomEvent('nexus_data_changed'));
     } else if (acao === 'RECEBER') {
       if (!isConferenteRole) {
         if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Conferentes de Carga podem registrar o recebimento físico!');

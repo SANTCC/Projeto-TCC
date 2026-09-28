@@ -755,24 +755,34 @@ document.addEventListener('DOMContentLoaded', () => {
   let containersList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
 
   async function carregarContainersSupabase() {
+    let localConts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase
           .from('containers')
           .select('*');
 
-        if (!error && Array.isArray(data)) {
+        if (!error && Array.isArray(data) && data.length > 0) {
           const supConts = data.map(c => ({
             id: c.id || `CONT-${c.numero_identificacao}`,
+            rawDbId: c.id,
             identificacao: c.numero_identificacao,
             tipo: c.material_carregado || 'Carga Geral',
             dataFabr: c.data_fabricacao || '',
-            dataManut: c.data_ultima_manutencao || '',
+            dataManut: c.data_ultima_manutencao || 'Sem Manutenção',
             refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
             navio_id: c.navio_id || null,
             navio: c.navio_id ? 'Vinculado' : 'Não Vinculado',
             estado: c.estado || 'OPERANTE'
           }));
+
+          // Mescla contêineres locais com o banco Supabase para preservar cadastros
+          const supIdSet = new Set(supConts.map(x => (x.identificacao || '').toUpperCase()));
+          localConts.forEach(lc => {
+            if (lc.identificacao && !supIdSet.has(lc.identificacao.toUpperCase())) {
+              supConts.push(lc);
+            }
+          });
 
           containersList = supConts;
           localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
@@ -783,6 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('[NexusPort] Erro ao carregar contêineres do Supabase:', err);
       }
     }
+    containersList = localConts;
     renderContainersTable();
   }
 
@@ -1021,18 +1032,21 @@ document.addEventListener('DOMContentLoaded', () => {
       let insertedContId = null;
       if (window.nexusSupabase) {
         try {
+          const dbDataManut = (dataManut && dataManut !== 'Sem Manutenção') ? dataManut : null;
           const { data, error } = await window.nexusSupabase.from('containers').insert({
             numero_identificacao: identificacao,
+            material_carregado: tipo,
             data_fabricacao: dataFabr || null,
-            data_ultima_manutencao: dataManut || null,
+            data_ultima_manutencao: dbDataManut,
             tempo_uso_referencia: refTempo,
             estado: 'OPERANTE',
             qr_code_url: `QR-${identificacao}`
           }).select('id').single();
 
-          if (data && data.id) {
+          if (!error && data && data.id) {
             insertedContId = data.id;
             newCont.id = data.id;
+            newCont.rawDbId = data.id;
           }
 
           if (window.registrarLogAlteracao) {
@@ -1093,25 +1107,100 @@ document.addEventListener('DOMContentLoaded', () => {
     if (guindastesList.length === 0) {
       guindastesTableBody.innerHTML = `
         <tr>
-          <td colspan="3" class="p-4 text-center text-slate-400 italic">Nenhum guindaste cadastrado no banco de dados.</td>
+          <td colspan="4" class="p-4 text-center text-slate-400 italic">Nenhum guindaste cadastrado no banco de dados.</td>
         </tr>
       `;
       return;
     }
 
-    guindastesTableBody.innerHTML = guindastesList.map(g => `
-      <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <td class="p-3 font-mono font-bold text-nexus-500">${g.identificacao}</td>
-        <td class="p-3">
-          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-            g.estado === 'OPERANTE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
-            'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-          }">${g.estado}</span>
-        </td>
-        <td class="p-3 font-mono text-xs">${g.dataManut || 'N/A'}</td>
-      </tr>
-    `).join('');
+    const tarefasGndAll = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+
+    guindastesTableBody.innerHTML = guindastesList.map(g => {
+      const tarefasAtivas = tarefasGndAll.filter(t => t.guindasteId === g.identificacao);
+      const temTarefas = tarefasAtivas.length > 0;
+
+      return `
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+          <td class="p-3 font-mono font-bold text-nexus-500">${g.identificacao}</td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+              g.estado === 'OPERANTE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+              'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+            }">${g.estado}</span>
+          </td>
+          <td class="p-3 font-mono text-xs">${g.dataManut || 'N/A'}</td>
+          <td class="p-3 text-right">
+            <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
+              <button type="button" onclick="window.exibirTarefasGuindaste('${g.identificacao}')" class="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold inline-flex items-center gap-1 transition-all ${temTarefas ? 'animate-pulse ring-2 ring-amber-400' : 'opacity-80'}">
+                <span class="material-symbols-outlined text-[13px]">task</span>
+                <span>Tarefas (${tarefasAtivas.length})</span>
+              </button>
+              <button type="button" onclick="window.excluirGuindaste('${g.identificacao}')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
   }
+
+  // Excluir Guindaste (Item 6)
+  window.excluirGuindaste = async function(gndIdentificacao) {
+    const guindaste = guindastesList.find(g => (g.identificacao || '').toUpperCase() === gndIdentificacao.toUpperCase());
+    if (!guindaste) return;
+
+    const confirmou = window.nexusConfirm
+      ? await window.nexusConfirm('Excluir Guindaste', `Tem certeza que deseja EXCLUIR o guindaste ${guindaste.identificacao}? Esta ação o removerá do sistema.`)
+      : true;
+
+    if (confirmou) {
+      guindastesList = guindastesList.filter(g => (g.identificacao || '').toUpperCase() !== gndIdentificacao.toUpperCase());
+      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+
+      // Remove tarefas associadas
+      let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      tarefasGnd = tarefasGnd.filter(t => t.guindasteId !== gndIdentificacao);
+      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
+
+      if (window.nexusSupabase) {
+        try {
+          await window.nexusSupabase.from('guindastes').delete().eq('numero_identificacao', gndIdentificacao);
+        } catch (e) {
+          console.warn('Erro ao excluir guindaste no Supabase:', e);
+        }
+      }
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EXCLUSAO', 'guindastes', guindaste.id || null, `Guindaste ${guindaste.identificacao} excluído do sistema`);
+      }
+
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('guindastes');
+      }
+
+      renderGuindastesTable();
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('sucesso', 'Guindaste Excluído', `Guindaste ${gndIdentificacao} excluído com sucesso do sistema.`);
+      }
+    }
+  }
+
+  window.exibirTarefasGuindaste = async function(gndIdentificacao) {
+    const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+    const tarefasAtivas = tarefasGnd.filter(t => t.guindasteId === gndIdentificacao);
+
+    if (tarefasAtivas.length === 0) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('info', 'Tarefas do Guindaste', `Nenhuma tarefa pendente para o Guindaste ${gndIdentificacao}.`);
+      }
+      return;
+    }
+
+    const listaTxt = tarefasAtivas.map((t, idx) => `${idx + 1}. Carga ${t.cargaId} (${t.tipoCarga || 'Geral'}) ➔ Destino: ${t.destino}`).join('\n');
+
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('atencao', `Tarefas do Guindaste ${gndIdentificacao}`, `TAREFA DE GUINDASTE (${gndIdentificacao}):\n\n${listaTxt}\n\nApós o serviço do guindaste ser concluído, na página 'Cargas & Pátio', ao clicar no botão 'receber', a tarefa sumirá.`);
+    }
+  };
 
   carregarGuindastesSupabase();
 
