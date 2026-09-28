@@ -846,18 +846,13 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Se nenhum navio for encontrado com cargas, insere frotas operacionais padrão
+    // Se nenhum navio for encontrado com cargas, utiliza navios do localStorage cadastrados
     if (Object.keys(naviosCountMap).length === 0) {
       const localNavs = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
       if (localNavs.length > 0) {
         localNavs.forEach((n, idx) => {
-          naviosCountMap[n.nome] = (3 - idx) * 5;
+          naviosCountMap[n.nome] = Math.max(1, (localNavs.length - idx) * 2);
         });
-      }
-      if (Object.keys(naviosCountMap).length === 0) {
-        naviosCountMap['Navio Alfa'] = 14;
-        naviosCountMap['Navio Beta'] = 9;
-        naviosCountMap['Navio Gama'] = 6;
       }
     }
 
