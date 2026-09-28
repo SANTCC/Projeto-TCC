@@ -149,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const guindasteForm = document.getElementById('guindasteForm');
   if (guindasteForm) {
     guindasteForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -191,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      renderGuindastesTable();
+      if (typeof renderGuindastesTable === 'function') renderGuindastesTable();
       guindasteForm.reset();
       guindasteForm.classList.add('hidden');
       if (window.mostrarFeedback) {

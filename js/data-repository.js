@@ -504,5 +504,14 @@
     }
   });
 
+  // Sincronização periódica e em foco da janela para atualização entre dispositivos/abas (Item 2)
+  window.addEventListener('focus', () => {
+    NexusRepository.notifyChange('window_focus');
+  });
+
+  setInterval(() => {
+    NexusRepository.notifyChange('periodic_sync');
+  }, 10000);
+
   window.NexusRepository = NexusRepository;
 })(window);
