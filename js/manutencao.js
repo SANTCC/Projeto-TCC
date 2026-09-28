@@ -297,9 +297,14 @@ document.addEventListener('DOMContentLoaded', () => {
           descricao_servicos: `Conclusão da manutenção do Guindaste ${identificacao}`
         });
 
-        await window.nexusSupabase.from('manutencoes')
-          .update({ status: 'CONCLUIDA' })
-          .ilike('descricao', `%${identificacao}%`);
+        const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+        let q = window.nexusSupabase.from('manutencoes').update({ status: 'CONCLUIDA' });
+        if (os && os.rawDbId && isUuid(os.rawDbId)) {
+          q = q.eq('id', os.rawDbId);
+        } else {
+          q = q.ilike('descricao', `%${identificacao}%`);
+        }
+        await q;
 
         if (window.registrarTrailDecisao) {
           await window.registrarTrailDecisao('APROVOU_MANUTENCAO', 'guindastes', null, `Concluiu manutenção do Guindaste ${identificacao} e reativou para OPERANTE`);
@@ -591,29 +596,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (window.nexusSupabase) {
       try {
-        await window.nexusSupabase.from('manutencoes')
-          .update({ status: supabaseStatus })
-          .ilike('descricao', `%${idOS}%`);
+        const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+        let qStatus = window.nexusSupabase.from('manutencoes').update({ status: supabaseStatus });
+        if (os.rawDbId && isUuid(os.rawDbId)) {
+          qStatus = qStatus.eq('id', os.rawDbId);
+        } else {
+          qStatus = qStatus.ilike('descricao', `%${idOS}%`);
+        }
+        await qStatus;
 
         const limpaNome = os.equipamento.replace(/^(Navio|Guindaste|Contêiner)\s+/, '').trim();
 
         if (os.equipamento.startsWith('Navio')) {
           if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).eq('nome', limpaNome);
+            await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).ilike('nome', limpaNome);
           } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).eq('nome', limpaNome);
+            await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).ilike('nome', limpaNome);
           }
         } else if (os.equipamento.startsWith('Guindaste')) {
           if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'EM_MANUTENCAO' }).eq('numero_identificacao', limpaNome);
+            await window.nexusSupabase.from('guindastes').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', limpaNome);
           } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).eq('numero_identificacao', limpaNome);
+            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
           }
         } else if (os.equipamento.startsWith('Contêiner')) {
           if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'EM_MANUTENCAO' }).eq('numero_identificacao', limpaNome);
+            await window.nexusSupabase.from('containers').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', limpaNome);
           } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).eq('numero_identificacao', limpaNome);
+            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
           }
         }
 

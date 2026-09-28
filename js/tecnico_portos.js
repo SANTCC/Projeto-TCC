@@ -116,9 +116,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (window.nexusSupabase) {
           try {
+            const rawMat = selectedEmp.matricula;
+            const formattedMat = rawMat.startsWith('MAT-') ? rawMat : `MAT-${rawMat}`;
+            const unformattedMat = rawMat.replace('MAT-', '');
+
             await window.nexusSupabase.from('funcionarios')
               .update({ codigo_individual: newCode })
-              .eq('matricula', selectedEmp.matricula);
+              .or(`matricula.eq.${rawMat},matricula.eq.${formattedMat},matricula.eq.${unformattedMat}`);
 
             if (window.registrarLogAlteracao) {
               await window.registrarLogAlteracao('EDICAO', 'funcionarios', null, { matricula: selectedEmp.matricula, novo_codigo: newCode, motivo: 'Reemissão de código pelo Técnico em Portos' });
@@ -493,18 +497,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (window.nexusSupabase) {
       try {
+        const textoOriginal = visitor.motivo || 'Visita técnica';
+        const textoVistoria = visitor.vistoria || 'Vistoria em Ordem';
+        let motivoFormatado = `${textoOriginal} | ${textoVistoria}`;
+        if (motivoFormatado.length > 200) {
+          motivoFormatado = motivoFormatado.substring(0, 197) + '...';
+        }
+
         if (visitor.id) {
           await window.nexusSupabase.from('visitantes')
             .update({
               data_hora_saida: new Date().toISOString(),
-              motivo: `${visitor.motivo} | ${visitor.vistoria}`
+              motivo: motivoFormatado
             })
             .eq('id', visitor.id);
         } else {
           await window.nexusSupabase.from('visitantes')
             .update({
               data_hora_saida: new Date().toISOString(),
-              motivo: `${visitor.motivo} | ${visitor.vistoria}`
+              motivo: motivoFormatado
             })
             .eq('documento', visitor.documento);
         }
