@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const prodTableBody = document.getElementById('produtividadeTableBody');
 
   let cargas = [];
+  let funcionariosList = [];
+  let logsList = [];
 
   async function popularCargas() {
     if (!selectCarga) return;
@@ -315,4 +317,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   renderProdutividadeTable();
+
+  // Sincronização viva e atualização automática ao registrar produtividade / alterar dados (Tarefa 6)
+  window.addEventListener('nexus_data_changed', () => {
+    popularCargas();
+    renderProdutividadeTable();
+  });
+
+  // Atualização periódica a cada 5 segundos para garantir atualização viva do relatório
+  setInterval(() => {
+    renderProdutividadeTable();
+  }, 5000);
 });

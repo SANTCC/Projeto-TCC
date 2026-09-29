@@ -442,3 +442,37 @@ Foi efetuada a checagem das 60 políticas RLS cadastradas na tabela `pg_policies
 
 **RESPOSTA:** **SIM.**  
 **Justificativa Técnica:** O sistema **NexusPort** foi validado e homologado de ponta a ponta com sucesso absoluto em todas as 12 etapas (Fase 0 a Fase 11). Todas as regras de negócio, exigências de segurança RBAC, auditoria imutável e integridade relacional no Supabase PostgreSQL estão ativas e plenamente funcionais.
+
+---
+
+## 🎯 7. Execução de Correções Adicionais
+
+### Tarefa 1 – Corrigir a regra do "Liberar Saída" (Embarcações & GPS)
+- **Status:** ✅ Concluído
+- **Data:** 29 de Setembro de 2026
+- **Descrição:** Removida a trava equivocada `navio.localizacao !== 'NO_PORTO_DE_DESTINO'` da função `liberarNavioPeloDiretor` em `js/embarcacoes.js`. O botão "Liberar Saída" agora libera a partida de navios que se encontram no porto de origem (`DENTRO_DO_PORTO`). A verificação de chegada ao destino permanece restrita a "Autorizar Retorno" (`autorizarRetornoNavio`).
+
+### Tarefa 2 – Salvar os berços no banco de dados (Supabase)
+- **Status:** ✅ Concluído
+- **Data:** 29 de Setembro de 2026
+- **Descrição:** Integrada a tabela `bercos` no Supabase em `js/data-repository.js` (`getBercos` e `saveBerco`) e `js/embarcacoes.js` (`carregarBercosSupabase`). A inicialização, vinculação de navios a berços, desvinculação, desocupação por saída de navio ou exclusão agora persistem em tempo real no PostgreSQL do Supabase via `upsert`.
+
+### Tarefa 3 – Salvar as informações no Supabase (Delegação Supervisor)
+- **Status:** ✅ Concluído
+- **Data:** 29 de Setembro de 2026
+- **Descrição:** Atualizada a lógica de `js/delegacao.js` para salvar no banco Supabase (`delegacoes_supervisor`) e buscar a delegação ativa do banco. Adicionado tratamento robusto de exceções e erros de gravação/revogação com mensagens de feedback visual via `mostrarFeedback`.
+
+### Tarefa 4 – Padronizar a matrícula de funcionários (Cadastro de funcionários)
+- **Status:** ✅ Concluído
+- **Data:** 29 de Setembro de 2026
+- **Descrição:** Implementada a validação do padrão de matrícula `MAT-4 números` (regex `/^MAT-\d{4}$/`) no cadastro de funcionários em `js/tecnico_portos.js`. Exibe mensagem de atenção caso o usuário insira uma matrícula fora do padrão exigido.
+
+### Tarefa 5 – Permitir CPFs fictícios (Cadastros em geral)
+- **Status:** ✅ Concluído
+- **Data:** 29 de Setembro de 2026
+- **Descrição:** Ajustadas as funções de validação de CPF (`validarCPF`) em `js/delegacao.js` e `js/tecnico_portos.js` para exigir estritamente a estrutura de 11 dígitos do CPF (formato/máscara `XXX.XXX.XXX-XX`), sem bloquear o cadastro por conta do cálculo oficial de dígitos verificadores de pessoas reais, permitindo CPFs fictícios em cadastros.
+
+### Tarefa 6 – Atualizar automaticamente o "Relatório de Produtividade por Cargo e Funcionários" (Relatórios & PDF)
+- **Status:** ✅ Concluído
+- **Data:** 29 de Setembro de 2026
+- **Descrição:** Adicionadas variáveis de escopo de módulo em `js/relatorios.js`, integração com o evento de transmissão `nexus_data_changed` e atualização viva automática periódica. O relatório de produtividade agora re-executa a busca e re-renderiza na tela em tempo real sempre que qualquer operação ou produtividade é registrada no sistema.
