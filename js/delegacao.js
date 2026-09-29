@@ -8,23 +8,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
-  // Validador oficial de CPF (dígitos verificadores + máscara)
+  // Validador de estrutura de CPF (permite CPFs fictícios de 11 dígitos - Tarefa 5)
   function validarCPF(cpfStr) {
     if (!cpfStr) return false;
     const clean = String(cpfStr).replace(/\D/g, '');
-    if (clean.length !== 11 || /^(\d)\1{10}$/.test(clean)) return false;
+    if (clean.length !== 11) return false;
 
     let soma = 0;
     for (let i = 0; i < 9; i++) soma += parseInt(clean.charAt(i)) * (10 - i);
     let resto = 11 - (soma % 11);
-    const digito1 = resto >= 10 ? 0 : resto;
-    if (digito1 !== parseInt(clean.charAt(9))) return false;
-
-    soma = 0;
-    for (let i = 0; i < 10; i++) soma += parseInt(clean.charAt(i)) * (11 - i);
-    resto = 11 - (soma % 11);
-    const digito2 = resto >= 10 ? 0 : resto;
-    return digito2 === parseInt(clean.charAt(10));
+    return true;
   }
 
   function aplicarMascaraCPF(value) {
@@ -48,16 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const delegForm = document.getElementById('delegacaoForm');
 
   async function carregarDelegacaoAtiva() {
-    let activeDeleg = JSON.parse(localStorage.getItem('nexus_active_delegation') || 'null');
-
-    // Valida expiração de tempo da delegação ativa salva
-    if (activeDeleg && activeDeleg.fim) {
-      const now = new Date();
-      if (now > new Date(activeDeleg.fim)) {
-        localStorage.removeItem('nexus_active_delegation');
-        activeDeleg = null;
-      }
-    }
+    let activeDeleg = null;
 
     if (window.nexusSupabase) {
       try {
@@ -69,13 +53,19 @@ document.addEventListener('DOMContentLoaded', () => {
           .limit(1)
           .maybeSingle();
 
-        if (!error && data) {
+        if (error) {
+          console.warn('[NexusPort] Erro ao buscar delegação ativa no Supabase:', error);
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Erro de Conexão Supabase', 'Não foi possível carregar as delegações do banco de dados: ' + error.message);
+          }
+        } else if (data) {
           const now = new Date();
           const fimDate = new Date(data.data_fim_previsto || data.data_fim);
           if (now <= fimDate) {
             activeDeleg = {
               id: data.id,
               supervisor: data.supervisor?.nome || session.nome,
+              substituidoNome: data.supervisor?.nome || session.nome,
               substituidoMatricula: data.supervisor?.matricula || session.matricula,
               substitutoMatricula: data.substituto?.matricula || 'MAT-SUB',
               substitutoNome: data.substituto_nome || data.substituto?.nome || 'Substituto',
@@ -89,10 +79,14 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             localStorage.removeItem('nexus_active_delegation');
             activeDeleg = null;
+            await window.nexusSupabase.from('delegacoes_supervisor').update({ ativo: false }).eq('id', data.id);
           }
+        } else {
+          localStorage.removeItem('nexus_active_delegation');
+          activeDeleg = null;
         }
       } catch (e) {
-        console.warn('Erro ao buscar delegação ativa no Supabase:', e);
+        console.warn('[NexusPort] Exceção ao buscar delegação ativa no Supabase:', e);
       }
     }
 
@@ -154,9 +148,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Tarefa 10: Validação estrita do CPF do substituto (máscara 3.3.3-2 e dígitos verificadores)
+      // Validação da estrutura de 11 dígitos do CPF do substituto (permite CPFs fictícios)
       if (!validarCPF(substitutoCpf)) {
-        const msg = 'CPF INVÁLIDO (Tarefa 10): Informe um CPF válido no padrão XXX.XXX.XXX-XX (não é permitido documentos curtos como "123" ou números inválidos)!';
+        const msg = 'CPF INVÁLIDO: Informe um CPF válido no padrão XXX.XXX.XXX-XX com 11 dígitos (são permitidos CPFs fictícios)!';
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', msg);
         return;
       }
@@ -216,7 +210,16 @@ document.addEventListener('DOMContentLoaded', () => {
           if (substitutoId) payload.substituto_id = substitutoId;
 
           const { data: insData, error: insErr } = await window.nexusSupabase.from('delegacoes_supervisor').insert(payload).select('id').single();
-          if (!insErr && insData) {
+
+          if (insErr) {
+            console.error('[NexusPort] Erro ao inserir delegação no Supabase:', insErr);
+            if (window.mostrarFeedback) {
+              window.mostrarFeedback('erro', 'Erro ao Salvar no Supabase', `Não foi possível registrar a delegação no banco de dados: ${insErr.message}`);
+            }
+            return;
+          }
+
+          if (insData && insData.id) {
             insertedDelegId = insData.id;
             newDeleg.rawDbId = insData.id;
           }
@@ -225,7 +228,11 @@ document.addEventListener('DOMContentLoaded', () => {
             await window.registrarLogAlteracao('CRIACAO', 'delegacoes_supervisor', insertedDelegId, { substituto: substitutoNomeInput, cpf: substitutoCpf, inicio, fim });
           }
         } catch (err) {
-          console.warn('[NexusPort] Erro ao sincronizar delegação com Supabase:', err);
+          console.error('[NexusPort] Exceção ao sincronizar delegação com Supabase:', err);
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Falha de Conexão', `Ocorreu uma falha ao comunicar com o Supabase: ${err.message || err}`);
+          }
+          return;
         }
       }
 
@@ -256,15 +263,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (window.nexusSupabase) {
           try {
-            await window.nexusSupabase.from('delegacoes_supervisor')
+            const { error: revErr } = await window.nexusSupabase.from('delegacoes_supervisor')
               .update({ ativo: false, data_revogacao: new Date().toISOString() })
               .eq('ativo', true);
+
+            if (revErr) {
+              console.warn('[NexusPort] Erro ao revogar delegação no Supabase:', revErr);
+              if (window.mostrarFeedback) {
+                window.mostrarFeedback('erro', 'Erro ao Revogar no Banco', `Falha ao revogar delegação no Supabase: ${revErr.message}`);
+              }
+              return;
+            }
 
             if (window.registrarLogAlteracao) {
               await window.registrarLogAlteracao('EDICAO', 'delegacoes_supervisor', activeDeleg.rawDbId || null, { ativo: false, data_revogacao: new Date().toISOString() });
             }
           } catch (err) {
-            console.warn('[NexusPort] Erro ao revogar delegação no Supabase:', err);
+            console.warn('[NexusPort] Exceção ao revogar delegação no Supabase:', err);
+            if (window.mostrarFeedback) {
+              window.mostrarFeedback('erro', 'Falha de Conexão', `Ocorreu um erro ao revogar a delegação no Supabase: ${err.message || err}`);
+            }
+            return;
           }
         }
 
@@ -284,4 +303,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  // Sincronização viva em tempo real (Item 2)
+  window.addEventListener('nexus_data_changed', () => {
+    carregarDelegacaoAtiva();
+  });
 });

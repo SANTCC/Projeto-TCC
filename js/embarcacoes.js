@@ -21,39 +21,82 @@ document.addEventListener('DOMContentLoaded', () => {
   const bercosGrid = document.getElementById('bercosGrid');
   const bercosLivresTag = document.getElementById('bercosLivresCountTag');
 
-  let bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-  if (!Array.isArray(bercosList) || bercosList.length < 15) {
-    const existingMap = new Map();
-    if (Array.isArray(bercosList)) {
-      bercosList.forEach(b => existingMap.set(b.nome, b));
+  let bercosList = [];
+
+  async function carregarBercosSupabase() {
+    let loaded = [];
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('bercos').select('*').order('nome', { ascending: true });
+        if (!error && Array.isArray(data) && data.length > 0) {
+          loaded = data.map(b => ({
+            id: b.id || `BERCO-${b.nome.replace(/\D/g, '')}`,
+            nome: b.nome,
+            estado: b.estado || 'LIVRE',
+            navio_nome: b.navio_nome || null,
+            navio_imo: b.navio_imo || null,
+            navio_id: b.navio_id || null
+          }));
+        }
+      } catch (err) {
+        console.warn('[NexusPort] Erro ao carregar berços do Supabase:', err);
+      }
     }
-    bercosList = Array.from({ length: 15 }, (_, i) => {
-      const num = String(i + 1).padStart(2, '0');
-      const nomeBerco = `Berço ${num}`;
-      return existingMap.get(nomeBerco) || {
-        id: `BERCO-${num}`,
-        nome: nomeBerco,
-        estado: 'LIVRE',
-        navio_nome: null,
-        navio_imo: null
-      };
-    });
+
+    if (loaded.length < 15) {
+      const existingMap = new Map(loaded.map(b => [b.nome, b]));
+      const localList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+      if (Array.isArray(localList)) {
+        localList.forEach(b => { if (!existingMap.has(b.nome)) existingMap.set(b.nome, b); });
+      }
+
+      bercosList = Array.from({ length: 15 }, (_, i) => {
+        const num = String(i + 1).padStart(2, '0');
+        const nomeBerco = `Berço ${num}`;
+        return existingMap.get(nomeBerco) || {
+          id: `BERCO-${num}`,
+          nome: nomeBerco,
+          estado: 'LIVRE',
+          navio_nome: null,
+          navio_imo: null,
+          navio_id: null
+        };
+      });
+
+      if (window.nexusSupabase) {
+        try {
+          const bercosPayload = bercosList.map(b => ({
+            id: b.id,
+            nome: b.nome,
+            estado: b.estado || 'LIVRE',
+            navio_nome: b.navio_nome || null,
+            navio_imo: b.navio_imo || null,
+            navio_id: b.navio_id || null
+          }));
+          await window.nexusSupabase.from('bercos').upsert(bercosPayload, { onConflict: 'nome' });
+        } catch (e) {
+          console.warn('[NexusPort] Erro ao sincronizar berços no Supabase:', e);
+        }
+      }
+    } else {
+      bercosList = loaded;
+    }
+
     localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+    renderBercosPanel();
   }
 
   function renderBercosPanel() {
     bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-    // Garante 15 berços
     if (bercosList.length < 15) {
       const existingMap = new Map(bercosList.map(b => [b.nome, b]));
       bercosList = Array.from({ length: 15 }, (_, i) => {
         const num = String(i + 1).padStart(2, '0');
         const nomeBerco = `Berço ${num}`;
-        return existingMap.get(nomeBerco) || { id: `BERCO-${num}`, nome: nomeBerco, estado: 'LIVRE', navio_nome: null, navio_imo: null };
+        return existingMap.get(nomeBerco) || { id: `BERCO-${num}`, nome: nomeBerco, estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null };
       });
     }
 
-    // Item 7: Libera berços ocupados por navios que não existem ou foram excluídos do sistema
     const currentNavios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
     const activeImoSet = new Set(currentNavios.map(n => (n.imo || '').toLowerCase()));
     const activeNomeSet = new Set(currentNavios.map(n => (n.nome || '').toLowerCase()));
@@ -67,7 +110,18 @@ document.addEventListener('DOMContentLoaded', () => {
           b.estado = 'LIVRE';
           b.navio_nome = null;
           b.navio_imo = null;
+          b.navio_id = null;
           bercosAlterados = true;
+          if (window.nexusSupabase) {
+            window.nexusSupabase.from('bercos').upsert({
+              id: b.id,
+              nome: b.nome,
+              estado: 'LIVRE',
+              navio_nome: null,
+              navio_imo: null,
+              navio_id: null
+            }, { onConflict: 'nome' }).then().catch(() => {});
+          }
         }
       }
     });
@@ -105,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  renderBercosPanel();
+  carregarBercosSupabase();
 
   // Cálculo de ETA a 33 km/h
   function calcularETA(distanciaKm) {
@@ -401,14 +455,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
-    // Tarefa 7: A autorização de retorno só é permitida se o navio já tiver chegado ao porto de destino
-    if (navio.localizacao !== 'NO_PORTO_DE_DESTINO') {
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('atencao', 'Retorno Não Permitido', `O retorno do navio "${navio.nome}" para o porto de origem só pode ser autorizado quando ele já estiver chegado ao porto de destino! Status atual: ${navio.localizacao}.`);
-      }
-      return;
-    }
-
     // RN 9: Bloqueia saída se NÃO houver rota cadastrada entre a origem e o destino do navio
     const origBusca = (navio.origem || 'Porto de Santos').trim().toLowerCase();
     const destBusca = (navio.destino || '').trim().toLowerCase();
@@ -438,6 +484,33 @@ document.addEventListener('DOMContentLoaded', () => {
       navio.dataSaida = horaSaida;
 
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+
+      // Desocupa o berço do navio ao liberar saída
+      bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+      let bercoDesocupado = false;
+      bercosList.forEach(b => {
+        if (b.navio_imo === imo || b.navio_nome === navio.nome) {
+          b.estado = 'LIVRE';
+          b.navio_nome = null;
+          b.navio_imo = null;
+          b.navio_id = null;
+          bercoDesocupado = true;
+          if (window.nexusSupabase) {
+            window.nexusSupabase.from('bercos').upsert({
+              id: b.id,
+              nome: b.nome,
+              estado: 'LIVRE',
+              navio_nome: null,
+              navio_imo: null,
+              navio_id: null
+            }, { onConflict: 'nome' }).then().catch(() => {});
+          }
+        }
+      });
+      if (bercoDesocupado) {
+        localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+        renderBercosPanel();
+      }
 
       // Atualiza status das cargas vinculadas para EM_TRANSITO
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
@@ -575,6 +648,17 @@ document.addEventListener('DOMContentLoaded', () => {
           b.estado = 'LIVRE';
           b.navio_nome = null;
           b.navio_imo = null;
+          b.navio_id = null;
+          if (window.nexusSupabase) {
+            window.nexusSupabase.from('bercos').upsert({
+              id: b.id,
+              nome: b.nome,
+              estado: 'LIVRE',
+              navio_nome: null,
+              navio_imo: null,
+              navio_id: null
+            }, { onConflict: 'nome' }).then().catch(() => {});
+          }
         }
       });
 
@@ -583,16 +667,27 @@ document.addEventListener('DOMContentLoaded', () => {
         bercoReal.estado = 'OCUPADO';
         bercoReal.navio_nome = navio.nome;
         bercoReal.navio_imo = navio.imo;
+        bercoReal.navio_id = navio.id || null;
+
+        if (window.nexusSupabase) {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          window.nexusSupabase.from('bercos').upsert({
+            id: bercoReal.id || `BERCO-${bercoReal.nome.replace(/\D/g, '')}`,
+            nome: bercoReal.nome,
+            estado: 'OCUPADO',
+            navio_nome: navio.nome,
+            navio_imo: navio.imo,
+            navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
+          }, { onConflict: 'nome' }).then().catch(() => {});
+        }
       }
 
       localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
       renderBercosPanel();
       renderGpsTable();
 
-      // Tarefa 6: Salva no banco de dados a vinculação do navio ao berço
       if (window.nexusSupabase) {
         try {
-          // Atualiza as coordenadas/localização ou registro no Supabase se houver coluna de berço
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           let navioQuery = window.nexusSupabase.from('navios').update({
             localizacao: 'DENTRO_DO_PORTO'
@@ -603,17 +698,8 @@ document.addEventListener('DOMContentLoaded', () => {
             navioQuery = navioQuery.eq('numero_imo', navio.imo);
           }
           await navioQuery;
-
-          // Se existir a tabela bercos no Supabase, tenta persistir lá também
-          await window.nexusSupabase.from('bercos').upsert({
-            nome: bercoAlvo.nome,
-            estado: 'OCUPADO',
-            navio_nome: navio.nome,
-            navio_imo: navio.imo,
-            navio_id: isUuid.test(navio.id) ? navio.id : null
-          }, { onConflict: 'nome' }).catch(() => {});
         } catch (e) {
-          console.warn('[NexusPort] Erro ao salvar vinculação de berço no Supabase:', e);
+          console.warn('[NexusPort] Erro ao salvar vinculação de navio no Supabase:', e);
         }
       }
 
@@ -648,6 +734,17 @@ document.addEventListener('DOMContentLoaded', () => {
           b.estado = 'LIVRE';
           b.navio_nome = null;
           b.navio_imo = null;
+          b.navio_id = null;
+          if (window.nexusSupabase) {
+            window.nexusSupabase.from('bercos').upsert({
+              id: b.id,
+              nome: b.nome,
+              estado: 'LIVRE',
+              navio_nome: null,
+              navio_imo: null,
+              navio_id: null
+            }, { onConflict: 'nome' }).then().catch(() => {});
+          }
         }
       });
       localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
@@ -1342,9 +1439,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {
+    carregarBercosSupabase();
     carregarNaviosSupabase();
     carregarContainersSupabase();
     carregarGuindastesSupabase();
-    renderBercosPanel();
   });
 });

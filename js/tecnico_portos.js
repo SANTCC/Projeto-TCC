@@ -245,6 +245,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const formattedMatricula = matriculaRaw.toUpperCase().startsWith('MAT-') ? matriculaRaw.toUpperCase() : `MAT-${matriculaRaw.toUpperCase()}`;
 
+      // Tarefa 4: Padronizar a matrícula de funcionários no padrão MAT-4 números (ex: MAT-1234)
+      const matriculaPattern = /^MAT-\d{4}$/;
+      if (!matriculaPattern.test(formattedMatricula)) {
+        const msg = 'PADRÃO DE MATRÍCULA INVÁLIDO (Tarefa 4): A matrícula do funcionário deve seguir obrigatoriamente a estrutura MAT-4 números (Exemplo: MAT-1234 ou MAT-5678)!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Matrícula Inválida', msg);
+        return;
+      }
+
       // Validação de Duplicidade Rígida: Bloqueia qualquer cadastro com a mesma matrícula
       const funcionarioExistente = mergedFuncList.find(f => f.matricula.toUpperCase() === formattedMatricula);
       if (funcionarioExistente) {
@@ -544,22 +552,16 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleVisBtn.addEventListener('click', () => visForm.classList.toggle('hidden'));
   }
 
+  // Validador de estrutura de CPF (permite CPFs fictícios de 11 dígitos - Tarefa 5)
   function validarCPF(cpfStr) {
     if (!cpfStr) return false;
     const clean = String(cpfStr).replace(/\D/g, '');
-    if (clean.length !== 11 || /^(\d)\1{10}$/.test(clean)) return false;
+    if (clean.length !== 11) return false;
 
     let soma = 0;
     for (let i = 0; i < 9; i++) soma += parseInt(clean.charAt(i)) * (10 - i);
     let resto = 11 - (soma % 11);
-    const digito1 = resto >= 10 ? 0 : resto;
-    if (digito1 !== parseInt(clean.charAt(9))) return false;
-
-    soma = 0;
-    for (let i = 0; i < 10; i++) soma += parseInt(clean.charAt(i)) * (11 - i);
-    resto = 11 - (soma % 11);
-    const digito2 = resto >= 10 ? 0 : resto;
-    return digito2 === parseInt(clean.charAt(10));
+    return true;
   }
 
   function aplicarMascaraCPF(value) {
@@ -588,10 +590,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Tarefa 13: Status inicial automático em "EM_VISITA"
       const status = 'EM_VISITA';
 
-      // Tarefa 11: O documento do visitante deve seguir obrigatoriamente o padrão do CPF (3.3.3-2) com validação dos dígitos verificadores
+      // Validação do documento do visitante no padrão do CPF (11 dígitos, permite CPFs fictícios - Tarefa 5)
       const docClean = documento.replace(/\D/g, '');
       if (docClean.length !== 11 || !validarCPF(docClean)) {
-        const msg = 'DOCUMENTO DO VISITANTE INVÁLIDO (Tarefa 11): O documento deve seguir o padrão do CPF (XXX.XXX.XXX-XX) com dígitos verificadores válidos. Documentos fictícios como "123" não são permitidos!';
+        const msg = 'DOCUMENTO DO VISITANTE INVÁLIDO: O documento deve seguir o padrão do CPF (XXX.XXX.XXX-XX) com 11 dígitos numéricos (são permitidos CPFs fictícios)!';
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Inválido', msg);
         return;
       }
