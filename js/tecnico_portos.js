@@ -588,11 +588,11 @@ document.addEventListener('DOMContentLoaded', () => {
       // Tarefa 13: Status inicial automático em "EM_VISITA"
       const status = 'EM_VISITA';
 
-      // Item 15: Validação do CPF com dígitos verificadores
+      // Tarefa 11: O documento do visitante deve seguir obrigatoriamente o padrão do CPF (3.3.3-2) com validação dos dígitos verificadores
       const docClean = documento.replace(/\D/g, '');
-      if (docClean.length === 11 && !validarCPF(docClean)) {
-        const msg = 'CPF INVÁLIDO (Item 15): O CPF informado é inválido de acordo com a validação dos dígitos verificadores. Digite um CPF válido.';
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', msg);
+      if (docClean.length !== 11 || !validarCPF(docClean)) {
+        const msg = 'DOCUMENTO DO VISITANTE INVÁLIDO (Tarefa 11): O documento deve seguir o padrão do CPF (XXX.XXX.XXX-XX) com dígitos verificadores válidos. Documentos fictícios como "123" não são permitidos!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Inválido', msg);
         return;
       }
 

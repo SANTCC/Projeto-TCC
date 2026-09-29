@@ -66,28 +66,25 @@ async function testFase1() {
     passed = false;
   }
 
-  // 5. Item 1.6: Gráfico Estratégico de Produtividade com Filtro de Inativos/Inexistentes
-  console.log('5. Validando filtro de funcionários ativos no gráfico de produtividade (Item 1.6)...');
-  const filtersInactiveEmployees = dashboardCode.includes(".from('funcionarios').select('id, codigo_individual, cargo').eq('ativo', true)") &&
-                                   dashboardCode.includes('!activeUserCodes.has(l.codigo_individual)');
+  // 5. Item 1.6: Gráfico Estratégico de Produtividade Removido conforme Tarefa 1
+  console.log('5. Validando remoção do gráfico de produtividade do Painel Geral (Tarefa 1)...');
+  const productivityChartRemoved = !dashboardCode.includes('chartProdutividade');
 
-  if (filtersInactiveEmployees) {
-    console.log('  ✅ [PASS] Produtividade filtra e contabiliza apenas operadores ativos cadastrados no Supabase.');
+  if (productivityChartRemoved) {
+    console.log('  ✅ [PASS] Gráfico "Produtividade Operacional por Cargo" removido do Painel Geral.');
   } else {
-    console.error('  ❌ [FAIL] Gráfico de produtividade não valida status ativo de funcionários.');
+    console.error('  ❌ [FAIL] Gráfico de produtividade ainda presente no dashboard.');
     passed = false;
   }
 
-  // 6. Item 1.7: Gráfico de Embarcações mais Utilizadas
-  console.log('6. Validando agregação de embarcações por cargas reais e navios (Item 1.7)...');
-  const aggregatesRealShips = dashboardCode.includes('quantidade_cargas_realizadas') &&
-                              dashboardCode.includes('c.navio_id') &&
-                              dashboardCode.includes('naviosCountMap');
+  // 6. Item 1.7: Gráfico de Embarcações mais Utilizadas Removido conforme Tarefa 2
+  console.log('6. Validando remoção do gráfico de embarcações mais utilizadas do Painel Geral (Tarefa 2)...');
+  const shipsChartRemoved = !dashboardCode.includes('chartNavios');
 
-  if (aggregatesRealShips) {
-    console.log('  ✅ [PASS] Embarcações agregadas dinamicamente com base nas cargas reais e navio_id.');
+  if (shipsChartRemoved) {
+    console.log('  ✅ [PASS] Gráfico "Embarcações Mais Utilizadas" removido do Painel Geral.');
   } else {
-    console.error('  ❌ [FAIL] Gráfico de navios não agrega por cargas reais.');
+    console.error('  ❌ [FAIL] Gráfico de navios ainda presente no dashboard.');
     passed = false;
   }
 
