@@ -401,14 +401,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
-    // Tarefa 7: A autorização de retorno só é permitida se o navio já tiver chegado ao porto de destino
-    if (navio.localizacao !== 'NO_PORTO_DE_DESTINO') {
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('atencao', 'Retorno Não Permitido', `O retorno do navio "${navio.nome}" para o porto de origem só pode ser autorizado quando ele já estiver chegado ao porto de destino! Status atual: ${navio.localizacao}.`);
-      }
-      return;
-    }
-
     // RN 9: Bloqueia saída se NÃO houver rota cadastrada entre a origem e o destino do navio
     const origBusca = (navio.origem || 'Porto de Santos').trim().toLowerCase();
     const destBusca = (navio.destino || '').trim().toLowerCase();
@@ -500,6 +492,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
+
+    // A autorização de retorno só é permitida se o navio já tiver chegado ao porto de destino
+    if (navio.localizacao !== 'NO_PORTO_DE_DESTINO') {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', 'Retorno Não Permitido', `O retorno do navio "${navio.nome}" para o porto de origem só pode ser autorizado quando ele já estiver chegado ao porto de destino! Status atual: ${navio.localizacao}.`);
+      }
+      return;
+    }
 
     const confirmou = window.nexusConfirm ? await window.nexusConfirm('Autorizar Retorno de Embarcação', `Autorizar o retorno da embarcação ${navio.nome} ao Porto de Origem (${navio.origem})?`) : true;
 
