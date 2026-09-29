@@ -589,6 +589,34 @@ document.addEventListener('DOMContentLoaded', () => {
       renderBercosPanel();
       renderGpsTable();
 
+      // Tarefa 6: Salva no banco de dados a vinculação do navio ao berço
+      if (window.nexusSupabase) {
+        try {
+          // Atualiza as coordenadas/localização ou registro no Supabase se houver coluna de berço
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          let navioQuery = window.nexusSupabase.from('navios').update({
+            localizacao: 'DENTRO_DO_PORTO'
+          });
+          if (isUuid.test(navio.id)) {
+            navioQuery = navioQuery.eq('id', navio.id);
+          } else {
+            navioQuery = navioQuery.eq('numero_imo', navio.imo);
+          }
+          await navioQuery;
+
+          // Se existir a tabela bercos no Supabase, tenta persistir lá também
+          await window.nexusSupabase.from('bercos').upsert({
+            nome: bercoAlvo.nome,
+            estado: 'OCUPADO',
+            navio_nome: navio.nome,
+            navio_imo: navio.imo,
+            navio_id: isUuid.test(navio.id) ? navio.id : null
+          }, { onConflict: 'nome' }).catch(() => {});
+        } catch (e) {
+          console.warn('[NexusPort] Erro ao salvar vinculação de berço no Supabase:', e);
+        }
+      }
+
       if (window.registrarLogAlteracao) {
         await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Navio ${navio.nome} vinculado ao ${bercoAlvo.nome}`);
       }
@@ -1024,7 +1052,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
       }
-      const identificacao = document.getElementById('contIdentificacao').value.trim().toUpperCase();
+      const rawIdentificacao = document.getElementById('contIdentificacao').value.trim().toUpperCase();
+      const identificacao = rawIdentificacao.replace(/[^A-Z0-9]/g, '');
       const tipo = document.getElementById('contTipo').value.trim();
       const dataFabr = document.getElementById('contFabricacao').value;
       let dataManut = document.getElementById('contManutencao').value;
@@ -1034,6 +1063,14 @@ document.addEventListener('DOMContentLoaded', () => {
         dataManut = 'Sem Manutenção';
       }
       const refTempo = document.getElementById('contRefTempo').value;
+
+      // Tarefa 7: Validação do padrão 4 letras e 7 números (ex: ABCD1234567)
+      const patternContainer = /^[A-Z]{4}\d{7}$/;
+      if (!patternContainer.test(identificacao)) {
+        const msg = 'PADRÃO DE CONTÊINER INVÁLIDO (Tarefa 7): A identificação do contêiner deve seguir o padrão de 4 letras seguidas de 7 números (Exemplo: MSCU1234567)!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Formato Inválido', msg);
+        return;
+      }
 
       // Item 13: Validação de unicidade do código de contêiner
       const contExistente = containersList.find(c => (c.identificacao || '').toUpperCase() === identificacao);
@@ -1251,9 +1288,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const identificacao = document.getElementById('gndNumero').value.trim().toUpperCase();
+      const rawIdentificacao = document.getElementById('gndNumero').value.trim().toUpperCase();
+      const identificacao = rawIdentificacao.replace(/[^A-Z0-9]/g, '');
       const dataManut = document.getElementById('gndDataManut').value;
       const estado = document.getElementById('gndEstado').value;
+
+      // Tarefa 8: Validação do padrão 3 letras - 3 números - 3 letras (ex: ABC123DEF)
+      const patternCrane = /^[A-Z]{3}\d{3}[A-Z]{3}$/;
+      if (!patternCrane.test(identificacao)) {
+        const msg = 'PADRÃO DE GUINDASTE/PÓRTICO INVÁLIDO (Tarefa 8): A identificação deve seguir o padrão de 3 letras, 3 números e 3 letras (Exemplo: ABC123DEF)!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Formato Inválido', msg);
+        return;
+      }
 
       const gndExistente = guindastesList.find(g => (g.identificacao || '').toUpperCase() === identificacao);
       if (gndExistente) {

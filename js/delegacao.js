@@ -8,6 +8,40 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  // Validador oficial de CPF (dígitos verificadores + máscara)
+  function validarCPF(cpfStr) {
+    if (!cpfStr) return false;
+    const clean = String(cpfStr).replace(/\D/g, '');
+    if (clean.length !== 11 || /^(\d)\1{10}$/.test(clean)) return false;
+
+    let soma = 0;
+    for (let i = 0; i < 9; i++) soma += parseInt(clean.charAt(i)) * (10 - i);
+    let resto = 11 - (soma % 11);
+    const digito1 = resto >= 10 ? 0 : resto;
+    if (digito1 !== parseInt(clean.charAt(9))) return false;
+
+    soma = 0;
+    for (let i = 0; i < 10; i++) soma += parseInt(clean.charAt(i)) * (11 - i);
+    resto = 11 - (soma % 11);
+    const digito2 = resto >= 10 ? 0 : resto;
+    return digito2 === parseInt(clean.charAt(10));
+  }
+
+  function aplicarMascaraCPF(value) {
+    const digits = value.replace(/\D/g, '').slice(0, 11);
+    return digits
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+
+  const delegCpfInput = document.getElementById('delegSubstitutoCpf');
+  if (delegCpfInput) {
+    delegCpfInput.addEventListener('input', (e) => {
+      e.target.value = aplicarMascaraCPF(e.target.value);
+    });
+  }
+
   const substitutoNome = document.getElementById('substitutoNome');
   const substitutoVigencia = document.getElementById('substitutoVigencia');
   const revogarBtn = document.getElementById('revogarDelegacaoBtn');
@@ -117,6 +151,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!substituidoMatricula || !substitutoNomeInput || !substitutoCpf || !inicio || !fim) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Preencha a matrícula do funcionário substituído, os dados do substituto e a vigência.');
+        return;
+      }
+
+      // Tarefa 10: Validação estrita do CPF do substituto (máscara 3.3.3-2 e dígitos verificadores)
+      if (!validarCPF(substitutoCpf)) {
+        const msg = 'CPF INVÁLIDO (Tarefa 10): Informe um CPF válido no padrão XXX.XXX.XXX-XX (não é permitido documentos curtos como "123" ou números inválidos)!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', msg);
         return;
       }
 

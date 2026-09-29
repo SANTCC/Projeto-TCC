@@ -134,11 +134,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (filterStatusVal && c.status !== filterStatusVal) return false;
 
       if (filterDataInicioVal || filterDataFimVal) {
-        const cDateRaw = c.data_entrada || c.created_at || c.dataAgendamento || c.dataChegada;
+        const cDateRaw = c.data_cadastro || c.created_at || c.data_entrada || c.dataAgendamento || c.dataChegada;
         if (cDateRaw) {
           const cDateStr = new Date(cDateRaw).toISOString().split('T')[0];
           if (filterDataInicioVal && cDateStr < filterDataInicioVal) return false;
           if (filterDataFimVal && cDateStr > filterDataFimVal) return false;
+        } else {
+          // Se for carga sem data e houver filtro de período, não satisfaz
+          return false;
         }
       }
 
@@ -275,8 +278,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const agDataPrevistaEl = document.getElementById('agDataPrevista');
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (agDataPrevistaEl) {
+    agDataPrevistaEl.setAttribute('min', todayStr);
+  }
+
   if (toggleFormBtn && agendamentoForm) {
-    toggleFormBtn.addEventListener('click', () => agendamentoForm.classList.toggle('hidden'));
+    toggleFormBtn.addEventListener('click', () => {
+      agendamentoForm.classList.toggle('hidden');
+      if (!agendamentoForm.classList.contains('hidden') && agDataPrevistaEl) {
+        agDataPrevistaEl.setAttribute('min', new Date().toISOString().split('T')[0]);
+      }
+    });
   }
 
   // Submissão de Agendamento com Trava de Pré-requisito (RF 2 / RN 13 / RF 17.1)
@@ -295,6 +309,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const natureza = document.getElementById('agNatureza').value.trim();
       const portoDescarga = document.getElementById('agPortoDescarga').value;
       const destino = document.getElementById('agDestino').value.trim();
+      const dataPrevista = agDataPrevistaEl ? agDataPrevistaEl.value : '';
+
+      // Tarefa 3: Bloquear data prevista de entrega no passado
+      const hojeData = new Date().toISOString().split('T')[0];
+      if (dataPrevista && dataPrevista < hojeData) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Inválida', 'A data prevista de entrega não pode ser anterior ao dia de hoje!');
+        return;
+      }
 
       // Item 16: Validação de valores estritamente positivos em peso, volume e valor declarado
       if (pesoVal <= 0 || volumeVal <= 0 || valorVal <= 0) {
@@ -311,6 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const newId = `CRG-2026-${idNum}`;
       const newQrCode = `QR-${newId}`;
 
+      const nowIso = new Date().toISOString();
       const novaCarga = {
         id: newId,
         tipo,
@@ -323,7 +346,9 @@ document.addEventListener('DOMContentLoaded', () => {
         status: 'AGENDAMENTO',
         container: '',
         navio: '',
-        qrCode: newQrCode
+        qrCode: newQrCode,
+        data_cadastro: nowIso,
+        created_at: nowIso
       };
 
 
@@ -363,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             await window.nexusSupabase.from('agendamentos').insert({
               carga_id: resCarga.id,
-              data_prevista_entrega: new Date().toISOString().split('T')[0]
+              data_prevista_entrega: dataPrevista || new Date().toISOString().split('T')[0]
             }).catch(() => {});
           }
         } catch (err) {
@@ -443,18 +468,25 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (e) { console.warn('Erro ao carregar contêineres para modal:', e); }
     }
 
-    // Calcular volume atual ocupado em cada contêiner
+    // Tarefa 5: Calcular volume atual ocupado em cada contêiner e garantir limite de 75m³
     vincularContainerSelect.innerHTML = '<option value="">Selecione o Contêiner...</option>';
     containers.forEach(cont => {
       const volCargasNoCont = cargasFluxoList
-        .filter(c => c.container === cont.identificacao || c.container === cont.id || c.container_id === cont.id || c.container_id === cont.rawDbId)
-        .reduce((sum, c) => sum + (parseFloat(c.volume) || 0), 0);
-      const dispVol = 75 - volCargasNoCont;
+        .filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA' && (
+          (c.container && (c.container === cont.identificacao || c.container === cont.id)) ||
+          (c.container_id && (c.container_id === cont.id || c.container_id === cont.rawDbId))
+        ))
+        .reduce((sum, c) => {
+          const v = typeof c.volume === 'number' ? c.volume : parseFloat(String(c.volume || '').replace(/[^0-9,.-]/g, '').replace(',', '.')) || 0;
+          return sum + v;
+        }, 0);
+
+      const dispVol = Math.max(0, 75 - volCargasNoCont);
       const statusText = cont.estado !== 'OPERANTE' ? ` [INDISPONÍVEL: ${cont.estado}]` : '';
       const containerUuid = cont.rawDbId || cont.id;
       vincularContainerSelect.innerHTML += `
         <option value="${containerUuid}" data-identificacao="${cont.identificacao}" data-disp="${dispVol}" data-estado="${cont.estado}" ${dispVol <= 0 ? 'disabled' : ''}>
-          ${cont.identificacao} (${cont.tipo}) - Disp: ${dispVol.toFixed(1)} m³ / 75 m³${statusText}
+          ${cont.identificacao} (${cont.tipo}) - Disp: ${dispVol.toFixed(1)} m³ / 75.0 m³${statusText}
         </option>
       `;
     });

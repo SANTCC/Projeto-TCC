@@ -102,7 +102,9 @@
               navioId: c.navio_id || null,
               qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
               motivoCancelamento: c.motivo_recusa || null,
-              rawDbId: c.id
+              rawDbId: c.id,
+              data_cadastro: c.created_at || c.data_cadastro || null,
+              created_at: c.created_at || null
             }));
             localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
             return mapped;
