@@ -194,14 +194,23 @@ create table navios (
 -- Berços do terminal STS-01 (15 posições de atracação).
 -- `id` é text pois o front-end usa identificadores 'BERCO-01' ... 'BERCO-15'.
 create table bercos (
-  id text primary key,
+  id text primary key check (id ~ '^BERCO-[0-9]{2}$'),
   nome text not null unique,
   estado text not null default 'LIVRE' check (estado in ('LIVRE', 'OCUPADO', 'MANUTENCAO')),
+  -- navio_nome / navio_imo sao snapshot historico: o front grava navio_id = null
+  -- enquanto o navio existir apenas no cache local (id ainda nao e uuid do banco).
   navio_nome text,
   navio_imo text,
   navio_id uuid references navios(id) on delete set null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- Coerencia: berco nao ocupado nao guarda residuo de vinculo;
+  -- berco ocupado identifica o navio por nome ou IMO.
+  constraint bercos_vinculo_navio_check check (
+    (estado <> 'OCUPADO' and navio_nome is null and navio_imo is null and navio_id is null)
+    or
+    (estado = 'OCUPADO' and (navio_nome is not null or navio_imo is not null))
+  )
 );
 
 create index idx_bercos_estado on bercos (estado);
@@ -430,7 +439,10 @@ alter table leituras_qr_code enable row level security;
 -- Permissão de leitura publica/autenticada para operacoes generales
 create policy "Acesso geral para usuarios autenticados" on cargas for all using (true);
 create policy "Acesso geral para usuarios autenticados" on navios for all using (true);
-create policy "Acesso geral para usuarios autenticados" on bercos for all using (true);
+-- ATENCAO: o projeto nao usa Supabase Auth (login proprio via codigo individual),
+-- entao o PostgREST sempre ve a role `anon`. Politica permissiva por isso;
+-- ver SPECs/migrations/001_create_bercos.sql para as politicas endurecidas.
+create policy "bercos_acesso_total_chave_anon" on bercos for all to anon, authenticated using (true) with check (true);
 create policy "Acesso geral para usuarios autenticados" on containers for all using (true);
 create policy "Acesso geral para usuarios autenticados" on guindastes for all using (true);
 create policy "Acesso geral para usuarios autenticados" on tipos_carga for all using (true);
