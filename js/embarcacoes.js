@@ -23,11 +23,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let bercosList = [];
 
+  /**
+   * Retorna o cliente Supabase apenas se a tabela `bercos` estiver disponível.
+   * Caso a tabela ainda não exista no banco (erro PGRST205), a aplicação
+   * continua funcionando somente com o cache local (localStorage).
+   */
+  function clienteBercos() {
+    if (window.NexusSupabaseUtils) return window.NexusSupabaseUtils.clientePara('bercos');
+    return window.nexusSupabase || null;
+  }
+
+  function tratarErroBercos(error) {
+    if (!error) return false;
+    if (window.NexusSupabaseUtils) return window.NexusSupabaseUtils.registrarErroTabela('bercos', error);
+    console.warn('[NexusPort] Erro na tabela bercos:', error.message || error);
+    return false;
+  }
+
+  /** Upsert resiliente de um berço no Supabase (no-op se a tabela não existir) */
+  function upsertBercoRemoto(payload) {
+    const client = clienteBercos();
+    if (!client) return Promise.resolve();
+    return client.from('bercos')
+      .upsert(payload, { onConflict: 'nome' })
+      .then(({ error }) => { tratarErroBercos(error); })
+      .catch(err => { tratarErroBercos(err); });
+  }
+
   async function carregarBercosSupabase() {
     let loaded = [];
-    if (window.nexusSupabase) {
+    const clientLeitura = clienteBercos();
+    if (clientLeitura) {
       try {
-        const { data, error } = await window.nexusSupabase.from('bercos').select('*').order('nome', { ascending: true });
+        const { data, error } = await clientLeitura.from('bercos').select('*').order('nome', { ascending: true });
+        if (error) tratarErroBercos(error);
         if (!error && Array.isArray(data) && data.length > 0) {
           loaded = data.map(b => ({
             id: b.id || `BERCO-${b.nome.replace(/\D/g, '')}`,
@@ -39,7 +68,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }));
         }
       } catch (err) {
-        console.warn('[NexusPort] Erro ao carregar berços do Supabase:', err);
+        if (!tratarErroBercos(err)) {
+          console.warn('[NexusPort] Erro ao carregar berços do Supabase:', err);
+        }
       }
     }
 
@@ -63,7 +94,8 @@ document.addEventListener('DOMContentLoaded', () => {
         };
       });
 
-      if (window.nexusSupabase) {
+      const clientSync = clienteBercos();
+      if (clientSync) {
         try {
           const bercosPayload = bercosList.map(b => ({
             id: b.id,
@@ -73,9 +105,12 @@ document.addEventListener('DOMContentLoaded', () => {
             navio_imo: b.navio_imo || null,
             navio_id: b.navio_id || null
           }));
-          await window.nexusSupabase.from('bercos').upsert(bercosPayload, { onConflict: 'nome' });
+          const { error } = await clientSync.from('bercos').upsert(bercosPayload, { onConflict: 'nome' });
+          tratarErroBercos(error);
         } catch (e) {
-          console.warn('[NexusPort] Erro ao sincronizar berços no Supabase:', e);
+          if (!tratarErroBercos(e)) {
+            console.warn('[NexusPort] Erro ao sincronizar berços no Supabase:', e);
+          }
         }
       }
     } else {
@@ -112,16 +147,14 @@ document.addEventListener('DOMContentLoaded', () => {
           b.navio_imo = null;
           b.navio_id = null;
           bercosAlterados = true;
-          if (window.nexusSupabase) {
-            window.nexusSupabase.from('bercos').upsert({
-              id: b.id,
-              nome: b.nome,
-              estado: 'LIVRE',
-              navio_nome: null,
-              navio_imo: null,
-              navio_id: null
-            }, { onConflict: 'nome' }).then().catch(() => {});
-          }
+          upsertBercoRemoto({
+        id: b.id,
+        nome: b.nome,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null,
+        navio_id: null
+      });
         }
       }
     });
@@ -495,16 +528,14 @@ document.addEventListener('DOMContentLoaded', () => {
           b.navio_imo = null;
           b.navio_id = null;
           bercoDesocupado = true;
-          if (window.nexusSupabase) {
-            window.nexusSupabase.from('bercos').upsert({
-              id: b.id,
-              nome: b.nome,
-              estado: 'LIVRE',
-              navio_nome: null,
-              navio_imo: null,
-              navio_id: null
-            }, { onConflict: 'nome' }).then().catch(() => {});
-          }
+          upsertBercoRemoto({
+        id: b.id,
+        nome: b.nome,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null,
+        navio_id: null
+      });
         }
       });
       if (bercoDesocupado) {
@@ -649,16 +680,14 @@ document.addEventListener('DOMContentLoaded', () => {
           b.navio_nome = null;
           b.navio_imo = null;
           b.navio_id = null;
-          if (window.nexusSupabase) {
-            window.nexusSupabase.from('bercos').upsert({
-              id: b.id,
-              nome: b.nome,
-              estado: 'LIVRE',
-              navio_nome: null,
-              navio_imo: null,
-              navio_id: null
-            }, { onConflict: 'nome' }).then().catch(() => {});
-          }
+          upsertBercoRemoto({
+        id: b.id,
+        nome: b.nome,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null,
+        navio_id: null
+      });
         }
       });
 
@@ -669,17 +698,15 @@ document.addEventListener('DOMContentLoaded', () => {
         bercoReal.navio_imo = navio.imo;
         bercoReal.navio_id = navio.id || null;
 
-        if (window.nexusSupabase) {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          window.nexusSupabase.from('bercos').upsert({
-            id: bercoReal.id || `BERCO-${bercoReal.nome.replace(/\D/g, '')}`,
-            nome: bercoReal.nome,
-            estado: 'OCUPADO',
-            navio_nome: navio.nome,
-            navio_imo: navio.imo,
-            navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
-          }, { onConflict: 'nome' }).then().catch(() => {});
-        }
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        upsertBercoRemoto({
+          id: bercoReal.id || `BERCO-${bercoReal.nome.replace(/\D/g, '')}`,
+          nome: bercoReal.nome,
+          estado: 'OCUPADO',
+          navio_nome: navio.nome,
+          navio_imo: navio.imo,
+          navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
+        });
       }
 
       localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
@@ -735,16 +762,14 @@ document.addEventListener('DOMContentLoaded', () => {
           b.navio_nome = null;
           b.navio_imo = null;
           b.navio_id = null;
-          if (window.nexusSupabase) {
-            window.nexusSupabase.from('bercos').upsert({
-              id: b.id,
-              nome: b.nome,
-              estado: 'LIVRE',
-              navio_nome: null,
-              navio_imo: null,
-              navio_id: null
-            }, { onConflict: 'nome' }).then().catch(() => {});
-          }
+          upsertBercoRemoto({
+        id: b.id,
+        nome: b.nome,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null,
+        navio_id: null
+      });
         }
       });
       localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));

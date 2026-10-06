@@ -28,4 +28,51 @@
   }
 
   window.nexusSupabase = supabaseClient;
+
+  /**
+   * Utilitários de resiliência para tabelas ainda não provisionadas no banco.
+   * Evita que um erro PGRST205 ("Could not find the table 'public.x' in the
+   * schema cache") quebre a tela: a tabela é marcada como indisponível e a
+   * aplicação segue operando com o cache local (localStorage).
+   */
+  const tabelasAusentes = new Set();
+
+  window.NexusSupabaseUtils = {
+    /** Detecta erro de tabela inexistente / fora do cache do PostgREST */
+    isTabelaAusenteError: function (error) {
+      if (!error) return false;
+      const code = error.code || '';
+      const message = String(error.message || '');
+      return code === 'PGRST205' || code === '42P01' || /Could not find the table/i.test(message);
+    },
+
+    /** Registra o erro e, se for tabela ausente, desativa novas chamadas remotas */
+    registrarErroTabela: function (tabela, error) {
+      if (!this.isTabelaAusenteError(error)) {
+        if (error) console.warn(`[NexusPort] Erro na tabela '${tabela}':`, error.message || error);
+        return false;
+      }
+      if (!tabelasAusentes.has(tabela)) {
+        tabelasAusentes.add(tabela);
+        console.warn(
+          `[NexusPort] A tabela 'public.${tabela}' não existe no Supabase. ` +
+          `Operando apenas com dados locais. Aplique a migração ` +
+          `SPECs/migrations/001_create_bercos.sql no SQL Editor do Supabase para habilitar a persistência.`
+        );
+      }
+      return true;
+    },
+
+    /** Indica se a tabela já foi identificada como ausente nesta sessão */
+    tabelaIndisponivel: function (tabela) {
+      return tabelasAusentes.has(tabela);
+    },
+
+    /** Cliente pronto para uso em uma tabela específica (ou null) */
+    clientePara: function (tabela) {
+      if (!window.nexusSupabase) return null;
+      if (tabelasAusentes.has(tabela)) return null;
+      return window.nexusSupabase;
+    }
+  };
 })();
