@@ -7,6 +7,11 @@
 (function (window) {
   'use strict';
 
+  // Utilitários Anti-XSS (js/security.js) — os dados de sessão (nome, cargo,
+  // código, matrícula) vêm do localStorage/sessionStorage e são controláveis,
+  // portanto jamais devem ser interpolados crus em innerHTML.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+
   function initLayout() {
     const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null);
 
@@ -54,6 +59,17 @@
       { id: 'relatorios.html', label: 'Relatórios & PDF', icon: 'assessment', href: 'relatorios.html', visible: true }
     ];
 
+    // Montagem prévia dos itens de menu (cada interpolação é codificada aqui)
+    const navItemsHtml = menuItems.filter(item => item.visible).map(item => {
+      const isActive = activePage === item.id;
+      return `
+        <a href="${esc(item.href)}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-[20px]">${esc(item.icon)}</span>
+          <span>${esc(item.label)}</span>
+        </a>
+      `;
+    }).join('');
+
     // Injeta Topbar com Posicionamento Fixo e Z-Index Elevado (Item 7)
     const topbarElem = document.getElementById('appTopbar') || document.querySelector('header');
     if (topbarElem) {
@@ -73,14 +89,14 @@
         <div class="flex items-center gap-3">
           <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
             <div id="headerAvatar" class="w-7 h-7 rounded-lg bg-nexus-500 text-white flex items-center justify-center font-mono text-xs font-bold">
-              ${initials}
+              ${esc(initials)}
             </div>
             <div class="hidden sm:flex flex-col min-w-0">
-              <span id="headerUserName" class="text-xs font-bold text-nexus-900 dark:text-white truncate">${userName}</span>
+              <span id="headerUserName" class="text-xs font-bold text-nexus-900 dark:text-white truncate">${esc(userName)}</span>
               <div class="flex items-center gap-1.5">
-                <span id="headerUserRole" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">${userRoleName}</span>
+                <span id="headerUserRole" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">${esc(userRoleName)}</span>
                 <span class="text-[10px] text-slate-300 dark:text-slate-600">•</span>
-                <span id="headerUserCode" class="font-mono text-[10px] font-semibold text-nexus-500 dark:text-indigo-400">${userCode}</span>
+                <span id="headerUserCode" class="font-mono text-[10px] font-semibold text-nexus-500 dark:text-indigo-400">${esc(userCode)}</span>
               </div>
             </div>
           </div>
@@ -129,19 +145,19 @@
             <div class="flex flex-col gap-2 p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-lg bg-nexus-500 text-white flex items-center justify-center font-display font-bold text-sm shadow-sm flex-shrink-0">
-                  ${initials}
+                  ${esc(initials)}
                 </div>
                 <div class="flex flex-col min-w-0">
-                  <span class="font-display font-bold text-xs text-white truncate">${userName}</span>
-                  <span class="text-[11px] text-slate-400 truncate">${userRoleName}</span>
+                  <span class="font-display font-bold text-xs text-white truncate">${esc(userName)}</span>
+                  <span class="text-[11px] text-slate-400 truncate">${esc(userRoleName)}</span>
                 </div>
               </div>
               <div class="flex items-center justify-between pt-2 border-t border-slate-700/60 font-mono text-[10px]">
                 <span class="text-slate-400">Código/Mat:</span>
-                <span class="font-bold text-indigo-400">${userCode} / ${userMatricula}</span>
+                <span class="font-bold text-indigo-400">${esc(userCode)} / ${esc(userMatricula)}</span>
               </div>
               <div class="mt-1 px-2 py-1 rounded bg-indigo-950/80 border border-indigo-800 text-indigo-300 font-mono text-[10px] font-bold text-center">
-                ${visionLayer} (RLS)
+                ${esc(visionLayer)} (RLS)
               </div>
             </div>
 
@@ -149,15 +165,7 @@
             <div class="flex flex-col gap-1">
               <span class="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-bold px-3">Menu Operacional</span>
               <nav class="flex flex-col gap-1 mt-1">
-                ${menuItems.filter(item => item.visible).map(item => {
-                  const isActive = activePage === item.id;
-                  return `
-                    <a href="${item.href}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
-                      <span class="material-symbols-outlined text-[20px]">${item.icon}</span>
-                      <span>${item.label}</span>
-                    </a>
-                  `;
-                }).join('')}
+                ${navItemsHtml}
               </nav>
             </div>
 

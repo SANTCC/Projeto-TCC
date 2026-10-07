@@ -43,6 +43,8 @@
     };
   </script>
 
+  <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
+  <script src="js/security.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
   <script src="js/tipos-carga.js"></script>

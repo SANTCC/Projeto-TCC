@@ -144,7 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const displayNavio = match ? (match.navio || 'Não vinculado') : 'Não vinculado';
     const displayStatus = match ? (match.status || 'NÃO_LOCALIZADO') : 'NÃO_LOCALIZADO';
 
-    targetChecklistUrl = `inspecao.html?carga=${displayId}`;
+    const displayIdParam = encodeURIComponent(String(displayId));
+    targetChecklistUrl = `inspecao.html?carga=${displayIdParam}`;
 
     // Grava log de leitura QR Code no pátio (T5.8 & Supabase leituras_qr_code)
     const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
@@ -207,22 +208,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (cargo === 'ESTIVADOR') {
       msgAcao = 'Redirecionamento para a Ficha de Movimentação no Pátio.';
-      targetRedirectUrl = `cargas.html?carga=${displayId}`;
+      targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
     } else if (cargo === 'CONFERENTE_CARGA') {
       msgAcao = 'Redirecionamento para Ficha de Recebimento Físico e Condições de Saída.';
-      targetRedirectUrl = `cargas.html?carga=${displayId}`;
+      targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
     } else if (cargo === 'INSPETOR') {
       msgAcao = 'Redirecionamento para o Checklist Técnico de Inspeção.';
-      targetRedirectUrl = `inspecao.html?carga=${displayId}`;
+      targetRedirectUrl = `inspecao.html?carga=${displayIdParam}`;
     } else if (cargo === 'ARRUMADOR_CONSERTADOR') {
       msgAcao = 'Redirecionamento para Alteração do Status "Pronta para Entrega".';
-      targetRedirectUrl = `cargas.html?carga=${displayId}`;
+      targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
     } else if (cargo === 'SUPERVISOR_GERENTE_OPERACOES') {
       msgAcao = 'Redirecionamento para o Painel de Cargas Vinculadas do Contêiner.';
-      targetRedirectUrl = `cargas.html?carga=${displayId}`;
+      targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
     } else {
       msgAcao = 'Redirecionamento para o Painel Geral de Cargas.';
-      targetRedirectUrl = `cargas.html?carga=${displayId}`;
+      targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
     }
 
     if (resultCodeTag) resultCodeTag.textContent = `Código Lido: ${rawCode}`;
