@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#dc2626" />
+  <title>Teste de Vibração — NexusPort STS-01</title>
+  <!--
+    Página PÚBLICA de diagnóstico do alerta no aparelho do Botão de Pânico.
+    Não exige login e não grava nada: serve para o operador abrir no próprio
+    celular e responder "este aparelho vibra com o sistema?" antes/depois de
+    um acionamento de emergência. Usa o mesmo motor das páginas internas
+    (js/haptics.js), portanto o resultado reflete o comportamento real do SOS.
+  -->
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 20px 16px 40px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a; color: #e2e8f0; line-height: 1.5;
+    }
+    .wrap { max-width: 620px; margin: 0 auto; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .badge {
+      width: 42px; height: 42px; border-radius: 12px; background: #dc2626;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex: 0 0 auto;
+    }
+    h1 { font-size: 18px; margin: 0; }
+    header p { margin: 2px 0 0; font-size: 12px; color: #94a3b8; }
+    .card {
+      background: #1e293b; border: 1px solid #334155; border-radius: 16px;
+      padding: 16px; margin-bottom: 14px;
+    }
+    .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; margin: 0 0 10px; }
+    button {
+      width: 100%; border: 0; border-radius: 14px; padding: 20px 16px;
+      font-size: 17px; font-weight: 700; letter-spacing: .03em; color: #fff;
+      background: #dc2626; cursor: pointer; touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button.secondary { background: #334155; font-size: 14px; padding: 14px 16px; }
+    button:active { transform: scale(.99); }
+    .row { display: flex; gap: 10px; }
+    .row button { margin-top: 10px; }
+    ul { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+    li { padding: 6px 0; border-bottom: 1px solid #24334a; display: flex; justify-content: space-between; gap: 12px; }
+    li:last-child { border-bottom: 0; }
+    li span:last-child { color: #cbd5e1; text-align: right; font-variant-numeric: tabular-nums; }
+    .ok { color: #4ade80; font-weight: 700; }
+    .bad { color: #f87171; font-weight: 700; }
+    .warn { color: #fbbf24; font-weight: 700; }
+    #resultado {
+      font-size: 14px; font-weight: 700; margin-top: 12px; min-height: 22px;
+      white-space: pre-line; color: #e2e8f0;
+    }
+    .diag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: #94a3b8; white-space: pre-line; }
+    .hint { font-size: 12px; color: #94a3b8; margin: 8px 0 0; }
+    .hint strong { color: #cbd5e1; }
+    a.voltar { color: #7dd3fc; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="badge" aria-hidden="true">📳</div>
+      <div>
+        <h1>Teste de Vibração do Botão de Pânico</h1>
+        <p>NexusPort · Terminal STS-01 · diagnóstico do aparelho</p>
+      </div>
+    </header>
+
+    <div class="card">
+      <h2>1. Vibre agora</h2>
+      <button id="vibrarBtn" type="button">VIBRAR (padrão SOS)</button>
+      <div class="row">
+        <button id="pulsoBtn" type="button" class="secondary">Pulso de alerta</button>
+        <button id="pararBtn" type="button" class="secondary">Parar</button>
+      </div>
+      <div id="resultado" role="status" aria-live="polite">Toque no botão vermelho. O primeiro toque também libera a vibração no navegador (exigência do Chrome/Android).</div>
+    </div>
+
+    <div class="card">
+      <h2>2. O que este aparelho suporta</h2>
+      <ul id="lista"></ul>
+      <p class="diag" id="diag"></p>
+      <div class="row">
+        <button id="reverificarBtn" type="button" class="secondary">Verificar novamente</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3. Se não vibrar</h2>
+      <p class="hint" id="ajuda"></p>
+    </div>
+
+    <p><a class="voltar" href="index.html">← Voltar ao login do NexusPort</a></p>
+  </div>
+
+  <script src="js/haptics.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const vibrarBtn = document.getElementById('vibrarBtn');
+      const pulsoBtn = document.getElementById('pulsoBtn');
+      const pararBtn = document.getElementById('pararBtn');
+      const reverificarBtn = document.getElementById('reverificarBtn');
+      const resultado = document.getElementById('resultado');
+      const lista = document.getElementById('lista');
+      const diag = document.getElementById('diag');
+      const ajuda = document.getElementById('ajuda');
+
+      function linha(rotulo, valor, classe) {
+        const li = document.createElement('li');
+        const nome = document.createElement('span');
+        nome.textContent = rotulo;
+        const val = document.createElement('span');
+        val.textContent = valor;
+        if (classe) val.className = classe;
+        li.appendChild(nome);
+        li.appendChild(val);
+        return li;
+      }
+
+      function simNao(condicao, textoOk, textoNao) {
+        return condicao
+          ? { valor: textoOk || 'sim', classe: 'ok' }
+          : { valor: textoNao || 'NÃO', classe: 'bad' };
+      }
+
+      function render() {
+        const st = NexusHaptics.status();
+        lista.textContent = '';
+
+        const api = simNao(st.vibrationApi, 'disponível', 'ausente');
+        lista.appendChild(linha('API de vibração (navigator.vibrate)', api.valor, api.classe));
+
+        const ctx = simNao(st.secureContext, 'https/localhost', 'http:// (bloqueia)');
+        lista.appendChild(linha('Contexto seguro', ctx.valor, ctx.classe));
+
+        const inter = simNao(st.userActivated, 'sim', 'não (toque na tela)');
+        lista.appendChild(linha('Interação do usuário', inter.valor, inter.classe));
+
+        const vis = simNao(st.visible, 'sim', 'aba em segundo plano');
+        lista.appendChild(linha('Página visível', vis.valor, vis.classe));
+
+        lista.appendChild(linha('Aparelho', st.platform === 'mobile' ? 'celular/tablet' : st.platform));
+        if (st.embedded) {
+          lista.appendChild(linha('Dentro de iframe', 'sim (exige toque no quadro)', 'warn'));
+        }
+        const habilitado = simNao(st.enabled, 'ativada', 'desativada');
+        lista.appendChild(linha('Preferência de vibração', habilitado.valor, habilitado.classe));
+        const som = simNao(st.soundEnabled, 'ativado', 'desativado');
+        lista.appendChild(linha('Alerta sonoro', som.valor, som.classe));
+
+        diag.textContent = NexusHaptics.describe();
+        ajuda.textContent = '';
+        const motivo = st.reasons[0] || null;
+        ajuda.appendChild(document.createTextNode(
+          NexusHaptics.hint(motivo)
+          + ' No Android, verifique também: página aberta em https://, som/vibração do sistema ligados, '
+          + 'modo silencioso (não impede a vibração) e navegador Chrome/Edge/Samsung Internet atualizado.'
+        ));
+        if (st.reasons.length === 0) {
+          ajuda.appendChild(document.createTextNode(' Se o aparelho continuar sem vibrar, veja em Ajustes do Android → Sons e vibração → Intensidade da vibração.'));
+        }
+      }
+
+      function relatar(nome, retorno) {
+        const st = NexusHaptics.status();
+        if (retorno && retorno.fired) {
+          resultado.textContent = `✅ "${nome}" enviado ao aparelho. Você sentiu a vibração? Se não sentiu, verifique a intensidade de vibração nas configurações do Android.`;
+        } else {
+          const motivo = (retorno && retorno.reason) || st.lastReason || st.reasons[0] || null;
+          resultado.textContent = `⚠️ "${nome}" NÃO vibrou: ${NexusHaptics.hint(motivo)}`;
+        }
+        render();
+      }
+
+      vibrarBtn.addEventListener('click', function () {
+        relatar('SOS', NexusHaptics.sos());
+      });
+      pulsoBtn.addEventListener('click', function () {
+        relatar('pulso de alerta', NexusHaptics.alert());
+      });
+      pararBtn.addEventListener('click', function () {
+        NexusHaptics.stop();
+        resultado.textContent = 'Vibração interrompida (navigator.vibrate(0)).';
+        render();
+      });
+      reverificarBtn.addEventListener('click', function () {
+        render();
+        resultado.textContent = 'Diagnóstico atualizado.';
+      });
+
+      document.addEventListener('visibilitychange', render);
+      render();
+    })();
+  </script>
+</body>
+</html>
