@@ -6,6 +6,7 @@
   "scripts": {
     "start": "npx serve -l 3000 .",
     "test": "python3 verify_phase4.py && python3 verify_phase5.py && python3 verify_phase6.py && python3 verify_phase7.py && python3 verify_phase8.py && python3 verify_phase9.py",
+    "test:graficos": "node tests/test_graficos_por_cargo.js",
     "test:xss": "node tests/xss.test.js",
     "scan:xss": "node tools/xss-scan.js",
     "audit:xss": "node tools/xss-scan.js && node tests/xss.test.js"

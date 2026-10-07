@@ -323,6 +323,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderProdutividadeTable();
 
+  // Gráficos de produtividade adaptados à camada de visão (RF 16 / RF 1)
+  if (window.NexusCharts && typeof window.NexusCharts.initRelatorios === 'function') {
+    window.NexusCharts.initRelatorios();
+  }
+
   // Sincronização viva e atualização automática ao registrar produtividade / alterar dados (Tarefa 6)
   window.addEventListener('nexus_data_changed', () => {
     popularCargas();

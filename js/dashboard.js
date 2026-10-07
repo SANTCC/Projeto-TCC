@@ -280,9 +280,25 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cardRoleLevel) cardRoleLevel.textContent = derivedLevel;
   if (cardVisionLayer) cardVisionLayer.textContent = derivedVision;
 
+  // Planilha consolidada com metas: exclusiva da Visão Estratégica (RF 1).
+  // Cargos operacionais/táticos recebem, no lugar dela, os gráficos do seu
+  // próprio escopo (js/charts.js), evitando ruído e exposição de metas.
   if (estrategicoPanel) {
-    estrategicoPanel.classList.remove('hidden');
-    renderIndicadoresExecutivosTable();
+    if (isDiretor) {
+      estrategicoPanel.classList.remove('hidden');
+      renderIndicadoresExecutivosTable();
+    } else {
+      estrategicoPanel.classList.add('hidden');
+    }
+  }
+
+  // Painel de gráficos (Chart.js) adaptado ao cargo do usuário autenticado
+  if (window.NexusCharts && typeof window.NexusCharts.initDashboard === 'function') {
+    window.NexusCharts.initDashboard();
+    const chartsRefreshBtn = document.getElementById('chartsRefreshBtn');
+    if (chartsRefreshBtn) {
+      chartsRefreshBtn.addEventListener('click', () => window.NexusCharts.atualizar());
+    }
   }
 
   // Renderiza Planilha Consolidada de Desempenho Operacional por Categoria (A3 / Item 1.5)

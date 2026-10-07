@@ -45,6 +45,9 @@
 
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+
+  <!-- Chart.js via CDN para os gráficos de produtividade por camada de visão -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
   <script src="js/vision-layer.js"></script>
@@ -147,7 +150,23 @@
           </div>
         </div>
 
-        <!-- Seção 2: Relatório de Produtividade Operacional por Cargo (T6.9, T6.10) -->
+        <!-- Seção 2: Análise Gráfica de Produtividade por Camada de Visão (RF 16 / RF 1) -->
+        <div id="relatoriosChartsPanel" class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+            <div>
+              <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-nexus-500">insights</span>
+                Análise Gráfica de Produtividade (RF 16)
+              </h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Gráficos adaptados à camada de visão: Direção e Inspetor veem o consolidado; os demais cargos veem apenas os próprios dados.</p>
+            </div>
+            <span id="relatoriosChartsBadge" class="font-mono text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Chart.js</span>
+          </div>
+
+          <div id="relatoriosChartsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+        </div>
+
+        <!-- Seção 3: Relatório de Produtividade Operacional por Cargo (T6.9, T6.10) -->
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
@@ -185,6 +204,7 @@
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/supabase-client.js"></script>
   <script src="js/data-repository.js"></script>
+  <script src="js/charts.js"></script>
   <script src="js/relatorios.js"></script>
 </body>
 </html>
