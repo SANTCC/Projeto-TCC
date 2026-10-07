@@ -7,6 +7,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
+  // antes de qualquer inserção em HTML ou em manipuladores inline.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+  const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
+
   const toggleOsBtn = document.getElementById('toggleOsFormBtn');
   const osForm = document.getElementById('osForm');
   const osTableBody = document.getElementById('osTableBody');
@@ -55,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     navs.forEach(n => {
-      navioManutSelect.innerHTML += `<option value="${n.nome}">${n.nome} (${n.imo || n.id})</option>`;
+      navioManutSelect.innerHTML += `<option value="${esc(n.nome)}">${esc(n.nome)} (${esc(n.imo || n.id)})</option>`;
     });
   }
 
@@ -390,31 +395,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     osTableBody.innerHTML = osList.map(os => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <td class="p-3 font-mono font-bold text-nexus-500">${os.id}</td>
-        <td class="p-3 font-bold">${os.equipamento}</td>
+        <td class="p-3 font-mono font-bold text-nexus-500">${esc(os.id)}</td>
+        <td class="p-3 font-bold">${esc(os.equipamento)}</td>
         <td class="p-3">
           <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
             os.prioridade === 'ALTA' ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' :
             os.prioridade === 'MEDIA' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
             'bg-slate-100 text-slate-800'
-          }">${os.prioridade}</span>
+          }">${esc(os.prioridade)}</span>
         </td>
-        <td class="p-3 text-xs">${os.descricao}</td>
-        <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${os.data || 'N/A'}</td>
+        <td class="p-3 text-xs">${esc(os.descricao)}</td>
+        <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(os.data || 'N/A')}</td>
         <td class="p-3 font-mono text-xs">
           <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
             os.status === 'EM_MANUTENCAO' ? 'bg-amber-100 text-amber-800' :
             os.status === 'CONCLUIDA' ? 'bg-emerald-100 text-emerald-800' :
             os.status === 'REPROVADA' ? 'bg-red-100 text-red-800' :
             'bg-blue-100 text-blue-800'
-          }">${os.status}</span>
+          }">${esc(os.status)}</span>
         </td>
         <td class="p-3 text-right font-mono text-[11px]">
           ${os.status === 'PENDENTE_APROVACAO' ? `
-            <button type="button" onclick="window.executarAcaoOS('${os.id}', 'APROVAR')" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold mr-1">Aprovar</button>
-            <button type="button" onclick="window.executarAcaoOS('${os.id}', 'REPROVAR')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold">Reprovar</button>
+            <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'APROVAR')" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold mr-1">Aprovar</button>
+            <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'REPROVAR')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold">Reprovar</button>
           ` : os.status === 'EM_MANUTENCAO' ? `
-            <button type="button" onclick="window.executarAcaoOS('${os.id}', 'CONCLUIR')" class="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Concluir Manutenção</button>
+            <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'CONCLUIR')" class="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Concluir Manutenção</button>
           ` : `<span class="text-slate-400 font-sans italic">Finalizada</span>`}
         </td>
       </tr>
@@ -456,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (gnds.length > 0) {
         osSelect.innerHTML += '<optgroup label="Guindastes & Pórticos">';
         gnds.forEach(g => {
-          osSelect.innerHTML += `<option value="Guindaste ${g.identificacao || g.id}">Guindaste ${g.identificacao || g.id}</option>`;
+          osSelect.innerHTML += `<option value="${esc('Guindaste ' + (g.identificacao || g.id))}">Guindaste ${esc(g.identificacao || g.id)}</option>`;
         });
         osSelect.innerHTML += '</optgroup>';
       }
@@ -464,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (conts.length > 0) {
         osSelect.innerHTML += '<optgroup label="Contêineres">';
         conts.forEach(c => {
-          osSelect.innerHTML += `<option value="Contêiner ${c.identificacao}">Contêiner ${c.identificacao}</option>`;
+          osSelect.innerHTML += `<option value="${esc('Contêiner ' + c.identificacao)}">Contêiner ${esc(c.identificacao)}</option>`;
         });
         osSelect.innerHTML += '</optgroup>';
       }
@@ -483,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (equipamentos.length > 0) {
         alertaList.innerHTML = equipamentos.map((e, idx) => 
-          `<div class="py-1"><strong>${idx + 1}. [${e.tipo}] ${e.identificacao}:</strong> ${e.motivo}</div>`
+          `<div class="py-1"><strong>${esc(idx + 1)}. [${esc(e.tipo)}] ${esc(e.identificacao)}:</strong> ${esc(e.motivo)}</div>`
         ).join('');
       } else {
         alertaList.innerHTML = '<span class="text-slate-400 italic">Nenhum equipamento com ciclo de preventiva vencido (> 3 anos) no momento. Todos os ativos operam dentro do ciclo recomendado.</span>';

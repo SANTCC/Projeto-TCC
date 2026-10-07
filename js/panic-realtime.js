@@ -122,7 +122,7 @@
           </span>
           <span class="material-symbols-outlined text-[22px] shrink-0">e911_emergency</span>
           <div class="min-w-0">
-            <span id="nexusPanicFooterTitle" class="font-display font-bold text-xs sm:text-sm uppercase tracking-wider block truncate">Emergência global ativa — Terminal ${TERMINAL}</span>
+            <span id="nexusPanicFooterTitle" class="font-display font-bold text-xs sm:text-sm uppercase tracking-wider block truncate">Emergência global ativa — Terminal STS-01</span>
             <span id="nexusPanicFooterDetail" class="text-[11px] text-red-100 block truncate">Uma emergência crítica está em andamento no terminal.</span>
           </div>
         </div>

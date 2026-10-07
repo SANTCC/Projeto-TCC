@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
+  // antes de qualquer inserção em HTML ou em manipuladores inline.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+  const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
+
   const selectCarga = document.getElementById('relatorioCargaSelect');
   const gerarPdfBtn = document.getElementById('gerarPdfBtn');
   const prodTableBody = document.getElementById('produtividadeTableBody');
@@ -46,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     cargas.forEach(c => {
-      selectCarga.innerHTML += `<option value="${c.id}">${c.id} — ${c.tipo} (${c.status})</option>`;
+      selectCarga.innerHTML += `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.tipo)} (${esc(c.status)})</option>`;
     });
   }
 
@@ -307,16 +312,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     prodTableBody.innerHTML = prodData.map(item => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <td class="p-3 font-mono font-bold text-nexus-500">${item.matricula}</td>
-        <td class="p-3 font-bold">${item.nome}</td>
-        <td class="p-3 text-slate-500">${item.cargo}</td>
-        <td class="p-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">${item.volume}</td>
-        <td class="p-3 text-slate-400 font-mono text-[11px]">${item.ultima}</td>
+        <td class="p-3 font-mono font-bold text-nexus-500">${esc(item.matricula)}</td>
+        <td class="p-3 font-bold">${esc(item.nome)}</td>
+        <td class="p-3 text-slate-500">${esc(item.cargo)}</td>
+        <td class="p-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">${esc(item.volume)}</td>
+        <td class="p-3 text-slate-400 font-mono text-[11px]">${esc(item.ultima)}</td>
       </tr>
     `).join('');
   }
 
   renderProdutividadeTable();
+
+  // Gráficos de produtividade adaptados à camada de visão (RF 16 / RF 1)
+  if (window.NexusCharts && typeof window.NexusCharts.initRelatorios === 'function') {
+    window.NexusCharts.initRelatorios();
+  }
 
   // Sincronização viva e atualização automática ao registrar produtividade / alterar dados (Tarefa 6)
   window.addEventListener('nexus_data_changed', () => {

@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
+  // antes de qualquer inserção em HTML ou em manipuladores inline.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+  const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
+
   const gpsTableBody = document.getElementById('embarcacoesGpsTableBody');
   const toggleNavioBtn = document.getElementById('toggleNavioFormBtn');
   const navioForm = document.getElementById('navioForm');
@@ -23,11 +28,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let bercosList = [];
 
+  /**
+   * Retorna o cliente Supabase apenas se a tabela `bercos` estiver disponível.
+   * Caso a tabela ainda não exista no banco (erro PGRST205), a aplicação
+   * continua funcionando somente com o cache local (localStorage).
+   */
+  function clienteBercos() {
+    if (window.NexusSupabaseUtils) return window.NexusSupabaseUtils.clientePara('bercos');
+    return window.nexusSupabase || null;
+  }
+
+  function tratarErroBercos(error) {
+    if (!error) return false;
+    if (window.NexusSupabaseUtils) return window.NexusSupabaseUtils.registrarErroTabela('bercos', error);
+    console.warn('[NexusPort] Erro na tabela bercos:', error.message || error);
+    return false;
+  }
+
+  /** Upsert resiliente de um berço no Supabase (no-op se a tabela não existir) */
+  function upsertBercoRemoto(payload) {
+    const client = clienteBercos();
+    if (!client) return Promise.resolve();
+    return client.from('bercos')
+      .upsert(payload, { onConflict: 'nome' })
+      .then(({ error }) => { tratarErroBercos(error); })
+      .catch(err => { tratarErroBercos(err); });
+  }
+
   async function carregarBercosSupabase() {
     let loaded = [];
-    if (window.nexusSupabase) {
+    const clientLeitura = clienteBercos();
+    if (clientLeitura) {
       try {
-        const { data, error } = await window.nexusSupabase.from('bercos').select('*').order('nome', { ascending: true });
+        const { data, error } = await clientLeitura.from('bercos').select('*').order('nome', { ascending: true });
+        if (error) tratarErroBercos(error);
         if (!error && Array.isArray(data) && data.length > 0) {
           loaded = data.map(b => ({
             id: b.id || `BERCO-${b.nome.replace(/\D/g, '')}`,
@@ -39,7 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }));
         }
       } catch (err) {
-        console.warn('[NexusPort] Erro ao carregar berços do Supabase:', err);
+        if (!tratarErroBercos(err)) {
+          console.warn('[NexusPort] Erro ao carregar berços do Supabase:', err);
+        }
       }
     }
 
@@ -63,7 +99,8 @@ document.addEventListener('DOMContentLoaded', () => {
         };
       });
 
-      if (window.nexusSupabase) {
+      const clientSync = clienteBercos();
+      if (clientSync) {
         try {
           const bercosPayload = bercosList.map(b => ({
             id: b.id,
@@ -73,9 +110,12 @@ document.addEventListener('DOMContentLoaded', () => {
             navio_imo: b.navio_imo || null,
             navio_id: b.navio_id || null
           }));
-          await window.nexusSupabase.from('bercos').upsert(bercosPayload, { onConflict: 'nome' });
+          const { error } = await clientSync.from('bercos').upsert(bercosPayload, { onConflict: 'nome' });
+          tratarErroBercos(error);
         } catch (e) {
-          console.warn('[NexusPort] Erro ao sincronizar berços no Supabase:', e);
+          if (!tratarErroBercos(e)) {
+            console.warn('[NexusPort] Erro ao sincronizar berços no Supabase:', e);
+          }
         }
       }
     } else {
@@ -112,16 +152,14 @@ document.addEventListener('DOMContentLoaded', () => {
           b.navio_imo = null;
           b.navio_id = null;
           bercosAlterados = true;
-          if (window.nexusSupabase) {
-            window.nexusSupabase.from('bercos').upsert({
-              id: b.id,
-              nome: b.nome,
-              estado: 'LIVRE',
-              navio_nome: null,
-              navio_imo: null,
-              navio_id: null
-            }, { onConflict: 'nome' }).then().catch(() => {});
-          }
+          upsertBercoRemoto({
+        id: b.id,
+        nome: b.nome,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null,
+        navio_id: null
+      });
         }
       }
     });
@@ -144,15 +182,15 @@ document.addEventListener('DOMContentLoaded', () => {
           'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'
         } flex flex-col gap-1 text-xs">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-nexus-900 dark:text-white">${b.nome}</span>
+            <span class="font-bold text-nexus-900 dark:text-white">${esc(b.nome)}</span>
             <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
               b.estado === 'LIVRE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
               b.estado === 'OCUPADO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
               'bg-slate-200 text-slate-800'
-            }">${b.estado}</span>
+            }">${esc(b.estado)}</span>
           </div>
           <span class="text-[11px] text-slate-500 font-mono">
-            ${b.estado === 'OCUPADO' ? `Navio: <strong class="text-nexus-500">${b.navio_nome || b.carga_id || 'Navio Alocado'}</strong>` : 'Pronto para atracação'}
+            ${b.estado === 'OCUPADO' ? `Navio: <strong class="text-nexus-500">${esc(b.navio_nome || b.carga_id || 'Navio Alocado')}</strong>` : 'Pronto para atracação'}
           </span>
         </div>
       `).join('');
@@ -299,8 +337,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (cargasDoNavio.length > 0) {
         bercosInfoHtml = cargasDoNavio.map(c => `
           <div class="text-[11px] leading-tight">
-            <strong class="text-nexus-500">${c.id}</strong>: <span class="font-bold text-slate-700 dark:text-slate-200">${c.portoDescarga || 'Berço não atrelado'}</span>
-            <span class="block text-[10px] text-slate-400">Contêiner: ${c.container || 'Não vinculado'}</span>
+            <strong class="text-nexus-500">${esc(c.id)}</strong>: <span class="font-bold text-slate-700 dark:text-slate-200">${esc(c.portoDescarga || 'Berço não atrelado')}</span>
+            <span class="block text-[10px] text-slate-400">Contêiner: ${esc(c.container || 'Não vinculado')}</span>
           </div>
         `).join('');
       }
@@ -311,41 +349,41 @@ document.addEventListener('DOMContentLoaded', () => {
       let acoesHtml = '<div class="flex items-center justify-end gap-1.5 font-mono text-[11px] flex-wrap">';
 
       // Botão Vincular a Berço (Tarefa 6)
-      acoesHtml += `<button type="button" onclick="window.vincularNavioABerco('${n.imo}')" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+      acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
 
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
-          acoesHtml += `<button type="button" onclick="window.liberarNavioPeloDiretor('${n.imo}')" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Liberar Saída</button>`;
+          acoesHtml += `<button type="button" onclick="window.liberarNavioPeloDiretor(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Liberar Saída</button>`;
         } else if (n.localizacao === 'NO_PORTO_DE_DESTINO') {
-          acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio('${n.imo}')" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Autorizar Retorno</button>`;
+          acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Autorizar Retorno</button>`;
         } else if (n.localizacao === 'FORA_DO_PORTO') {
-          acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio('${n.imo}')" class="px-2.5 py-1 rounded bg-slate-400 text-white font-bold cursor-not-allowed" title="Navio precisa chegar ao porto de destino antes de autorizar retorno">Autorizar Retorno</button>`;
+          acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-slate-400 text-white font-bold cursor-not-allowed" title="Navio precisa chegar ao porto de destino antes de autorizar retorno">Autorizar Retorno</button>`;
         }
       }
 
       // Botão Excluir Navio (Tarefa 6)
-      acoesHtml += `<button type="button" onclick="window.excluirNavio('${n.imo}')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>`;
+      acoesHtml += `<button type="button" onclick="window.excluirNavio(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>`;
 
       acoesHtml += '</div>';
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
           <td class="p-3 font-bold text-nexus-900 dark:text-white">
-            ${n.nome}
-            <span class="block font-mono text-[10px] text-nexus-500">${n.imo}</span>
+            ${esc(n.nome)}
+            <span class="block font-mono text-[10px] text-nexus-500">${esc(n.imo)}</span>
           </td>
           <td class="p-3 font-mono text-xs">${bercosInfoHtml}</td>
-          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${n.gps}</td>
+          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(n.gps)}</td>
           <td class="p-3">
             <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
               n.localizacao === 'DENTRO_DO_PORTO' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
               n.localizacao === 'FORA_DO_PORTO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
               'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
-            }">${n.localizacao}</span>
+            }">${esc(n.localizacao)}</span>
           </td>
-          <td class="p-3 text-xs">${n.origem} → <strong class="text-nexus-900 dark:text-white">${n.destino}</strong></td>
-          <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${etaText}</td>
-          <td class="p-3 font-mono text-xs font-bold ${n.localizacao === 'NO_PORTO_DE_DESTINO' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${tempoForaText}</td>
+          <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino)}</strong></td>
+          <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}</td>
+          <td class="p-3 font-mono text-xs font-bold ${n.localizacao === 'NO_PORTO_DE_DESTINO' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${esc(tempoForaText)}</td>
           <td class="p-3 text-right whitespace-nowrap">${acoesHtml}</td>
         </tr>
       `;
@@ -394,10 +432,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const eta = calcularETA(dist);
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 font-mono text-xs">
-          <td class="p-3 font-bold">${r.origem}</td>
-          <td class="p-3 text-nexus-900 dark:text-white font-bold">${r.destino}</td>
-          <td class="p-3 text-emerald-600 font-bold">${dist.toLocaleString('pt-BR')} km</td>
-          <td class="p-3 text-indigo-600 font-bold">${eta}</td>
+          <td class="p-3 font-bold">${esc(r.origem)}</td>
+          <td class="p-3 text-nexus-900 dark:text-white font-bold">${esc(r.destino)}</td>
+          <td class="p-3 text-emerald-600 font-bold">${esc(dist.toLocaleString('pt-BR'))} km</td>
+          <td class="p-3 text-indigo-600 font-bold">${esc(eta)}</td>
         </tr>
       `;
     }).join('');
@@ -495,16 +533,14 @@ document.addEventListener('DOMContentLoaded', () => {
           b.navio_imo = null;
           b.navio_id = null;
           bercoDesocupado = true;
-          if (window.nexusSupabase) {
-            window.nexusSupabase.from('bercos').upsert({
-              id: b.id,
-              nome: b.nome,
-              estado: 'LIVRE',
-              navio_nome: null,
-              navio_imo: null,
-              navio_id: null
-            }, { onConflict: 'nome' }).then().catch(() => {});
-          }
+          upsertBercoRemoto({
+        id: b.id,
+        nome: b.nome,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null,
+        navio_id: null
+      });
         }
       });
       if (bercoDesocupado) {
@@ -649,16 +685,14 @@ document.addEventListener('DOMContentLoaded', () => {
           b.navio_nome = null;
           b.navio_imo = null;
           b.navio_id = null;
-          if (window.nexusSupabase) {
-            window.nexusSupabase.from('bercos').upsert({
-              id: b.id,
-              nome: b.nome,
-              estado: 'LIVRE',
-              navio_nome: null,
-              navio_imo: null,
-              navio_id: null
-            }, { onConflict: 'nome' }).then().catch(() => {});
-          }
+          upsertBercoRemoto({
+        id: b.id,
+        nome: b.nome,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null,
+        navio_id: null
+      });
         }
       });
 
@@ -669,17 +703,15 @@ document.addEventListener('DOMContentLoaded', () => {
         bercoReal.navio_imo = navio.imo;
         bercoReal.navio_id = navio.id || null;
 
-        if (window.nexusSupabase) {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          window.nexusSupabase.from('bercos').upsert({
-            id: bercoReal.id || `BERCO-${bercoReal.nome.replace(/\D/g, '')}`,
-            nome: bercoReal.nome,
-            estado: 'OCUPADO',
-            navio_nome: navio.nome,
-            navio_imo: navio.imo,
-            navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
-          }, { onConflict: 'nome' }).then().catch(() => {});
-        }
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        upsertBercoRemoto({
+          id: bercoReal.id || `BERCO-${bercoReal.nome.replace(/\D/g, '')}`,
+          nome: bercoReal.nome,
+          estado: 'OCUPADO',
+          navio_nome: navio.nome,
+          navio_imo: navio.imo,
+          navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
+        });
       }
 
       localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
@@ -735,16 +767,14 @@ document.addEventListener('DOMContentLoaded', () => {
           b.navio_nome = null;
           b.navio_imo = null;
           b.navio_id = null;
-          if (window.nexusSupabase) {
-            window.nexusSupabase.from('bercos').upsert({
-              id: b.id,
-              nome: b.nome,
-              estado: 'LIVRE',
-              navio_nome: null,
-              navio_imo: null,
-              navio_id: null
-            }, { onConflict: 'nome' }).then().catch(() => {});
-          }
+          upsertBercoRemoto({
+        id: b.id,
+        nome: b.nome,
+        estado: 'LIVRE',
+        navio_nome: null,
+        navio_imo: null,
+        navio_id: null
+      });
         }
       });
       localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
@@ -968,7 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let cargasVinculadasHtml = '<span class="text-slate-400 italic text-[11px]">Nenhuma carga</span>';
       if (cargasDoCont.length > 0) {
         cargasVinculadasHtml = cargasDoCont.map(crg => `
-          <span class="inline-block px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] text-nexus-500 font-bold">${crg.id} (${crg.volume})</span>
+          <span class="inline-block px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] text-nexus-500 font-bold">${esc(crg.id)} (${esc(crg.volume)})</span>
         `).join(' ');
       }
 
@@ -976,20 +1006,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let contAcoesHtml = `
         <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
-          <button type="button" onclick="window.vincularContainerANavio('${c.identificacao}')" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>
-          <button type="button" onclick="window.excluirContainer('${c.identificacao}')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+          <button type="button" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>
+          <button type="button" onclick="window.excluirContainer(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
         </div>
       `;
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-          <td class="p-3 font-mono font-bold text-nexus-500">${c.identificacao}</td>
-          <td class="p-3 font-bold">${c.tipo}</td>
+          <td class="p-3 font-mono font-bold text-nexus-500">${esc(c.identificacao)}</td>
+          <td class="p-3 font-bold">${esc(c.tipo)}</td>
           <td class="p-3 font-mono text-xs">${cargasVinculadasHtml}</td>
-          <td class="p-3 font-mono text-xs">Fab: ${c.dataFabr}<br>Manut: ${manutDisplay}</td>
-          <td class="p-3 font-mono text-xs"><span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-bold">${c.refTempo}</span></td>
-          <td class="p-3 font-bold text-xs">${c.navio || 'Não Vinculado'}</td>
-          <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[10px] font-bold">${c.estado}</span></td>
+          <td class="p-3 font-mono text-xs">Fab: ${esc(c.dataFabr)}<br>Manut: ${esc(manutDisplay)}</td>
+          <td class="p-3 font-mono text-xs"><span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-bold">${esc(c.refTempo)}</span></td>
+          <td class="p-3 font-bold text-xs">${esc(c.navio || 'Não Vinculado')}</td>
+          <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[10px] font-bold">${esc(c.estado)}</span></td>
           <td class="p-3 text-right whitespace-nowrap">${contAcoesHtml}</td>
         </tr>
       `;
@@ -1281,21 +1311,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-          <td class="p-3 font-mono font-bold text-nexus-500">${g.identificacao}</td>
+          <td class="p-3 font-mono font-bold text-nexus-500">${esc(g.identificacao)}</td>
           <td class="p-3">
             <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
               g.estado === 'OPERANTE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
               'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-            }">${g.estado}</span>
+            }">${esc(g.estado)}</span>
           </td>
-          <td class="p-3 font-mono text-xs">${g.dataManut || 'N/A'}</td>
+          <td class="p-3 font-mono text-xs">${esc(g.dataManut || 'N/A')}</td>
           <td class="p-3 text-right">
             <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
-              <button type="button" onclick="window.exibirTarefasGuindaste('${g.identificacao}')" class="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold inline-flex items-center gap-1 transition-all ${temTarefas ? 'animate-pulse ring-2 ring-amber-400' : 'opacity-80'}">
+              <button type="button" onclick="window.exibirTarefasGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold inline-flex items-center gap-1 transition-all ${temTarefas ? 'animate-pulse ring-2 ring-amber-400' : 'opacity-80'}">
                 <span class="material-symbols-outlined text-[13px]">task</span>
                 <span>Tarefas (${tarefasAtivas.length})</span>
               </button>
-              <button type="button" onclick="window.excluirGuindaste('${g.identificacao}')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+              <button type="button" onclick="window.excluirGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
             </div>
           </td>
         </tr>

@@ -240,6 +240,11 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
+  // antes de qualquer inserção em HTML ou em manipuladores inline.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+  const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
+
   // Elementos do DOM
   const welcomeAvatar = document.getElementById('welcomeAvatar');
   const welcomeName = document.getElementById('welcomeName');
@@ -275,9 +280,25 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cardRoleLevel) cardRoleLevel.textContent = derivedLevel;
   if (cardVisionLayer) cardVisionLayer.textContent = derivedVision;
 
+  // Planilha consolidada com metas: exclusiva da Visão Estratégica (RF 1).
+  // Cargos operacionais/táticos recebem, no lugar dela, os gráficos do seu
+  // próprio escopo (js/charts.js), evitando ruído e exposição de metas.
   if (estrategicoPanel) {
-    estrategicoPanel.classList.remove('hidden');
-    renderIndicadoresExecutivosTable();
+    if (isDiretor) {
+      estrategicoPanel.classList.remove('hidden');
+      renderIndicadoresExecutivosTable();
+    } else {
+      estrategicoPanel.classList.add('hidden');
+    }
+  }
+
+  // Painel de gráficos (Chart.js) adaptado ao cargo do usuário autenticado
+  if (window.NexusCharts && typeof window.NexusCharts.initDashboard === 'function') {
+    window.NexusCharts.initDashboard();
+    const chartsRefreshBtn = document.getElementById('chartsRefreshBtn');
+    if (chartsRefreshBtn) {
+      chartsRefreshBtn.addEventListener('click', () => window.NexusCharts.atualizar());
+    }
   }
 
   // Renderiza Planilha Consolidada de Desempenho Operacional por Categoria (A3 / Item 1.5)
@@ -324,13 +345,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     execTableBody.innerHTML = indicadores.map((i, idx) => `
       <tr class="${idx % 2 === 0 ? 'bg-slate-50/60 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'} hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-        <td class="p-3 text-left font-bold text-nexus-900 dark:text-white">${i.categoria}</td>
-        <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">${i.volume.toLocaleString('pt-BR')}</td>
-        <td class="p-3 text-right font-mono text-slate-500">${i.meta.toLocaleString('pt-BR')}</td>
-        <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${i.atingimento}%</td>
-        <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${i.tempo} h</td>
+        <td class="p-3 text-left font-bold text-nexus-900 dark:text-white">${esc(i.categoria)}</td>
+        <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">${esc(i.volume.toLocaleString('pt-BR'))}</td>
+        <td class="p-3 text-right font-mono text-slate-500">${esc(i.meta.toLocaleString('pt-BR'))}</td>
+        <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${esc(i.atingimento)}%</td>
+        <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${esc(i.tempo)} h</td>
         <td class="p-3 text-center">
-          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">${i.status}</span>
+          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">${esc(i.status)}</span>
         </td>
       </tr>
     `).join('');
@@ -519,13 +540,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     auditTableBody.innerHTML = logs.map(l => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <td class="p-2.5 text-slate-500 whitespace-nowrap">${l.data_hora ? new Date(l.data_hora).toLocaleString('pt-BR') : 'N/A'}</td>
-        <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${l.nome_funcionario || l.nome || session.nome || 'Operador'}</td>
-        <td class="p-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">${l.cargo || 'OPERACIONAL'}</td>
-        <td class="p-2.5 text-nexus-500 font-bold whitespace-nowrap">${l.codigo_usuario || l.codigo_individual || '--'}</td>
-        <td class="p-2.5 font-bold whitespace-nowrap">${l.entidade || 'Sistema'}</td>
+        <td class="p-2.5 text-slate-500 whitespace-nowrap">${l.data_hora ? esc(new Date(l.data_hora).toLocaleString('pt-BR')) : 'N/A'}</td>
+        <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${esc(l.nome_funcionario || l.nome || session.nome || 'Operador')}</td>
+        <td class="p-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">${esc(l.cargo || 'OPERACIONAL')}</td>
+        <td class="p-2.5 text-nexus-500 font-bold whitespace-nowrap">${esc(l.codigo_usuario || l.codigo_individual || '--')}</td>
+        <td class="p-2.5 font-bold whitespace-nowrap">${esc(l.entidade || 'Sistema')}</td>
         <td class="p-2.5">
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 whitespace-nowrap">${l.tipo_alteracao || 'EDICAO'}</span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 whitespace-nowrap">${esc(l.tipo_alteracao || 'EDICAO')}</span>
         </td>
       </tr>
     `).join('');
@@ -610,22 +631,22 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="p-4 rounded-xl border border-nexus-border dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex flex-col gap-3">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700/80 pb-2">
           <div class="flex items-center gap-2">
-            <span class="font-mono font-bold text-xs text-nexus-500">${t.id}</span>
+            <span class="font-mono font-bold text-xs text-nexus-500">${esc(t.id)}</span>
             <span class="text-slate-300 dark:text-slate-600">•</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">${t.decisao}</span>
-            <span class="font-mono text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">${t.entidade}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">${esc(t.decisao)}</span>
+            <span class="font-mono text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">${esc(t.entidade)}</span>
           </div>
-          <span class="text-slate-400 font-mono text-[11px]">${new Date(t.data_hora).toLocaleString('pt-BR')}</span>
+          <span class="text-slate-400 font-mono text-[11px]">${esc(new Date(t.data_hora).toLocaleString('pt-BR'))}</span>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
           <div>
             <span class="font-bold text-slate-500 block text-[10px] uppercase">Responsável Operacional</span>
-            <span class="font-bold text-nexus-900 dark:text-white">${t.responsavel}</span>
+            <span class="font-bold text-nexus-900 dark:text-white">${esc(t.responsavel)}</span>
           </div>
           <div>
             <span class="font-bold text-slate-500 block text-[10px] uppercase">Justificativa / Motivo Formal</span>
-            <span class="text-slate-700 dark:text-slate-300">${t.motivo}</span>
+            <span class="text-slate-700 dark:text-slate-300">${esc(t.motivo)}</span>
           </div>
         </div>
 
@@ -633,10 +654,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="flex items-start gap-1.5 min-w-0">
             <span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0 mt-0.5">edit_note</span>
             <span class="font-mono text-[11px] italic text-amber-700 dark:text-amber-400 leading-snug">
-              ${t.retificacao || '<span class="text-slate-400 not-italic">Nenhuma retificação vinculada.</span>'}
+              ${t.retificacao ? esc(t.retificacao) : '<span class="text-slate-400 not-italic">Nenhuma retificação vinculada.</span>'}
             </span>
           </div>
-          <button type="button" onclick="window.anexarRetificacaoTrail('${t.id}', '${t.dbId || ''}')" class="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] shrink-0 transition-colors">
+          <button type="button" onclick="window.anexarRetificacaoTrail(${jsArg(t.id)}, ${jsArg(t.dbId || '')})" class="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] shrink-0 transition-colors">
             + Anexar Retificação
           </button>
         </div>
