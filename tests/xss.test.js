@@ -15,6 +15,7 @@ const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '..');
+const xssScan = require('../tools/xss-scan.js');
 
 /* ------------------------------------------------------------------ *
  * Payloads de ataque
@@ -136,14 +137,16 @@ function assertNoXss(collected, label, window, document, containers = []) {
     fail(collected, label, `payload executado (window.__xss=${window.__xss})`);
   }
   // Marcadores dos payloads só existem no DOM se o HTML foi interpretado.
-  const injected = document.querySelectorAll('img[src="x"]');
+  // `onmouseover` cobre o vetor de quebra de atributo (PAYLOADS.attrBreak) e não
+  // é usado legitimamente em nenhum ponto da aplicação.
+  const injected = document.querySelectorAll('img[src="x"], [onmouseover]');
   if (injected.length > 0) {
     const tags = Array.from(injected).map(e => e.tagName.toLowerCase()).join(',');
     fail(collected, label, `elementos/atributos injetados no DOM: ${tags}`);
   }
   // Nenhum <script> pode ter sido criado dentro das áreas renderizadas.
   containers.filter(Boolean).forEach(c => {
-    const bad = c.querySelectorAll('script, img[src="x"], [onerror], [onload], [href^="javascript:"]');
+    const bad = c.querySelectorAll('script, img[src="x"], [onerror], [onload], [onmouseover], [href^="javascript:"]');
     if (bad.length > 0) {
       fail(collected, label,
         `conteúdo injetado em área renderizada: ${Array.from(bad).map(e => e.tagName.toLowerCase()).join(',')}`);
@@ -214,6 +217,68 @@ async function scenarioCargas(collected) {
     }
   }
 
+  dom.window.close();
+}
+
+/**
+ * Vetor de quebra de ATRIBUTO: o identificador do contêiner é renderizado
+ * dentro de `data-identificacao="..."` e no texto da <option>. Um valor com
+ * `"` fecharia o atributo e criaria um manipulador de evento (onmouseover)
+ * caso não fosse codificado.
+ */
+async function scenarioModalVinculacao(collected) {
+  const label = 'cargas.html (modal de vinculação)';
+  const carga = {
+    id: 'CRG-2026-500',
+    tipo: 'Carga Geral',
+    natureza: 'Geral',
+    peso: '10 t',
+    volume: '20 m³',
+    valor: 'R$ 1',
+    portoDescarga: 'Pátio STS-01',
+    destino: 'Destino',
+    status: 'ARMAZENAGEM',
+    container: '',
+    navio: '',
+    qrCode: 'QR-CRG-2026-500',
+    data_cadastro: new Date().toISOString()
+  };
+  const containerMalicioso = {
+    id: 'CONT-MAL',
+    identificacao: PAYLOADS.attrBreak,
+    tipo: PAYLOADS.svgEvent,
+    estado: 'OPERANTE'
+  };
+
+  const dom = await loadApp('cargas.html', {
+    scripts: ['js/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/cargas.js'],
+    seed: {
+      nexus_cargas_fluxo: [carga],
+      nexus_containers_list: [containerMalicioso]
+    }
+  });
+  const { window } = dom;
+  const document = window.document;
+  const select = document.getElementById('vincularContainerSelect');
+
+  if (!select || typeof window.abrirModalVinculacao !== 'function') {
+    fail(collected, label, 'modal de vinculação indisponível na página');
+    dom.window.close();
+    return;
+  }
+
+  await window.abrirModalVinculacao(carga.id);
+
+  assertNoXss(collected, label, window, document, [select, document.getElementById('vincularModal')]);
+  assertRenderedAsText(collected, label, select, 'onmouseover');
+
+  // Integridade funcional: a codificação deve ser reversível pelo parser,
+  // preservando o valor original no atributo data-identificacao.
+  const opcao = Array.from(select.options).find(o => o.getAttribute('data-identificacao') === PAYLOADS.attrBreak);
+  if (!opcao) {
+    fail(collected, label, 'data-identificacao não preservou o valor original (codificação destrutiva)');
+  }
+  assertNoRuntimeErrors(collected, label, dom);
   dom.window.close();
 }
 
@@ -494,6 +559,91 @@ async function scenarioInspecao(collected) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Verificações unitárias (helpers de segurança e heurísticas do scanner)
+ * ------------------------------------------------------------------ */
+async function runUnitChecks(collected) {
+  // --- js/security.js :: safeUrl (allowlist de esquema) ---
+  const dom = new JSDOM('<!doctype html><body></body>', {
+    url: 'https://host/dir/page.html',
+    runScripts: 'dangerously'
+  });
+  dom.window.eval(readFile('js/security.js'));
+  const safeUrl = dom.window.NexusSecurity && dom.window.NexusSecurity.safeUrl;
+  if (typeof safeUrl !== 'function') {
+    fail(collected, 'safeUrl', 'js/security.js não expõe NexusSecurity.safeUrl');
+  }
+
+  const bloqueados = [
+    'javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'java\tscript:alert(1)',
+    'vbscript:msgbox(1)', 'data:text/html,<script>alert(1)</script>',
+    'blob:https://evil/x', 'file:///etc/passwd',
+    'ms-msdt:/id', 'intent://x', 'jar:http://evil/x.zip!/y', 'view-source:https://x',
+    'anexo:1', 'a:b', 'x.html:8080/y'
+  ];
+  const permitidos = [
+    'https://ok.example/a', 'http://ok.example', 'mailto:a@b.com', 'tel:+5511',
+    'cargas.html?carga=1', './rel.html', '../x.html', '/abs/path', '#anchor', '?q=1',
+    '//host/x', 'foo/bar:baz'
+  ];
+
+  for (const valor of bloqueados) {
+    const out = typeof safeUrl === 'function' ? safeUrl(valor) : valor;
+    if (out !== '#') fail(collected, 'safeUrl', `esquema não allowlistado aceito: ${JSON.stringify(valor)} => ${JSON.stringify(out)}`);
+  }
+  for (const valor of permitidos) {
+    const out = typeof safeUrl === 'function' ? safeUrl(valor) : '';
+    if (out === '#') fail(collected, 'safeUrl', `referência válida recusada: ${JSON.stringify(valor)}`);
+  }
+  // Round-trip pelo parser HTML: o valor efetivo não pode resultar em esquema perigoso.
+  for (const valor of bloqueados) {
+    if (typeof safeUrl !== 'function') break;
+    const probe = new JSDOM(`<a id="l" href="${safeUrl(valor)}">x</a>`, { url: 'https://host/dir/page.html' });
+    const href = probe.window.document.getElementById('l').getAttribute('href');
+    let proto = null;
+    try { proto = new probe.window.URL(href, 'https://host/dir/page.html').protocol; } catch (e) { proto = 'INVALID'; }
+    if (proto && !['http:', 'https:', 'mailto:', 'tel:'].includes(proto)) {
+      fail(collected, 'safeUrl', `esquema efetivo fora do allowlist após parsing: ${JSON.stringify(valor)} => ${proto}`);
+    }
+  }
+  dom.window.close();
+
+  // --- tools/xss-scan.js :: heurísticas (sem prefixo nem match parcial) ---
+  const seguras = [
+    'esc(a)', "esc(cond ? a : 'x')",
+    'cond ? esc(a) : esc(b)', "a ? b ? 'x' : 'y' : 'z'",
+    "cond ? `x ${esc(raw)}` : ''", 'index + 1', 'items.length',
+    "new Date(x).toLocaleString('pt-BR')", 'Number(x)', 'key', 'actionButtonsHtml'
+  ];
+  const inseguras = [
+    'esc(a) + rawUser', 'rawUser + esc(a)', "cond ? rawUser : 'static'",
+    "cond ? 'static' : rawUser", "cond ? `x ${rawUser}` : ''", 'index + rawUser',
+    'items.length + rawUser', 'new Date(x) + rawUser',
+    "new Date(x).toLocaleString('pt-BR') + rawUser", 'Number(x) + rawUser',
+    "x.toLocaleString('pt-BR')", 'rawUser', "a ? 'x' : b ? rawUser : 'z'"
+  ];
+  for (const expr of seguras) {
+    if (!xssScan.isSafeExpression(expr)) {
+      fail(collected, 'xss-scan', `expressão segura reprovada (falso positivo): ${JSON.stringify(expr)}`);
+    }
+  }
+  for (const expr of inseguras) {
+    if (xssScan.isSafeExpression(expr)) {
+      fail(collected, 'xss-scan', `expressão insegura aprovada (falso negativo): ${JSON.stringify(expr)}`);
+    }
+  }
+
+  // --- gate: nenhuma interpolação não codificada no código atual ---
+  const jsDir = path.join(ROOT, 'js');
+  const alvos = fs.readdirSync(jsDir)
+    .filter(f => f.endsWith('.js') && f !== 'security.js')
+    .map(f => path.join(jsDir, f));
+  const achados = alvos.flatMap(f => xssScan.scan(f).map(x => `${path.basename(f)}:${x.line}`));
+  if (achados.length > 0) {
+    fail(collected, 'xss-scan', `interpolações não codificadas: ${achados.slice(0, 3).join(', ')}`);
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Execução
  * ------------------------------------------------------------------ */
 async function main() {
@@ -501,6 +651,7 @@ async function main() {
   const scenarios = [
     ['cargas.html', scenarioCargas],
     ['cargas.html (onclick)', scenarioInlineHandlerExecution],
+    ['cargas.html (modal vinculação)', scenarioModalVinculacao],
     ['dashboard.html', scenarioDashboard],
     ['embarcacoes.html', scenarioEmbarcacoes],
     ['manutencao.html', scenarioManutencao],
@@ -512,10 +663,16 @@ async function main() {
   console.log('Executando testes de regressão XSS (jsdom)\n');
   console.log(`Payloads testados: ${PAYLOAD_LIST.length}\n`);
 
+  const falhasAntes = collected.length;
+  await runUnitChecks(collected);
+  console.log(`  ${collected.length === falhasAntes ? '✓' : '✗'} verificações unitárias (safeUrl + heurísticas do scanner)\n`);
+
   for (const [name, fn] of scenarios) {
+    const antes = collected.length;
     try {
       await fn(collected);
-      console.log(`  ✓ ${name}`);
+      const ok = collected.length === antes;
+      console.log(`  ${ok ? '✓' : '✗'} ${name}`);
     } catch (err) {
       fail(collected, name, `exceção durante a execução: ${err && err.message}`);
       console.log(`  ✗ ${name} (exceção)`);

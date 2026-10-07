@@ -330,8 +330,8 @@ document.addEventListener('DOMContentLoaded', () => {
     execTableBody.innerHTML = indicadores.map((i, idx) => `
       <tr class="${idx % 2 === 0 ? 'bg-slate-50/60 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'} hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
         <td class="p-3 text-left font-bold text-nexus-900 dark:text-white">${esc(i.categoria)}</td>
-        <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">${i.volume.toLocaleString('pt-BR')}</td>
-        <td class="p-3 text-right font-mono text-slate-500">${i.meta.toLocaleString('pt-BR')}</td>
+        <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">${esc(i.volume.toLocaleString('pt-BR'))}</td>
+        <td class="p-3 text-right font-mono text-slate-500">${esc(i.meta.toLocaleString('pt-BR'))}</td>
         <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${esc(i.atingimento)}%</td>
         <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${esc(i.tempo)} h</td>
         <td class="p-3 text-center">

@@ -93,10 +93,25 @@
     return jsString(value);
   }
 
+  // Esquema de URL no início do valor (RFC 3986 / WHATWG URL).
+  const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
+  // Allowlist explícita: qualquer outro esquema é recusado (inclusive
+  // javascript:, vbscript:, data:, blob:, file: e esquemas de handler externo
+  // como ms-msdt: / intent: / jar: / view-source:).
+  const ALLOWED_URL_SCHEME_RE = /^(?:https?|mailto|tel):/i;
+  // Referência relativa simples (caminho, query ou fragmento): "cargas.html?carga=1"
+  const RELATIVE_REF_RE = /^[a-z0-9._~%!$&'()*+,;=:@-]+(?:[/?#].*)?$/i;
+
   /**
-   * Bloqueia esquemas perigosos (`javascript:`, `vbscript:`, `data:`) em
-   * URLs dinâmicas, permitindo apenas http(s), mailto, tel, caminhos
-   * relativos e âncoras.
+   * Sanitiza URLs dinâmicas com allowlist de esquema:
+   *   - http, https, mailto, tel  -> permitidos;
+   *   - referências relativas válidas (caminho, "./x", "../x", "/x", "?q", "#f",
+   *     "//host/x") -> permitidas;
+   *   - QUALQUER outro esquema -> recusado (fallback).
+   *
+   * A checagem de esquema acontece ANTES do ramo de caminho relativo, de modo
+   * que um valor com esquema nunca seja aceito pela regra permissiva de
+   * referência relativa (ex.: "ms-msdt:/id", "intent://x", "a:b").
    */
   function safeUrl(value, fallback) {
     const fb = fallback === undefined ? '#' : fallback;
@@ -104,11 +119,17 @@
     // Remove caracteres de controle usados para ofuscar o esquema (ex.: "java\tscript:")
     const cleaned = String(value).replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
     if (!cleaned) return fb;
-    const lowered = cleaned.toLowerCase();
-    if (/^(?:javascript|vbscript|data|blob|file):/i.test(lowered)) return fb;
-    if (/^(?:https?:|mailto:|tel:|\/|\.\/|\.\.\/|#|\?)/i.test(lowered)) return escapeHtml(cleaned);
-    // Caminho relativo simples (ex.: "cargas.html?carga=1")
-    if (/^[a-z0-9._~%!$&'()*+,;=:@-]+(?:[/?#].*)?$/i.test(cleaned)) return escapeHtml(cleaned);
+
+    // 1. Valor com esquema: só passa se estiver na allowlist explícita.
+    if (URL_SCHEME_RE.test(cleaned)) {
+      return ALLOWED_URL_SCHEME_RE.test(cleaned) ? escapeHtml(cleaned) : fb;
+    }
+
+    // 2. Sem esquema: referências relativas e de rede continuam aceitas.
+    if (/^(?:\/|\.{1,2}\/|#|\?)/.test(cleaned) || RELATIVE_REF_RE.test(cleaned)) {
+      return escapeHtml(cleaned);
+    }
+
     return fb;
   }
 

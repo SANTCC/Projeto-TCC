@@ -59,6 +59,17 @@
       { id: 'relatorios.html', label: 'Relatórios & PDF', icon: 'assessment', href: 'relatorios.html', visible: true }
     ];
 
+    // Montagem prévia dos itens de menu (cada interpolação é codificada aqui)
+    const navItemsHtml = menuItems.filter(item => item.visible).map(item => {
+      const isActive = activePage === item.id;
+      return `
+        <a href="${esc(item.href)}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-[20px]">${esc(item.icon)}</span>
+          <span>${esc(item.label)}</span>
+        </a>
+      `;
+    }).join('');
+
     // Injeta Topbar com Posicionamento Fixo e Z-Index Elevado (Item 7)
     const topbarElem = document.getElementById('appTopbar') || document.querySelector('header');
     if (topbarElem) {
@@ -154,15 +165,7 @@
             <div class="flex flex-col gap-1">
               <span class="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-bold px-3">Menu Operacional</span>
               <nav class="flex flex-col gap-1 mt-1">
-                ${menuItems.filter(item => item.visible).map(item => {
-                  const isActive = activePage === item.id;
-                  return `
-                    <a href="${esc(item.href)}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
-                      <span class="material-symbols-outlined text-[20px]">${esc(item.icon)}</span>
-                      <span>${esc(item.label)}</span>
-                    </a>
-                  `;
-                }).join('')}
+                ${navItemsHtml}
               </nav>
             </div>
 
