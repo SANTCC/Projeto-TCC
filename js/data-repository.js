@@ -20,6 +20,27 @@
     },
 
     /**
+     * Retorna o cliente Supabase somente se a tabela informada estiver
+     * disponível no banco. Se a tabela ainda não foi provisionada
+     * (erro PGRST205), retorna null e o chamador usa o cache local.
+     */
+    getSupabaseTabela: function (tabela) {
+      if (window.NexusSupabaseUtils) return window.NexusSupabaseUtils.clientePara(tabela);
+      return this.getSupabase();
+    },
+
+    /**
+     * Trata erros de tabela ausente. Retorna true se o erro foi de
+     * tabela inexistente (e já foi registrado/silenciado).
+     */
+    tratarErroTabela: function (tabela, error) {
+      if (!error) return false;
+      if (window.NexusSupabaseUtils) return window.NexusSupabaseUtils.registrarErroTabela(tabela, error);
+      console.warn(`[NexusRepository] Erro na tabela '${tabela}':`, error.message || error);
+      return false;
+    },
+
+    /**
      * BUSCAR FUNCIONÁRIOS
      */
     getFuncionarios: async function () {
@@ -180,16 +201,19 @@
      * BUSCAR BERÇOS DO TERMINAL
      */
     getBercos: async function () {
-      const client = this.getSupabase();
+      const client = this.getSupabaseTabela('bercos');
       if (client) {
         try {
           const { data, error } = await client.from('bercos').select('*').order('nome', { ascending: true });
+          if (error) this.tratarErroTabela('bercos', error);
           if (!error && Array.isArray(data) && data.length > 0) {
             localStorage.setItem('nexus_bercos_list', JSON.stringify(data));
             return data;
           }
         } catch (err) {
-          console.warn('[NexusRepository] Erro ao buscar bercos do Supabase:', err);
+          if (!this.tratarErroTabela('bercos', err)) {
+            console.warn('[NexusRepository] Erro ao buscar bercos do Supabase:', err);
+          }
         }
       }
       return JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
@@ -199,10 +223,10 @@
      * SALVAR / ATUALIZAR BERÇO
      */
     saveBerco: async function (berco) {
-      const client = this.getSupabase();
+      const client = this.getSupabaseTabela('bercos');
       if (client) {
         try {
-          await client.from('bercos').upsert({
+          const { error } = await client.from('bercos').upsert({
             id: berco.id || `BERCO-${berco.nome.replace(/\D/g, '')}`,
             nome: berco.nome,
             estado: berco.estado || 'LIVRE',
@@ -210,8 +234,11 @@
             navio_imo: berco.navio_imo || null,
             navio_id: berco.navio_id || null
           }, { onConflict: 'nome' });
+          this.tratarErroTabela('bercos', error);
         } catch (err) {
-          console.warn('[NexusRepository] Erro ao salvar berco no Supabase:', err);
+          if (!this.tratarErroTabela('bercos', err)) {
+            console.warn('[NexusRepository] Erro ao salvar berco no Supabase:', err);
+          }
         }
       }
       let list = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');

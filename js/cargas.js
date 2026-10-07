@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
+  // antes de qualquer inserção em HTML ou em manipuladores inline.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+  const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
+
   const userCargo = session.cargo;
 
   const toggleFormBtn = document.getElementById('toggleAgendamentoFormBtn');
@@ -43,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (selectTipoCarga && window.NEXUS_TIPOS_CARGA) {
     selectTipoCarga.innerHTML = '<option value="">Selecione o Tipo de Carga...</option>';
     window.NEXUS_TIPOS_CARGA.forEach(t => {
-      selectTipoCarga.innerHTML += `<option value="${t.nome}">${t.nome}</option>`;
+      selectTipoCarga.innerHTML += `<option value="${esc(t.nome)}">${esc(t.nome)}</option>`;
     });
   }
 
@@ -85,10 +90,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     canceladasTableBody.innerHTML = cargasCanceladas.map(c => `
       <tr class="hover:bg-red-50/50 dark:hover:bg-red-950/20 transition-colors">
-        <td class="p-3 font-mono font-bold text-red-600 dark:text-red-400">${c.id}</td>
-        <td class="p-3 font-bold">${c.tipo || 'Carga Geral'}</td>
-        <td class="p-3 font-mono text-xs">${c.portoDescarga || 'Setor Pátio'}</td>
-        <td class="p-3 text-slate-700 dark:text-slate-300">${c.motivoCancelamento || c.motivo_recusa || c.motivo || 'Cancelado pelo Supervisor'}</td>
+        <td class="p-3 font-mono font-bold text-red-600 dark:text-red-400">${esc(c.id)}</td>
+        <td class="p-3 font-bold">${esc(c.tipo || 'Carga Geral')}</td>
+        <td class="p-3 font-mono text-xs">${esc(c.portoDescarga || 'Setor Pátio')}</td>
+        <td class="p-3 text-slate-700 dark:text-slate-300">${esc(c.motivoCancelamento || c.motivo_recusa || c.motivo || 'Cancelado pelo Supervisor')}</td>
         <td class="p-3">
           <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300">CANCELADA</span>
         </td>
@@ -170,50 +175,50 @@ document.addEventListener('DOMContentLoaded', () => {
       let actionButtonsHtml = '';
 
       if (isEstivador) {
-        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga('${c.id}', 'MOVIMENTAR')" class="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
+        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
       }
 
       if (c.status === 'AGENDAMENTO' && isConferente) {
-        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga('${c.id}', 'RECEBER')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">download</span><span>Receber</span></button>`;
+        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'RECEBER')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">download</span><span>Receber</span></button>`;
       }
 
       if (c.status === 'RECEBIMENTO_INSPECAO' && isInspetor) {
-        actionButtonsHtml += `<button type="button" onclick="window.location.href='inspecao.html?carga=${c.id}'" class="px-2.5 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">fact_check</span><span>Inspecionar</span></button>`;
+        actionButtonsHtml += `<button type="button" onclick="window.location.href=${jsArg('inspecao.html?carga=' + encodeURIComponent(c.id || ''))}" class="px-2.5 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">fact_check</span><span>Inspecionar</span></button>`;
       }
 
       if (c.status === 'ARMAZENAGEM') {
         if (isArrumador) {
-          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga('${c.id}', 'PRONTA')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">verified</span><span>Pronta</span></button>`;
+          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'PRONTA')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">verified</span><span>Pronta</span></button>`;
         }
         if (isSupervisor) {
-          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga('${c.id}', 'VINCULAR')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">link</span><span>Vincular</span></button>`;
+          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'VINCULAR')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">link</span><span>Vincular</span></button>`;
         }
       }
 
       if (c.status === 'PRONTA_PARA_ENTREGA' && isSupervisor) {
-        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga('${c.id}', 'LIBERAR')" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">local_shipping</span><span>Liberar</span></button>`;
+        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'LIBERAR')" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">local_shipping</span><span>Liberar</span></button>`;
       }
 
       // C10: Botão manual de "Entregar" REMOVIDO — a entrega ocorre automaticamente quando o navio chega ao destino
 
       if (['AGENDAMENTO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'].includes(c.status) && isSupervisor) {
-        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga('${c.id}', 'CANCELAR')" class="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">block</span><span>Cancelar</span></button>`;
+        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'CANCELAR')" class="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">block</span><span>Cancelar</span></button>`;
       }
 
       if (!actionButtonsHtml) {
-        actionButtonsHtml = `<span class="text-slate-400 font-mono italic text-[11px]">Leitura (${session.cargo_nome || userCargo})</span>`;
+        actionButtonsHtml = `<span class="text-slate-400 font-mono italic text-[11px]">Leitura (${esc(session.cargo_nome || userCargo)})</span>`;
       }
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
           <td class="p-3 font-mono font-bold text-nexus-500 whitespace-nowrap">
-            ${c.id}
-            <span class="block text-[10px] text-slate-400 font-normal">${c.qrCode || ''}</span>
+            ${esc(c.id)}
+            <span class="block text-[10px] text-slate-400 font-normal">${esc(c.qrCode || '')}</span>
           </td>
-          <td class="p-3 whitespace-nowrap">${c.tipo} <span class="block text-[10px] text-slate-400">${c.natureza || ''}</span></td>
-          <td class="p-3 font-mono whitespace-nowrap">${c.peso} / ${c.volume}</td>
-          <td class="p-3 font-bold whitespace-nowrap">${c.portoDescarga}</td>
-          <td class="p-3 font-mono text-xs whitespace-nowrap">${c.container || 'Não vinculado'} / ${c.navio || 'Não vinculado'}</td>
+          <td class="p-3 whitespace-nowrap">${esc(c.tipo)} <span class="block text-[10px] text-slate-400">${esc(c.natureza || '')}</span></td>
+          <td class="p-3 font-mono whitespace-nowrap">${esc(c.peso)} / ${esc(c.volume)}</td>
+          <td class="p-3 font-bold whitespace-nowrap">${esc(c.portoDescarga)}</td>
+          <td class="p-3 font-mono text-xs whitespace-nowrap">${esc(c.container || 'Não vinculado')} / ${esc(c.navio || 'Não vinculado')}</td>
           <td class="p-3 whitespace-nowrap">
             <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
               c.status === 'AGENDAMENTO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
@@ -223,11 +228,11 @@ document.addEventListener('DOMContentLoaded', () => {
               c.status === 'ENTREGUE' ? 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300' :
               c.status === 'RECUSADA' ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' :
               'bg-slate-100 text-slate-800'
-            }">${c.status}</span>
+            }">${esc(c.status)}</span>
           </td>
           <td class="p-3 text-right">
             <div class="flex items-center justify-end gap-1.5 flex-wrap min-w-[200px]">
-              <button type="button" onclick="window.exibirEtiquetaQr({id: '${c.id}', tipo: '${c.tipo}', qrCode: '${c.qrCode}', natureza: '${c.natureza}'})" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center gap-1 transition-colors"><span class="material-symbols-outlined text-[14px]">qr_code</span><span>QR Code</span></button>
+              <button type="button" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode)}, natureza: ${jsArg(c.natureza)}})" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center gap-1 transition-colors"><span class="material-symbols-outlined text-[14px]">qr_code</span><span>QR Code</span></button>
               ${actionButtonsHtml}
             </div>
           </td>
@@ -485,8 +490,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const statusText = cont.estado !== 'OPERANTE' ? ` [INDISPONÍVEL: ${cont.estado}]` : '';
       const containerUuid = cont.rawDbId || cont.id;
       vincularContainerSelect.innerHTML += `
-        <option value="${containerUuid}" data-identificacao="${cont.identificacao}" data-disp="${dispVol}" data-estado="${cont.estado}" ${dispVol <= 0 ? 'disabled' : ''}>
-          ${cont.identificacao} (${cont.tipo}) - Disp: ${dispVol.toFixed(1)} m³ / 75.0 m³${statusText}
+        <option value="${esc(containerUuid)}" data-identificacao="${esc(cont.identificacao)}" data-disp="${esc(dispVol)}" data-estado="${esc(cont.estado)}" ${dispVol <= 0 ? 'disabled' : ''}>
+          ${esc(cont.identificacao)} (${esc(cont.tipo)}) - Disp: ${esc(dispVol.toFixed(1))} m³ / 75.0 m³${esc(statusText)}
         </option>
       `;
     });
