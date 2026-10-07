@@ -3,8 +3,13 @@
  * Valida o módulo js/charts.js: painéis por cargo, restrições da Spec (RF 1),
  * cálculos dos indicadores (RF 4 / RF 7 / RF 16) e estados vazios.
  *
- * Não depende de navegador nem de dependências externas: o módulo é carregado
- * em um contexto isolado (vm) com window/document/localStorage simulados.
+ * Parte 1 (sempre executada): carrega o módulo em contexto isolado (vm) com
+ * window/document/localStorage simulados — sem dependências externas.
+ *
+ * Parte 2 (executada quando o jsdom estiver disponível): renderiza as páginas
+ * reais em DOM e comprova que cada cargo recebe APENAS os gráficos da sua
+ * camada de visão, com Chart.js instanciado. Se o jsdom não estiver instalado
+ * (`npm install`), a seção é apenas informada como ignorada.
  */
 
 const fs = require('fs');
@@ -113,6 +118,141 @@ const DADOS = {
   ],
   trail: [{ tipo_decisao: 'LIBEROU_NAVIO' }, { tipo_decisao: 'LIBEROU_NAVIO' }, { tipo_decisao: 'APROVOU_CARGA' }]
 };
+
+/* ---------------------------------------------------------------------------
+ * Parte 2 — Renderização real por cargo (jsdom)
+ * ------------------------------------------------------------------------- */
+
+const CENARIOS_DOM = [
+  {
+    cargo: 'ESTIVADOR', titulo: 'Meus indicadores operacionais', camada: 'Visão Própria (RLS)',
+    esperados: ['minhas_operacoes_7d', 'minhas_cargas_status', 'minhas_cargas_tipo'],
+    proibidos: ['valor_declarado_mes', 'produtividade_cargo', 'bercos_ocupacao', 'funcionarios_cargo']
+  },
+  {
+    cargo: 'TECNICO_PORTOS', titulo: 'Painel de gestão de pessoas no porto', camada: 'Visão Própria (RLS)',
+    esperados: ['visitantes_7d', 'visitantes_motivo', 'funcionarios_cargo', 'meus_registros_pessoas_7d'],
+    proibidos: ['valor_declarado_mes', 'bercos_ocupacao']
+  },
+  {
+    cargo: 'INSPETOR', titulo: 'Painel operacional do inspetor', camada: 'Visão Operacional (RLS)',
+    esperados: ['inspecoes_resultado', 'cargas_fluxo', 'manutencoes_status', 'navios_localizacao'],
+    proibidos: ['visitantes_7d', 'visitantes_motivo', 'funcionarios_cargo', 'valor_declarado_mes']
+  },
+  {
+    cargo: 'SUPERVISOR_GERENTE_OPERACOES', titulo: 'Painel tático de operações', camada: 'Visão Operacional (RLS)',
+    esperados: ['fila_liberacao', 'manutencoes_status', 'bercos_ocupacao', 'trail_decisoes_tipo'],
+    proibidos: ['visitantes_motivo', 'funcionarios_cargo', 'valor_declarado_mes']
+  },
+  {
+    cargo: 'DIRETOR_OPERACOES_LOGISTICA', titulo: 'Painel estratégico consolidado', camada: 'Visão Estratégica (RLS)',
+    esperados: ['aprovacao_recusa', 'tempo_permanencia', 'embarcacoes_utilizadas', 'produtividade_cargo', 'bercos_ocupacao', 'valor_declarado_mes'],
+    proibidos: ['minhas_cargas_status']
+  }
+];
+
+async function verificarRenderizacaoPorCargo() {
+  let JSDOM;
+  try {
+    JSDOM = require('jsdom').JSDOM; // devDependency do projeto
+  } catch (e) {
+    console.log('  ⏭️  [SKIP] jsdom não instalado (execute `npm install` para a validação em DOM real).');
+    return;
+  }
+
+  const htmlDashboard = fs.readFileSync(path.join(ROOT, 'dashboard.html'), 'utf-8');
+  const htmlRelatorios = fs.readFileSync(path.join(ROOT, 'relatorios.html'), 'utf-8');
+  // Ordem idêntica à das páginas reais: security.js → auth-guard.js → visão → gráficos → página
+  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/charts.js', 'js/dashboard.js']
+    .map(f => ({ arquivo: f, codigo: fs.readFileSync(path.join(ROOT, f), 'utf-8') }));
+
+  for (const cenario of CENARIOS_DOM) {
+    const dom = new JSDOM(htmlDashboard, { url: 'http://localhost:3000/dashboard.html', runScripts: 'outside-only', pretendToBeVisual: true });
+    const win = dom.window;
+    const configs = [];
+
+    win.HTMLCanvasElement.prototype.getContext = () => ({ canvas: {} });
+    win.Chart = class ChartFake {
+      constructor(ctx, config) { configs.push(config); }
+      destroy() {}
+    };
+    win.Chart.defaults = { font: {}, color: '' };
+
+    // js/security.js (anti-XSS) e js/auth-guard.js (limpeza de cache legado)
+    win.eval(fontes[0].codigo);
+    win.eval(fontes[1].codigo);
+    win.localStorage.setItem('nexus_cargas_fluxo', JSON.stringify([
+      { id: 'CRG-1', status: 'ARMAZENAGEM', tipo: 'Grãos', peso: '25 t', valor: 'R$ 100.000,00', dataChegada: new Date(Date.now() - 5 * 86400000).toISOString(), estivadorMatricula: cenario.cargo === 'ESTIVADOR' ? 'MAT-1040' : null },
+      { id: 'CRG-2', status: 'ENTREGUE', tipo: 'Grãos', peso: '10 t', valor: 'R$ 50.000,00', dataChegada: new Date(Date.now() - 20 * 86400000).toISOString(), data_saida: new Date(Date.now() - 3 * 86400000).toISOString() }
+    ]));
+    win.localStorage.setItem('nexus_navios_list', JSON.stringify([{ nome: 'Alfa', localizacao: 'DENTRO_DO_PORTO', operacoes: 2 }]));
+    win.localStorage.setItem('nexus_bercos_list', JSON.stringify([{ nome: 'B1', estado: 'OCUPADO' }, { nome: 'B2', estado: 'LIVRE' }]));
+    win.localStorage.setItem('nexus_func_list', JSON.stringify([{ nome: 'Ana', cargo: 'ESTIVADOR', ativo: true }]));
+    win.localStorage.setItem('nexus_audit_logs', JSON.stringify([{ data_hora: new Date(Date.now() - 86400000).toISOString(), cargo: cenario.cargo, codigo_individual: 'COD-1', entidade: 'CARGA CRG-1', tipo_alteracao: 'EDICAO' }]));
+    win.localStorage.setItem('nexus_session', JSON.stringify({ cargo: cenario.cargo, nome: 'Operador Teste', codigo_individual: 'COD-1', matricula: 'MAT-1040' }));
+
+    win.eval(fontes[2].codigo);
+    win.eval(fontes[3].codigo);
+    win.eval(fontes[4].codigo);
+    win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+    await new Promise(r => setTimeout(r, 150));
+
+    const ids = Array.from(win.document.querySelectorAll('#chartsRoleGrid [data-chart-card]'))
+      .map(c => c.getAttribute('data-chart-card'));
+    const faltando = cenario.esperados.filter(id => !ids.includes(id));
+    const vazando = cenario.proibidos.filter(id => ids.includes(id));
+    const titulo = win.document.getElementById('chartsRoleTitle').textContent;
+    const camada = win.document.getElementById('chartsRoleBadge').textContent;
+    const painelEstrategicoOculto = win.document.getElementById('estrategicoPanel').classList.contains('hidden');
+
+    const ehDiretor = cenario.cargo === 'DIRETOR_OPERACOES_LOGISTICA';
+    const problemas = [];
+    if (faltando.length) problemas.push(`gráficos ausentes: ${faltando.join(', ')}`);
+    if (vazando.length) problemas.push(`gráficos de outra camada exibidos: ${vazando.join(', ')}`);
+    if (titulo !== cenario.titulo) problemas.push(`título inesperado: "${titulo}"`);
+    if (camada !== cenario.camada) problemas.push(`camada de visão inesperada: "${camada}"`);
+    if (!ehDiretor && !painelEstrategicoOculto) problemas.push('painel estratégico (metas/financeiro) visível para cargo não estratégico');
+    if (ehDiretor && painelEstrategicoOculto) problemas.push('painel estratégico oculto para a Direção');
+    if (configs.length === 0) problemas.push('nenhuma instância de Chart.js criada');
+
+    verificar(
+      problemas.length === 0,
+      `DOM real: ${cenario.cargo} renderiza apenas a sua camada (${ids.length} cartões, ${configs.length} gráficos Chart.js).`,
+      problemas.join(' | ')
+    );
+    if (cenario.cargo === 'DIRETOR_OPERACOES_LOGISTICA') {
+      verificar(
+        configs.some(cfg => cfg && cfg.data && String(cfg.data.datasets[0].label || '').indexOf('Valor declarado') !== -1),
+        'DOM real: apenas a Direção recebe o gráfico financeiro de valor declarado.'
+      );
+    }
+    dom.window.close();
+  }
+
+  // Página de relatórios: cada cargo recebe o recorte do RF 16
+  const domRel = new JSDOM(htmlRelatorios, { url: 'http://localhost:3000/relatorios.html', runScripts: 'outside-only', pretendToBeVisual: true });
+  const winRel = domRel.window;
+  winRel.HTMLCanvasElement.prototype.getContext = () => ({ canvas: {} });
+  winRel.Chart = class { constructor() {} destroy() {} };
+  winRel.Chart.defaults = { font: {}, color: '' };
+  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/security.js'), 'utf-8'));
+  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/auth-guard.js'), 'utf-8'));
+  winRel.localStorage.setItem('nexus_cargas_fluxo', JSON.stringify([{ id: 'CRG-1', status: 'ARMAZENAGEM', tipo: 'Grãos', valor: 'R$ 10,00', dataChegada: new Date().toISOString() }]));
+  winRel.localStorage.setItem('nexus_audit_logs', JSON.stringify([{ data_hora: new Date().toISOString(), cargo: 'INSPETOR', codigo_individual: 'NX-07', entidade: 'CARGA CRG-1', tipo_alteracao: 'EDICAO' }]));
+  winRel.localStorage.setItem('nexus_session', JSON.stringify({ cargo: 'INSPETOR', nome: 'Igor', codigo_individual: 'NX-07', matricula: 'MAT-07' }));
+  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/vision-layer.js'), 'utf-8'));
+  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/charts.js'), 'utf-8'));
+  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/relatorios.js'), 'utf-8'));
+  winRel.document.dispatchEvent(new winRel.Event('DOMContentLoaded'));
+  await new Promise(r => setTimeout(r, 250));
+  const idsRel = Array.from(winRel.document.querySelectorAll('#relatoriosChartsGrid [data-chart-card]')).map(c => c.getAttribute('data-chart-card'));
+  verificar(
+    idsRel.includes('produtividade_cargo') && idsRel.includes('inspecoes_resultado') && !idsRel.includes('valor_declarado_mes'),
+    'DOM real: relatorios.html entrega produtividade consolidada ao Inspetor sem indicador financeiro (RF 16).',
+    idsRel.join(', ')
+  );
+  domRel.window.close();
+}
 
 let falhas = 0;
 function verificar(condicao, mensagem, detalhe) {
@@ -339,6 +479,10 @@ async function main() {
     configRosca.type === 'doughnut' && configRosca.options.cutout === '62%',
     'Gráficos de rosca configurados com cutout e legenda inferior.'
   );
+
+  // 7. Renderização real em DOM (jsdom) por cargo
+  console.log('\n7. Validando renderização real das páginas por cargo (jsdom)...');
+  await verificarRenderizacaoPorCargo();
 
   console.log('\n================================================================');
   if (falhas === 0) {

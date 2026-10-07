@@ -60,8 +60,8 @@ Acesse `http://localhost:3000` no seu navegador.
 
 ### 4. Executar Testes Automatizados
 ```bash
-npm test            # suite Playwright (fluxos ponta a ponta)
-npm run test:graficos   # gráficos por camada de visão (Node, sem dependências)
+npm test              # suite Playwright (fluxos ponta a ponta)
+npm run test:graficos # gráficos por camada de visão (Node, sem dependências)
 ```
 
 ---
@@ -87,12 +87,53 @@ Os painéis são exibidos no Painel Geral (`dashboard.html`) e no módulo de Rel
 com atualização automática a cada 60 s, re-renderização ao alternar o tema claro/escuro e estado vazio
 explícito quando ainda não há dados (nunca dados fictícios).
 
+### 5. Verificações de Segurança (Anti-XSS)
+```bash
+npm install          # instala o jsdom (devDependency)
+npm run audit:xss    # roda o scanner estático + a suíte de regressão XSS
+```
+- `npm run scan:xss` — análise estática: percorre todos os módulos `js/*.js` e
+  falha (exit code 1) se encontrar interpolação `${...}` não codificada dentro
+  de templates que geram HTML.
+- `npm run test:xss` — suíte de regressão: executa as páginas reais em jsdom,
+  injeta payloads de ataque (quebra de tag, quebra de atributo, quebra de string
+  JavaScript, entidades HTML, backslash) via `localStorage`, sessão e QR Code, e
+  confirma que nada é executado e que tudo é renderizado como texto.
+
+---
+
 ## 🔒 Modelo de Segurança e Limitações da Arquitetura
 
 ### 1. Modelo de Autenticação e Sessão Client-Side
 O NexusPort foi desenvolvido no contexto de um protótipo operacional portuário (TCC). A verificação de credenciais e permissões (RBAC) é validada no frontend (`js/tecnico_portos.js`, `js/vision-layer.js`), armazenando a sessão ativa em `sessionStorage`/`localStorage` (`nexus_session`).
 
-### 2. Camada de Segurança RLS (Row Level Security) no Supabase
+### 2. Codificação de Saída contra XSS (DOM-based)
+Todo o front-end monta tabelas, cards e modais via `innerHTML`. Como os dados
+exibidos vêm do Supabase, do `localStorage` (chaves `nexus_*`), da sessão
+(`nexus_session`) e da leitura de QR Code, eles são tratados como
+**não confiáveis** e nunca interpolados crus.
+
+O módulo `js/security.js` (carregado em **todas** as páginas, antes dos demais
+scripts) expõe `window.NexusSecurity` e os aliases globais `nexusEsc`,
+`nexusJsArg` e `nexusSafeUrl`:
+
+| Situação | Helper | Exemplo |
+|---|---|---|
+| Texto/atributo HTML | `nexusEsc(valor)` | `<td>${nexusEsc(c.nome)}</td>` |
+| Argumento de `onclick`/`onchange` inline | `nexusJsArg(valor)` | `onclick="fn(${nexusJsArg(c.id)})"` |
+| URL dinâmica (`href`/`src`) | `nexusSafeUrl(valor)` | `href="${nexusSafeUrl(u.url)}"` |
+
+Regras obrigatórias ao contribuir:
+
+1. Nunca interpole dados em `innerHTML` sem `nexusEsc`.
+2. Em manipuladores inline, use **sempre** `nexusJsArg` — `nexusEsc` não impede
+   o fechamento da string JavaScript (ex.: `id` = `');alert(1);//`).
+3. Prefira `textContent` para dados puros; `innerHTML` fica restrito ao markup
+   estrutural.
+4. Rode `npm run scan:xss` antes de enviar alterações; o scanner deve reportar
+   **0** interpolações não codificadas.
+
+### 3. Camada de Segurança RLS (Row Level Security) no Supabase
 Para proteger a integridade dos dados no banco de dados contra solicitações maliciosas via API REST (`anon` key):
 - **Tabelas de Log e Auditoria (`logs_alteracoes`, `trail_decisoes`, `retificacoes_trail`):** Protegidas por políticas *Append-Only* (`SELECT` e `INSERT`). Operações de `UPDATE` e `DELETE` são totalmente bloqueadas no banco de dados.
 - **Tabelas Operacionais (`cargas`, `navios`, `containers`, `manutencoes`, etc.):** Permitem `SELECT`, `INSERT` e `UPDATE`, porém o comando `DELETE` (deleção física de registros) é restrito no banco para evitar perda indevida de dados.

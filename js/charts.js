@@ -1411,53 +1411,58 @@
     instancias.clear();
   }
 
-  function escaparHtml(texto) {
-    return String(texto === null || texto === undefined ? '' : texto)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  const ENTIDADES_HTML = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;', '=': '&#61;' };
+
+  /**
+   * Codifica dados NÃO CONFIÁVEIS antes de qualquer inserção em HTML.
+   * Delega para `window.nexusEsc` (js/security.js — convenção obrigatória do
+   * projeto) e mantém um fallback equivalente para ambientes onde o módulo de
+   * segurança não esteja carregado (ex.: execução em Node/testes).
+   */
+  function esc(valor) {
+    if (typeof window.nexusEsc === 'function') return window.nexusEsc(valor);
+    if (valor === null || valor === undefined) return '';
+    return String(valor).replace(/[&<>"'`=]/g, function (ch) { return ENTIDADES_HTML[ch]; });
   }
 
   function cartaoGrafico(definicao, indice, spec) {
     const canvasId = `nexusChart_${definicao.id}_${indice}`;
     return `
-      <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3" data-chart-card="${escaparHtml(definicao.id)}">
+      <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3" data-chart-card="${esc(definicao.id)}">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-start gap-2 min-w-0">
-            <span class="material-symbols-outlined text-[20px] text-nexus-500 dark:text-indigo-400 shrink-0">${escaparHtml(definicao.icone || 'insights')}</span>
+            <span class="material-symbols-outlined text-[20px] text-nexus-500 dark:text-indigo-400 shrink-0">${esc(definicao.icone || 'insights')}</span>
             <div class="min-w-0">
-              <h4 class="font-display font-bold text-xs text-nexus-900 dark:text-white leading-snug">${escaparHtml(definicao.titulo)}</h4>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">${escaparHtml(definicao.descricao)}</p>
+              <h4 class="font-display font-bold text-xs text-nexus-900 dark:text-white leading-snug">${esc(definicao.titulo)}</h4>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
             </div>
           </div>
-          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-500 dark:text-slate-400 shrink-0">${escaparHtml(definicao.badge || 'RF 7')}</span>
+          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-500 dark:text-slate-400 shrink-0">${esc(definicao.badge || 'RF 7')}</span>
         </div>
         <div class="relative w-full h-56">
-          <canvas id="${canvasId}" role="img" aria-label="${escaparHtml(definicao.titulo)}"></canvas>
+          <canvas id="${esc(canvasId)}" role="img" aria-label="${esc(definicao.titulo)}"></canvas>
         </div>
-        <p class="text-[11px] font-mono text-slate-600 dark:text-slate-300 border-t border-nexus-border dark:border-nexus-dark-border pt-2">${escaparHtml(spec.resumo || '')}</p>
+        <p class="text-[11px] font-mono text-slate-600 dark:text-slate-300 border-t border-nexus-border dark:border-nexus-dark-border pt-2">${esc(spec.resumo || '')}</p>
       </div>
     `;
   }
 
   function cartaoVazio(definicao, mensagem) {
     return `
-      <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3" data-chart-card="${escaparHtml(definicao.id)}" data-empty="true">
+      <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3" data-chart-card="${esc(definicao.id)}" data-empty="true">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-start gap-2 min-w-0">
-            <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0">${escaparHtml(definicao.icone || 'insights')}</span>
+            <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0">${esc(definicao.icone || 'insights')}</span>
             <div class="min-w-0">
-              <h4 class="font-display font-bold text-xs text-slate-500 dark:text-slate-400 leading-snug">${escaparHtml(definicao.titulo)}</h4>
-              <p class="text-[11px] text-slate-400 dark:text-slate-500 leading-snug mt-0.5">${escaparHtml(definicao.descricao)}</p>
+              <h4 class="font-display font-bold text-xs text-slate-500 dark:text-slate-400 leading-snug">${esc(definicao.titulo)}</h4>
+              <p class="text-[11px] text-slate-400 dark:text-slate-500 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
             </div>
           </div>
-          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-400 shrink-0">${escaparHtml(definicao.badge || 'RF 7')}</span>
+          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-400 shrink-0">${esc(definicao.badge || 'RF 7')}</span>
         </div>
         <div class="flex flex-col items-center justify-center gap-2 h-56 text-center">
           <span class="material-symbols-outlined text-[36px] text-slate-300 dark:text-slate-600">bar_chart</span>
-          <p class="text-[11px] text-slate-400 dark:text-slate-500 max-w-[240px]">${escaparHtml(mensagem)}</p>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 max-w-[240px]">${esc(mensagem)}</p>
         </div>
       </div>
     `;
@@ -1466,7 +1471,7 @@
   function cartaoCarregando(definicao) {
     return `
       <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3">
-        <h4 class="font-display font-bold text-xs text-slate-400 dark:text-slate-500">${escaparHtml(definicao.titulo)}</h4>
+        <h4 class="font-display font-bold text-xs text-slate-400 dark:text-slate-500">${esc(definicao.titulo)}</h4>
         <div class="h-56 rounded-xl bg-slate-200/70 dark:bg-slate-700/40 animate-pulse"></div>
       </div>
     `;

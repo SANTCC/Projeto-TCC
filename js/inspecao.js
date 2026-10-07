@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
+  // antes de qualquer inserção em HTML ou em manipuladores inline.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+  const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
+
   const selectCarga = document.getElementById('inspecaoCargaSelect');
   const carregarBtn = document.getElementById('carregarChecklistBtn');
   const formContainer = document.getElementById('checklistFormContainer');
@@ -59,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     selectCarga.innerHTML = '<option value="">Selecione uma Carga para Vistoria...</option>';
     cargasAtivas.forEach(c => {
-      selectCarga.innerHTML += `<option value="${c.id}">${c.id} — ${c.tipo} (${c.status})</option>`;
+      selectCarga.innerHTML += `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.tipo)} (${esc(c.status)})</option>`;
     });
 
     // Se a URL passar ?carga=CRG-2026-001, seleciona automaticamente
@@ -137,8 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">${index + 1}</span>
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-bold text-xs text-nexus-900 dark:text-white block">${item.desc}</span>
-                ${item.categoria ? `<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[9px] font-semibold">${item.categoria}</span>` : ''}
+                <span class="font-bold text-xs text-nexus-900 dark:text-white block">${esc(item.desc)}</span>
+                ${item.categoria ? `<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[9px] font-semibold">${esc(item.categoria)}</span>` : ''}
               </div>
               ${item.critico ? '<span class="px-2 py-0.5 rounded bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300 font-mono text-[10px] font-bold uppercase mt-1 inline-block">Item Crítico (100% Requerido)</span>' : '<span class="text-[10px] text-slate-400 font-mono mt-0.5 inline-block">Item Operacional Secundário</span>'}
             </div>
@@ -146,11 +151,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
           <div class="flex items-center gap-3 shrink-0 self-end sm:self-center">
             <label class="flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 cursor-pointer bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-              <input type="radio" name="chk_${item.id}" value="CONFORME" onchange="window.atualizarChecklistItem('${item.id}', true)" class="accent-emerald-600 w-4 h-4" />
+              <input type="radio" name="chk_${esc(item.id)}" value="CONFORME" onchange="window.atualizarChecklistItem(${jsArg(item.id)}, true)" class="accent-emerald-600 w-4 h-4" />
               <span>Conforme</span>
             </label>
             <label class="flex items-center gap-1 text-xs font-bold text-red-700 dark:text-red-400 cursor-pointer bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-              <input type="radio" name="chk_${item.id}" value="NAO_CONFORME" onchange="window.atualizarChecklistItem('${item.id}', false)" class="accent-red-600 w-4 h-4" />
+              <input type="radio" name="chk_${esc(item.id)}" value="NAO_CONFORME" onchange="window.atualizarChecklistItem(${jsArg(item.id)}, false)" class="accent-red-600 w-4 h-4" />
               <span>Não Conforme</span>
             </label>
           </div>
@@ -160,10 +165,10 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="mt-4 p-4 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
         <div class="flex items-center gap-2 font-mono">
           <span class="material-symbols-outlined text-nexus-500">draw</span>
-          <span><strong>Inspetor Responsável:</strong> ${session.nome || 'Inspetor'} (${session.codigo_individual || session.codigo || 'INS-6090'})</span>
+          <span><strong>Inspetor Responsável:</strong> ${esc(session.nome || 'Inspetor')} (${esc(session.codigo_individual || session.codigo || 'INS-6090')})</span>
         </div>
         <div class="font-mono text-slate-500">
-          <span>Data/Hora: ${new Date().toLocaleString('pt-BR')}</span>
+          <span>Data/Hora: ${esc(new Date().toLocaleString('pt-BR'))}</span>
         </div>
       </div>
     `;
