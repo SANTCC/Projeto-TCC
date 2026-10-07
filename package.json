@@ -5,7 +5,8 @@
   "main": "index.html",
   "scripts": {
     "start": "npx serve -l 3000 .",
-    "test": "python3 verify_phase4.py && python3 verify_phase5.py && python3 verify_phase6.py && python3 verify_phase7.py && python3 verify_phase8.py && python3 verify_phase9.py"
+    "test": "python3 verify_phase4.py && python3 verify_phase5.py && python3 verify_phase6.py && python3 verify_phase7.py && python3 verify_phase8.py && python3 verify_phase9.py",
+    "test:graficos": "node tests/test_graficos_por_cargo.js"
   },
   "keywords": [
     "nexusport",

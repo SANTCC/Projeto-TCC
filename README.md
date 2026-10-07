@@ -15,6 +15,7 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 - **Fluxo Core de Cargas & Pátio:** Agendamento, recebimento, checklist de avarias, armazenamento em baia, vinculação e trânsito.
 - **QR Code & Etiquetas:** Geração de QR Code com canvas em tempo real, download de etiqueta A4/PDF 10x10cm e scanner via câmera/simulação.
 - **Dashboards & Relatórios:** KPIs em tempo real, busca operacional com 5 filtros e emissão de relatório PDF A4 com logotipo.
+- **Gráficos por Camada de Visão (Chart.js):** painéis gráficos recortados por cargo — Visão Própria (operações do próprio funcionário), Visão Operacional (inspeções, fila de liberação, manutenções, berços e trail) e Visão Estratégica (aprovação/recusa, permanência, frota, produtividade por cargo, % de berços e valor declarado).
 - **Auditoria, Trail & Delegação:** Trilha imutável de decisões críticas com anexação de retificações e gestão de substituto ativo.
 - **Localização & Tempos:** Posicionamento GPS dos navios, classificação automática de status e cálculo de ETA com velocidade fixa de 33 km/h (RN 9).
 
@@ -24,7 +25,7 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 
 - **Frontend:** HTML5, Tailwind CSS, JavaScript (ES6 Modules)
 - **Supabase Backend:** PostgreSQL com Row Level Security (RLS) e Auth Client (`@supabase/supabase-js`)
-- **Bibliotecas:** `qrcode.js`, `html5-qrcode`, `jsPDF`
+- **Bibliotecas:** `Chart.js`, `qrcode.js`, `html5-qrcode`, `jsPDF`
 - **Automação & Testes:** Python 3 (Scripts de verificação `verify_phase*.py`)
 
 ---
@@ -59,8 +60,32 @@ Acesse `http://localhost:3000` no seu navegador.
 
 ### 4. Executar Testes Automatizados
 ```bash
-npm test
+npm test            # suite Playwright (fluxos ponta a ponta)
+npm run test:graficos   # gráficos por camada de visão (Node, sem dependências)
 ```
+
+---
+
+## 📊 Gráficos por Cargo (js/charts.js)
+
+Os gráficos são montados em tempo de execução pelo módulo `js/charts.js` (Chart.js via CDN),
+sempre recortados pela **camada de visão do cargo autenticado** (RF 1):
+
+| Camada | Cargos | Indicadores exibidos |
+|--------|--------|----------------------|
+| **Visão Própria** | Estivador, Conferente, Arrumador, Planejador, Técnico em Portos | Operações próprias por dia, cargas/contêineres da própria atribuição e, para o Técnico, visitantes/efetivo (RF 15) |
+| **Visão Operacional** | Inspetor, Supervisor | Inspeções técnicas, fluxo de cargas, manutenções, fila de liberação, ocupação de berços e trail de decisões |
+| **Visão Estratégica** | Diretor de Operações, Diretor-Presidente e Conselho | Aprovação/recusa, tempo médio de permanência, embarcações mais utilizadas, produtividade por cargo, % de berços operacionais e **valor declarado** |
+
+Regras de privacidade aplicadas no próprio módulo:
+
+- O **valor declarado** (indicador financeiro) só é carregado para a Direção/Conselho — funcionários e supervisão recebem o campo sanitizado.
+- Dados de pessoas (`visitantes` e documentação de funcionários) **nunca** são carregados para Inspetor/Supervisor (restrição obrigatória do RF 1), mesmo que existam no banco.
+- Cargos operacionais enxergam apenas os próprios registros de auditoria e as cargas ligadas à sua atribuição (Vision Layer).
+
+Os painéis são exibidos no Painel Geral (`dashboard.html`) e no módulo de Relatórios (`relatorios.html`),
+com atualização automática a cada 60 s, re-renderização ao alternar o tema claro/escuro e estado vazio
+explícito quando ainda não há dados (nunca dados fictícios).
 
 ## 🔒 Modelo de Segurança e Limitações da Arquitetura
 

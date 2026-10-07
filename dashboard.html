@@ -211,6 +211,33 @@
           </div>
         </div>
 
+        <!-- Painel de Gráficos por Camada de Visão (Chart.js) — RF 1 / RF 7 / RF 16 -->
+        <div id="chartsRolePanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+            <div class="flex items-start gap-3">
+              <div class="p-2.5 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-nexus-500 dark:text-indigo-400 shrink-0">
+                <span class="material-symbols-outlined text-[22px]">monitoring</span>
+              </div>
+              <div>
+                <h3 id="chartsRoleTitle" class="font-display font-bold text-sm text-nexus-900 dark:text-white">Análise gráfica por camada de visão</h3>
+                <p id="chartsRoleSubtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Carregando indicadores gráficos do seu cargo...</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span id="chartsRoleBadge" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[10px] font-bold uppercase">RLS</span>
+              <button id="chartsRefreshBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1 transition-colors">
+                <span class="material-symbols-outlined text-[16px]">refresh</span>
+                <span>Atualizar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Grade de gráficos renderizada dinamicamente por js/charts.js conforme o cargo -->
+          <div id="chartsRoleGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+
+          <p id="chartsRoleFooter" class="text-[11px] font-mono text-slate-400 dark:text-slate-500"></p>
+        </div>
+
         <!-- Tabela do Log Geral de Alterações (RF 12 / T7.1, T7.2) -->
         <div id="auditLogPanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
@@ -265,7 +292,7 @@
           </div>
         </div>
 
-        <!-- Painel Estratégico do Diretor (Planilha Consolidada e Gráficos - A3, C7, C8) -->
+        <!-- Painel Estratégico exclusivo do Diretor (Visão Estratégica — RF 1): planilha consolidada com metas -->
         <div id="estrategicoPanel" class="flex flex-col gap-6">
 
           <!-- Planilha Consolidada de Desempenho Operacional por Categoria (A3) -->
@@ -396,6 +423,7 @@
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/supabase-client.js"></script>
   <script src="js/data-repository.js"></script>
+  <script src="js/charts.js"></script>
   <script src="js/dashboard.js"></script>
 </body>
 </html>
