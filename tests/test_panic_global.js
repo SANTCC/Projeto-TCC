@@ -64,6 +64,10 @@ function testPanicGlobal() {
   check('Não usa fallback quando o servidor bloqueia por RBAC (401/403)', pr.includes('httpStatus === 401 || httpStatus === 403'));
   check('Bind do painel de configuração do webhook', pr.includes('bindWebhookSettingsUI') && pr.includes('panicWebhookEnabled'));
   check('Evento global nexus_panic_changed', pr.includes('nexus_panic_changed'));
+  check('Indicador SOS anima em todas as páginas enquanto ativo', pr.includes('nexus-panic-vibrating') && pr.includes('nexusPanicVibrate'));
+  check('Vibração tátil periódica em dispositivos compatíveis', pr.includes('navigator.vibrate') && pr.includes('HAPTIC_INTERVAL_MS'));
+  check('Vibração interrompida ao desativar ou ocultar a página', pr.includes('navigator.vibrate(0)') && pr.includes("'visibilitychange'"));
+  check('Respeita preferência de movimento reduzido', pr.includes('prefers-reduced-motion: reduce'));
 
   // 5. Botão existente delegado ao fluxo global
   console.log('\n5. Validando integração do botão existente (manutencao)...');
