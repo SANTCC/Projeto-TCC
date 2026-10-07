@@ -108,6 +108,47 @@
           </div>
         </div>
 
+        <!-- Alerta no Aparelho (vibração / som) — diagnóstico e preferências -->
+        <div id="hapticsPanel" class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-3">
+          <div class="flex items-start gap-3">
+            <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">vibration</span>
+            <div class="min-w-0">
+              <span class="font-bold text-sm text-nexus-900 dark:text-white block">Alerta no Aparelho (vibração / som)</span>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Enquanto a emergência estiver ativa, o aparelho vibra a cada 3s (Android/Chrome) e o iPhone recebe haptics nativos pelo switch do Safari; onde a vibração web é impossível (iOS 26.5+, http://, navegadores sem suporte) entra o alerta sonoro. O painel abaixo diz exatamente o que o seu aparelho suporta.</p>
+            </div>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <label class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700 cursor-pointer">
+              <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-[18px]">vibration</span>
+                <span>Vibração</span>
+              </span>
+              <input type="checkbox" id="hapticsEnabledToggle" class="sr-only peer" />
+              <div class="relative w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:bg-nexus-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full shrink-0"></div>
+            </label>
+            <label class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700 cursor-pointer">
+              <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-[18px]">volume_up</span>
+                <span>Alerta sonoro</span>
+              </span>
+              <input type="checkbox" id="hapticsSoundToggle" class="sr-only peer" />
+              <div class="relative w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:bg-nexus-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full shrink-0"></div>
+            </label>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="hapticsTestBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">sensors</span>
+              <span>Testar vibração</span>
+            </button>
+            <button id="hapticsRefreshBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">refresh</span>
+              <span>Verificar novamente</span>
+            </button>
+          </div>
+          <p id="hapticsStatus" class="text-[11px] font-mono whitespace-pre-line text-slate-500 dark:text-slate-400">Verificando suporte do aparelho...</p>
+          <p id="hapticsFeedback" class="text-[11px] font-bold text-nexus-500 dark:text-nexus-300"></p>
+        </div>
+
         <!-- Configuração do Webhook de Emergência (OPCIONAL — DESATIVADO POR PADRÃO) -->
         <div id="panicWebhookPanel" class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-3">
           <div class="flex items-start justify-between gap-4">
@@ -264,6 +305,7 @@
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/supabase-client.js"></script>
   <script src="js/data-repository.js"></script>
+  <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
   <script src="js/manutencao.js"></script>
 </body>

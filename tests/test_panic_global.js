@@ -69,6 +69,18 @@ function testPanicGlobal() {
   check('Vibração interrompida ao desativar ou ocultar a página', pr.includes('navigator.vibrate(0)') && pr.includes("'visibilitychange'"));
   check('Respeita preferência de movimento reduzido', pr.includes('prefers-reduced-motion: reduce'));
 
+  // 4.1 Alerta no próprio aparelho (regressão: "o SOS não faz o celular vibrar")
+  const hp = read('js/haptics.js');
+  check('Motor de alerta no aparelho existe (js/haptics.js)', hp.includes('window.NexusHaptics'));
+  check('Lida com iOS, contexto inseguro e user activation', hp.includes('ios_switch') && hp.includes('insecure_context') && hp.includes('no_activation'));
+  check('Explica em português por que o aparelho não vibrou', hp.includes('function describe()') && hp.includes('function hint('));
+  check('Alerta sonoro de fallback quando a vibração é impossível', hp.includes('AudioContext') && hp.includes('function beep('));
+  check('O tátil NÃO é desligado por prefers-reduced-motion (só a animação)', !/reduced_motion/.test(pr));
+  check('Pânico delega a vibração ao motor de haptics', pr.includes('window.NexusHaptics'));
+  check('Padrão SOS disparado no acionamento (local e broadcast)', pr.includes('HAPTIC_PATTERN_SOS') && pr.includes('fireActivationAlert'));
+  check('Rodapé mostra o motivo de o aparelho não vibrar', pr.includes('nexusPanicFooterHaptics') && pr.includes('deviceAlertHint'));
+  check('Overlay de toque do iOS aplicado ao botão SOS', pr.includes('attachTapHaptic'));
+
   // 5. Botão existente delegado ao fluxo global
   console.log('\n5. Validando integração do botão existente (manutencao)...');
   const man = read('js/manutencao.js');
@@ -88,6 +100,19 @@ function testPanicGlobal() {
   check('Botão de pânico original preservado (#panicButton)', mh.includes('id="panicButton"'));
   check('Painel do webhook: toggle + URL + salvar + testar', ['panicWebhookEnabled', 'panicWebhookUrl', 'panicWebhookSaveBtn', 'panicWebhookTestBtn'].every(id => mh.includes(id)));
   check('Documentado como desativado por padrão', mh.includes('Desativado por padrão'));
+
+  // 7.1 Painel "Alerta no Aparelho" + testes dedicados
+  console.log('\n7.1. Validando painel de vibração/som e testes dedicados...');
+  check('Painel de vibração/som em manutencao.html',
+    ['hapticsPanel', 'hapticsStatus', 'hapticsEnabledToggle', 'hapticsSoundToggle', 'hapticsTestBtn', 'hapticsRefreshBtn']
+      .every(id => mh.includes(`id="${id}"`)));
+  check('js/haptics.js carregado ANTES de js/panic-realtime.js em todas as páginas internas',
+    pages.every(p => {
+      const html = read(p);
+      return html.indexOf('js/haptics.js') !== -1
+        && html.indexOf('js/haptics.js') < html.indexOf('js/panic-realtime.js');
+    }));
+  check('Teste dedicado do alerta no aparelho (tests/test_haptics.js)', read('tests/test_haptics.js').includes('NexusHaptics'));
 
   // 8. Documentação
   console.log('\n8. Validando documentação...');

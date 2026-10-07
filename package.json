@@ -9,7 +9,9 @@
     "test:graficos": "node tests/test_graficos_por_cargo.js",
     "test:xss": "node tests/xss.test.js",
     "scan:xss": "node tools/xss-scan.js",
-    "audit:xss": "node tools/xss-scan.js && node tests/xss.test.js"
+    "audit:xss": "node tools/xss-scan.js && node tests/xss.test.js",
+    "test:haptics": "node tests/test_haptics.js",
+    "test:panic": "node tests/test_panic_global.js"
   },
   "keywords": [
     "nexusport",

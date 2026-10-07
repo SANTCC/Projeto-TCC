@@ -166,6 +166,27 @@ O botão de pânico existente (`manutencao.html`) foi elevado a **evento global 
 - **Fallback resiliente:** se a Edge Function não estiver implantada, o módulo faz o broadcast direto pelo canal Realtime (cliente → clientes) e persiste em `emergencias` localmente; nesse modo o webhook não dispara (somente o servidor o dispara).
 - **Webhook (opcional, OFF por padrão):** configurável no painel "Webhook de Emergência" em `manutencao.html` (interruptor + URL + botão de teste). Eventos enviados: `PANIC_ACTIVATED`, `PANIC_DEACTIVATED` e `PANIC_WEBHOOK_TEST`, com timeout de 5s.
 
+### Alerta no aparelho (vibração / som) — `js/haptics.js`
+
+A emergência também é **sentida no próprio celular**, não apenas vista na tela:
+
+- **Acionamento (SOS):** quem aperta o botão recebe o padrão de vibração de socorro imediatamente (ainda dentro do gesto do usuário); **todos os clientes conectados** recebem o mesmo padrão ao chegar o broadcast.
+- **Enquanto a emergência estiver ativa:** pulsos de alerta a cada 3s (`HAPTIC_INTERVAL_MS`), interrompidos ao desativar o alarme, ao ocultar a aba ou ao fazer logout.
+- **Por que antes o celular não vibrava:** `navigator.vibrate()` (Vibration API) só existe em **https://** (é `[SecureContext]`), **não existe em nenhum navegador do iPhone/iPad** (a Apple nunca implementou a API no WebKit), **exige que o usuário já tenha tocado na página** (sticky user activation — o Chrome bloqueia e registra intervention), **exige a aba visível** e **foi removida do Firefox 129+**. O módulo `js/haptics.js` cobre cada um desses casos:
+
+| Aparelho / contexto | Como o alerta acontece |
+| --- | --- |
+| Android (Chrome, Edge, Samsung Internet) em https | `navigator.vibrate()` com os padrões SOS/pulso |
+| iPhone/iPad (iOS 17.4+), toque no botão SOS | Overlay de `<label>` + `<input type="checkbox" switch>` sobre o botão: o toque real aciona o Taptic Engine — **funciona até no iOS 26.5+** |
+| iPhone/iPad, pulsos do alerta global | Switch nativo acionado por script (iOS 17.4–26.4); no iOS 26.5+ a Apple bloqueou esse disparo e entra o **alerta sonoro** |
+| Sem retorno tátil possível (iOS 26.5+, Firefox 129+, `http://`, desktop sem motor) | **Alerta sonoro** via WebAudio (curto e intermitente) + banner no rodapé |
+| Aba em segundo plano / tela apagada | Os navegadores pausam a vibração: o alerta visual permanece e a vibração volta ao trazer o sistema para primeiro plano |
+
+- **Diagnóstico em vez de silêncio:** o rodapé de emergência mostra o motivo exato de o aparelho não estar vibrando (ex.: *"Toque na tela para liberar a vibração"*, *"Vibração exige https://"*, *"Sem vibração neste navegador (iPhone/iPad) — ative o alerta sonoro"*).
+- **Painel "Alerta no Aparelho"** (`manutencao.html`): mostra o diagnóstico do aparelho e permite **Testar vibração**, além de ligar/desligar vibração e som (preferências salvas por aparelho em `localStorage`).
+- **Acessibilidade:** `prefers-reduced-motion` continua desligando apenas a **animação** do indicador de SOS — a vibração/som de emergência é controlada pela preferência explícita do operador no painel, nunca por um ajuste de sistema sobre movimento.
+- **Teste:** `node tests/test_haptics.js` (simula Android, iOS 18, iOS 26.5, Firefox 129+ e `http://` em DOM real).
+
 ### Implantação (backend)
 
 ```bash

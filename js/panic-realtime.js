@@ -57,8 +57,13 @@
   let initialized = false;
   let inFlight = false;
   let hapticTimer = null;
+  let lastActivationAlertAt = 0;
   const HAPTIC_PULSE_MS = 180;
   const HAPTIC_INTERVAL_MS = 3000;
+  // Padrão "SOS" reduzido (limitado a 10 posições pela especificação da
+  // Vibration API): três toques curtos + dois longos, repetido pelo loop.
+  const HAPTIC_PATTERN_SOS = [200, 100, 200, 100, 200, 300, 600, 300, 600];
+  const HAPTIC_PATTERN_ALERT = [HAPTIC_PULSE_MS, 90, HAPTIC_PULSE_MS, 90, HAPTIC_PULSE_MS];
 
   // ------------------------------------------------------------------
   // Utilitários
@@ -142,6 +147,7 @@
           <div class="min-w-0">
             <span id="nexusPanicFooterTitle" class="font-display font-bold text-xs sm:text-sm uppercase tracking-wider block truncate">Emergência global ativa — Terminal STS-01</span>
             <span id="nexusPanicFooterDetail" class="text-[11px] text-red-100 block truncate">Uma emergência crítica está em andamento no terminal.</span>
+            <span id="nexusPanicFooterHaptics" class="hidden text-[10px] text-red-100/90 block truncate"></span>
           </div>
         </div>
         <button id="nexusPanicFooterDeactivate" type="button" class="hidden sm:flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-red-700 hover:bg-red-50 font-bold text-[11px] uppercase tracking-wide transition-colors">
@@ -159,51 +165,143 @@
     return banner;
   }
 
+  // ------------------------------------------------------------------
+  // Alerta NO PRÓPRIO APARELHO (vibração + som)
+  //
+  // js/haptics.js resolve as diferenças entre navegadores (iOS x Android,
+  // https:// x http://, user activation, aba oculta, iOS 26.5+). Aqui fica o
+  // caminho direto pela Vibration API como fallback, para que o alerta tátil
+  // continue funcionando mesmo se o módulo extra não estiver carregado.
+  // ------------------------------------------------------------------
+  function vibrateDevice(pattern) {
+    if (window.NexusHaptics && typeof window.NexusHaptics.vibrate === 'function') {
+      return window.NexusHaptics.vibrate(pattern);
+    }
+    const nav = window.navigator;
+    if (!nav || typeof nav.vibrate !== 'function') return false;
+    if (window.isSecureContext === false) return false; // API só existe em https/localhost
+    try {
+      return nav.vibrate(pattern) !== false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Existe alguma via de vibração no aparelho (mesmo que temporariamente bloqueada)? */
+  function deviceHasHapticBackend() {
+    if (window.NexusHaptics && typeof window.NexusHaptics.hasBackend === 'function') {
+      return window.NexusHaptics.hasBackend();
+    }
+    const nav = window.navigator;
+    return Boolean(nav && typeof nav.vibrate === 'function');
+  }
+
+  function deviceSoundEnabled() {
+    return Boolean(window.NexusHaptics && typeof window.NexusHaptics.isSoundEnabled === 'function'
+      && window.NexusHaptics.isSoundEnabled());
+  }
+
+  /**
+   * Motivo (em português) pelo qual o aparelho NÃO está vibrando agora — ou
+   * null quando o retorno tátil está funcionando. Exibido no banner do rodapé
+   * para o operador não ficar sem saber se o alerta chegou ao celular.
+   */
+  function deviceAlertHint() {
+    if (!window.NexusHaptics) {
+      const nav = window.navigator;
+      if (!nav || typeof nav.vibrate !== 'function') {
+        return 'Sem vibração neste navegador (ex.: iPhone/iPad) — considere ativar o alerta sonoro.';
+      }
+      if (window.isSecureContext === false) return 'Vibração exige https:// — abra o sistema por https.';
+      return null;
+    }
+    const st = window.NexusHaptics.status();
+    const motivo = st.reasons[0] || null;
+    if (!motivo) return null;
+    return window.NexusHaptics.hint(motivo, true);
+  }
+
   function stopDeviceVibration() {
     if (hapticTimer !== null) {
       window.clearTimeout(hapticTimer);
       hapticTimer = null;
-      try {
-        if (window.navigator && typeof window.navigator.vibrate === 'function') {
-          window.navigator.vibrate(0);
-        }
-      } catch (e) { /* vibração indisponível neste navegador */ }
     }
+    if (window.NexusHaptics && typeof window.NexusHaptics.stop === 'function') {
+      window.NexusHaptics.stop();
+      return;
+    }
+    try {
+      if (window.navigator && typeof window.navigator.vibrate === 'function') {
+        window.navigator.vibrate(0);
+      }
+    } catch (e) { /* vibração indisponível neste navegador */ }
+  }
+
+  /** Um pulso do alerta (tátil + sonoro quando habilitado) e reprograma o próximo. */
+  function pulseDeviceAlert() {
+    hapticTimer = null;
+    if (!state.active || document.hidden) {
+      stopDeviceVibration();
+      return;
+    }
+    if (window.NexusHaptics && typeof window.NexusHaptics.alert === 'function') {
+      window.NexusHaptics.alert();
+    } else {
+      vibrateDevice(HAPTIC_PATTERN_ALERT);
+    }
+    // O motivo exibido no rodapé muda (ex.: o operador tocou na tela e a
+    // vibração passou a funcionar) — mantém o aviso coerente.
+    refreshHapticsNote();
+    // Mesmo quando o navegador recusa no momento (sem interação do usuário,
+    // por exemplo), seguimos tentando: no primeiro toque a vibração volta.
+    hapticTimer = window.setTimeout(pulseDeviceAlert, HAPTIC_INTERVAL_MS);
   }
 
   function syncDeviceVibration() {
-    const nav = window.navigator;
-    const prefersReducedMotion = window.matchMedia
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (!state.active || document.hidden || prefersReducedMotion || !nav || typeof nav.vibrate !== 'function') {
+    if (!state.active || document.hidden) {
       stopDeviceVibration();
       return;
     }
     if (hapticTimer !== null) return;
+    if (!deviceHasHapticBackend() && !deviceSoundEnabled()) return;
+    pulseDeviceAlert();
+  }
 
-    const pulse = () => {
+  /**
+   * Padrão de acionamento (SOS) disparado quando uma emergência passa a valer,
+   * tanto para quem apertou o botão quanto para quem recebeu o broadcast.
+   * Deve ser chamado ANTES de setState({ active: true }) para que o padrão SOS
+   * seja o primeiro sinal no aparelho (e não um pulso comum do loop).
+   * O debounce evita repetir o padrão no mesmo aparelho (o próprio cliente
+   * também recebe o broadcast que enviou).
+   */
+  function fireActivationAlert() {
+    const agora = Date.now();
+    if (agora - lastActivationAlertAt < 2000) return;
+    lastActivationAlertAt = agora;
+
+    if (!document.hidden) {
+      if (window.NexusHaptics && typeof window.NexusHaptics.sos === 'function') {
+        window.NexusHaptics.sos();
+      } else {
+        vibrateDevice(HAPTIC_PATTERN_SOS);
+      }
+    }
+
+    if (hapticTimer !== null) {
+      window.clearTimeout(hapticTimer);
       hapticTimer = null;
-      const reducedMotion = window.matchMedia
-        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (!state.active || document.hidden || reducedMotion) {
-        stopDeviceVibration();
-        return;
-      }
-      try {
-        nav.vibrate(HAPTIC_PULSE_MS);
-        hapticTimer = window.setTimeout(pulse, HAPTIC_INTERVAL_MS);
-      } catch (e) {
-        stopDeviceVibration();
-      }
-    };
-    pulse();
+    }
+    if (deviceHasHapticBackend() || deviceSoundEnabled()) {
+      hapticTimer = window.setTimeout(pulseDeviceAlert, HAPTIC_INTERVAL_MS);
+    }
   }
 
   function renderBanner() {
     const el = ensureBanner();
     if (!el) return;
     const detail = el.querySelector('#nexusPanicFooterDetail');
+    const hapticsNote = el.querySelector('#nexusPanicFooterHaptics');
     const deactivateBtn = el.querySelector('#nexusPanicFooterDeactivate');
 
     if (state.active) {
@@ -223,12 +321,26 @@
       document.documentElement.classList.remove('nexus-panic-active');
     }
 
-    // Every connected page gets the same animated SOS cue. On devices that
-    // support the Vibration API, add a short haptic pulse while the alert is active.
+    // Toda página conectada recebe o mesmo indicador animado de SOS. Nos
+    // aparelhos compatíveis, o alerta também vibra (js/haptics.js).
     el.classList.toggle('nexus-panic-vibrating', Boolean(state.active));
     const panicButton = document.getElementById('panicButton');
     if (panicButton) panicButton.classList.toggle('nexus-panic-vibrating', Boolean(state.active));
+
+    // Deixa explícito no rodapé quando o aparelho NÃO está vibrando e por quê
+    // (iOS, http://, falta de interação do usuário, aba em segundo plano...).
+    if (hapticsNote) refreshHapticsNote(hapticsNote);
+
     syncDeviceVibration();
+  }
+
+  /** Atualiza a linha de diagnóstico do rodapé (motivo de o aparelho não vibrar). */
+  function refreshHapticsNote(noteEl) {
+    const note = noteEl || document.getElementById('nexusPanicFooterHaptics');
+    if (!note) return;
+    const motivo = state.active ? deviceAlertHint() : null;
+    note.textContent = motivo || '';
+    note.classList.toggle('hidden', !motivo);
   }
 
   // ------------------------------------------------------------------
@@ -263,6 +375,12 @@
   function handleBroadcast(payload) {
     if (!payload || typeof payload !== 'object') return;
     if (payload.estado === 'ATIVA') {
+      // Todos os aparelhos conectados também são alertados no próprio
+      // dispositivo (vibração/som), não apenas visualmente no rodapé. O padrão
+      // SOS vem antes do estado para ser o primeiro sinal sentido; o debounce
+      // interno evita repetir para quem acabou de acionar (o emissor também
+      // recebe o próprio broadcast).
+      fireActivationAlert();
       setState({
         active: true,
         emergencia_id: payload.emergencia_id || null,
@@ -531,6 +649,10 @@
       // 3) Atualização otimista do estado local
       // (o broadcast com self:true também reatualiza via WebSocket)
       if (ativando) {
+        // Quem aperta o botão SOS precisa SENTIR a emergência no aparelho:
+        // dispara o padrão completo antes de publicar o estado (ainda dentro
+        // do gesto do usuário, requisito dos navegadores para vibrar/sonorizar).
+        fireActivationAlert();
         setState({
           active: true,
           emergencia_id: emergenciaId,
@@ -786,6 +908,31 @@
   }
 
   // ------------------------------------------------------------------
+  // Painel "Alerta no Aparelho" (vibração / som) — presente em manutencao.html
+  // Depende de js/haptics.js; sem o módulo o alerta tátil continua usando o
+  // caminho direto pela Vibration API.
+  // ------------------------------------------------------------------
+  function bindDeviceAlertUI() {
+    const panicButton = document.getElementById('panicButton');
+
+    // iOS: cobre o botão SOS com o overlay do switch nativo do Safari para o
+    // toque vibrar de verdade — inclusive no iOS 26.5+, versão em que a Apple
+    // bloqueou o acionamento programático dos haptics.
+    if (panicButton && window.NexusHaptics && typeof window.NexusHaptics.attachTapHaptic === 'function') {
+      window.NexusHaptics.attachTapHaptic(panicButton);
+    }
+
+    const panel = document.getElementById('hapticsPanel');
+    if (!panel || !window.NexusHaptics || typeof window.NexusHaptics.bindUI !== 'function') return null;
+    try {
+      return window.NexusHaptics.bindUI();
+    } catch (e) {
+      console.warn('[NexusPanic] Falha ao montar o painel de alerta do aparelho:', e);
+      return null;
+    }
+  }
+
+  // ------------------------------------------------------------------
   // Inicialização
   // ------------------------------------------------------------------
   function init() {
@@ -799,6 +946,7 @@
     subscribeRealtime();
     loadStateFromDb();
     bindWebhookSettingsUI();
+    bindDeviceAlertUI();
 
     // Retoma/paralisa a vibração ao alternar de aba, sem deixar pulsos presos.
     document.addEventListener('visibilitychange', syncDeviceVibration);
@@ -825,6 +973,8 @@
     getState: () => Object.assign({}, state),
     isActive: () => Boolean(state.active),
     bindWebhookSettingsUI,
+    bindDeviceAlertUI,
+    deviceAlertHint,
     CHANNEL_NAME,
     BROADCAST_EVENT,
     FUNCTION_SLUG
