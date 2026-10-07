@@ -18,6 +18,7 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 - **Gráficos por Camada de Visão (Chart.js):** painéis gráficos recortados por cargo — Visão Própria (operações do próprio funcionário), Visão Operacional (inspeções, fila de liberação, manutenções, berços e trail) e Visão Estratégica (aprovação/recusa, permanência, frota, produtividade por cargo, % de berços e valor declarado).
 - **Auditoria, Trail & Delegação:** Trilha imutável de decisões críticas com anexação de retificações e gestão de substituto ativo.
 - **Localização & Tempos:** Posicionamento GPS dos navios, classificação automática de status e cálculo de ETA com velocidade fixa de 33 km/h (RN 9).
+- **🚨 Botão de Pânico Global (Tempo Real):** O botão de emergência dispara a Edge Function `panic-alert`, que transmite o alerta via WebSocket (Supabase Realtime) para **todos os clientes conectados** — exibindo aviso fixo no rodapé de cada tela — e dispara um **webhook opcional (desativado por padrão)**.
 
 ---
 
@@ -25,6 +26,8 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 
 - **Frontend:** HTML5, Tailwind CSS, JavaScript (ES6 Modules)
 - **Supabase Backend:** PostgreSQL com Row Level Security (RLS) e Auth Client (`@supabase/supabase-js`)
+- **Supabase Edge Functions (Deno):** `panic-alert` — evento de servidor do botão de pânico global
+- **Supabase Realtime (WebSocket):** Broadcast do alarme de emergência para todos os clientes conectados
 - **Bibliotecas:** `Chart.js`, `qrcode.js`, `html5-qrcode`, `jsPDF`
 - **Automação & Testes:** Python 3 (Scripts de verificação `verify_phase*.py`)
 
@@ -142,5 +145,43 @@ Para proteger a integridade dos dados no banco de dados contra solicitações ma
 
 ---
 
+## 🚨 Botão de Pânico Global (Edge Function + WebSocket + Webhook)
+
+O botão de pânico existente (`manutencao.html`) foi elevado a **evento global de servidor**:
+
+```
+[Botão de Pânico] ──POST──▶ Edge Function "panic-alert" (Deno/Supabase)
+                                   │  1. RBAC no servidor (cargo ACIONAR_EMERGENCIA,
+                                   │     validado contra a tabela funcionarios)
+                                   │  2. Persiste o estado em `emergencias`
+                                   │     (ATIVA / RESOLVIDA)
+                                   ├─ 3. Broadcast via WebSocket (Supabase Realtime,
+                                   │     canal "nexus-emergency") ──▶ TODOS os clientes
+                                   │     conectados exibem aviso fixo no RODAPÉ da tela
+                                   └─ 4. Webhook OPCIONAL (padrão: DESATIVADO) — POST JSON
+                                         para a URL de `panic_webhook_config` se enabled=true
+```
+
+- **Cliente global:** `js/panic-realtime.js` (carregado em todas as páginas internas) assina o canal Realtime, sincroniza o estado ao carregar a página (tabela `emergencias`) e renderiza o banner fixo no rodapé (`#nexusPanicFooter`).
+- **Fallback resiliente:** se a Edge Function não estiver implantada, o módulo faz o broadcast direto pelo canal Realtime (cliente → clientes) e persiste em `emergencias` localmente; nesse modo o webhook não dispara (somente o servidor o dispara).
+- **Webhook (opcional, OFF por padrão):** configurável no painel "Webhook de Emergência" em `manutencao.html` (interruptor + URL + botão de teste). Eventos enviados: `PANIC_ACTIVATED`, `PANIC_DEACTIVATED` e `PANIC_WEBHOOK_TEST`, com timeout de 5s.
+
+### Implantação (backend)
+
+```bash
+# 1. Aplicar a migração (tabelas emergencias + panic_webhook_config + RLS)
+supabase link --project-ref <ref-do-projeto>
+supabase db push
+#    (ou executar supabase/migrations/20261007000000_panic_button_global.sql
+#     manualmente no SQL Editor do Supabase)
+
+# 2. Implantar a Edge Function
+#    --no-verify-jwt: o app usa sessão própria (codigo_individual), não Supabase Auth;
+#    a identidade/RBAC é validada DENTRO da função contra a tabela funcionarios.
+supabase functions deploy panic-alert --no-verify-jwt
+```
+
+---
+
 ## 🔒 Banco de Dados e Schemas
-O script DDL com as tabelas, funções RLS e políticas de acesso está disponível em `SPECs/schema.sql`.
+O script DDL com as tabelas, funções RLS e políticas de acesso está disponível em `SPECs/schema.sql`. As migrações incrementais aplicáveis via Supabase CLI estão em `supabase/migrations/`.

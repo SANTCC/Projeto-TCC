@@ -665,9 +665,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Botão de Pânico
+  // Botão de Pânico — GLOBAL (js/panic-realtime.js → Edge Function "panic-alert"
+  // → broadcast WebSocket para todos os clientes + webhook opcional)
   if (panicBtn) {
     panicBtn.addEventListener('click', async () => {
+      if (window.NexusPanic) {
+        // Fluxo global: confirmação, RBAC, Edge Function, broadcast e webhook
+        // são tratados pelo módulo NexusPanic.triggerPanic().
+        const resultado = await window.NexusPanic.triggerPanic({ confirmar: true });
+        if (resultado && resultado.ok) {
+          // Mantém estado local e banner da página sincronizados (EMERGENCIA_CRITICA_ATIVADA)
+          localStorage.setItem('nexus_emergency_active', 'true');
+          if (emergencyBanner) emergencyBanner.classList.remove('hidden');
+        }
+        return;
+      }
+
+      // Fallback legado (apenas se o módulo global não estiver carregado)
       const confirmou = window.nexusConfirm ? await window.nexusConfirm('DECLARAÇÃO DE EMERGÊNCIA', 'ATENÇÃO: Deseja acionar o BOTÃO DE PÂNICO e declarar EMERGÊNCIA CRÍTICA no Terminal STS-01?') : true;
       if (confirmou) {
         localStorage.setItem('nexus_emergency_active', 'true');
@@ -686,6 +700,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (resetEmergencyBtn) {
     resetEmergencyBtn.addEventListener('click', async () => {
+      if (window.NexusPanic) {
+        const resultado = await window.NexusPanic.clearPanic({ confirmar: true });
+        if (resultado && resultado.ok) {
+          localStorage.removeItem('nexus_emergency_active');
+          if (emergencyBanner) emergencyBanner.classList.add('hidden');
+        }
+        return;
+      }
+
+      // Fallback legado (apenas se o módulo global não estiver carregado)
       const confirmou = window.nexusConfirm ? await window.nexusConfirm('Desativar Emergência', 'Confirmar desativação do alarme de emergência?') : true;
       if (confirmou) {
         localStorage.removeItem('nexus_emergency_active');
@@ -702,7 +726,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Sincroniza o banner desta página com o estado GLOBAL do pânico
+  // (eventos disparados por este ou por qualquer outro cliente conectado)
+  window.addEventListener('nexus_panic_changed', (evt) => {
+    if (!emergencyBanner) return;
+    const ativo = Boolean(evt && evt.detail && evt.detail.active);
+    if (ativo) emergencyBanner.classList.remove('hidden');
+    else emergencyBanner.classList.add('hidden');
+  });
+
   if (localStorage.getItem('nexus_emergency_active') === 'true' && emergencyBanner) {
+    emergencyBanner.classList.remove('hidden');
+  }
+  if (window.NexusPanic && window.NexusPanic.isActive() && emergencyBanner) {
     emergencyBanner.classList.remove('hidden');
   }
 

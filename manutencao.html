@@ -91,13 +91,13 @@
           </button>
         </div>
 
-        <!-- Botão de Pânico e Protocolo de Emergência -->
+        <!-- Botão de Pânico e Protocolo de Emergência (GLOBAL) -->
         <div class="p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div class="flex items-center gap-3">
             <span class="material-symbols-outlined text-red-600 text-[32px]">campaign</span>
             <div>
-              <span class="font-bold text-sm text-red-900 dark:text-red-200 block">Protocolo de Emergência / Botão de Pânico (Inspetor)</span>
-              <p class="text-xs text-red-700 dark:text-red-300">Acione em caso de incêndio, vazamento químico ou sinistro grave no terminal.</p>
+              <span class="font-bold text-sm text-red-900 dark:text-red-200 block">Protocolo de Emergência / Botão de Pânico Global (Inspetor)</span>
+              <p class="text-xs text-red-700 dark:text-red-300">Acione em caso de incêndio, vazamento químico ou sinistro grave no terminal. O alerta é processado pela Edge Function <code class="font-mono font-bold">panic-alert</code> e transmitido em tempo real (WebSocket) para <strong>todos os clientes conectados</strong>, exibindo aviso no rodapé de cada tela.</p>
             </div>
           </div>
           <div class="flex items-center gap-2 w-full sm:w-auto">
@@ -106,6 +106,37 @@
               <span>BOTÃO DE PÂNICO</span>
             </button>
           </div>
+        </div>
+
+        <!-- Configuração do Webhook de Emergência (OPCIONAL — DESATIVADO POR PADRÃO) -->
+        <div id="panicWebhookPanel" class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-3">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">webhook</span>
+              <div>
+                <span class="font-bold text-sm text-nexus-900 dark:text-white block">Webhook de Emergência (opcional)</span>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Quando ativado, a Edge Function <code class="font-mono">panic-alert</code> envia um POST JSON para a URL configurada a cada acionamento/desativação do botão de pânico. <strong class="text-red-600 dark:text-red-400">Desativado por padrão.</strong></p>
+              </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1" title="Ativar/desativar webhook de emergência">
+              <input type="checkbox" id="panicWebhookEnabled" class="sr-only peer" />
+              <div class="w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:bg-red-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+            </label>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="panicWebhookUrl" type="url" placeholder="https://exemplo.com/hooks/nexusport-emergency" class="flex-1 px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono font-medium text-nexus-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:outline-none" />
+            <div class="flex gap-2">
+              <button id="panicWebhookSaveBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px]">save</span>
+                <span>Salvar</span>
+              </button>
+              <button id="panicWebhookTestBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px]">sensors</span>
+                <span>Testar</span>
+              </button>
+            </div>
+          </div>
+          <p id="panicWebhookStatus" class="text-[11px] font-mono text-slate-500 dark:text-slate-400">Carregando configuração...</p>
         </div>
 
         <!-- Alerta de Manutenção Preventiva Sugerida (> 3 Anos) -->
@@ -233,6 +264,7 @@
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/supabase-client.js"></script>
   <script src="js/data-repository.js"></script>
+  <script src="js/panic-realtime.js"></script>
   <script src="js/manutencao.js"></script>
 </body>
 </html>
