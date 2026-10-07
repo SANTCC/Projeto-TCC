@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
+  // antes de qualquer inserção em HTML ou em manipuladores inline.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+  const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
+
   const searchInput = document.getElementById('empMatriculaSearch');
   const searchBtn = document.getElementById('searchEmpBtn');
   const regenBtn = document.getElementById('regenCodeBtn');
@@ -191,13 +196,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!funcTableBody) return;
     funcTableBody.innerHTML = mergedFuncList.map(f => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-        <td class="p-3 font-mono font-bold text-nexus-500">${f.matricula}</td>
-        <td class="p-3 font-bold">${f.nome}</td>
-        <td class="p-3 text-slate-500 font-semibold">${f.cargo}</td>
-        <td class="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">${f.codigo}</td>
+        <td class="p-3 font-mono font-bold text-nexus-500">${esc(f.matricula)}</td>
+        <td class="p-3 font-bold">${esc(f.nome)}</td>
+        <td class="p-3 text-slate-500 font-semibold">${esc(f.cargo)}</td>
+        <td class="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">${esc(f.codigo)}</td>
         <td class="p-3 text-slate-400 font-mono text-xs flex items-center justify-between">
-          <span class="${f.ativo ? 'text-emerald-600 font-bold' : 'text-slate-400'}">${f.doc || 'Cadastrado'}</span>
-          <button type="button" onclick="window.excluirFuncionarioReal('${f.matricula}')" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
+          <span class="${f.ativo ? 'text-emerald-600 font-bold' : 'text-slate-400'}">${esc(f.doc || 'Cadastrado')}</span>
+          <button type="button" onclick="window.excluirFuncionarioReal(${jsArg(f.matricula)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
         </td>
       </tr>
     `).join('');
@@ -393,27 +398,27 @@ document.addEventListener('DOMContentLoaded', () => {
           const isAguardando = v.status === 'AGUARDANDO_AUTORIZACAO';
           return `
             <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-              <td class="p-3 font-bold">${v.nome}</td>
-              <td class="p-3 font-mono text-xs">${v.documento}</td>
-              <td class="p-3 text-slate-500">${v.motivo}</td>
+              <td class="p-3 font-bold">${esc(v.nome)}</td>
+              <td class="p-3 font-mono text-xs">${esc(v.documento)}</td>
+              <td class="p-3 text-slate-500">${esc(v.motivo)}</td>
               <td class="p-3">
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
                   isAguardando ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
                 }">
-                  ${v.status || 'EM_VISITA'}
+                  ${esc(v.status || 'EM_VISITA')}
                 </span>
               </td>
-              <td class="p-3 font-mono text-xs text-slate-400">${v.data}</td>
-              <td class="p-3 font-mono text-xs font-bold text-nexus-500">${v.por || session.matricula}</td>
+              <td class="p-3 font-mono text-xs text-slate-400">${esc(v.data)}</td>
+              <td class="p-3 font-mono text-xs font-bold text-nexus-500">${esc(v.por || session.matricula)}</td>
               <td class="p-3 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-2">
                   ${isAguardando ? `
-                    <button type="button" onclick="window.alterarStatusVisitante('${vKey}', 'EM_VISITA')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-colors">
+                    <button type="button" onclick="window.alterarStatusVisitante(${jsArg(vKey)}, 'EM_VISITA')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-colors">
                       <span class="material-symbols-outlined text-[16px]">how_to_reg</span>
                       <span>Autorizar (Entrar em Visita)</span>
                     </button>
                   ` : ''}
-                  <button type="button" onclick="window.registrarSaidaVisitante('${vKey}')" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-colors">
+                  <button type="button" onclick="window.registrarSaidaVisitante(${jsArg(vKey)})" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-colors">
                     <span class="material-symbols-outlined text-[16px]">logout</span>
                     <span>Registrar Saída & Vistoria</span>
                   </button>
@@ -436,17 +441,17 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         visHistoricoTableBody.innerHTML = historico.map(v => `
           <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-            <td class="p-3 font-bold text-slate-700 dark:text-slate-200">${v.nome}</td>
-            <td class="p-3 font-mono text-xs">${v.documento}</td>
-            <td class="p-3 text-slate-500">${v.motivo}</td>
-            <td class="p-3 font-mono text-xs text-slate-400">${v.data}</td>
-            <td class="p-3 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">${v.data_saida || 'Concluída'}</td>
+            <td class="p-3 font-bold text-slate-700 dark:text-slate-200">${esc(v.nome)}</td>
+            <td class="p-3 font-mono text-xs">${esc(v.documento)}</td>
+            <td class="p-3 text-slate-500">${esc(v.motivo)}</td>
+            <td class="p-3 font-mono text-xs text-slate-400">${esc(v.data)}</td>
+            <td class="p-3 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">${esc(v.data_saida || 'Concluída')}</td>
             <td class="p-3">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                ${v.vistoria || 'Vistoria em Ordem - Sem Anormalidades'}
+                ${esc(v.vistoria || 'Vistoria em Ordem - Sem Anormalidades')}
               </span>
             </td>
-            <td class="p-3 font-mono text-xs text-slate-400">${v.por || session.matricula}</td>
+            <td class="p-3 font-mono text-xs text-slate-400">${esc(v.por || session.matricula)}</td>
           </tr>
         `).join('');
       }
