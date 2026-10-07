@@ -58,12 +58,15 @@
   let inFlight = false;
   let hapticTimer = null;
   let lastActivationAlertAt = 0;
-  const HAPTIC_PULSE_MS = 180;
+  let lastPulseBlocked = false;
+  // Motores de celular (Android) levam ~50–100 ms para girar e o sistema
+  // arredonda pulsos muito curtos: 300 ms é o mínimo que se sente no bolso.
+  const HAPTIC_PULSE_MS = 300;
   const HAPTIC_INTERVAL_MS = 3000;
   // Padrão "SOS" reduzido (limitado a 10 posições pela especificação da
   // Vibration API): três toques curtos + dois longos, repetido pelo loop.
-  const HAPTIC_PATTERN_SOS = [200, 100, 200, 100, 200, 300, 600, 300, 600];
-  const HAPTIC_PATTERN_ALERT = [HAPTIC_PULSE_MS, 90, HAPTIC_PULSE_MS, 90, HAPTIC_PULSE_MS];
+  const HAPTIC_PATTERN_SOS = [300, 120, 300, 120, 300, 350, 700, 350, 700];
+  const HAPTIC_PATTERN_ALERT = [HAPTIC_PULSE_MS, 120, HAPTIC_PULSE_MS, 120, HAPTIC_PULSE_MS];
 
   // ------------------------------------------------------------------
   // Utilitários
@@ -245,9 +248,10 @@
       return;
     }
     if (window.NexusHaptics && typeof window.NexusHaptics.alert === 'function') {
-      window.NexusHaptics.alert();
+      const resultado = window.NexusHaptics.alert();
+      lastPulseBlocked = Boolean(resultado && resultado.fired === false);
     } else {
-      vibrateDevice(HAPTIC_PATTERN_ALERT);
+      lastPulseBlocked = !vibrateDevice(HAPTIC_PATTERN_ALERT);
     }
     // O motivo exibido no rodapé muda (ex.: o operador tocou na tela e a
     // vibração passou a funcionar) — mantém o aviso coerente.
@@ -265,6 +269,45 @@
     if (hapticTimer !== null) return;
     if (!deviceHasHapticBackend() && !deviceSoundEnabled()) return;
     pulseDeviceAlert();
+  }
+
+  /** Reinicia o ciclo do alerta disparando um pulso imediatamente. */
+  function kickDeviceAlert() {
+    if (hapticTimer !== null) {
+      window.clearTimeout(hapticTimer);
+      hapticTimer = null;
+    }
+    if (!deviceHasHapticBackend() && !deviceSoundEnabled()) return;
+    pulseDeviceAlert();
+  }
+
+  /**
+   * No Chrome/Android a vibração só é liberada depois que o usuário toca na
+   * página. Quem apenas RECEBE o alerta (aba aberta, ninguém tocou) fica sem
+   * vibração até interagir — então, no primeiro toque durante a emergência,
+   * disparamos o pulso na hora, sem esperar o próximo ciclo de 3s.
+   */
+  function onUserInteraction() {
+    if (window.NexusHaptics && typeof window.NexusHaptics.unlock === 'function') {
+      window.NexusHaptics.unlock();
+    }
+    if (!state.active || document.hidden || !lastPulseBlocked) return;
+    kickDeviceAlert();
+  }
+
+  /**
+   * Toque/confirmação do operador: vibra o padrão SOS NA HORA, antes de
+   * qualquer ida à rede. O celular precisa responder no momento do toque —
+   * a chamada da Edge Function/webhook pode levar segundos.
+   */
+  function primeActivationAlert() {
+    lastActivationAlertAt = Date.now();
+    if (document.hidden) return;
+    if (window.NexusHaptics && typeof window.NexusHaptics.sos === 'function') {
+      window.NexusHaptics.sos();
+    } else {
+      vibrateDevice(HAPTIC_PATTERN_SOS);
+    }
   }
 
   /**
@@ -741,6 +784,9 @@
       return { ok: false, forbidden: true };
     }
 
+    // O operador confirmou: o aparelho já avisa agora, sem esperar a rede.
+    primeActivationAlert();
+
     const motivo = typeof options.motivo === 'string' && options.motivo.trim() ? options.motivo.trim() : null;
     const identity = buildIdentity();
     return await executePanicAction('activate', {
@@ -950,6 +996,9 @@
 
     // Retoma/paralisa a vibração ao alternar de aba, sem deixar pulsos presos.
     document.addEventListener('visibilitychange', syncDeviceVibration);
+
+    // Libera o alerta no primeiro toque do usuário (exigência do Chrome/Android).
+    document.addEventListener('pointerdown', onUserInteraction, { passive: true });
 
     // Sincronização entre abas do mesmo navegador
     window.addEventListener('storage', (e) => {

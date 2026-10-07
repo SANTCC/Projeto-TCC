@@ -59,12 +59,16 @@
    * Padrões de vibração em milissegundos (mesmo formato da Vibration API:
    * ligado, desligado, ligado, desligado...). A especificação limita o vetor
    * a 10 posições — os padrões abaixo respeitam esse limite.
+   *
+   * Durações de 300ms nos toques: os motores dos celulares Android levam
+   * ~50–100ms para girar e o Sistema pode arredondar pulsos muito curtos,
+   * então pulsos de 16–180ms podem passar despercebidos no bolso.
    */
   const PATTERNS = {
-    tap: [16],
-    double: [40, 60, 40],
-    alert: [220, 90, 220, 90, 220],
-    sos: [200, 100, 200, 100, 200, 300, 600, 300, 600]
+    tap: [30],
+    double: [60, 80, 60],
+    alert: [300, 120, 300, 120, 300],
+    sos: [300, 120, 300, 120, 300, 350, 700, 350, 700]
   };
 
   const IOS_SWITCH_MIN = { major: 17, minor: 4 };      // switch nativo disponível
@@ -179,6 +183,7 @@
     const mobile = isMobile();
 
     const backend = vibrationApi ? 'vibration_api' : (iosSwitch ? 'ios_switch' : 'none');
+    const embedded = isEmbedded();
     const reasons = [];
     if (!enabled) reasons.push('disabled');
     if (backend === 'none') reasons.push('unsupported');
@@ -192,6 +197,7 @@
       platform: ios ? 'ios' : (mobile ? 'mobile' : 'desktop'),
       ios: ios,
       mobile: mobile,
+      embedded: embedded,
       secureContext: secureContext,
       vibrationApi: vibrationApi,
       iosSwitch: iosSwitch,
@@ -209,6 +215,19 @@
       reasons: reasons,
       lastReason: lastReason
     };
+  }
+
+  /**
+   * A página está dentro de um iframe? No Chrome/Android um quadro aninhado
+   * só vibra depois que o usuário interage COM o quadro — é o caso da
+   * pré-visualização do sistema embutida em outra página.
+   */
+  function isEmbedded() {
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      return true; // acesso bloqueado ao topo: iframe de outra origem
+    }
   }
 
   /** Existe QUALQUER forma de dar retorno no aparelho (tátil ou sonoro)? */
@@ -273,6 +292,7 @@
     }
 
     parts.push(`contexto seguro: ${st.secureContext ? 'sim' : 'não'}`);
+    if (st.embedded) parts.push('página em iframe (exige toque prévio no quadro)');
     if (st.backend !== 'none') parts.push(`interação do usuário: ${st.userActivated ? 'sim' : 'não'}`);
     parts.push(`página visível: ${st.visible ? 'sim' : 'não'}`);
     parts.push(`vibração ${st.enabled ? 'ativada' : 'desativada'}`);

@@ -113,6 +113,10 @@ function testPanicGlobal() {
         && html.indexOf('js/haptics.js') < html.indexOf('js/panic-realtime.js');
     }));
   check('Teste dedicado do alerta no aparelho (tests/test_haptics.js)', read('tests/test_haptics.js').includes('NexusHaptics'));
+  check('Página pública de teste de vibração (teste-vibracao.html)', read('teste-vibracao.html').includes('js/haptics.js'));
+  check('Pulsos do alerta com duração perceptível (>= 300ms)', pr.includes('HAPTIC_PULSE_MS = 300'));
+  check('Vibração no primeiro toque durante a emergência (exigência do Chrome)',
+    pr.includes('onUserInteraction') && pr.includes("addEventListener('pointerdown'"));
 
   // 8. Documentação
   console.log('\n8. Validando documentação...');

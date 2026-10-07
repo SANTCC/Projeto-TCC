@@ -351,6 +351,10 @@ async function testHaptics() {
   const primeiroPadrao = vibracoes.find((p) => p !== 0);
   check('Padrão SOS é o primeiro sinal tátil do acionamento',
     JSON.stringify(primeiroPadrao) === JSON.stringify(w13.NexusHaptics.PATTERNS.sos), JSON.stringify(vibracoes));
+  check('Vibração disparada já na confirmação do operador (antes da rede)',
+    PANIC_SRC.includes('primeActivationAlert') && /primeActivationAlert\(\);\s*\n\s*const motivo/.test(PANIC_SRC));
+  check('Pulsos com duração perceptível no Android (>= 300ms)',
+    /alert: \[300,/.test(HAPTICS_SRC) && /sos: \[300,/.test(HAPTICS_SRC));
   check('Estado global ativo após o acionamento', w13.NexusPanic.isActive() === true);
   const rodape = w13.document.getElementById('nexusPanicFooter');
   check('Rodapé de emergência exibido em todas as páginas',
@@ -358,6 +362,91 @@ async function testHaptics() {
   const desativacao = await w13.NexusPanic.clearPanic({ confirmar: false });
   check('Desativação liberada para o Inspetor', desativacao.ok === true, JSON.stringify(desativacao));
   check('Vibração interrompida com navigator.vibrate(0)', vibracoes[vibracoes.length - 1] === 0, JSON.stringify(vibracoes));
+
+  // ------------------------------------------------------------------
+  console.log('\n14. Validando liberação por toque (exigência do Chrome/Android)...');
+  const dom14 = new JSDOM(read('manutencao.html'), {
+    url: 'https://nexusport.example/dashboard.html',
+    runScripts: 'outside-only',
+    pretendToBeVisual: true
+  });
+  const w14 = dom14.window;
+  w14.isSecureContext = true;
+  Object.defineProperty(w14.navigator, 'userAgent', { configurable: true, get: () => ANDROID_UA });
+  const vibracoes14 = [];
+  w14.navigator.vibrate = (pattern) => { vibracoes14.push(pattern); return true; };
+  w14.currentUserSession = {
+    id: '11111111-1111-1111-1111-111111111111', nome: 'Operador', cargo: 'ESTIVADOR',
+    cargo_nome: 'Estivador', codigo_individual: 'EST-1001'
+  };
+  w14.nexusSupabase = null;
+  w14.eval(HAPTICS_SRC);
+  w14.eval(panicSrc);
+  w14.document.dispatchEvent(new w14.Event('DOMContentLoaded', { bubbles: true }));
+  await tick();
+
+  // Cliente que só RECEBE o alerta (outra aba/dispositivo), sem nunca ter tocado a tela.
+  w14.dispatchEvent(new w14.StorageEvent('storage', { key: 'nexus_emergency_active', newValue: 'true' }));
+  await tick();
+  check('Estado global ativo via sincronização entre abas', w14.NexusPanic.isActive() === true);
+  check('Sem interação do usuário nada vibra (navegador recusaria)',
+    vibracoes14.filter((p) => p !== 0).length === 0, JSON.stringify(vibracoes14));
+
+  // Primeiro toque do operador na página durante a emergência.
+  w14.document.dispatchEvent(new w14.Event('pointerdown', { bubbles: true }));
+  check('Primeiro toque libera a vibração IMEDIATAMENTE (sem esperar o ciclo de 3s)',
+    JSON.stringify(vibracoes14.filter((p) => p !== 0)[0]) === JSON.stringify(w14.NexusHaptics.PATTERNS.alert),
+    JSON.stringify(vibracoes14));
+  check('status() reconhece a interação após o toque', w14.NexusHaptics.status().userActivated === true);
+
+  // ------------------------------------------------------------------
+  console.log('\n15. Validando a página pública de teste (teste-vibracao.html)...');
+  const testePagina = read('teste-vibracao.html');
+  check('Página de teste existe e carrega o motor de haptics', /js\/haptics\.js/.test(testePagina));
+  check('Não exige login (página pública, sem auth-guard)', !testePagina.includes('auth-guard.js'));
+  check('Tem botão de teste do padrão SOS e do pulso', testePagina.includes('vibrarBtn') && testePagina.includes('pulsoBtn'));
+  check('Mostra o diagnóstico e a dica em português', testePagina.includes('NexusHaptics.describe()') && testePagina.includes('NexusHaptics.hint('));
+  check('Botão do painel abre o teste no celular (manutencao.html)',
+    panelTextIncludesTestPage());
+  function panelTextIncludesTestPage() {
+    return read('manutencao.html').includes('href="teste-vibracao.html"');
+  }
+
+  // ------------------------------------------------------------------
+  console.log('\n16. Executando a página de teste de verdade (jsdom)...');
+  const { requestInterceptor } = require('jsdom');
+  const dom16 = new JSDOM(read('teste-vibracao.html'), {
+    url: 'https://nexusport.example/teste-vibracao.html',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    resources: {
+      // Serve os módulos locais (js/haptics.js) sem tocar a rede.
+      interceptors: [
+        requestInterceptor((request) => {
+          const rel = String(request.url).replace(/^https?:\/\/[^/]+\//, '');
+          const body = (rel.startsWith('js/') && fs.existsSync(path.join(ROOT, rel))) ? read(rel) : '';
+          return new Response(body, { headers: { 'Content-Type': 'application/javascript' } });
+        })
+      ]
+    }
+  });
+  const w16 = dom16.window;
+  await new Promise((resolve) => {
+    if (w16.document.readyState === 'complete') resolve();
+    else w16.addEventListener('load', resolve);
+  });
+  await tick();
+  const lista16 = w16.document.getElementById('lista');
+  const resultado16 = w16.document.getElementById('resultado');
+  check('Página de teste roda sem erros e carrega o motor', Boolean(w16.NexusHaptics));
+  check('Lista de diagnóstico preenchida na página de teste',
+    Boolean(lista16) && lista16.children.length >= 5, lista16 ? String(lista16.children.length) : 'sem lista');
+  check('Resultado inicial orienta o operador',
+    Boolean(resultado16) && /Toque no botão/.test(resultado16.textContent));
+  const vibrar16 = w16.document.getElementById('vibrarBtn');
+  vibrar16.dispatchEvent(new w16.MouseEvent('click', { bubbles: true }));
+  check('Teste mostra o veredito (vibrou ou motivo) após o toque',
+    /vibrou|Vibração operante|Toque/.test(resultado16.textContent), resultado16.textContent);
 
   console.log('\n================================================================');
   if (passed) {
