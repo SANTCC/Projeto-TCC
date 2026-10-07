@@ -7,7 +7,7 @@ async function testFase4() {
   console.log('================================================================\n');
 
   let passed = true;
-  const jsDir = path.join(__dirname, 'js');
+  const jsDir = path.join(__dirname, '..', 'js');
   const manutencaoCode = fs.readFileSync(path.join(jsDir, 'manutencao.js'), 'utf-8');
 
   // 1. Validar Ciclo de Vida de Ordens de Serviço (OS)

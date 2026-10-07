@@ -350,6 +350,42 @@
 | `data_hora` | `timestamptz` |  |
 | `created_at` | `timestamptz` |  |
 
+## Table `emergencias`
+
+> Botão de Pânico Global — estado da emergência (ATIVA/RESOLVIDA). Escrita feita pela Edge Function `panic-alert` (service role); leitura usada pelos clientes ao carregar a página. Tempo real via broadcast WebSocket no canal `nexus-emergency`.
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `estado` | `text` |  Default `'ATIVA'` (`ATIVA`/`RESOLVIDA`) |
+| `motivo` | `text` |  Nullable |
+| `funcionario_id` | `uuid` |  Nullable FK → `funcionarios.id` |
+| `acionado_por_nome` | `text` |  Nullable |
+| `acionado_por_cargo` | `cargo_enum` |  Nullable |
+| `acionado_por_codigo` | `text` |  Nullable |
+| `data_hora` | `timestamptz` |  |
+| `resolvido_por_nome` | `text` |  Nullable |
+| `resolvido_por_cargo` | `cargo_enum` |  Nullable |
+| `data_resolucao` | `timestamptz` |  Nullable |
+| `webhook_disparado` | `bool` |  Default `false` |
+| `origem` | `text` |  Default `'EDGE_FUNCTION'` (`EDGE_FUNCTION`/`CLIENT_FALLBACK`) |
+| `created_at` | `timestamptz` |  |
+
+## Table `panic_webhook_config`
+
+> Webhook OPCIONAL do botão de pânico — **desativado por padrão** (`enabled = false`). A Edge Function `panic-alert` só dispara o POST JSON se `enabled = true` e `url` estiver configurada.
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `enabled` | `bool` |  Default `false` |
+| `url` | `text` |  Nullable |
+| `updated_at` | `timestamptz` |  |
+
 ## Custom Types / Enums
 
 ### `cargo_enum`
@@ -386,7 +422,7 @@
 
 ### `tipo_entidade_enum`
 
-`NAVIO` | `CONTAINER` | `CARGA` | `FUNCIONARIO` | `VISITANTE` | `GUINDASTE` | `MANUTENCAO` | `CHECKLIST` | `ROTA` | `TIPO_CARGA`
+`NAVIO` | `CONTAINER` | `CARGA` | `FUNCIONARIO` | `VISITANTE` | `GUINDASTE` | `MANUTENCAO` | `CHECKLIST` | `ROTA` | `TIPO_CARGA` | `EMERGENCIA`
 
 ### `tipo_alteracao_enum`
 
@@ -577,3 +613,18 @@
 | `nexus_insert_guindastes` | INSERT | public | PERMISSIVE | — | `true` |
 | `nexus_update_guindastes` | UPDATE | public | PERMISSIVE | `true` | `true` |
 
+### `emergencias`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `nexus_select_emergencias` | SELECT | public | PERMISSIVE | `true` | — |
+| `nexus_insert_emergencias` | INSERT | public | PERMISSIVE | — | `true` |
+| `nexus_update_emergencias` | UPDATE | public | PERMISSIVE | `true` | `true` |
+
+### `panic_webhook_config`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `nexus_select_panic_webhook_config` | SELECT | public | PERMISSIVE | `true` | — |
+| `nexus_insert_panic_webhook_config` | INSERT | public | PERMISSIVE | — | `true` |
+| `nexus_update_panic_webhook_config` | UPDATE | public | PERMISSIVE | `true` | `true` |

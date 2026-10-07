@@ -464,3 +464,57 @@ insert into cargo_niveis (cargo, nivel) values
   ('DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'ESTRATEGICO'),
   ('CONSELHO_ADMINISTRACAO', 'ESTRATEGICO')
 on conflict (cargo) do nothing;
+
+-- 14. BOTÃO DE PÂNICO GLOBAL (Edge Function panic-alert + Realtime + Webhook opcional)
+-- ============================================================
+-- Obs.: a migração canônica desta seção está em
+-- supabase/migrations/20261007000000_panic_button_global.sql
+
+-- Novo tipo de entidade para auditoria de emergências
+alter type tipo_entidade_enum add value if not exists 'EMERGENCIA';
+
+-- Estado global da emergência (fonte da verdade para clientes que
+-- conectam após o acionamento; o tempo real vem do canal de broadcast
+-- "nexus-emergency" via WebSocket)
+create table emergencias (
+  id uuid primary key default gen_random_uuid(),
+  estado text not null default 'ATIVA' check (estado in ('ATIVA', 'RESOLVIDA')),
+  motivo text,
+  funcionario_id uuid references funcionarios(id) on delete set null,
+  acionado_por_nome text,
+  acionado_por_cargo cargo_enum,
+  acionado_por_codigo text,
+  data_hora timestamptz not null default now(),
+  resolvido_por_nome text,
+  resolvido_por_cargo cargo_enum,
+  data_resolucao timestamptz,
+  webhook_disparado boolean not null default false,
+  origem text not null default 'EDGE_FUNCTION' check (origem in ('EDGE_FUNCTION', 'CLIENT_FALLBACK')),
+  created_at timestamptz not null default now()
+);
+
+create index idx_emergencias_estado_data on emergencias (estado, data_hora desc);
+
+-- Configuração do webhook OPCIONAL — DESATIVADO POR PADRÃO.
+-- A Edge Function panic-alert só dispara o POST se enabled = true E url válida.
+create table panic_webhook_config (
+  id uuid primary key default gen_random_uuid(),
+  enabled boolean not null default false,
+  url text,
+  updated_at timestamptz not null default now()
+);
+
+insert into panic_webhook_config (enabled, url)
+select false, null
+where not exists (select 1 from panic_webhook_config);
+
+alter table emergencias enable row level security;
+alter table panic_webhook_config enable row level security;
+
+create policy nexus_select_emergencias on emergencias for select using (true);
+create policy nexus_insert_emergencias on emergencias for insert with check (true);
+create policy nexus_update_emergencias on emergencias for update using (true) with check (true);
+
+create policy nexus_select_panic_webhook_config on panic_webhook_config for select using (true);
+create policy nexus_insert_panic_webhook_config on panic_webhook_config for insert with check (true);
+create policy nexus_update_panic_webhook_config on panic_webhook_config for update using (true) with check (true);

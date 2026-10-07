@@ -1,0 +1,6 @@
+# Configuração mínima do projeto para a Supabase CLI.
+# Use:
+#   supabase link --project-ref <ref-do-projeto>
+#   supabase db push                                  (aplica supabase/migrations/*)
+#   supabase functions deploy panic-alert --no-verify-jwt
+project_id = "nexusport"
