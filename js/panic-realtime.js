@@ -56,6 +56,9 @@
   let banner = null;
   let initialized = false;
   let inFlight = false;
+  let hapticTimer = null;
+  const HAPTIC_PULSE_MS = 180;
+  const HAPTIC_INTERVAL_MS = 3000;
 
   // ------------------------------------------------------------------
   // Utilitários
@@ -104,8 +107,23 @@
     const style = document.createElement('style');
     style.textContent = `
       @keyframes nexusPanicSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      @keyframes nexusPanicVibrate {
+        0%, 88%, 100% { transform: translateX(0); }
+        90% { transform: translateX(-2px); }
+        92% { transform: translateX(2px); }
+        94% { transform: translateX(-2px); }
+        96% { transform: translateX(2px); }
+        98% { transform: translateX(-1px); }
+      }
       #nexusPanicFooter:not(.hidden) { animation: nexusPanicSlideUp 0.35s ease-out; }
+      .nexus-panic-vibrating { animation: nexusPanicVibrate 1.8s linear infinite !important; }
+      #nexusPanicFooter:not(.hidden).nexus-panic-vibrating {
+        animation: nexusPanicSlideUp 0.35s ease-out, nexusPanicVibrate 1.8s linear 0.35s infinite !important;
+      }
       html.nexus-panic-active body { padding-bottom: 58px; }
+      @media (prefers-reduced-motion: reduce) {
+        .nexus-panic-vibrating { animation: none !important; }
+      }
     `;
     document.head.appendChild(style);
 
@@ -141,6 +159,47 @@
     return banner;
   }
 
+  function stopDeviceVibration() {
+    if (hapticTimer !== null) {
+      window.clearTimeout(hapticTimer);
+      hapticTimer = null;
+      try {
+        if (window.navigator && typeof window.navigator.vibrate === 'function') {
+          window.navigator.vibrate(0);
+        }
+      } catch (e) { /* vibração indisponível neste navegador */ }
+    }
+  }
+
+  function syncDeviceVibration() {
+    const nav = window.navigator;
+    const prefersReducedMotion = window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (!state.active || document.hidden || prefersReducedMotion || !nav || typeof nav.vibrate !== 'function') {
+      stopDeviceVibration();
+      return;
+    }
+    if (hapticTimer !== null) return;
+
+    const pulse = () => {
+      hapticTimer = null;
+      const reducedMotion = window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!state.active || document.hidden || reducedMotion) {
+        stopDeviceVibration();
+        return;
+      }
+      try {
+        nav.vibrate(HAPTIC_PULSE_MS);
+        hapticTimer = window.setTimeout(pulse, HAPTIC_INTERVAL_MS);
+      } catch (e) {
+        stopDeviceVibration();
+      }
+    };
+    pulse();
+  }
+
   function renderBanner() {
     const el = ensureBanner();
     if (!el) return;
@@ -163,6 +222,13 @@
       el.classList.add('hidden');
       document.documentElement.classList.remove('nexus-panic-active');
     }
+
+    // Every connected page gets the same animated SOS cue. On devices that
+    // support the Vibration API, add a short haptic pulse while the alert is active.
+    el.classList.toggle('nexus-panic-vibrating', Boolean(state.active));
+    const panicButton = document.getElementById('panicButton');
+    if (panicButton) panicButton.classList.toggle('nexus-panic-vibrating', Boolean(state.active));
+    syncDeviceVibration();
   }
 
   // ------------------------------------------------------------------
@@ -733,6 +799,9 @@
     subscribeRealtime();
     loadStateFromDb();
     bindWebhookSettingsUI();
+
+    // Retoma/paralisa a vibração ao alternar de aba, sem deixar pulsos presos.
+    document.addEventListener('visibilitychange', syncDeviceVibration);
 
     // Sincronização entre abas do mesmo navegador
     window.addEventListener('storage', (e) => {
