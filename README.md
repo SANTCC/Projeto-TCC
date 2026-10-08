@@ -168,39 +168,37 @@ O botão de pânico existente (`manutencao.html`) foi elevado a **evento global 
 
 ### Alerta no aparelho (vibração / som) — `js/haptics.js`
 
-A emergência também é **sentida no próprio celular**, não apenas vista na tela:
+A emergência também pode ser **sentida no próprio aparelho**, quando o navegador e o dispositivo permitem:
 
-- **Acionamento (SOS):** quem aperta o botão recebe o padrão de vibração de socorro imediatamente (ainda dentro do gesto do usuário); **todos os clientes conectados** recebem o mesmo padrão ao chegar o broadcast.
-- **Enquanto a emergência estiver ativa:** pulsos de alerta a cada 3s (`HAPTIC_INTERVAL_MS`), interrompidos ao desativar o alarme, ao ocultar a aba ou ao fazer logout.
-- **Por que antes o celular não vibrava:** `navigator.vibrate()` (Vibration API) só existe em **https://** (é `[SecureContext]`), **não existe em nenhum navegador do iPhone/iPad** (a Apple nunca implementou a API no WebKit), **exige que o usuário já tenha tocado na página** (sticky user activation — o Chrome bloqueia e registra intervention), **exige a aba visível** e **foi removida do Firefox 129+**. O módulo `js/haptics.js` cobre cada um desses casos:
+- **Acionamento (SOS):** após a confirmação, o aparelho de quem acionou recebe o padrão SOS antes da chamada de rede. Os demais clientes tentam reproduzir o padrão ao receber o broadcast.
+- **Enquanto a emergência estiver ativa:** pulsos locais a cada 3s (`HAPTIC_INTERVAL_MS`). A página precisa estar visível; o navegador encerra a vibração ao ocultar o documento. Se um cliente recebeu o alerta antes de qualquer interação, o sistema tenta novamente no primeiro toque/clique/tecla.
+- **Limites da plataforma:** `navigator.vibrate()` é uma API de disponibilidade limitada. Exige contexto seguro (normalmente **HTTPS**; `localhost` também é considerado seguro), sticky user activation e documento visível. Safari no iOS/iPadOS não expõe a Vibration API; Firefox removeu sua implementação no Firefox 129. Não há workaround web confiável para forçar vibração nesses navegadores. Mesmo um retorno `true` da API não garante que exista motor ou que as configurações do aparelho permitam vibrar.
 
-| Aparelho / contexto | Como o alerta acontece |
+| Aparelho / contexto | Comportamento esperado |
 | --- | --- |
-| Android (Chrome, Edge, Samsung Internet) em https | `navigator.vibrate()` com os padrões SOS/pulso |
-| iPhone/iPad (iOS 17.4+), toque no botão SOS | Overlay de `<label>` + `<input type="checkbox" switch>` sobre o botão: o toque real aciona o Taptic Engine — **funciona até no iOS 26.5+** |
-| iPhone/iPad, pulsos do alerta global | Switch nativo acionado por script (iOS 17.4–26.4); no iOS 26.5+ a Apple bloqueou esse disparo e entra o **alerta sonoro** |
-| Sem retorno tátil possível (iOS 26.5+, Firefox 129+, `http://`, desktop sem motor) | **Alerta sonoro** via WebAudio (curto e intermitente) + banner no rodapé |
-| Aba em segundo plano / tela apagada | Os navegadores pausam a vibração: o alerta visual permanece e a vibração volta ao trazer o sistema para primeiro plano |
+| Android com navegador compatível, HTTPS, página visível e interação prévia | `navigator.vibrate()` com padrões SOS/pulso |
+| iPhone/iPad com Safari/WebKit | Sem Vibration API para páginas web; alerta sonoro (quando permitido) + banner |
+| Firefox 129+ ou outro navegador sem a API | Alerta sonoro (quando permitido) + banner |
+| Desktop ou dispositivo sem motor de vibração | A API pode não existir ou não produzir sensação física; use o alerta sonoro |
+| Aba em segundo plano / tela apagada | A vibração é interrompida; o banner permanece e o ciclo local recomeça quando a página volta a ficar visível |
 
-- **Diagnóstico em vez de silêncio:** o rodapé de emergência mostra o motivo exato de o aparelho não estar vibrando (ex.: *"Toque na tela para liberar a vibração"*, *"Vibração exige https://"*, *"Sem vibração neste navegador (iPhone/iPad) — ative o alerta sonoro"*).
-- **Painel "Alerta no Aparelho"** (`manutencao.html`): mostra o diagnóstico do aparelho e permite **Testar vibração**, além de ligar/desligar vibração e som (preferências salvas por aparelho em `localStorage`).
-- **Acessibilidade:** `prefers-reduced-motion` continua desligando apenas a **animação** do indicador de SOS — a vibração/som de emergência é controlada pela preferência explícita do operador no painel, nunca por um ajuste de sistema sobre movimento.
-- **Teste rápido no celular:** abra **`teste-vibracao.html`** (página pública, sem login) no próprio aparelho — ela dispara o padrão SOS/pulso, mostra o veredito e lista o que o aparelho suporta. O painel em `manutencao.html` tem o atalho "Abrir teste no celular".
+- **Diagnóstico:** o rodapé e o painel informam se falta HTTPS, interação, visibilidade, preferência local ou suporte do navegador.
+- **Painel "Alerta no Aparelho"** (`manutencao.html`): permite testar a API e configurar vibração/som (preferências salvas por aparelho em `localStorage`).
+- **Áudio também requer interação:** browsers podem bloquear WebAudio até o primeiro gesto do usuário; por isso, clientes que só recebem um alerta devem interagir com a página para liberar os canais locais.
+- **Acessibilidade:** `prefers-reduced-motion` desliga apenas a animação do indicador de SOS; vibração/som são controlados pela preferência explícita do operador.
+- **Teste rápido:** abra **`teste-vibracao.html`** no próprio aparelho. O teste informa o suporte e o motivo de uma chamada não ser aceita, mas a confirmação física depende do aparelho e das configurações do sistema.
 
 #### Android — checklist quando não vibra
 
-No Android a `Vibration API` existe, então a causa é quase sempre uma destas:
+1. **HTTPS:** a API é um recurso de contexto seguro. `localhost` funciona para teste no mesmo aparelho; acessar o servidor por um IP local usando HTTP não é equivalente.
+2. **Interação:** faça pelo menos um toque/clique/tecla na página. Alertas recebidos antes dessa interação não podem contornar o bloqueio do navegador.
+3. **Página visível:** mantenha o NexusPort em primeiro plano; a Vibration API não é um mecanismo de notificação em segundo plano.
+4. **Configurações do aparelho:** habilite a vibração/intensidade nas configurações. Alguns aparelhos também silenciam vibração em modo silencioso, Não Perturbe ou economia de energia.
+5. **Navegador compatível e hardware:** use uma versão atual de Chrome/Edge/Samsung Internet num aparelho com motor de vibração. Firefox 129+ não oferece a API.
 
-1. **`http://`** — a API só existe em **https://** ou `localhost`. Servindo por IP da rede local (`npm start` + celular no Wi-Fi) o módulo reporta *"Vibração exige https://"*;
-2. **Chat/notificações do sistema em silêncio** — em alguns aparelhos (Xiaomi/HyperOS, Samsung com modo de economia) o motor de vibração é desativado para o navegador: Ajustes → Sons e vibração → **Intensidade da vibração** (e desligue a economia de energia para o navegador);
-3. **Nunca tocou na página** — o Chrome exige interação (sticky activation). O módulo já dispara o pulso **no primeiro toque** durante a emergência, em vez de esperar o próximo ciclo de 3s; quem só *recebe* o alerta precisa de um toque na tela;
-4. **Aba em segundo plano / tela apagada** — o navegador pausa a vibração; o banner continua e o alerta volta ao reabrir;
-5. **Firefox 129+** — API removida: nesse caso o sistema cai no alerta sonoro;
-6. **Pré-visualização dentro de iframe** — quadros aninhados exigem interação com o quadro; use o link direto.
+Os padrões usam pulsos de **300 ms** e respeitam os limites de 10 entradas e 10.000 ms por entrada da especificação.
 
-Os padrões usam pulsos de **300 ms** (motores Android levam ~50–100 ms para girar e o sistema arredonda pulsos curtos, que passariam despercebidos no bolso).
-
-- **Teste:** `node tests/test_haptics.js` (simula Android, iOS 18, iOS 26.5, Firefox 129+ e `http://` em DOM real).
+- **Teste automatizado:** `node tests/test_haptics.js` (simula Android, iOS sem API, Firefox, falta de interação, HTTP, visibilidade e normalização dos padrões).
 
 ### Implantação (backend)
 

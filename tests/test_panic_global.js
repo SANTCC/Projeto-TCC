@@ -72,14 +72,15 @@ function testPanicGlobal() {
   // 4.1 Alerta no próprio aparelho (regressão: "o SOS não faz o celular vibrar")
   const hp = read('js/haptics.js');
   check('Motor de alerta no aparelho existe (js/haptics.js)', hp.includes('window.NexusHaptics'));
-  check('Lida com iOS, contexto inseguro e user activation', hp.includes('ios_switch') && hp.includes('insecure_context') && hp.includes('no_activation'));
+  check('Respeita contexto seguro, sticky user activation e limitações do iOS',
+    hp.includes('insecure_context') && hp.includes('no_activation') && hp.includes('Vibration API') && hp.includes("isIOS()"));
   check('Explica em português por que o aparelho não vibrou', hp.includes('function describe()') && hp.includes('function hint('));
   check('Alerta sonoro de fallback quando a vibração é impossível', hp.includes('AudioContext') && hp.includes('function beep('));
   check('O tátil NÃO é desligado por prefers-reduced-motion (só a animação)', !/reduced_motion/.test(pr));
   check('Pânico delega a vibração ao motor de haptics', pr.includes('window.NexusHaptics'));
   check('Padrão SOS disparado no acionamento (local e broadcast)', pr.includes('HAPTIC_PATTERN_SOS') && pr.includes('fireActivationAlert'));
   check('Rodapé mostra o motivo de o aparelho não vibrar', pr.includes('nexusPanicFooterHaptics') && pr.includes('deviceAlertHint'));
-  check('Overlay de toque do iOS aplicado ao botão SOS', pr.includes('attachTapHaptic'));
+  check('Não aplica pseudo-haptics ao botão SOS em navegadores sem suporte', !pr.includes('attachTapHaptic'));
 
   // 5. Botão existente delegado ao fluxo global
   console.log('\n5. Validando integração do botão existente (manutencao)...');
@@ -115,8 +116,8 @@ function testPanicGlobal() {
   check('Teste dedicado do alerta no aparelho (tests/test_haptics.js)', read('tests/test_haptics.js').includes('NexusHaptics'));
   check('Página pública de teste de vibração (teste-vibracao.html)', read('teste-vibracao.html').includes('js/haptics.js'));
   check('Pulsos do alerta com duração perceptível (>= 300ms)', pr.includes('HAPTIC_PULSE_MS = 300'));
-  check('Vibração no primeiro toque durante a emergência (exigência do Chrome)',
-    pr.includes('onUserInteraction') && pr.includes("addEventListener('pointerdown'"));
+  check('Vibração é repetida na primeira interação durante a emergência',
+    pr.includes('onUserInteraction') && /pointerdown.*touchstart.*keydown.*click/.test(pr));
 
   // 8. Documentação
   console.log('\n8. Validando documentação...');

@@ -157,11 +157,11 @@
 
         diag.textContent = NexusHaptics.describe();
         ajuda.textContent = '';
-        const motivo = st.reasons[0] || null;
+        const motivo = st.reasons[0] || st.lastReason || null;
         ajuda.appendChild(document.createTextNode(
           NexusHaptics.hint(motivo)
-          + ' No Android, verifique também: página aberta em https://, som/vibração do sistema ligados, '
-          + 'modo silencioso (não impede a vibração) e navegador Chrome/Edge/Samsung Internet atualizado.'
+          + ' No Android, verifique também: página aberta em https://, vibração habilitada nas configurações do sistema, '
+          + 'modo Não Perturbe/silencioso e navegador Chrome/Edge/Samsung Internet atualizado.'
         ));
         if (st.reasons.length === 0) {
           ajuda.appendChild(document.createTextNode(' Se o aparelho continuar sem vibrar, veja em Ajustes do Android → Sons e vibração → Intensidade da vibração.'));
@@ -186,8 +186,11 @@
         relatar('pulso de alerta', NexusHaptics.alert());
       });
       pararBtn.addEventListener('click', function () {
-        NexusHaptics.stop();
-        resultado.textContent = 'Vibração interrompida (navigator.vibrate(0)).';
+        const stopped = NexusHaptics.vibrate(0);
+        const st = NexusHaptics.status();
+        resultado.textContent = stopped
+          ? 'Solicitação para cancelar a vibração aceita pelo navegador.'
+          : `Não foi possível cancelar: ${NexusHaptics.hint(st.lastReason || st.reasons[0])}`;
         render();
       });
       reverificarBtn.addEventListener('click', function () {

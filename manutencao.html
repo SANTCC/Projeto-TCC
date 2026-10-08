@@ -114,7 +114,7 @@
             <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">vibration</span>
             <div class="min-w-0">
               <span class="font-bold text-sm text-nexus-900 dark:text-white block">Alerta no Aparelho (vibração / som)</span>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Enquanto a emergência estiver ativa, o aparelho vibra a cada 3s (Android/Chrome) e o iPhone recebe haptics nativos pelo switch do Safari; onde a vibração web é impossível (iOS 26.5+, http://, navegadores sem suporte) entra o alerta sonoro. O painel abaixo diz exatamente o que o seu aparelho suporta.</p>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Enquanto a emergência estiver ativa, navegadores compatíveis vibram a cada 3s quando a página está visível e já recebeu uma interação do usuário. O Safari no iPhone/iPad não expõe a Vibration API; nesses aparelhos, em contexto HTTP inseguro ou em navegadores sem suporte, tentamos o alerta sonoro (quando permitido) e mostramos o banner. O painel abaixo mostra o diagnóstico deste aparelho.</p>
             </div>
           </div>
           <div class="grid sm:grid-cols-2 gap-3">

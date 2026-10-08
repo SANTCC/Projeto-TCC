@@ -58,6 +58,7 @@
   let inFlight = false;
   let hapticTimer = null;
   let lastActivationAlertAt = 0;
+  let lastInteractionHapticAt = -Infinity;
   let lastPulseBlocked = false;
   // Motores de celular (Android) levam ~50–100 ms para girar e o sistema
   // arredonda pulsos muito curtos: 300 ms é o mínimo que se sente no bolso.
@@ -171,10 +172,9 @@
   // ------------------------------------------------------------------
   // Alerta NO PRÓPRIO APARELHO (vibração + som)
   //
-  // js/haptics.js resolve as diferenças entre navegadores (iOS x Android,
-  // https:// x http://, user activation, aba oculta, iOS 26.5+). Aqui fica o
-  // caminho direto pela Vibration API como fallback, para que o alerta tátil
-  // continue funcionando mesmo se o módulo extra não estiver carregado.
+  // js/haptics.js aplica os requisitos da Vibration API (contexto seguro,
+  // página visível e sticky user activation). Aqui fica um fallback direto
+  // para o caso de o módulo extra não estar carregado.
   // ------------------------------------------------------------------
   function vibrateDevice(pattern) {
     if (window.NexusHaptics && typeof window.NexusHaptics.vibrate === 'function') {
@@ -182,7 +182,8 @@
     }
     const nav = window.navigator;
     if (!nav || typeof nav.vibrate !== 'function') return false;
-    if (window.isSecureContext === false) return false; // API só existe em https/localhost
+    if (window.isSecureContext === false || document.hidden) return false;
+    if (nav.userActivation && nav.userActivation.hasBeenActive === false) return false;
     try {
       return nav.vibrate(pattern) !== false;
     } catch (e) {
@@ -213,13 +214,15 @@
     if (!window.NexusHaptics) {
       const nav = window.navigator;
       if (!nav || typeof nav.vibrate !== 'function') {
-        return 'Sem vibração neste navegador (ex.: iPhone/iPad) — considere ativar o alerta sonoro.';
+        return 'Sem Vibration API neste navegador (ex.: Safari no iPhone/iPad) — considere ativar o alerta sonoro.';
       }
-      if (window.isSecureContext === false) return 'Vibração exige https:// — abra o sistema por https.';
+      if (window.isSecureContext === false) return 'Vibração exige https:// ou localhost.';
+      if (document.hidden) return 'Aba em segundo plano: vibração pausada.';
+      if (nav.userActivation && nav.userActivation.hasBeenActive === false) return 'Toque na página para liberar a vibração.';
       return null;
     }
     const st = window.NexusHaptics.status();
-    const motivo = st.reasons[0] || null;
+    const motivo = st.reasons[0] || st.lastReason || null;
     if (!motivo) return null;
     return window.NexusHaptics.hint(motivo, true);
   }
@@ -234,7 +237,10 @@
       return;
     }
     try {
-      if (window.navigator && typeof window.navigator.vibrate === 'function') {
+      const nav = window.navigator;
+      const activated = !nav || !nav.userActivation || nav.userActivation.hasBeenActive !== false;
+      if (nav && typeof nav.vibrate === 'function' && window.isSecureContext !== false
+        && !document.hidden && activated) {
         window.navigator.vibrate(0);
       }
     } catch (e) { /* vibração indisponível neste navegador */ }
@@ -292,6 +298,12 @@
       window.NexusHaptics.unlock();
     }
     if (!state.active || document.hidden || !lastPulseBlocked) return;
+
+    // pointerdown/touchstart/click podem fazer parte do mesmo toque. Tente uma
+    // única vez por gesto para não duplicar o alerta sonoro/tátil.
+    const now = Date.now();
+    if (now - lastInteractionHapticAt < 400) return;
+    lastInteractionHapticAt = now;
     kickDeviceAlert();
   }
 
@@ -959,15 +971,6 @@
   // caminho direto pela Vibration API.
   // ------------------------------------------------------------------
   function bindDeviceAlertUI() {
-    const panicButton = document.getElementById('panicButton');
-
-    // iOS: cobre o botão SOS com o overlay do switch nativo do Safari para o
-    // toque vibrar de verdade — inclusive no iOS 26.5+, versão em que a Apple
-    // bloqueou o acionamento programático dos haptics.
-    if (panicButton && window.NexusHaptics && typeof window.NexusHaptics.attachTapHaptic === 'function') {
-      window.NexusHaptics.attachTapHaptic(panicButton);
-    }
-
     const panel = document.getElementById('hapticsPanel');
     if (!panel || !window.NexusHaptics || typeof window.NexusHaptics.bindUI !== 'function') return null;
     try {
@@ -997,8 +1000,11 @@
     // Retoma/paralisa a vibração ao alternar de aba, sem deixar pulsos presos.
     document.addEventListener('visibilitychange', syncDeviceVibration);
 
-    // Libera o alerta no primeiro toque do usuário (exigência do Chrome/Android).
-    document.addEventListener('pointerdown', onUserInteraction, { passive: true });
+    // A primeira interação real libera a ativação persistente do navegador e,
+    // se o aparelho só recebeu o SOS via rede, repete o pulso imediatamente.
+    ['pointerdown', 'touchstart', 'keydown', 'click'].forEach((eventName) => {
+      document.addEventListener(eventName, onUserInteraction, { passive: true, capture: true });
+    });
 
     // Sincronização entre abas do mesmo navegador
     window.addEventListener('storage', (e) => {
