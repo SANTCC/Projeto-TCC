@@ -70,3 +70,420 @@ Ao acessar o sistema pelo celular, o scanner de QR Code atualmente fica em um fo
 > **Objetivo:** o scanner deve manter uma área de leitura **quadrada**, independentemente do tamanho ou orientação da tela.
 >
 > Garantir que o elemento de câmera/preview e a área visual de leitura preservem proporção `1:1` em dispositivos móveis, sem distorcer a imagem da câmera.
+
+# Anotações
+
+## 1) Correção — Autorizar retorno de navio com a ação bloqueada
+
+* **Página:** Embarcações (`embarcacoes.html` / `js/embarcacoes.js`)
+* **Local:** Tabela "Localização GPS Marítima & Cadastro de Navios", coluna Ações, botão **Autorizar Retorno** (cinza) de navios `FORA_DO_PORTO` (linha ~322) e a função `window.autorizarRetornoNavio` (linha ~565).
+* **Causa:** o botão só *parece* bloqueado (`bg-slate-400 cursor-not-allowed`). Ele mantém o `onclick`, não tem `disabled`, e a função não confere a localização do navio.
+* **Solução:**
+
+```js
+// 1) No botão: disabled de verdade e sem onclick
+} else if (n.localizacao === 'FORA_DO_PORTO') {
+  acoesHtml += `<button type="button" disabled aria-disabled="true"
+      class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed opacity-70"
+      title="O navio precisa chegar ao porto de destino antes de autorizar o retorno">
+      Autorizar Retorno</button>`;
+}
+
+// 2) Na função: trava de regra de negócio
+window.autorizarRetornoNavio = async function (imo) {
+  // ...checagem de cargo que já existe...
+  const navio = naviosList.find(n => n.imo === imo);
+  if (!navio) return;
+
+  if (navio.localizacao !== 'NO_PORTO_DE_DESTINO') {
+    window.mostrarFeedback?.('alerta', 'Retorno não permitido',
+      `O navio ${navio.nome} ainda não chegou ao porto de destino.`);
+    return;
+  }
+  // ...resto igual...
+};
+```
+
+* **Extra:** aplicar a mesma checagem em **Liberar Saída** (`liberarNavioPeloDiretor`): `navio.localizacao === 'DENTRO_DO_PORTO'` dentro da função.
+
+---
+
+## 2) Correção — Botão de pânico pode ser acionado com o alarme já ativo
+
+* **Página:** Manutenção & OS (`manutencao.html` / `js/manutencao.js`)
+* **Local:** Faixa vermelha "Protocolo de Emergência / Botão de Pânico (Inspetor)" (HTML ~93–107) e listener do `panicButton` (JS ~664–680). Estado em `localStorage['nexus_emergency_active']`.
+* **Causa:** o clique não verifica se a emergência já está ativa; pede confirmação, grava de novo e registra outro log. O botão nunca muda de aparência.
+* **Solução:**
+
+```js
+function aplicarEstadoEmergencia(ativa) {
+  emergencyBanner?.classList.toggle('hidden', !ativa);
+  if (!panicBtn) return;
+  panicBtn.disabled = ativa;
+  panicBtn.setAttribute('aria-disabled', String(ativa));
+  panicBtn.classList.toggle('opacity-50', ativa);
+  panicBtn.classList.toggle('cursor-not-allowed', ativa);
+  panicBtn.querySelector('span:last-child').textContent =
+    ativa ? 'EMERGÊNCIA ATIVA' : 'BOTÃO DE PÂNICO';
+}
+
+panicBtn?.addEventListener('click', async () => {
+  if (localStorage.getItem('nexus_emergency_active') === 'true') return; // trava
+  const ok = await window.nexusConfirm(/* ... */);
+  if (!ok) return;
+  localStorage.setItem('nexus_emergency_active', 'true');
+  aplicarEstadoEmergencia(true);
+  // ...log e feedback como já estão...
+});
+
+resetEmergencyBtn?.addEventListener('click', async () => {
+  // ...confirmação...
+  localStorage.removeItem('nexus_emergency_active');
+  aplicarEstadoEmergencia(false);
+});
+
+// ao carregar a página
+aplicarEstadoEmergencia(localStorage.getItem('nexus_emergency_active') === 'true');
+
+// sincroniza entre abas abertas
+window.addEventListener('storage', e => {
+  if (e.key === 'nexus_emergency_active') aplicarEstadoEmergencia(e.newValue === 'true');
+});
+```
+
+---
+
+## 3) Organização de palavras, informações e formatação nos cards e campos de ação
+
+### 3.1 Manutenção & OS — tabela de Ordens de Serviço
+
+* **Local:** `renderOsTable()` (`js/manutencao.js` ~391–421), colunas Status e Ação.
+* **Problemas:** status cru do banco (`EM_MANUTENCAO`, `PENDENTE_APROVACAO`); botões Aprovar/Reprovar com `mr-1` em vez de `gap`; "Concluir Manutenção" longo; prioridade `BAIXA` sem cor própria.
+* **Solução:**
+
+```js
+const STATUS_OS = {
+  PENDENTE_APROVACAO: { txt: 'Aguardando aprovação', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' },
+  EM_MANUTENCAO:      { txt: 'Em manutenção',        cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' },
+  CONCLUIDA:          { txt: 'Concluída',            cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' },
+  REPROVADA:          { txt: 'Reprovada',            cls: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' },
+};
+
+const PRIORIDADE_OS = {
+  ALTA:  'bg-red-100 text-red-800',
+  MEDIA: 'bg-amber-100 text-amber-800',
+  BAIXA: 'bg-emerald-100 text-emerald-800',
+};
+
+const badge = (cls, txt) =>
+  `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap ${cls}">${txt}</span>`;
+```
+
+* **Coluna Ação:** utilizar grupo com `gap` e largura mínima:
+
+```html
+<div class="flex items-center justify-end gap-1.5 flex-wrap min-w-[150px]">
+  <button class="px-2.5 py-1 rounded bg-emerald-600 text-white font-bold">Aprovar</button>
+  <button class="px-2.5 py-1 rounded bg-red-600 text-white font-bold">Reprovar</button>
+</div>
+```
+
+* Trocar **"Concluir Manutenção"** por **"Concluir"**, utilizando o ícone `task_alt` e `title="Concluir manutenção"`.
+
+### 3.2 Manutenção & OS — "Alerta de Manutenção Preventiva Sugerida"
+
+* **Local:** `#alertaPreventivaList` (`js/manutencao.js` ~485).
+* **Problema:** cada item é uma linha corrida `1. [TIPO] ID: motivo`.
+* **Solução:**
+
+```js
+alertaList.innerHTML = equipamentos.map(e => `
+  <div class="flex items-start gap-2 py-1.5 border-b last:border-0 border-amber-200/60">
+    <span class="shrink-0 px-1.5 py-0.5 rounded bg-amber-200/70 text-[10px] font-bold uppercase">${e.tipo}</span>
+    <div>
+      <strong class="block">${e.identificacao}</strong>
+      <span class="text-amber-800/80 dark:text-amber-300/80">${e.motivo}</span>
+    </div>
+  </div>`).join('');
+```
+
+### 3.3 Cargas — tabela e botões de ação
+
+* **Local:** `renderTable()` (`js/cargas.js` ~162–236), coluna Ações (`min-w-[200px]`, até 5–6 botões).
+* **Problemas:** todos os botões têm o mesmo peso visual; a coluna "Contêiner / Navio" junta os dois valores com " / " e repete "Não vinculado".
+* **Solução:** ação principal do status em botão cheio, secundárias em ícones com tooltip; contêiner e navio em duas linhas.
+
+```js
+const btnSec = (icone, titulo, acao, cor = 'slate') =>
+  `<button type="button" title="${titulo}" aria-label="${titulo}"
+     onclick="window.executarAcaoCarga('${c.id}','${acao}')"
+     class="p-1.5 rounded-lg bg-${cor}-100 hover:bg-${cor}-200 text-${cor}-700">
+     <span class="material-symbols-outlined text-[16px]">${icone}</span>
+   </button>`;
+
+`<td class="p-3 text-xs">
+  <span class="block font-mono">${c.container || '<em class="text-slate-400">Contêiner: não vinculado</em>'}</span>
+  <span class="block text-[10px] text-slate-400">${c.navio || 'Navio: não vinculado'}</span>
+</td>`
+```
+
+### 3.4 Cargas — formulário "Agendamento de Nova Carga"
+
+* **Local:** `cargas.html` ~77–139.
+* **Problemas:**
+
+  * Botão superior com erro de concordância: **"Agendar Nova Cargas"** → **"Agendar Nova Carga"**.
+  * Botão de confirmar longo: **"Confirmar Agendamento & Gerar QR Code"**.
+  * 8 campos soltos em 4 colunas, sem separação por assunto.
+  * Falta botão **Cancelar**.
+* **Solução:**
+
+```html
+<button id="toggleAgendamentoFormBtn" ...>
+  <span>Agendar Nova Carga</span>
+</button>
+
+<fieldset class="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+  <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">Dados da carga</legend>
+  <!-- Tipo, Peso, Volume, Valor, Natureza -->
+</fieldset>
+
+<fieldset class="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+  <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">Destino e prazo</legend>
+  <!-- Setor do pátio, Destino final, Data prevista -->
+</fieldset>
+
+<div class="sm:col-span-2 md:col-span-4 flex justify-end gap-2 pt-2">
+  <button type="button" id="cancelAgendamentoBtn"
+    class="px-4 py-2.5 rounded-xl border border-nexus-border text-slate-600 font-semibold text-xs">
+    Cancelar
+  </button>
+
+  <button type="submit"
+    class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-xs">
+    Agendar e gerar QR
+  </button>
+</div>
+```
+
+### 3.5 Embarcações — coluna Ações da tabela de navios
+
+* **Local:** `js/embarcacoes.js` ~311–329.
+* **Problema:** três botões coloridos lado a lado (Vincular, Liberar/Autorizar, Excluir), todos em `font-mono`.
+* **Solução:** manter **Vincular** e **Liberar Saída / Autorizar Retorno** com texto; **Excluir** vira botão somente de ícone, separado por um divisor.
+
+```js
+acoesHtml += `<span class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1"></span>
+  <button type="button"
+    title="Excluir navio"
+    aria-label="Excluir navio ${n.nome}"
+    onclick="window.excluirNavio('${n.imo}')"
+    class="p-1.5 rounded bg-red-50 hover:bg-red-600 text-red-600 hover:text-white">
+    <span class="material-symbols-outlined text-[16px]">delete</span>
+  </button>`;
+```
+
+### 3.6 Embarcações — etiqueta de localização com nome técnico
+
+* **Local:** `js/embarcacoes.js` ~340–344.
+* **Problema:** mostra diretamente os estados técnicos `DENTRO_DO_PORTO`, `FORA_DO_PORTO`, `NO_PORTO_DE_DESTINO`.
+* **Solução:**
+
+```js
+const LOCAL = {
+  DENTRO_DO_PORTO:     { txt: 'No porto',          cls: 'bg-emerald-100 text-emerald-800' },
+  FORA_DO_PORTO:       { txt: 'Em trânsito',       cls: 'bg-blue-100 text-blue-800' },
+  NO_PORTO_DE_DESTINO: { txt: 'Chegou ao destino', cls: 'bg-purple-100 text-purple-800' },
+};
+```
+
+---
+
+## 4) Adição — Gráfico de rosca: navios dentro × fora do porto
+
+* **Página:** Painel Geral (`dashboard.html`)
+* **Local:** abaixo do bloco "Indicadores operacionais no terminal", ou ao lado do card "Navios fora do porto".
+* **Dados:** `dashboard.js` já carrega `navios` (~290–315) com o campo `localizacao`.
+* **Solução:** CSS puro, sem biblioteca.
+
+```html
+<div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm">
+  <h3 class="font-display font-bold text-sm mb-3">Navios dentro × fora do porto</h3>
+
+  <div class="flex items-center gap-6">
+    <div id="donutNavios" class="w-32 h-32 rounded-full relative"></div>
+    <ul id="donutLegenda" class="text-xs space-y-1"></ul>
+  </div>
+</div>
+```
+
+```js
+function renderDonutNavios(navios) {
+  const total = navios.length || 1;
+  const dentro = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
+  const destino = navios.filter(n => n.localizacao === 'NO_PORTO_DE_DESTINO').length;
+  const fora = navios.length - dentro - destino;
+
+  const pct = v => Math.round((v / total) * 100);
+  const a = pct(dentro);
+  const b = a + pct(destino);
+
+  const el = document.getElementById('donutNavios');
+
+  el.style.background =
+    `conic-gradient(#10b981 0 ${a}%, #8b5cf6 ${a}% ${b}%, #3b82f6 ${b}% 100%)`;
+
+  el.innerHTML = `
+    <div class="absolute inset-4 rounded-full bg-white dark:bg-slate-900
+      flex items-center justify-center font-bold">
+      ${pct(dentro)}%
+    </div>`;
+
+  document.getElementById('donutLegenda').innerHTML = `
+    <li>
+      <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
+      No porto: ${dentro} (${pct(dentro)}%)
+    </li>
+    <li>
+      <span class="inline-block w-2 h-2 rounded-full bg-violet-500 mr-2"></span>
+      No destino: ${destino} (${pct(destino)}%)
+    </li>
+    <li>
+      <span class="inline-block w-2 h-2 rounded-full bg-blue-500 mr-2"></span>
+      Em trânsito: ${fora} (${pct(fora)}%)
+    </li>`;
+}
+```
+
+* **Alternativa:** utilizar Chart.js (`https://cdn.jsdelivr.net/npm/chart.js`) caso a implementação com CSS puro seja substituída pela biblioteca de gráficos já utilizada pelo sistema.
+
+---
+
+## 5) Adição — Gráfico de barras: navios mais utilizados
+
+* **Página:** Painel Geral ou Relatórios.
+* **Local:** ao lado da rosca, utilizando grid de 2 colunas em telas grandes.
+* **Dados:** contagem de cargas por navio (`cargas.navio`, já utilizado em `embarcacoes.js` ~296).
+* **Solução:**
+
+```js
+function renderTopNavios(cargas) {
+  const cont = {};
+
+  cargas
+    .filter(c => c.navio)
+    .forEach(c => {
+      cont[c.navio] = (cont[c.navio] || 0) + 1;
+    });
+
+  const top = Object.entries(cont)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const max = top[0]?.[1] || 1;
+
+  document.getElementById('topNavios').innerHTML =
+    top.map(([nome, qtd]) => `
+      <div class="mb-2">
+        <div class="flex justify-between text-xs mb-0.5">
+          <span>${nome}</span>
+          <strong>${qtd}</strong>
+        </div>
+
+        <div class="h-2 rounded bg-slate-100 dark:bg-slate-800">
+          <div
+            class="h-2 rounded bg-nexus-500"
+            style="width:${(qtd / max) * 100}%">
+          </div>
+        </div>
+      </div>
+    `).join('') ||
+    '<p class="text-xs text-slate-400 italic">Sem cargas vinculadas ainda.</p>';
+}
+```
+
+---
+
+## 6) Adição — Faixa de alarme global (continuação do item 2)
+
+* **Página:** todas, via `js/layout.js`.
+* **Local:** topo do `<main>`, abaixo do cabeçalho.
+* **Problema:** `nexus_emergency_active` só é lido na tela de Manutenção, embora a mensagem diga que as operações do pátio estão bloqueadas.
+* **Solução:**
+
+```js
+if (localStorage.getItem('nexus_emergency_active') === 'true') {
+  document.querySelector('main')?.insertAdjacentHTML(
+    'afterbegin',
+    `<div
+      role="alert"
+      class="mb-4 p-3 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center gap-2">
+      <span class="material-symbols-outlined text-[18px]">warning</span>
+      EMERGÊNCIA ATIVA — operações do pátio bloqueadas temporariamente.
+    </div>`
+  );
+}
+```
+
+* **Complemento:** desabilitar **Liberar Saída**, **Autorizar Retorno** e **Movimentar** enquanto o alarme estiver ativo.
+
+---
+
+## 7) Adições simples
+
+| # | Página           | Local                  | O que adicionar                                                                                                            |
+| - | ---------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| a | Cargas           | Acima da tabela        | Chips de resumo por status (`Agendamento 4 · Armazenagem 3 · Prontas 2…`) que filtram a tabela. Já existe `#filterStatus`. |
+| b | Todas as tabelas | Acima de cada tabela   | Campo de busca rápida (nome / IMO / ID) e contador **"Exibindo X de Y"**.                                                  |
+| c | Todas as tabelas | Quando vazia           | Estado vazio com ícone e frase útil, por exemplo: **"Nenhuma OS cadastrada. Use + Nova Ordem de Serviço"**.                |
+| d | Embarcações      | Coluna ETA             | Barra de progresso da viagem (tempo decorrido ÷ previsto, já calculados em ~273–292).                                      |
+| e | Painel Geral     | Cabeçalho              | Hora da última atualização, por exemplo **"Atualizado às 14:32"**.                                                         |
+| f | Painel Geral     | Planilha de desempenho | Botão **Exportar CSV**.                                                                                                    |
+| g | Relatórios       | Topo                   | Atalhos de período (**Hoje · 7 dias · 30 dias · Este mês**).                                                               |
+| h | Manutenção       | Tabela de OS           | Filtro por status (**Todas · Pendentes · Em manutenção · Concluídas**).                                                    |
+| i | Cargas / Scanner | Etiqueta QR            | Botão **Imprimir etiqueta** (`window.print()` + CSS `@media print`).                                                       |
+
+---
+
+## 8) Ajustes visuais (sem mudar o que já existe)
+
+| # | Página           | Local                                     | Ajuste                                                                                                                                                                                   | Exemplo                                                                                                      |
+| - | ---------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 1 | Todas (menu)     | Menu lateral no celular                   | O menu abre por cima do conteúdo e esconde o título; adicionar fundo escurecido que fecha ao tocar fora.                                                                                 | `<div id="navOverlay" class="fixed inset-0 bg-black/40 z-30 hidden"></div>` + `overlay.onclick = fecharMenu` |
+| 2 | Todas as tabelas | Container das tabelas                     | No celular a tabela rola para o lado sem aviso; incluir dica de rolagem.                                                                                                                 | `<p class="sm:hidden text-[10px] text-slate-400">Deslize para ver mais →</p>`                                |
+| 3 | Painel Geral     | Cards de indicadores                      | Os cards são `<div onclick>` e não funcionam com teclado nem leitor de tela; trocar por `<button>`.                                                                                      | `<button type="button" onclick="..." class="text-left ...">`                                                 |
+| 4 | Todas            | Botões só com ícone                       | Falta `aria-label` e foco visível.                                                                                                                                                       | `focus-visible:ring-2 focus-visible:ring-nexus-500 focus-visible:outline-none`                               |
+| 5 | Todas            | Textos de 10–11 px                        | Muito pequenos; subir rótulos de status e textos de apoio para 12 px.                                                                                                                    | `text-xs` no lugar de `text-[10px]`                                                                          |
+| 6 | Manutenção       | Select "Equipamento / Ativo"              | O código faz `innerHTML += '<optgroup>'` e depois `+= '</optgroup>'`; o navegador fecha o grupo sozinho e as opções ficam fora dele (grupos aparecem vazios). Montar o grupo de uma vez. | —                                                                                                            |
+| 7 | Todas            | Mensagens de feedback (`mostrarFeedback`) | Padronizar tempo na tela (4–5 s), botão fechar e ícone por tipo.                                                                                                                         | —                                                                                                            |
+| 8 | Todas            | Datas                                     | Padronizar `dd/mm/aaaa` (a tabela de OS mostra `2026-09-27` ou "N/A").                                                                                                                   | `new Date(os.data).toLocaleDateString('pt-BR')`                                                              |
+
+### Código do ajuste 6 — `carregarEquipamentosEAlertas` (`js/manutencao.js`)
+
+```js
+const optGroup = (label, itens) =>
+  itens.length
+    ? `<optgroup label="${label}">
+        ${itens.map(i =>
+          `<option value="${i.valor}">${i.rotulo}</option>`
+        ).join('')}
+       </optgroup>`
+    : '';
+
+osSelect.innerHTML =
+  '<option value="">Selecione o Equipamento / Ativo...</option>' +
+  optGroup(
+    'Guindastes & Pórticos',
+    gnds.map(g => ({
+      valor: `Guindaste ${g.identificacao || g.id}`,
+      rotulo: `Guindaste ${g.identificacao || g.id}`
+    }))
+  ) +
+  optGroup(
+    'Contêineres',
+    conts.map(c => ({
+      valor: `Contêiner ${c.identificacao}`,
+      rotulo: `Contêiner ${c.identificacao}`
+    }))
+  );
+```
