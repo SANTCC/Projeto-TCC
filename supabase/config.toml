@@ -3,4 +3,13 @@
 #   supabase link --project-ref <ref-do-projeto>
 #   supabase db push                                  (aplica supabase/migrations/*)
 #   supabase functions deploy panic-alert --no-verify-jwt
+
 project_id = "nexusport"
+
+# panic-alert: o app não usa Supabase Auth (sessão própria via codigo_individual),
+# então o gateway NÃO deve exigir JWT. Com verify_jwt ligado, o gateway responde 401
+# ao preflight CORS (OPTIONS não envia Authorization), e o navegador bloqueia a
+# chamada com "Response to preflight request doesn't pass access control check".
+# A autorização real é feita dentro da função (RBAC por cargo).
+[functions.panic-alert]
+verify_jwt = false
