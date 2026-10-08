@@ -34,6 +34,9 @@ Adicionar usuários "mock" pra cada cargo, cada um com nome no formato [CARGO] +
 ## Popular ações
 Adicionar histórico de mudanças, novos cargas, novos navios, tudo pra fazer isso realmente parecer algo 100% polido.
 
+## Nº de usuários on-line no momento
+Número de usuários ativos naquele momento, atualizado a cada 30 segundos.
+
 ## Atualização em tempo real das tabelas e indicadores
 Corrigir os dados exibidos pelas tabelas e indicadores do sistema quando ocorre uma alteração no Supabase, garantindo que todos os painéis sejam atualizados em tempo real e não apresentem dados antigos ou incorretos.
 
