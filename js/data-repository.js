@@ -599,7 +599,7 @@
 
   setInterval(() => {
     NexusRepository.notifyChange('periodic_sync');
-  }, 10000);
+  }, 60000);
 
   window.NexusRepository = NexusRepository;
 })(window);
