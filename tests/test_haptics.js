@@ -2,13 +2,14 @@
  * Teste de Verificação — Alerta no Aparelho (js/haptics.js)
  *
  * Cobre a regressão relatada em campo: "o botão SOS não faz o celular vibrar".
- * Executa o módulo em DOM real (jsdom) simulando Android/Chrome, iPhone
- * (iOS 18 e iOS 26.5) e navegadores sem suporte algum, verificando:
- *   - vibração realmente disparada quando há Vibration API + interação;
- *   - motivo (reason) informado em cada cenário de bloqueio, sem exceções;
- *   - `prefers-reduced-motion` NÃO desliga mais o alerta tátil;
+ * Executa o módulo em DOM real (jsdom) simulando Android/Chrome, iOS sem API
+ * e navegadores sem suporte, verificando requisitos W3C e integrações:
+ *   - vibração somente com Vibration API, contexto seguro, página visível e
+ *     sticky user activation;
+ *   - normalização dos padrões e diagnóstico dos bloqueios;
+ *   - `prefers-reduced-motion` não desliga o alerta tátil;
  *   - pulsos de emergência, parada e preferências persistidas;
- *   - haptics do iOS (overlay de toque no botão SOS) sem acionar duas vezes.
+ *   - nenhum pseudo-haptic é anunciado como suporte real do iOS.
  *
  * Executar: node tests/test_haptics.js
  */
@@ -22,7 +23,6 @@ const PANIC_SRC = read('js/panic-realtime.js');
 
 const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36';
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
-const IPHONE_265_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1';
 const FIREFOX_UA = 'Mozilla/5.0 (Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0';
 
 let JSDOM = null;
@@ -40,6 +40,15 @@ function check(label, cond, extra) {
     console.error(`  ❌ [FAIL] ${label}${extra ? ` — ${extra}` : ''}`);
     passed = false;
   }
+}
+
+function mockUserActivation(window, initiallyActive = false) {
+  let active = Boolean(initiallyActive);
+  Object.defineProperty(window.navigator, 'userActivation', {
+    configurable: true,
+    get: () => ({ hasBeenActive: active })
+  });
+  window.__setTestUserActivation = (value) => { active = Boolean(value); };
 }
 
 /**
@@ -61,6 +70,7 @@ function mount(options = {}) {
     configurable: true,
     get: () => options.userAgent || ANDROID_UA
   });
+  mockUserActivation(window, options.userActivated);
   window.isSecureContext = options.secure !== false;
   if (options.vibrate) {
     window.navigator.vibrate = function (pattern) {
@@ -91,13 +101,13 @@ function mount(options = {}) {
   return { dom, window, vibrateCalls };
 }
 
-/** Simula a interação do usuário (sticky user activation). */
+/** Simula a ativação sticky que o navegador define durante uma interação real. */
 function activate(window) {
+  window.__setTestUserActivation(true);
   window.document.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
-  window.NexusHaptics.unlock();
 }
 
-/** Aguarda o próximo tick (a rede de segurança do overlay usa setTimeout 0). */
+/** Aguarda o próximo tick para callbacks assíncronos de DOM. */
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 async function testHaptics() {
@@ -122,9 +132,8 @@ async function testHaptics() {
   }
 
   const m1 = mount({ vibrate: true });
-  const api = ['status', 'describe', 'hint', 'hasBackend', 'vibrate', 'alert', 'sos', 'stop',
-    'test', 'unlock', 'isEnabled', 'setEnabled', 'isSoundEnabled', 'setSoundEnabled',
-    'attachTapHaptic', 'bindUI'];
+  const api = ['status', 'describe', 'hint', 'hasBackend', 'normalizePattern', 'vibrate', 'alert', 'sos', 'stop',
+    'test', 'unlock', 'isEnabled', 'setEnabled', 'isSoundEnabled', 'setSoundEnabled', 'bindUI'];
   const missing = api.filter((fn) => !m1.window.NexusHaptics || typeof m1.window.NexusHaptics[fn] !== 'function');
   check('Expõe window.NexusHaptics com a API completa', Boolean(m1.window.NexusHaptics) && missing.length === 0, missing.join(', '));
 
@@ -145,17 +154,37 @@ async function testHaptics() {
   hapt1.stop();
   check('stop() envia navigator.vibrate(0)', m1.vibrateCalls[m1.vibrateCalls.length - 1] === 0);
 
+  const longPattern = Array.from({ length: 12 }, (_, index) => index === 0 ? 12001 : 50 + index);
+  hapt1.vibrate(longPattern);
+  const normalized = m1.vibrateCalls[m1.vibrateCalls.length - 1];
+  check('Padrões são truncados a 10 itens e limitados a 10.000 ms',
+    normalized.length === 10 && normalized[0] === 10000, JSON.stringify(normalized));
+  hapt1.vibrate(12000);
+  check('Um número é convertido em sequência e limitado a 10.000 ms',
+    JSON.stringify(m1.vibrateCalls[m1.vibrateCalls.length - 1]) === JSON.stringify([10000]));
+  const callsBeforeInvalid = m1.vibrateCalls.length;
+  check('Padrão com valor negativo é rejeitado antes da chamada nativa',
+    hapt1.vibrate([100, -1]) === false && m1.vibrateCalls.length === callsBeforeInvalid);
+  hapt1.vibrate([]);
+  check('Padrão vazio cancela a vibração atual', m1.vibrateCalls[m1.vibrateCalls.length - 1] === 0);
+
   // ------------------------------------------------------------------
   console.log('\n3. Validando bloqueio por falta de interação (sticky activation)...');
   const m3 = mount({ vibrate: true });
   const hapt3 = m3.window.NexusHaptics;
   check('Motivo "no_activation" reportado antes de qualquer toque',
     hapt3.status().reasons.indexOf('no_activation') !== -1, JSON.stringify(hapt3.status().reasons));
+  hapt3.unlock();
+  m3.window.document.dispatchEvent(new m3.window.Event('pointerdown', { bubbles: true }));
+  check('unlock() e eventos sintéticos não falsificam a interação do usuário',
+    hapt3.status().userActivated === false, JSON.stringify(hapt3.status()));
   const res3 = hapt3.alert();
   check('Nenhuma chamada é feita sem interação (evita intervention do Chrome)',
     res3.fired === false && m3.vibrateCalls.length === 0, JSON.stringify(m3.vibrateCalls));
   check('hint() explica a exigência de toque', /[Tt]oque/.test(hapt3.hint('no_activation')));
   check('hint() compacto existe para o rodapé', hapt3.hint('no_activation', true).length < 70);
+  activate(m3.window);
+  check('Ativação sticky do navegador libera a próxima chamada', hapt3.alert().fired === true);
 
   // ------------------------------------------------------------------
   console.log('\n4. Validando que prefers-reduced-motion NÃO silencia o alerta...');
@@ -175,54 +204,47 @@ async function testHaptics() {
   check('Motivo "hidden" listado no status', m5.window.NexusHaptics.status().reasons.indexOf('hidden') !== -1);
 
   // ------------------------------------------------------------------
-  console.log('\n6. Validando iPhone (iOS 18 — haptics pelo switch nativo)...');
+  console.log('\n6. Validando iPhone/iPad sem Vibration API...');
   const m6 = mount({ userAgent: IPHONE_UA });
   const hapt6 = m6.window.NexusHaptics;
   check('Detecta iOS pelo User-Agent', hapt6.isIOS() === true && hapt6.status().platform === 'ios');
-  check('Backend identificado como ios_switch', hapt6.status().backend === 'ios_switch', hapt6.status().backend);
-  check('Não reporta "unsupported" no iPhone 18', hapt6.status().reasons.indexOf('unsupported') === -1, JSON.stringify(hapt6.status().reasons));
-  activate(m6.window);
-  check('Haptics do iOS acionados por script (iOS < 26.5)', hapt6.alert().fired === true);
-  check('Switch nativo (<input switch>) criado no DOM', Boolean(m6.window.document.querySelector('input[switch]')));
+  check('iOS sem navigator.vibrate é reportado como unsupported',
+    hapt6.status().backend === 'none' && hapt6.status().reasons.includes('unsupported'), JSON.stringify(hapt6.status()));
+  check('Não inventa um backend tátil por meio de controles HTML',
+    hapt6.hasBackend() === false && !m6.window.document.querySelector('input[switch]'));
+  check('Diagnóstico explica que páginas web no iPhone não expõem a API',
+    /não expõe a Vibration API/i.test(hapt6.hint('unsupported')));
+  check('Alerta sonoro é habilitado por padrão onde não há Vibration API', hapt6.isSoundEnabled() === true);
 
   // ------------------------------------------------------------------
-  console.log('\n7. Validando iPhone (iOS 26.5 — overlay de toque no botão SOS)...');
-  const m7 = mount({ userAgent: IPHONE_265_UA });
-  const hapt7 = m7.window.NexusHaptics;
-  check('Motivo "ios_programmatic_blocked" reportado',
-    hapt7.status().reasons.indexOf('ios_programmatic_blocked') !== -1, JSON.stringify(hapt7.status().reasons));
-  check('hint(curto) explica a limitação do iOS 26.5+', /26\.5/.test(hapt7.hint('ios_programmatic_blocked', true)));
-  const btn = m7.window.document.getElementById('panicButton');
-  let cliques = 0;
-  btn.addEventListener('click', () => { cliques += 1; });
-  check('Overlay de toque aplicado ao botão SOS', hapt7.attachTapHaptic(btn) === true);
-  check('Overlay usa <label data-haptic-trigger> + input switch',
-    Boolean(btn.querySelector('label[data-haptic-trigger] input[switch]')));
-  check('Não duplica o overlay em chamadas repetidas', hapt7.attachTapHaptic(btn) === false);
-  btn.querySelector('label[data-haptic-trigger]').dispatchEvent(new m7.window.MouseEvent('click', { bubbles: true }));
-  check('Toque no overlay aciona o botão SOS uma única vez (bubbling)', cliques === 1, `cliques=${cliques}`);
-  await tick();
-  check('Rede de segurança não duplica o acionamento', cliques === 1, `cliques=${cliques}`);
-
-  // ------------------------------------------------------------------
-  console.log('\n8. Validando navegador sem vibração (Firefox 129+) e http://...');
+  console.log('\n7. Validando ausência da API e contexto inseguro...');
   const m8 = mount({ userAgent: FIREFOX_UA });
   const hapt8 = m8.window.NexusHaptics;
-  check('Motivo "unsupported" reportado', hapt8.status().reasons.indexOf('unsupported') !== -1, JSON.stringify(hapt8.status().reasons));
-  check('hasBackend() === false', hapt8.hasBackend() === false);
-  check('Alerta sonoro entra como padrão nesse cenário (iOS/Firefox/desktop)',
-    hapt8.isSoundEnabled() === true);
-  check('describe() explica o cenário em português', /Vibração: INDISPONÍVEL/.test(hapt8.describe()));
-  check('hint() orienta a ativar o alerta sonoro', /sonoro/i.test(hapt8.hint('unsupported')));
-  check('test()/alert()/stop() não lançam exceção sem suporte',
+  check('Firefox sem navigator.vibrate é reportado como unsupported',
+    hapt8.status().reasons.includes('unsupported') && hapt8.hasBackend() === false);
+  check('O áudio fica habilitado por padrão sem API tátil', hapt8.isSoundEnabled() === true);
+  check('Diagnóstico de navegador sem suporte é legível', /Vibração: INDISPONÍVEL/.test(hapt8.describe()));
+  check('Sem suporte, teste/alerta/parada não lançam exceção',
     (() => { try { hapt8.test(); hapt8.alert(); hapt8.stop(); return true; } catch (e) { return false; } })());
 
   const m9 = mount({ vibrate: true, secure: false });
-  check('Contexto inseguro (http://) é reportado quando a API não existe',
-    m9.window.NexusHaptics.status().reasons.length > 0);
+  activate(m9.window);
+  const insecureResult = m9.window.NexusHaptics.alert();
+  check('HTTP é bloqueado mesmo se um método vibrate estiver exposto',
+    insecureResult.fired === false && insecureResult.reason === 'insecure_context' && m9.vibrateCalls.length === 0,
+    JSON.stringify({ result: insecureResult, calls: m9.vibrateCalls }));
+  check('Contexto inseguro aparece no diagnóstico',
+    m9.window.NexusHaptics.status().reasons.includes('insecure_context'));
 
-  // ------------------------------------------------------------------
-  console.log('\n9. Validando preferências e persistência...');
+  console.log('\n8. Validando preferências e persistência...');
+  const blocked = mount({ vibrate: true, vibrateReturn: false });
+  activate(blocked.window);
+  const blockedResult = blocked.window.NexusHaptics.alert();
+  check('Retorno false do navegador é preservado como bloqueio',
+    blockedResult.fired === false && blockedResult.reason === 'blocked');
+  check('Diagnóstico inclui a última recusa, mesmo sem outra causa ambiental',
+    /navegador recusou a vibração/i.test(blocked.window.NexusHaptics.describe()));
+
   const m10 = mount({ vibrate: true });
   const hapt10 = m10.window.NexusHaptics;
   activate(m10.window);
@@ -239,7 +261,7 @@ async function testHaptics() {
       && /"sound":true/.test(m10.window.localStorage.getItem('nexus_haptics_prefs') || ''));
 
   // ------------------------------------------------------------------
-  console.log('\n10. Validando o painel de diagnóstico ("Alerta no Aparelho")...');
+  console.log('\n9. Validando o painel de diagnóstico ("Alerta no Aparelho")...');
   const panel = read('manutencao.html');
   check('manutencao.html traz o painel de alerta no aparelho',
     ['hapticsPanel', 'hapticsStatus', 'hapticsEnabledToggle', 'hapticsSoundToggle', 'hapticsTestBtn', 'hapticsRefreshBtn']
@@ -255,14 +277,14 @@ async function testHaptics() {
   m11.window.document.body.appendChild(toggleEl);
   m11.window.document.body.appendChild(testBtnEl);
   m11.window.NexusHaptics.bindUI();
-  check('bindUI() preenche o diagnóstico em texto', /Vibração: SUPORTADA/.test(statusEl.textContent));
+  check('bindUI() preenche o diagnóstico em texto', /Vibração: API disponível/.test(statusEl.textContent));
   check('bindUI() reflete o estado do interruptor', toggleEl.checked === true);
   activate(m11.window);
   testBtnEl.dispatchEvent(new m11.window.MouseEvent('click', { bubbles: true }));
   check('Botão "Testar vibração" dispara o padrão de teste', m11.vibrateCalls.length > 0, JSON.stringify(m11.vibrateCalls));
 
   // ------------------------------------------------------------------
-  console.log('\n11. Validando integração com o Botão de Pânico (panic-realtime)...');
+  console.log('\n10. Validando integração com o Botão de Pânico (panic-realtime)...');
   check('panic-realtime.js usa o motor de haptics', PANIC_SRC.includes('window.NexusHaptics'));
   check('Mantém o caminho direto pela Vibration API como fallback',
     PANIC_SRC.includes('navigator.vibrate') && PANIC_SRC.includes('navigator.vibrate(0)'));
@@ -272,7 +294,8 @@ async function testHaptics() {
     /HAPTIC_PATTERN_SOS/.test(PANIC_SRC) && /fireActivationAlert\(\)/.test(PANIC_SRC));
   check('Rodapé informa o motivo de o aparelho não vibrar',
     PANIC_SRC.includes('nexusPanicFooterHaptics') && PANIC_SRC.includes('deviceAlertHint'));
-  check('Overlay de toque do iOS aplicado ao #panicButton', PANIC_SRC.includes('attachTapHaptic'));
+  check('Não aplica pseudo-haptics nem overlay ao botão SOS',
+    !PANIC_SRC.includes('attachTapHaptic') && !HAPTICS_SRC.includes('input[switch]'));
   const pages = ['dashboard.html', 'cargas.html', 'inspecao.html', 'scanner.html', 'embarcacoes.html',
     'manutencao.html', 'delegacao.html', 'tecnico_portos.html', 'relatorios.html'];
   check('Todas as páginas internas carregam js/haptics.js antes do módulo de pânico',
@@ -284,7 +307,7 @@ async function testHaptics() {
     }));
 
   // ------------------------------------------------------------------
-  console.log('\n12. Validando a página real (manutencao.html + módulos)...');
+  console.log('\n11. Validando a página real (manutencao.html + módulos)...');
   const panicSrc = read('js/panic-realtime.js');
   const dom = new JSDOM(read('manutencao.html'), {
     url: 'https://nexusport.example/manutencao.html',
@@ -311,13 +334,15 @@ async function testHaptics() {
   check('Página real monta o módulo de haptics', Boolean(w12.NexusHaptics));
   check('Página real monta o módulo de pânico', Boolean(w12.NexusPanic));
   check('Diagnóstico do painel preenchido na página real', /Vibração/.test(status12 ? status12.textContent : ''), status12 ? status12.textContent : 'sem elemento');
-  check('Overlay de toque aplicado ao botão SOS na página real',
-    Boolean(w12.document.querySelector('#panicButton label[data-haptic-trigger]')));
+  check('Página real não injeta um switch falso sobre o botão SOS',
+    !w12.document.querySelector('#panicButton label[data-haptic-trigger], #panicButton input[switch]'));
+  check('iOS recebe diagnóstico honesto de API indisponível',
+    /Vibração: INDISPONÍVEL/.test(status12 ? status12.textContent : ''));
   check('Botão de pânico continua publicando o estado global',
     typeof w12.NexusPanic.getState === 'function' && w12.NexusPanic.isActive() === false);
 
   // ------------------------------------------------------------------
-  console.log('\n13. Validando o fluxo completo do botão SOS (Android)...');
+  console.log('\n12. Validando o fluxo completo do botão SOS (Android)...');
   const dom13 = new JSDOM(read('manutencao.html'), {
     url: 'https://nexusport.example/manutencao.html',
     runScripts: 'outside-only',
@@ -326,6 +351,7 @@ async function testHaptics() {
   const w13 = dom13.window;
   w13.isSecureContext = true;
   Object.defineProperty(w13.navigator, 'userAgent', { configurable: true, get: () => ANDROID_UA });
+  mockUserActivation(w13);
   const vibracoes = [];
   w13.navigator.vibrate = (pattern) => { vibracoes.push(pattern); return true; };
   w13.localStorage.setItem('nexus_session', JSON.stringify({
@@ -344,7 +370,7 @@ async function testHaptics() {
   w13.eval(panicSrc);
   w13.document.dispatchEvent(new w13.Event('DOMContentLoaded', { bubbles: true }));
   await tick();
-  w13.NexusHaptics.unlock(); // operador já tocou na tela ao usar o sistema
+  activate(w13); // simula a interação real do operador antes de acionar o SOS
 
   const acionamento = await w13.NexusPanic.triggerPanic({ confirmar: false });
   check('Acionamento do SOS concluído (fallback sem Supabase)', acionamento.ok === true, JSON.stringify(acionamento));
@@ -364,7 +390,7 @@ async function testHaptics() {
   check('Vibração interrompida com navigator.vibrate(0)', vibracoes[vibracoes.length - 1] === 0, JSON.stringify(vibracoes));
 
   // ------------------------------------------------------------------
-  console.log('\n14. Validando liberação por toque (exigência do Chrome/Android)...');
+  console.log('\n13. Validando liberação por toque (exigência do Chrome/Android)...');
   const dom14 = new JSDOM(read('manutencao.html'), {
     url: 'https://nexusport.example/dashboard.html',
     runScripts: 'outside-only',
@@ -373,6 +399,7 @@ async function testHaptics() {
   const w14 = dom14.window;
   w14.isSecureContext = true;
   Object.defineProperty(w14.navigator, 'userAgent', { configurable: true, get: () => ANDROID_UA });
+  mockUserActivation(w14);
   const vibracoes14 = [];
   w14.navigator.vibrate = (pattern) => { vibracoes14.push(pattern); return true; };
   w14.currentUserSession = {
@@ -393,14 +420,14 @@ async function testHaptics() {
     vibracoes14.filter((p) => p !== 0).length === 0, JSON.stringify(vibracoes14));
 
   // Primeiro toque do operador na página durante a emergência.
-  w14.document.dispatchEvent(new w14.Event('pointerdown', { bubbles: true }));
+  activate(w14);
   check('Primeiro toque libera a vibração IMEDIATAMENTE (sem esperar o ciclo de 3s)',
     JSON.stringify(vibracoes14.filter((p) => p !== 0)[0]) === JSON.stringify(w14.NexusHaptics.PATTERNS.alert),
     JSON.stringify(vibracoes14));
   check('status() reconhece a interação após o toque', w14.NexusHaptics.status().userActivated === true);
 
   // ------------------------------------------------------------------
-  console.log('\n15. Validando a página pública de teste (teste-vibracao.html)...');
+  console.log('\n14. Validando a página pública de teste (teste-vibracao.html)...');
   const testePagina = read('teste-vibracao.html');
   check('Página de teste existe e carrega o motor de haptics', /js\/haptics\.js/.test(testePagina));
   check('Não exige login (página pública, sem auth-guard)', !testePagina.includes('auth-guard.js'));
@@ -413,7 +440,7 @@ async function testHaptics() {
   }
 
   // ------------------------------------------------------------------
-  console.log('\n16. Executando a página de teste de verdade (jsdom)...');
+  console.log('\n15. Executando a página de teste de verdade (jsdom)...');
   const { requestInterceptor } = require('jsdom');
   const dom16 = new JSDOM(read('teste-vibracao.html'), {
     url: 'https://nexusport.example/teste-vibracao.html',
