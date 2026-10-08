@@ -30,6 +30,12 @@
  *                                    devolve de onde vieram os dados (servidor
  *                                    × cache local) para a interface informar
  *                                    o operador do botão "Atualizar"
+ *
+ * Renovação automática: a cada 1 MINUTO (INTERVALO_AUTO_REFRESH_MS), além de
+ * imediatamente a cada alteração real de dados (evento `nexus_data_changed`).
+ * O heartbeat de sincronização de 10 s do repositório (`periodic_sync`) e o
+ * foco da janela NÃO redesenham os gráficos — antes eles causavam o "auto
+ * reload" de 10 em 10 segundos.
  * ---------------------------------------------------------------------------
  */
 
@@ -38,6 +44,26 @@
 
   const CDN_CHARTJS = 'https://cdn.jsdelivr.net/npm/chart.js';
   const TTL_CACHE_MS = 4000;
+
+  /**
+   * Cadência da renovação AUTOMÁTICA do painel de gráficos: 1 minuto.
+   *
+   * O painel já foi redesenhado a cada 10 s porque o heartbeat de
+   * sincronização do repositório (`periodic_sync`, ver js/data-repository.js)
+   * dispara `nexus_data_changed` e o ouvinte abaixo redesenhava tudo. Isso
+   * piscava a tela e gastava leituras no Supabase sem dado novo. Agora a
+   * renovação automática é de 1 em 1 minuto; alterações reais de dados
+   * continuam refletindo na hora (evento com entidade verdadeira) e o botão
+   * "Atualizar" força a leitura do servidor a qualquer momento.
+   */
+  const INTERVALO_AUTO_REFRESH_MS = 60000;
+
+  /**
+   * Eventos de sincronização de FUNDO — heartbeat do repositório e foco da
+   * janela. Não representam alteração de dados, portanto não redesenham os
+   * gráficos (a renovação periódica de 1 minuto cobre esse caso).
+   */
+  const ENTIDADES_SYNC_FUNDO = ['periodic_sync', 'window_focus'];
 
   // ---------------------------------------------------------------------
   // Paleta de cores (Specs/design/design.md): barras #445987, linhas #1E293B,
@@ -1713,7 +1739,13 @@
     if (ligarEventos.ligado) return;
     ligarEventos.ligado = true;
 
-    window.addEventListener('nexus_data_changed', function () {
+    window.addEventListener('nexus_data_changed', function (evento) {
+      // Heartbeat de sync (10 s) e foco da janela não são alterações de dados:
+      // redesenhar a cada 10 s fazia o painel piscar sem novidade. Esses casos
+      // ficam por conta da renovação automática de 1 minuto (INTERVALO_AUTO_REFRESH_MS).
+      const entidade = evento && evento.detail ? evento.detail.entity : null;
+      if (entidade && ENTIDADES_SYNC_FUNDO.indexOf(entidade) !== -1) return;
+
       invalidarCache();
       if (!padraoAtual.sessao) return;
       if (debounceTimer) clearTimeout(debounceTimer);
@@ -1723,17 +1755,23 @@
     });
 
     if (typeof window.setInterval !== 'function') return;
+    // Renovação automática: a cada 1 minuto (nunca durante o heartbeat de 10 s).
     window.setInterval(function () {
       if (!padraoAtual.sessao) return;
       if (window.document && window.document.hidden) return;
       invalidarCache();
       renderPainel(padraoAtual.sessao, padraoAtual);
-    }, 60000);
+    }, INTERVALO_AUTO_REFRESH_MS);
   }
 
   const NexusCharts = {
     GRUPOS: GRUPOS,
     CONSTRUTORES: CONSTRUTORES,
+
+    /** Cadência da renovação automática do painel (1 minuto) — exposta para testes/auditoria. */
+    INTERVALO_AUTO_REFRESH_MS: INTERVALO_AUTO_REFRESH_MS,
+    /** Entidades de sincronização de fundo que NÃO disparam redesenho imediato. */
+    ENTIDADES_SYNC_FUNDO: ENTIDADES_SYNC_FUNDO,
 
     /** Inicializa o painel de gráficos do dashboard.html conforme o cargo. */
     initDashboard: function () {
