@@ -86,7 +86,7 @@
 
           <button id="toggleAgendamentoFormBtn" type="button" class="px-4 py-2.5 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-2 transition-all shadow-md">
             <span class="material-symbols-outlined text-[18px]">add_circle</span>
-            <span>Agendar Nova Cargas</span>
+            <span>Agendar Nova Carga</span>
           </button>
         </div>
 
@@ -99,6 +99,9 @@
               Agendamento de Nova Carga
             </h3>
           </div>
+
+          <fieldset class="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+            <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-400 px-1">Dados da carga</legend>
 
           <div>
             <label class="block font-bold text-slate-500 mb-1">Tipo de Carga</label>
@@ -122,6 +125,11 @@
             <label class="block font-bold text-slate-500 mb-1">Natureza da Mercadoria</label>
             <input type="text" id="agNatureza" required placeholder="Ex: Agrícola / Perecível" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
           </div>
+          </fieldset>
+
+          <fieldset class="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-4 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+            <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-400 px-1">Destino e prazo</legend>
+
           <div>
             <label class="block font-bold text-slate-500 mb-1">Setor do Pátio (Ponto de Descarga)</label>
             <select id="agPortoDescarga" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-nexus-900 dark:text-white">
@@ -139,11 +147,24 @@
             <label class="block font-bold text-slate-500 mb-1">Data Prevista de Entrega</label>
             <input type="date" id="agDataPrevista" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
           </div>
+          <div class="sm:col-span-3">
+            <label class="block font-bold text-slate-500 mb-1">Funcionário Responsável pela Carga</label>
+            <select id="agEstivadorResponsavel" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold">
+              <option value="">Carregando funcionários em escala...</option>
+            </select>
+            <p id="agEstivadorResponsavelHint" class="text-[11px] text-slate-400 mt-1">
+              Gestão: selecione um funcionário em escala para assumir a carga. Funcionário operacional: a carga é automaticamente atribuída a você.
+            </p>
+          </div>
+          </fieldset>
 
           <div class="sm:col-span-2 md:col-span-4 flex justify-end gap-2 pt-2">
+            <button type="button" id="cancelAgendamentoBtn" class="px-4 py-2.5 rounded-xl border border-nexus-border dark:border-nexus-dark-border text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs transition-colors">
+              Cancelar
+            </button>
             <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm">
               <span class="material-symbols-outlined text-[18px]">check_circle</span>
-              <span>Confirmar Agendamento & Gerar QR Code</span>
+              <span>Agendar e gerar QR</span>
             </button>
           </div>
         </form>
@@ -162,6 +183,10 @@
 
           <!-- Painel de Pesquisa e Filtros em 5 Campos (RF 10.1) -->
           <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+            <div class="sm:col-span-2">
+              <label class="block font-bold text-slate-500 mb-1">Busca Rápida</label>
+              <input type="search" id="filterBusca" placeholder="Buscar por código, tipo, natureza, contêiner ou navio..." class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
+            </div>
             <div>
               <label class="block font-bold text-slate-500 mb-1">1. Nome do Navio</label>
               <input type="text" id="filterNavio" placeholder="Ex: Santos Star" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
@@ -201,6 +226,18 @@
                 <span class="material-symbols-outlined text-[16px]">filter_alt_off</span>
                 <span>Limpar Filtros</span>
               </button>
+            </div>
+
+            <!-- Chips rápidos de status do fluxo (Backlog 3 - filtragem visual direta) -->
+            <div id="cargasStatusChips" class="sm:col-span-2 md:col-span-3 lg:col-span-6 flex flex-wrap items-center gap-1.5 pt-1">
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Atalhos de Status:</span>
+              <button type="button" data-status="AGENDAMENTO" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-amber-400">Agendamento</button>
+              <button type="button" data-status="RECEBIMENTO_INSPECAO" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-indigo-400">Inspeção</button>
+              <button type="button" data-status="ARMAZENAGEM" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-indigo-400">Armazenagem</button>
+              <button type="button" data-status="PRONTA_PARA_ENTREGA" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-emerald-400">Pronta p/ Entrega</button>
+              <button type="button" data-status="EM_TRANSITO" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-blue-400">Em Trânsito</button>
+              <button type="button" data-status="ENTREGUE" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-green-400">Entregue</button>
+              <span id="cargasCounter" class="ml-auto text-[11px] font-mono text-slate-400">Exibindo 0 de 0 cargas</span>
             </div>
           </div>
 
@@ -291,6 +328,25 @@
       </div>
     </div>
   </div>
+
+  <!-- Impressão da etiqueta: quando o jsPDF estiver indisponível, o fallback
+       window.print() deve levar SOMENTE o conteúdo do modal de QR (Backlog 3 - 7i) -->
+  <style>
+    @media print {
+      body * { visibility: hidden !important; }
+      #qrModal, #qrModal * { visibility: visible !important; }
+      #qrModal {
+        position: fixed !important;
+        inset: 0 auto auto 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        background: #ffffff !important;
+        backdrop-filter: none !important;
+        z-index: 9999 !important;
+      }
+      #qrModal button { display: none !important; }
+    }
+  </style>
 
   <!-- Modal Centralizado de Vinculação (C4, A6, A7) -->
   <div id="vincularModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">

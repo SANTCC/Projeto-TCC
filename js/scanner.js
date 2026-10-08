@@ -259,4 +259,19 @@ document.addEventListener('DOMContentLoaded', () => {
       window.location.href = targetRedirectUrl;
     });
   }
+
+  // Backlog 3 (7i): impressão da etiqueta da carga identificada no scan.
+  // O CSS @media print da página isola o cartão de resultado no papel.
+  const imprimirEtiquetaBtn = document.getElementById('imprimirEtiquetaScanBtn');
+  if (imprimirEtiquetaBtn) {
+    imprimirEtiquetaBtn.addEventListener('click', () => {
+      const codeTag = document.getElementById('resultCodeTag');
+      if (codeTag && codeTag.textContent && codeTag.textContent !== '--') {
+        if (window.registrarLogAlteracao) {
+          window.registrarLogAlteracao('REIMPRESSAO_ETIQUETA', 'cargas', null, `Reimpressão de etiqueta via Scanner para ${codeTag.textContent}`);
+        }
+      }
+      window.print();
+    });
+  }
 });

@@ -16,7 +16,8 @@
     "test:migracao": "node tests/test_emergencias_404.js",
     "test:panic": "node tests/test_panic_global.js && node tests/test_emergencias_404.js",
     "test:net-debug": "node tests/test_net_debug.js",
-    "test:backlog3": "node tests/test_backlog3_correcoes.js"
+    "test:backlog3": "node tests/test_backlog3_correcoes.js && node tests/test_backlog3_restantes.js",
+    "test:backlog3:restantes": "node tests/test_backlog3_restantes.js"
   },
   "keywords": [
     "nexusport",

@@ -123,31 +123,34 @@ const DADOS = {
  * Parte 2 — Renderização real por cargo (jsdom)
  * ------------------------------------------------------------------------- */
 
+// Backlog 3: a análise gráfica saiu do Dashboard e foi consolidada na página
+// dedicada de Relatórios (central única de gráficos). Por isso os cenários
+// abaixo renderizam relatorios.html com os conjuntos expandidos por cargo.
 const CENARIOS_DOM = [
   {
     cargo: 'ESTIVADOR', titulo: 'Meus indicadores operacionais', camada: 'Visão Própria (RLS)',
-    esperados: ['minhas_operacoes_7d', 'minhas_cargas_status', 'minhas_cargas_tipo'],
-    proibidos: ['valor_declarado_mes', 'produtividade_cargo', 'bercos_ocupacao', 'funcionarios_cargo']
+    esperados: ['minhas_operacoes_7d', 'minhas_cargas_status'],
+    proibidos: ['valor_declarado_mes', 'produtividade_cargo', 'bercos_ocupacao', 'funcionarios_cargo', 'navios_localizacao', 'tempo_permanencia']
   },
   {
     cargo: 'TECNICO_PORTOS', titulo: 'Painel de gestão de pessoas no porto', camada: 'Visão Própria (RLS)',
-    esperados: ['visitantes_7d', 'visitantes_motivo', 'funcionarios_cargo', 'meus_registros_pessoas_7d'],
-    proibidos: ['valor_declarado_mes', 'bercos_ocupacao']
+    esperados: ['meus_registros_pessoas_7d', 'visitantes_motivo'],
+    proibidos: ['valor_declarado_mes', 'bercos_ocupacao', 'navios_localizacao']
   },
   {
     cargo: 'INSPETOR', titulo: 'Painel operacional do inspetor', camada: 'Visão Operacional (RLS)',
-    esperados: ['inspecoes_resultado', 'cargas_fluxo', 'manutencoes_status', 'navios_localizacao'],
+    esperados: ['produtividade_cargo', 'inspecoes_resultado', 'cargas_fluxo', 'manutencoes_status', 'navios_localizacao', 'embarcacoes_utilizadas'],
     proibidos: ['visitantes_7d', 'visitantes_motivo', 'funcionarios_cargo', 'valor_declarado_mes']
   },
   {
     cargo: 'SUPERVISOR_GERENTE_OPERACOES', titulo: 'Painel tático de operações', camada: 'Visão Operacional (RLS)',
-    esperados: ['fila_liberacao', 'manutencoes_status', 'bercos_ocupacao', 'trail_decisoes_tipo'],
+    esperados: ['fila_liberacao', 'manutencoes_status', 'bercos_ocupacao', 'trail_decisoes_tipo', 'navios_localizacao', 'embarcacoes_utilizadas'],
     proibidos: ['visitantes_motivo', 'funcionarios_cargo', 'valor_declarado_mes']
   },
   {
     cargo: 'DIRETOR_OPERACOES_LOGISTICA', titulo: 'Painel estratégico consolidado', camada: 'Visão Estratégica (RLS)',
-    esperados: ['aprovacao_recusa', 'tempo_permanencia', 'embarcacoes_utilizadas', 'produtividade_cargo', 'bercos_ocupacao', 'valor_declarado_mes'],
-    proibidos: ['minhas_cargas_status']
+    esperados: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes', 'tempo_permanencia', 'bercos_ocupacao', 'embarcacoes_utilizadas', 'navios_localizacao'],
+    proibidos: ['minhas_cargas_status', 'visitantes_motivo', 'fila_liberacao']
   }
 ];
 
@@ -160,14 +163,13 @@ async function verificarRenderizacaoPorCargo() {
     return;
   }
 
-  const htmlDashboard = fs.readFileSync(path.join(ROOT, 'dashboard.html'), 'utf-8');
   const htmlRelatorios = fs.readFileSync(path.join(ROOT, 'relatorios.html'), 'utf-8');
   // Ordem idêntica à das páginas reais: security.js → auth-guard.js → visão → gráficos → página
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/charts.js', 'js/dashboard.js']
+  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/charts.js', 'js/relatorios.js']
     .map(f => ({ arquivo: f, codigo: fs.readFileSync(path.join(ROOT, f), 'utf-8') }));
 
   for (const cenario of CENARIOS_DOM) {
-    const dom = new JSDOM(htmlDashboard, { url: 'http://localhost:3000/dashboard.html', runScripts: 'outside-only', pretendToBeVisual: true });
+    const dom = new JSDOM(htmlRelatorios, { url: 'http://localhost:3000/relatorios.html', runScripts: 'outside-only', pretendToBeVisual: true });
     const win = dom.window;
     const configs = [];
 
@@ -197,22 +199,18 @@ async function verificarRenderizacaoPorCargo() {
     win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
     await new Promise(r => setTimeout(r, 150));
 
-    const ids = Array.from(win.document.querySelectorAll('#chartsRoleGrid [data-chart-card]'))
+    const ids = Array.from(win.document.querySelectorAll('#relatoriosChartsGrid [data-chart-card]'))
       .map(c => c.getAttribute('data-chart-card'));
     const faltando = cenario.esperados.filter(id => !ids.includes(id));
     const vazando = cenario.proibidos.filter(id => ids.includes(id));
     const titulo = win.document.getElementById('chartsRoleTitle').textContent;
     const camada = win.document.getElementById('chartsRoleBadge').textContent;
-    const painelEstrategicoOculto = win.document.getElementById('estrategicoPanel').classList.contains('hidden');
 
-    const ehDiretor = cenario.cargo === 'DIRETOR_OPERACOES_LOGISTICA';
     const problemas = [];
     if (faltando.length) problemas.push(`gráficos ausentes: ${faltando.join(', ')}`);
     if (vazando.length) problemas.push(`gráficos de outra camada exibidos: ${vazando.join(', ')}`);
     if (titulo !== cenario.titulo) problemas.push(`título inesperado: "${titulo}"`);
     if (camada !== cenario.camada) problemas.push(`camada de visão inesperada: "${camada}"`);
-    if (!ehDiretor && !painelEstrategicoOculto) problemas.push('painel estratégico (metas/financeiro) visível para cargo não estratégico');
-    if (ehDiretor && painelEstrategicoOculto) problemas.push('painel estratégico oculto para a Direção');
     if (configs.length === 0) problemas.push('nenhuma instância de Chart.js criada');
 
     verificar(

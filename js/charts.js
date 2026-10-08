@@ -1752,12 +1752,30 @@
       const sessao = sessaoAtual();
       if (!sessao) return Promise.resolve({ ok: false, motivo: 'sem-sessao' });
       const grupo = grupoDoCargo(sessao.cargo);
+      // Backlog 3: esta página passa a ser a central única de gráficos do
+      // sistema (a análise gráfica saiu do Dashboard). Os conjuntos foram
+      // expandidos com as visões que antes só existiam no painel do Dashboard,
+      // e com os conjuntos planejados que estavam ausentes (navios por
+      // localização, embarcações mais utilizadas, tempo de permanência das
+      // cargas, decisões do trail, etc.).
       const conjuntos = {
-        DIRETOR: { charts: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes'], fontes: ['cargas', 'logs', 'funcionarios'] },
-        INSPETOR: { charts: ['produtividade_cargo', 'inspecoes_resultado', 'cargas_fluxo'], fontes: ['cargas', 'logs'] },
-        SUPERVISOR: { charts: ['fila_liberacao', 'manutencoes_status', 'bercos_ocupacao'], fontes: ['cargas', 'manutencoes', 'bercos'] },
+        DIRETOR: {
+          charts: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes', 'tempo_permanencia', 'bercos_ocupacao', 'embarcacoes_utilizadas', 'navios_localizacao'],
+          fontes: ['cargas', 'logs', 'funcionarios', 'navios', 'bercos']
+        },
+        INSPETOR: {
+          charts: ['produtividade_cargo', 'inspecoes_resultado', 'cargas_fluxo', 'manutencoes_status', 'navios_localizacao', 'embarcacoes_utilizadas'],
+          fontes: ['cargas', 'logs', 'navios', 'manutencoes']
+        },
+        SUPERVISOR: {
+          charts: ['fila_liberacao', 'manutencoes_status', 'bercos_ocupacao', 'trail_decisoes_tipo', 'navios_localizacao', 'embarcacoes_utilizadas'],
+          fontes: ['cargas', 'manutencoes', 'bercos', 'trail', 'navios']
+        },
         TECNICO_PORTOS: { charts: ['meus_registros_pessoas_7d', 'visitantes_motivo'], fontes: ['visitantes', 'logs'] },
-        PLANEJADOR_PATIO: { charts: ['minhas_operacoes_7d', 'containers_estado'], fontes: ['containers', 'logs'] },
+        PLANEJADOR_PATIO: {
+          charts: ['minhas_operacoes_7d', 'containers_estado', 'navios_localizacao', 'embarcacoes_utilizadas'],
+          fontes: ['containers', 'logs', 'navios']
+        },
         OPERACIONAL_CARGA: { charts: ['minhas_operacoes_7d', 'minhas_cargas_status'], fontes: ['cargas', 'logs'] }
       };
       const conjunto = conjuntos[grupo] || conjuntos.OPERACIONAL_CARGA;

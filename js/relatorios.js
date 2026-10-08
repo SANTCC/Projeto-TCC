@@ -21,6 +21,30 @@ document.addEventListener('DOMContentLoaded', () => {
   let funcionariosList = [];
   let logsList = [];
 
+  // Backlog 3 (7g): período de referência selecionado — os atalhos do topo
+  // (Hoje / 7 dias / 30 dias / Este mês) e o select compartilham este estado e
+  // filtram o histórico de operações da tabela de produtividade.
+  let periodoRelatorioAtual = (document.getElementById('relatorioPeriodoSelect') || { value: '30D' }).value || '30D';
+
+  function inicioDoPeriodo(periodo) {
+    const agora = new Date();
+    if (periodo === 'HOJE') {
+      const d = new Date(agora); d.setHours(0, 0, 0, 0); return d;
+    }
+    if (periodo === '7D')  { const d = new Date(agora); d.setDate(d.getDate() - 7);  d.setHours(0, 0, 0, 0); return d; }
+    if (periodo === '30D') { const d = new Date(agora); d.setDate(d.getDate() - 30); d.setHours(0, 0, 0, 0); return d; }
+    if (periodo === 'MENSAL') { return new Date(agora.getFullYear(), agora.getMonth(), 1); }
+    if (periodo === 'TRIMESTRAL') { return new Date(agora.getFullYear(), agora.getMonth() - 3, 1); }
+    if (periodo === 'ANUAL') { return new Date(agora.getFullYear(), 0, 1); }
+    return null; // 'TODOS' ou valor desconhecido: sem corte de data
+  }
+
+  function logDentroDoPeriodo(l, inicio) {
+    if (!inicio) return true;
+    const dataLog = new Date(l.created_at || l.data_hora || 0);
+    return !Number.isNaN(dataLog.getTime()) && dataLog >= inicio;
+  }
+
   async function popularCargas() {
     if (!selectCarga) return;
     if (window.nexusSupabase) {
@@ -56,6 +80,46 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   popularCargas();
+
+  // Backlog 3 (7g): ligação dos atalhos de período com o select e a tabela
+  (function ligarAtalhosPeriodo() {
+    const periodoSelect = document.getElementById('relatorioPeriodoSelect');
+    const chipsWrap = document.getElementById('relatorioPeriodoChips');
+    if (!periodoSelect && !chipsWrap) return;
+
+    function sincronizarChips() {
+      if (!chipsWrap) return;
+      chipsWrap.querySelectorAll('.periodo-chip').forEach(chip => {
+        const ativo = chip.getAttribute('data-periodo') === periodoRelatorioAtual;
+        chip.classList.toggle('bg-nexus-500', ativo);
+        chip.classList.toggle('border-nexus-500', ativo);
+        chip.classList.toggle('text-white', ativo);
+        chip.classList.toggle('bg-white', !ativo);
+        chip.classList.toggle('dark:bg-slate-900', !ativo);
+        chip.classList.toggle('text-slate-600', !ativo);
+        chip.classList.toggle('dark:text-slate-300', !ativo);
+        chip.classList.toggle('border-nexus-border', !ativo);
+        chip.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+      });
+    }
+
+    function aplicarPeriodo(novoPeriodo) {
+      periodoRelatorioAtual = novoPeriodo;
+      if (periodoSelect && periodoSelect.value !== novoPeriodo) periodoSelect.value = novoPeriodo;
+      sincronizarChips();
+      renderProdutividadeTable();
+    }
+
+    if (chipsWrap) {
+      chipsWrap.querySelectorAll('.periodo-chip').forEach(chip => {
+        chip.addEventListener('click', () => aplicarPeriodo(chip.getAttribute('data-periodo')));
+      });
+    }
+    if (periodoSelect) {
+      periodoSelect.addEventListener('change', () => aplicarPeriodo(periodoSelect.value));
+    }
+    sincronizarChips();
+  })();
 
   const loadingStatus = document.getElementById('pdfLoadingStatus');
   const idleStatus = document.getElementById('pdfIdleStatus');
@@ -281,7 +345,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const localLogs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
-    const todosLogs = [...logsList, ...localLogs];
+    const inicioPeriodo = inicioDoPeriodo(periodoRelatorioAtual);
+    const todosLogs = [...logsList, ...localLogs].filter(l => logDentroDoPeriodo(l, inicioPeriodo));
 
     const prodData = targetFuncs.map(func => {
       const userLogs = todosLogs.filter(l => l.codigo_individual === func.codigo_individual || l.funcionario_id === func.id || l.codigo_usuario === func.codigo_individual || l.codigo_usuario === func.matricula);
@@ -323,9 +388,68 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderProdutividadeTable();
 
-  // Gráficos de produtividade adaptados à camada de visão (RF 16 / RF 1)
+  // Gráficos por camada de visão — página central única de gráficos do sistema
+  // (RF 16 / RF 1 / Backlog 3: a análise gráfica saiu do Dashboard e foi
+  // consolidada aqui).
   if (window.NexusCharts && typeof window.NexusCharts.initRelatorios === 'function') {
     window.NexusCharts.initRelatorios();
+
+    // Botão "Atualizar": reconsulta o SERVIDOR (ignora o cache em memória) e
+    // informa o resultado. Sem esse retorno visual o operador não tinha como
+    // saber se o clique trouxe dado novo ou apenas redesenhou o mesmo gráfico.
+    const chartsRefreshBtn = document.getElementById('chartsRefreshBtn');
+    if (chartsRefreshBtn) {
+      const chartsSyncStatus = document.getElementById('chartsSyncStatus');
+      const chartsRefreshIcon = chartsRefreshBtn.querySelector('.material-symbols-outlined');
+
+      const informarSincronia = (texto) => {
+        if (!chartsSyncStatus) return;
+        chartsSyncStatus.textContent = texto;
+        chartsSyncStatus.setAttribute('title', texto);
+      };
+
+      const horaDe = (iso) => {
+        const data = iso ? new Date(iso) : new Date();
+        return isNaN(data.getTime()) ? '--:--:--' : data.toLocaleTimeString('pt-BR');
+      };
+
+      chartsRefreshBtn.addEventListener('click', async () => {
+        if (chartsRefreshBtn.disabled) return; // evita cliques concorrentes
+        chartsRefreshBtn.disabled = true;
+        chartsRefreshBtn.setAttribute('aria-busy', 'true');
+        if (chartsRefreshIcon) chartsRefreshIcon.classList.add('animate-spin');
+        informarSincronia('Consultando o servidor...');
+
+        try {
+          const resultado = (await window.NexusCharts.atualizar()) || {};
+          const hora = horaDe(resultado.atualizadoEm);
+
+          if (!resultado.ok && resultado.motivo === 'chartjs-indisponivel') {
+            informarSincronia('Chart.js indisponível — não foi possível redesenhar os gráficos.');
+          } else if (!resultado.ok) {
+            informarSincronia('Não foi possível atualizar os gráficos agora.');
+          } else if (resultado.origem === 'supabase') {
+            informarSincronia(`Dados do servidor recebidos às ${hora}.`);
+          } else if (resultado.origem === 'misto') {
+            informarSincronia(`Atualizado parcialmente do servidor às ${hora} — fontes sem resposta usaram o cache local.`);
+          } else {
+            informarSincronia(`Servidor indisponível — gráficos exibidos a partir do cache local (${hora}).`);
+          }
+        } catch (erro) {
+          console.warn('[NexusPort] Falha ao atualizar os gráficos:', erro);
+          informarSincronia('Falha ao atualizar os gráficos — os dados anteriores foram mantidos.');
+        } finally {
+          chartsRefreshBtn.disabled = false;
+          chartsRefreshBtn.removeAttribute('aria-busy');
+          if (chartsRefreshIcon) chartsRefreshIcon.classList.remove('animate-spin');
+        }
+      });
+
+      // Reatualização viva dos gráficos quando os dados mudam (inclusive via Realtime)
+      if (typeof window.NexusCharts.ligarEventos === 'function') {
+        window.NexusCharts.ligarEventos();
+      }
+    }
   }
 
   // Sincronização viva e atualização automática ao registrar produtividade / alterar dados (Tarefa 6)

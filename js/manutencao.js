@@ -359,6 +359,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let osList = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
 
+  // Backlog 3 (7h/7b): estado do filtro de status das OS (declarado junto da
+  // lista para evitar erro de TDZ quando carregarOsSupabase renderiza primeiro).
+  let filtroStatusOsAtual = '';
+
   async function carregarOsSupabase() {
     if (window.nexusSupabase) {
       try {
@@ -413,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Badges montados aqui (classes em ternário estático) — o valor exibido
   // vem sempre de esc(), nunca interpolado cru.
   const statusBadgeOs = (status) => `
-    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap ${
+    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase whitespace-nowrap ${
       status === 'EM_MANUTENCAO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
       status === 'CONCLUIDA' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
       status === 'REPROVADA' ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' :
@@ -421,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }">${esc((STATUS_OS[status] || {}).txt || status || 'Desconhecido')}</span>`;
 
   const prioridadeBadgeOs = (prioridade) => `
-    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap ${
+    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase whitespace-nowrap ${
       prioridade === 'ALTA' ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' :
       prioridade === 'MEDIA' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
       prioridade === 'BAIXA' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
@@ -447,16 +451,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (osList.length === 0) {
       osTableBody.innerHTML = `
         <tr>
-          <td colspan="7" class="p-4 text-center text-slate-400 italic">
-            <span class="material-symbols-outlined text-[28px] block mb-1 text-slate-300 dark:text-slate-600">build_circle</span>
-            Nenhuma OS cadastrada. Use "+ Nova Ordem de Serviço" para abrir a primeira.
+          <td colspan="7" class="p-8 text-center">
+            <span class="material-symbols-outlined text-[32px] block mb-1 text-slate-300 dark:text-slate-600">build_circle</span>
+            <span class="block font-bold text-slate-400 text-xs">Nenhuma OS cadastrada ainda.</span>
+            <span class="block text-[11px] text-slate-400 mt-1">Use "+ Nova Ordem de Serviço" para registrar a primeira ordem, ou solicite uma manutenção de embarcação no painel acima.</span>
           </td>
         </tr>
       `;
       return;
     }
 
-    osTableBody.innerHTML = osList.map(os => {
+    const buscaOsVal = (document.getElementById('buscarOsInput')?.value || '').trim().toLowerCase();
+    const osVisiveis = osList.filter(os => {
+      if (filtroStatusOsAtual && os.status !== filtroStatusOsAtual) return false;
+      if (buscaOsVal) {
+        const haystack = `${os.id || ''} ${os.equipamento || ''} ${os.descricao || ''}`.toLowerCase();
+        if (!haystack.includes(buscaOsVal)) return false;
+      }
+      return true;
+    });
+
+    const osCounterEl = document.getElementById('osCounter');
+    if (osCounterEl) {
+      osCounterEl.textContent = `Exibindo ${osVisiveis.length} de ${osList.length} OS`;
+    }
+
+    if (osVisiveis.length === 0) {
+      const statusTxt = filtroStatusOsAtual ? ` para o status "${(STATUS_OS[filtroStatusOsAtual] || {}).txt || filtroStatusOsAtual}"` : '';
+      osTableBody.innerHTML = `
+        <tr>
+          <td colspan="7" class="p-8 text-center">
+            <span class="material-symbols-outlined text-[32px] block mb-1 text-slate-300 dark:text-slate-600">search_off</span>
+            <span class="block font-bold text-slate-400 text-xs">Nenhuma OS corresponde à busca/filtro${esc(statusTxt)}.</span>
+            <span class="block text-[11px] text-slate-400 mt-1">Ajuste o texto pesquisado ou limpe o filtro de status ativo para listar novamente.</span>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    osTableBody.innerHTML = osVisiveis.map(os => {
       const statusHtml = statusBadgeOs(os.status);
       const prioridadeHtml = prioridadeBadgeOs(os.prioridade);
 
@@ -484,6 +518,33 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   renderOsTable();
+
+  // Backlog 3 (7b/7h): busca local e chips de status com estado visual ativo.
+  const buscarOsInput = document.getElementById('buscarOsInput');
+  if (buscarOsInput) {
+    buscarOsInput.addEventListener('input', renderOsTable);
+  }
+
+  const osStatusChipsEl = document.getElementById('osStatusChips');
+  if (osStatusChipsEl) {
+    osStatusChipsEl.querySelectorAll('.os-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const alvo = chip.getAttribute('data-status');
+        // Toggle: clicar no chip ATIVO limpa o filtro (volta a listar todas)
+        filtroStatusOsAtual = (filtroStatusOsAtual === alvo) ? '' : alvo;
+        osStatusChipsEl.querySelectorAll('.os-chip').forEach(c => {
+          const ativo = c.getAttribute('data-status') === filtroStatusOsAtual;
+          c.classList.toggle('ring-2', ativo);
+          c.classList.toggle('ring-nexus-500', ativo);
+          c.classList.toggle('bg-nexus-500', ativo);
+          c.classList.toggle('text-white', ativo);
+          c.classList.toggle('border-nexus-500', ativo);
+          c.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+        });
+        renderOsTable();
+      });
+    });
+  }
 
   async function carregarEquipamentosEAlertas() {
     const osSelect = document.getElementById('osEquipamento');
@@ -551,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Item 3.2: cada equipamento em bloco próprio (tipo + identificação + motivo)
         alertaList.innerHTML = equipamentos.map(e => `
           <div class="flex items-start gap-2 py-1.5 border-b last:border-0 border-amber-200/60 dark:border-amber-900/40">
-            <span class="shrink-0 px-1.5 py-0.5 rounded bg-amber-200/70 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 text-[10px] font-bold uppercase">${esc(e.tipo)}</span>
+            <span class="shrink-0 px-1.5 py-0.5 rounded bg-amber-200/70 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 text-xs font-bold uppercase">${esc(e.tipo)}</span>
             <div class="min-w-0">
               <strong class="block text-nexus-900 dark:text-white">${esc(e.identificacao)}</strong>
               <span class="text-amber-800/90 dark:text-amber-300/90">${esc(e.motivo)}</span>
@@ -683,7 +744,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (os.equipamento.startsWith('Navio')) {
           if (acao === 'APROVAR') {
             await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).ilike('nome', limpaNome);
-          } else if (acao === 'CONCLUIR') {
+          } else if (acao === 'CONCLUIR' || acao === 'REPROVAR') {
+            // Backlog3: ao REPROVAR a OS, o navio também precisa sair do estado
+            // AGENDADO_PARA_REFORMA/EM_REFORMA, senão fica preso no contador de
+            // "Manutenção" do dashboard sem nunca ter sido atendido.
             await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).ilike('nome', limpaNome);
           }
         } else if (os.equipamento.startsWith('Guindaste')) {
@@ -691,12 +755,16 @@ document.addEventListener('DOMContentLoaded', () => {
             await window.nexusSupabase.from('guindastes').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', limpaNome);
           } else if (acao === 'CONCLUIR') {
             await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
+          } else if (acao === 'REPROVAR') {
+            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', limpaNome);
           }
         } else if (os.equipamento.startsWith('Contêiner')) {
           if (acao === 'APROVAR') {
             await window.nexusSupabase.from('containers').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', limpaNome);
           } else if (acao === 'CONCLUIR') {
             await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
+          } else if (acao === 'REPROVAR') {
+            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', limpaNome);
           }
         }
 

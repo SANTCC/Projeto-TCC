@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } flex flex-col gap-1 text-xs">
           <div class="flex items-center justify-between">
             <span class="font-bold text-nexus-900 dark:text-white">${esc(b.nome)}</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+            <span class="px-2 py-0.5 rounded text-xs font-mono font-bold uppercase ${
               b.estado === 'LIVRE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
               b.estado === 'OCUPADO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
               'bg-slate-200 text-slate-800'
@@ -272,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Etiqueta da coluna Localização (nome amigável + situação técnica no title)
   function localizacaoBadgeHtml(localizacao) {
     return `
-      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+      <span class="px-2 py-0.5 rounded text-xs font-bold uppercase ${
         localizacao === 'DENTRO_DO_PORTO' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
         localizacao === 'FORA_DO_PORTO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
         localizacao === 'NO_PORTO_DE_DESTINO' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' :
@@ -281,6 +281,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Cálculo de ETA a 33 km/h
+  /**
+   * Backlog 3 (7d): porcentagem decorrida do tempo previsto da viagem.
+   * Mesma premissa do ETA: velocidade fixa de 33 km/h. Retorna null quando
+   * não é possível estimar (data de saída ausente/inválida).
+   */
+  function calcularProgressoViagem(dataSaida, distanciaKm) {
+    if (!dataSaida) return null;
+    const saidaTime = new Date(dataSaida).getTime();
+    if (isNaN(saidaTime)) return null;
+    const dist = parseFloat(distanciaKm) || 10200;
+    const msPrevistos = (dist / 33) * 3600 * 1000;
+    if (msPrevistos <= 0) return null;
+    const decorridos = Math.max(0, Date.now() - saidaTime);
+    return Math.min(100, Math.round((decorridos / msPrevistos) * 100));
+  }
+
   function calcularETA(distanciaKm) {
     if (!distanciaKm || distanciaKm <= 0) return 'Atracado / Viagem Concluída';
     const velocidade = 33; // km/h (RN 9)
@@ -330,7 +346,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (naviosList.length === 0) {
       gpsTableBody.innerHTML = `
         <tr>
-          <td colspan="8" class="p-4 text-center text-slate-400 italic">Nenhuma embarcação cadastrada no banco de dados.</td>
+          <td colspan="8" class="p-8 text-center">
+            <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">sailing</span>
+            <span class="block font-bold text-slate-400 text-xs">Nenhuma embarcação cadastrada ainda.</span>
+            <span class="block text-[11px] text-slate-400 mt-1">Navios são cadastrados pelo Inspetor em "Gerenciar Embarcações". Assim que o primeiro cadastro for salvo, o GPS, o ETA e as ações aparecem aqui automaticamente.</span>
+          </td>
         </tr>
       `;
       return;
@@ -362,18 +382,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Exibe todos os navios cadastrados no terminal (Tarefa 5.2 - RF 1.9, RF 2.1)
-    if (naviosList.length === 0) {
+
+
+    // Backlog 3 (7b): busca local + contador "Exibindo X de Y"
+    const buscaNavioVal = (document.getElementById('buscarNavioInput')?.value || '').trim().toLowerCase();
+    const naviosVisiveis = naviosList.filter(n => {
+      if (!buscaNavioVal) return true;
+      const haystack = `${n.nome || ''} ${n.imo || ''} ${n.gps || ''} ${n.origem || ''} ${n.destino || ''}`.toLowerCase();
+      return haystack.includes(buscaNavioVal);
+    });
+
+    const embarcacoesCounterEl = document.getElementById('embarcacoesCounter');
+    if (embarcacoesCounterEl) {
+      embarcacoesCounterEl.textContent = `Exibindo ${naviosVisiveis.length} de ${naviosList.length} embarcação(ões)`;
+    }
+
+    if (naviosVisiveis.length === 0) {
       gpsTableBody.innerHTML = `
         <tr>
-          <td colspan="8" class="p-4 text-center text-slate-400 italic">Nenhum navio cadastrado no banco de dados.</td>
+          <td colspan="8" class="p-8 text-center">
+            <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">search_off</span>
+            <span class="block font-bold text-slate-400 text-xs">Nenhuma embarcação corresponde à busca.</span>
+            <span class="block text-[11px] text-slate-400 mt-1">Ajuste o termo pesquisado (nome, IMO, GPS ou destino) para listar novamente.</span>
+          </td>
         </tr>
       `;
       return;
     }
 
-    gpsTableBody.innerHTML = naviosList.map(n => {
+    gpsTableBody.innerHTML = naviosVisiveis.map(n => {
       let etaText = '';
       let tempoForaText = '';
+      let etaExtraHtml = '';
 
       if (n.localizacao === 'DENTRO_DO_PORTO') {
         etaText = 'Em Atracação no Porto Origem';
@@ -409,6 +449,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const segRestantes = Math.floor((msRestantes % (1000 * 60)) / 1000);
 
         etaText = `ETA: ${diasRestantes}d ${horasRestantes}h ${minRestantes}m ${segRestantes}s (@33km/h)`;
+
+        // Backlog 3 (7d): barra de progresso visual da viagem (X% decorrido do tempo previsto)
+        const progressoPct = calcularProgressoViagem(n.dataSaida, n.distancia);
+        if (progressoPct !== null) {
+          etaExtraHtml = `
+            <div class="mt-1.5">
+              <div class="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase mb-0.5">
+                <span>Progresso da viagem</span>
+                <span class="text-indigo-600 dark:text-indigo-400">${esc(String(progressoPct))}%</span>
+              </div>
+              <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow="${esc(String(progressoPct))}" aria-valuemin="0" aria-valuemax="100" title="Progresso da viagem: ${esc(String(progressoPct))}% do tempo previsto decorrido">
+                <div class="h-1.5 rounded-full ${progressoPct >= 100 ? 'bg-emerald-500' : 'bg-nexus-500'}" style="width:${esc(String(progressoPct))}%"></div>
+              </div>
+            </div>`;
+        }
       }
 
       // Busca cargas do localstorage ou Supabase associadas a este navio (C2, C3)
@@ -479,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(n.gps)}</td>
           <td class="p-3">${localizacaoHtml}</td>
           <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino)}</strong></td>
-          <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}</td>
+          <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}${etaExtraHtml}</td>
           <td class="p-3 font-mono text-xs font-bold ${n.localizacao === 'NO_PORTO_DE_DESTINO' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${esc(tempoForaText)}</td>
           <td class="p-3 text-right whitespace-nowrap">${acoesHtml}</td>
         </tr>
@@ -512,6 +567,27 @@ document.addEventListener('DOMContentLoaded', () => {
       ];
     }
     renderRotasTable();
+    preencherSelectRotasNavio();
+  }
+
+  /**
+   * Backlog3 (formulários): o cadastro de navio NÃO registra destino/distância
+   * manualmente — o Inspetor seleciona uma das rotas marítimas já registradas
+   * pelos níveis superiores na `rotas_maritimas` do Supabase, e a embarcação
+   * herda origem, destino e distância dessa rota.
+   */
+  function preencherSelectRotasNavio() {
+    const rotaSel = document.getElementById('navioRotaSelect');
+    if (!rotaSel) return;
+    if (!Array.isArray(rotasMaritimasList) || rotasMaritimasList.length === 0) {
+      rotaSel.innerHTML = '<option value="">Nenhuma rota cadastrada — peça ao Supervisor para registrar na Gestão de Rotas Marítimas.</option>';
+      return;
+    }
+    rotaSel.innerHTML = '<option value="">Selecione a Rota Marítima...</option>' +
+      rotasMaritimasList.map((r, idx) => {
+        const dist = parseFloat(r.distancia_km) || 0;
+        return `<option value="${idx}">${esc(r.origem)} ➔ ${esc(r.destino)} (${esc(dist.toLocaleString('pt-BR'))} km)</option>`;
+      }).join('');
   }
 
   function renderRotasTable() {
@@ -569,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       renderRotasTable();
+      preencherSelectRotasNavio();
       rotaForm.reset();
       rotaForm.classList.add('hidden');
       if (window.mostrarFeedback) {
@@ -948,6 +1025,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // C6: Relógio em tempo real que atualiza continuamente a contagem de ETA e tempo fora do porto
   setInterval(renderGpsTable, 1000);
 
+  // Busca local na tabela de embarcações (Backlog 3 - 7b)
+  const buscarNavioInput = document.getElementById('buscarNavioInput');
+  if (buscarNavioInput) {
+    buscarNavioInput.addEventListener('input', renderGpsTable);
+  }
+
   const isInspetorRole = ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
 
   if (toggleNavioBtn && navioForm) {
@@ -959,6 +1042,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
       }
+      preencherSelectRotasNavio();
       navioForm.classList.toggle('hidden');
     });
   }
@@ -988,11 +1072,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const nome = document.getElementById('navioNome').value.trim();
       const imo = document.getElementById('navioImo').value.trim().toUpperCase().replace(/\s+/g, '');
-      const origem = document.getElementById('navioOrigem').value.trim();
-      const destino = document.getElementById('navioDestino').value.trim();
+      const rotaSel = document.getElementById('navioRotaSelect');
       const localizacao = document.getElementById('navioLocalizacao').value;
       const gps = document.getElementById('navioGps').value.trim();
-      const distancia = parseFloat(document.getElementById('navioDistancia').value) || 10200;
+
+      // Backlog3 (formulários): origem, destino e distância vêm SOMENTE de
+      // uma rota marítima registrada no Supabase (rotas_maritimas), selecionada
+      // pelo operador — não há mais registro manual de destino/distância.
+      const rotaIdx = rotaSel ? parseInt(rotaSel.value, 10) : NaN;
+      const rota = (!Number.isNaN(rotaIdx) && Array.isArray(rotasMaritimasList)) ? rotasMaritimasList[rotaIdx] : null;
+      if (!rota) {
+        const msg = 'ROTA MARÍTIMA OBRIGATÓRIA (Backlog3): selecione uma das rotas cadastradas no sistema para o navio. Se a rota desejada não existir, solicite ao Supervisor o registro na seção "Gestão de Rotas Marítimas" — o cadastro de destino/distância manual não é permitido.';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Não Selecionada', msg);
+        return;
+      }
+      const origem = (rota.origem || 'Porto de Santos').trim();
+      const destino = (rota.destino || '').trim();
+      const distancia = parseFloat(rota.distancia_km) || 10200;
 
       // Item 11: Validação do padrão do Número IMO (3 letras + 7 números)
       const imoRegex = /^[A-Z]{3}\d{7}$/;
@@ -1158,7 +1254,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 font-mono text-xs">Fab: ${esc(c.dataFabr)}<br>Manut: ${esc(manutDisplay)}</td>
           <td class="p-3 font-mono text-xs"><span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-bold">${esc(c.refTempo)}</span></td>
           <td class="p-3 font-bold text-xs">${esc(c.navio || 'Não Vinculado')}</td>
-          <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[10px] font-bold">${esc(c.estado)}</span></td>
+          <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-xs font-bold">${esc(c.estado)}</span></td>
           <td class="p-3 text-right whitespace-nowrap">${contAcoesHtml}</td>
         </tr>
       `;
@@ -1177,14 +1273,25 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const optionsText = naviosList.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo}) [${n.localizacao}]`).join('\n');
-    const selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao}:\n${optionsText}`);
+    // Backlog3: somente embarcações ATRACADAS no Porto de Santos podem
+    // receber contêineres. Navios em trânsito (FORA_DO_PORTO) ou já no
+    // porto de destino ficam fora da lista de vínculo.
+    const naviosElegiveis = naviosList.filter(n => (n.localizacao || 'DENTRO_DO_PORTO') === 'DENTRO_DO_PORTO');
+    if (naviosElegiveis.length === 0) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', 'Nenhum Navio no Porto', 'Não há embarcações atracadas no Porto de Santos disponíveis para vinculação. Navios em trânsito ou no porto de destino não podem receber contêineres.');
+      }
+      return;
+    }
+
+    const optionsText = naviosElegiveis.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo})`).join('\n');
+    const selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao} (apenas embarcações no Porto de Santos):\n${optionsText}`);
 
     if (!selecao) return;
 
     const idxSel = parseInt(selecao, 10) - 1;
-    if (!isNaN(idxSel) && naviosList[idxSel]) {
-      const navioAlvo = naviosList[idxSel];
+    if (!isNaN(idxSel) && naviosElegiveis[idxSel]) {
+      const navioAlvo = naviosElegiveis[idxSel];
 
       // Validação de Capacidade Rígida (OBS Tarefa 8): max 15.000 toneladas e ~300 metros de espaço
       // Calcula peso e quantidade de contêineres atualmente alocados ao navioAlvo
@@ -1452,7 +1559,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
           <td class="p-3 font-mono font-bold text-nexus-500">${esc(g.identificacao)}</td>
           <td class="p-3">
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+            <span class="px-2 py-0.5 rounded text-xs font-mono font-bold uppercase ${
               g.estado === 'OPERANTE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
               'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
             }">${esc(g.estado)}</span>

@@ -38,9 +38,88 @@ document.addEventListener('DOMContentLoaded', () => {
   const isArrumadorRole = ['ARRUMADOR_CONSERTADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
   const isEstivadorRole = ['ESTIVADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
 
-  // Oculta/Restringe o formulário de agendamento se o usuário não tiver privilégio de Supervisor / Inspetor / Diretor
-  if (toggleFormBtn && !isSupervisorRole && !isInspetorRole) {
-    toggleFormBtn.classList.add('hidden');
+  const isGestorRole = isSupervisorRole || isInspetorRole;
+
+  // ======================================================================
+  // Backlog 3 (Anotação 3.4) — Funcionário responsável pela carga
+  // Gestor (Supervisor/Gerência/Inspetor/Diretor): formulário exige a
+  // seleção de um funcionário EM ESCALA (ativo) para assumir a carga.
+  // Funcionário operacional (Estivador etc.): o sistema auto-seleciona a
+  // sessão logada como responsável e o campo fica desabilitado, sem como
+  // atribuir a outra pessoa.
+  // ======================================================================
+  const agEstivadorSel = document.getElementById('agEstivadorResponsavel');
+  const agEstivadorHint = document.getElementById('agEstivadorResponsavelHint');
+  let funcionariosEscalaCache = [];
+
+  async function carregarFuncionariosEscala() {
+    if (funcionariosEscalaCache.length > 0) return funcionariosEscalaCache;
+    let lista = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+    if (window.NexusRepository && typeof window.NexusRepository.getFuncionarios === 'function') {
+      try {
+        const dbList = await window.NexusRepository.getFuncionarios();
+        if (Array.isArray(dbList) && dbList.length > 0) lista = dbList;
+      } catch (e) { /* mantém cache local */ }
+    }
+    // "Em escala": somente funcionários marcados como ativos (não afastados/inativos)
+    funcionariosEscalaCache = (lista || []).filter(f => f && f.ativo !== false && f.status !== 'INATIVO');
+    return funcionariosEscalaCache;
+  }
+
+  function funcionarioDaSessao(escala) {
+    const mat = String(session.matricula || '').toUpperCase();
+    const cod = String(session.codigo_individual || '').toUpperCase();
+    return (escala || []).find(f => {
+      const fMat = String(f.matricula || '').toUpperCase();
+      const fCod = String(f.codigo_individual || f.codigo || '').toUpperCase();
+      return (mat && fMat === mat) || (cod && fCod === cod);
+    }) || null;
+  }
+
+  async function preencherSelectEstivadorResponsavel() {
+    if (!agEstivadorSel) return;
+    const escala = await carregarFuncionariosEscala();
+
+    if (isGestorRole) {
+      // Gestor escolhe livremente entre funcionários em escala (ativos)
+      agEstivadorSel.disabled = false;
+      agEstivadorSel.required = true;
+      agEstivadorSel.innerHTML = '<option value="">Selecione o funcionário responsável em escala...</option>' +
+        escala.map(f => {
+          const val = f.id || f.matricula || f.codigo_individual || '';
+          return `<option value="${esc(String(val))}" data-matricula="${esc(f.matricula || '')}" data-nome="${esc(f.nome || '')}" data-cargo="${esc(f.cargo || '')}">${esc(f.nome || 'Funcionário')} — ${esc(f.cargo_nome || f.cargo || 'Operacional')} (Mat: ${esc(f.matricula || '-')})</option>`;
+        }).join('');
+      if (agEstivadorHint) {
+        agEstivadorHint.textContent = escala.length > 0
+          ? `${escala.length} funcionário(s) em escala disponíveis para assumir a carga.`
+          : 'Nenhum funcionário ativo em escala encontrado. Verifique o cadastro (Técnico em Portos).';
+      }
+    } else {
+      // Funcionário operacional: auto-seleção e travamento do campo
+      const proprio = funcionarioDaSessao(escala);
+      const nomeExib = (proprio && proprio.nome) || session.nome || 'Funcionário logado';
+      const matExib = (proprio && proprio.matricula) || session.matricula || '-';
+      const val = (proprio && (proprio.id || proprio.matricula || proprio.codigo_individual)) || session.matricula || session.codigo_individual || 'SESSAO_ATUAL';
+      agEstivadorSel.innerHTML = `<option value="${esc(String(val))}" selected data-matricula="${esc(matExib)}" data-nome="${esc(nomeExib)}" data-cargo="${esc(session.cargo)}">${esc(nomeExib)} — ${esc(session.cargo_nome || session.cargo)} (você)</option>`;
+      agEstivadorSel.value = String(val);
+      agEstivadorSel.disabled = true;
+      agEstivadorSel.required = false;
+      if (agEstivadorHint) {
+        agEstivadorHint.textContent = 'Carga atribuída automaticamente à sua sessão (campo travado por segurança).';
+      }
+    }
+  }
+
+  function obterEstivadorSelecionado() {
+    if (!agEstivadorSel) return null;
+    const opt = agEstivadorSel.options[agEstivadorSel.selectedIndex];
+    if (!opt || !opt.value) return null;
+    return {
+      id: opt.value,
+      matricula: opt.getAttribute('data-matricula') || opt.value,
+      nome: opt.getAttribute('data-nome') || opt.text,
+      cargo: opt.getAttribute('data-cargo') || null
+    };
   }
 
   // Preenche o select de tipos de carga usando a lista compartilhada NEXUS_TIPOS_CARGA
@@ -95,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 font-mono text-xs">${esc(c.portoDescarga || 'Setor Pátio')}</td>
         <td class="p-3 text-slate-700 dark:text-slate-300">${esc(c.motivoCancelamento || c.motivo_recusa || c.motivo || 'Cancelado pelo Supervisor')}</td>
         <td class="p-3">
-          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300">CANCELADA</span>
+          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300">CANCELADA</span>
         </td>
       </tr>
     `).join('');
@@ -112,6 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterStatusVal = (document.getElementById('filterStatus')?.value || '').trim();
     const filterDataInicioVal = (document.getElementById('filterDataInicio')?.value || '').trim();
     const filterDataFimVal = (document.getElementById('filterDataFim')?.value || '').trim();
+    const filterBuscaVal = (document.getElementById('filterBusca')?.value || '').trim().toLowerCase();
 
     // Atualiza status "ENTREGUE" AUTOMATICAMENTE se o navio chegou ao porto de destino
     const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
@@ -138,6 +218,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (filterTipoVal && !(c.tipo || '').toLowerCase().includes(filterTipoVal) && !(c.natureza || '').toLowerCase().includes(filterTipoVal)) return false;
       if (filterStatusVal && c.status !== filterStatusVal) return false;
 
+      // Busca rápida livre (Backlog 3 - 7b): código, QR, tipo, natureza, contêiner, navio
+      if (filterBuscaVal) {
+        const haystack = `${c.id || ''} ${c.qrCode || ''} ${c.tipo || ''} ${c.natureza || ''} ${c.container || ''} ${c.navio || ''} ${c.estivador || ''}`.toLowerCase();
+        if (!haystack.includes(filterBuscaVal)) return false;
+      }
+
       if (filterDataInicioVal || filterDataFimVal) {
         const cDateRaw = c.data_cadastro || c.created_at || c.data_entrada || c.dataAgendamento || c.dataChegada;
         if (cDateRaw) {
@@ -154,6 +240,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     renderCargasCanceladasTable(cargasCanceladas);
+
+    // Contador "Exibindo X de Y" (Backlog 3 - 7b)
+    const cargasCounterEl = document.getElementById('cargasCounter');
+    if (cargasCounterEl) {
+      cargasCounterEl.textContent = `Exibindo ${userItems.length} de ${cargasAtivas.length} carga(s) ativa(s)`;
+    }
 
     if (userItems.length === 0) {
       cargasTableBody.innerHTML = `
@@ -180,43 +272,43 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isEstivador) {
         if (cargaEmTransito) {
           // Carga em trânsito não pode ser movimentada pelo sistema
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else if (emergenciaAtiva) {
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else {
-          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" title="Movimentar carga no pátio" aria-label="Movimentar carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         }
       }
 
       if (c.status === 'AGENDAMENTO' && isConferente) {
-        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'RECEBER')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">download</span><span>Receber</span></button>`;
+        actionButtonsHtml += `<button type="button" title="Confirmar recebimento no porto" aria-label="Receber carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'RECEBER')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">download</span><span class="hidden sm:inline">Receber</span></button>`;
       }
 
       if (c.status === 'RECEBIMENTO_INSPECAO' && isInspetor) {
-        actionButtonsHtml += `<button type="button" onclick="window.location.href=${jsArg('inspecao.html?carga=' + encodeURIComponent(c.id || ''))}" class="px-2.5 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">fact_check</span><span>Inspecionar</span></button>`;
+        actionButtonsHtml += `<button type="button" title="Abrir inspeção formal da carga" aria-label="Inspecionar carga" onclick="window.location.href=${jsArg('inspecao.html?carga=' + encodeURIComponent(c.id || ''))}" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">fact_check</span><span class="hidden sm:inline">Inspecionar</span></button>`;
       }
 
       if (c.status === 'ARMAZENAGEM') {
         if (isArrumador) {
-          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'PRONTA')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">verified</span><span>Pronta</span></button>`;
+          actionButtonsHtml += `<button type="button" title="Marcar carga como pronta para entrega" aria-label="Marcar como pronta" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'PRONTA')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">verified</span><span class="hidden sm:inline">Pronta</span></button>`;
         }
         if (isSupervisor) {
-          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'VINCULAR')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">link</span><span>Vincular</span></button>`;
+          actionButtonsHtml += `<button type="button" title="Vincular carga a um contêiner" aria-label="Vincular a contêiner" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'VINCULAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">link</span><span class="hidden sm:inline">Vincular</span></button>`;
         }
       }
 
       if (c.status === 'PRONTA_PARA_ENTREGA' && isSupervisor) {
         if (emergenciaAtiva) {
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: liberação de saída bloqueada temporariamente" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[14px]">local_shipping</span><span>Liberar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: liberação de saída bloqueada temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">local_shipping</span><span class="hidden sm:inline">Liberar</span></button>`;
         } else {
-          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'LIBERAR')" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">local_shipping</span><span>Liberar</span></button>`;
+          actionButtonsHtml += `<button type="button" title="Liberar saída da carga do porto" aria-label="Liberar saída" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'LIBERAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">local_shipping</span><span class="hidden sm:inline">Liberar</span></button>`;
         }
       }
 
       // C10: Botão manual de "Entregar" REMOVIDO — a entrega ocorre automaticamente quando o navio chega ao destino
 
       if (['AGENDAMENTO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'].includes(c.status) && isSupervisor) {
-        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'CANCELAR')" class="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">block</span><span>Cancelar</span></button>`;
+        actionButtonsHtml += `<button type="button" title="Cancelar carga (Supervisor)" aria-label="Cancelar carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'CANCELAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">block</span><span class="hidden sm:inline">Cancelar</span></button>`;
       }
 
       if (!actionButtonsHtml) {
@@ -237,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="block text-[10px] ${c.navio ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
           </td>
           <td class="p-3 whitespace-nowrap">
-            <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+            <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase ${
               c.status === 'AGENDAMENTO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
               c.status === 'ARMAZENAGEM' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300' :
               c.status === 'PRONTA_PARA_ENTREGA' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
@@ -249,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td class="p-3 text-right">
             <div class="flex items-center justify-end gap-1.5 flex-wrap min-w-[200px]">
-              <button type="button" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode)}, natureza: ${jsArg(c.natureza)}})" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center gap-1 transition-colors"><span class="material-symbols-outlined text-[14px]">qr_code</span><span>QR Code</span></button>
+              <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode)}, natureza: ${jsArg(c.natureza)}})" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center gap-1 transition-colors"><span class="material-symbols-outlined text-[18px]">qr_code</span><span class="hidden sm:inline">QR Code</span></button>
               ${actionButtonsHtml}
             </div>
           </td>
@@ -281,7 +373,10 @@ document.addEventListener('DOMContentLoaded', () => {
     filterTipo.value = cargaQueryParam.replace('QR-', '');
   }
 
-  [filterNavio, filterContainer, filterTipo, filterStatus, filterDataInicio, filterDataFim].forEach(el => {
+  const filterBusca = document.getElementById('filterBusca');
+  if (filterBusca) filterBusca.value = '';
+
+  [filterNavio, filterContainer, filterTipo, filterStatus, filterDataInicio, filterDataFim, filterBusca].forEach(el => {
     if (el) {
       el.addEventListener('input', renderTable);
       el.addEventListener('change', renderTable);
@@ -296,8 +391,42 @@ document.addEventListener('DOMContentLoaded', () => {
       if (filterStatus) filterStatus.value = '';
       if (filterDataInicio) filterDataInicio.value = '';
       if (filterDataFim) filterDataFim.value = '';
+      const filterBuscaEl = document.getElementById('filterBusca');
+      if (filterBuscaEl) filterBuscaEl.value = '';
+      window.atualizarCargasChips && window.atualizarCargasChips('');
       renderTable();
     });
+  }
+
+  // Chips rápidos de Status do Fluxo (Backlog 3 - 7a): atalho visual que
+  // espelha o select #filterStatus; um novo clique no chip ATIVO limpa o filtro.
+  const cargasChipContainer = document.getElementById('cargasStatusChips');
+  function sincronizarChipsCargas(statusAtivo) {
+    if (!cargasChipContainer) return;
+    cargasChipContainer.querySelectorAll('.cargas-chip').forEach(chip => {
+      const ativo = statusAtivo && chip.getAttribute('data-status') === statusAtivo;
+      chip.classList.toggle('bg-nexus-500', !!ativo);
+      chip.classList.toggle('text-white', !!ativo);
+      chip.classList.toggle('border-nexus-500', !!ativo);
+      chip.classList.toggle('bg-white', !ativo);
+      chip.classList.toggle('dark:bg-slate-900', !ativo);
+      chip.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+    });
+  }
+  window.atualizarCargasChips = sincronizarChipsCargas;
+  if (cargasChipContainer) {
+    cargasChipContainer.querySelectorAll('.cargas-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        if (!filterStatus) return;
+        const novoStatus = filterStatus.value === chip.getAttribute('data-status') ? '' : chip.getAttribute('data-status');
+        filterStatus.value = novoStatus;
+        sincronizarChipsCargas(novoStatus);
+        renderTable();
+      });
+    });
+    if (filterStatus) {
+      filterStatus.addEventListener('change', () => sincronizarChipsCargas(filterStatus.value));
+    }
   }
 
   const agDataPrevistaEl = document.getElementById('agDataPrevista');
@@ -312,6 +441,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!agendamentoForm.classList.contains('hidden') && agDataPrevistaEl) {
         agDataPrevistaEl.setAttribute('min', new Date().toISOString().split('T')[0]);
       }
+      if (!agendamentoForm.classList.contains('hidden')) {
+        preencherSelectEstivadorResponsavel();
+      }
     });
   }
 
@@ -319,9 +451,26 @@ document.addEventListener('DOMContentLoaded', () => {
   if (agendamentoForm) {
     agendamentoForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!isSupervisorRole && !isInspetorRole) {
-        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Acesso Restrito: Apenas Supervisores ou Inspetores podem registrar/agendar novas cargas!');
-        return;
+
+      // Backlog 3 (Anotação 3.4) — atribuição do funcionário responsável:
+      // gestor escolhe na lista de funcionários em escala; funcionário
+      // operacional é atribuído a si mesmo automaticamente (campo travado).
+      let estivadorResp = null;
+      if (isGestorRole) {
+        estivadorResp = obterEstivadorSelecionado();
+        if (!estivadorResp) {
+          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Responsável Obrigatório', 'Selecione o funcionário em escala (ativo) que assumirá a responsabilidade por esta carga. Não é permitido agendar sem responsável designado.');
+          return;
+        }
+      } else {
+        const escala = await carregarFuncionariosEscala();
+        const proprio = funcionarioDaSessao(escala);
+        estivadorResp = {
+          id: (proprio && (proprio.id || proprio.matricula || proprio.codigo_individual)) || session.matricula || session.codigo_individual || 'SESSAO_ATUAL',
+          matricula: (proprio && proprio.matricula) || session.matricula,
+          nome: (proprio && proprio.nome) || session.nome,
+          cargo: (proprio && proprio.cargo) || session.cargo
+        };
       }
 
       const tipo = document.getElementById('agTipoCarga').value;
@@ -370,7 +519,11 @@ document.addEventListener('DOMContentLoaded', () => {
         navio: '',
         qrCode: newQrCode,
         data_cadastro: nowIso,
-        created_at: nowIso
+        created_at: nowIso,
+        // Atribuição do funcionário responsável (Backlog 3 - Anotação 3.4)
+        estivador_id: estivadorResp ? estivadorResp.id : null,
+        estivadorMatricula: estivadorResp ? estivadorResp.matricula : null,
+        estivador: estivadorResp ? estivadorResp.nome : null
       };
 
 
@@ -412,6 +565,24 @@ document.addEventListener('DOMContentLoaded', () => {
               carga_id: resCarga.id,
               data_prevista_entrega: dataPrevista || new Date().toISOString().split('T')[0]
             }).catch(() => {});
+
+            // Backlog 3 (Anotação 3.4) — persiste a atribuição do responsável
+            // na tabela mestre estivador_cargas quando há UUIDs disponíveis
+            if (estivadorResp && isUuid.test(String(estivadorResp.id)) && isUuid.test(String(resCarga.id))) {
+              try {
+                await window.nexusSupabase.from('estivador_cargas').upsert({
+                  estivador_id: estivadorResp.id,
+                  carga_id: resCarga.id,
+                  data_inicio: nowIso
+                }, { onConflict: 'estivador_id,carga_id' });
+              } catch (attrErr) {
+                console.warn('[NexusPort] Atribuição do responsável salva apenas localmente:', attrErr);
+              }
+            }
+
+            if (window.registrarLogAlteracao) {
+              window.registrarLogAlteracao('CRIACAO', 'cargas', resCarga.id, { id: newId, responsavel: estivadorResp ? estivadorResp.nome : null });
+            }
           }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar agendamento com Supabase:', err);
@@ -521,6 +692,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (closeVincularModalBtn) closeVincularModalBtn.addEventListener('click', fecharVincularModal);
+
+  // Backlog 3 (3.4): botão Cancelar fecha e limpa o formulário de agendamento
+  const cancelAgendamentoBtn = document.getElementById('cancelAgendamentoBtn');
+  if (cancelAgendamentoBtn) {
+    cancelAgendamentoBtn.addEventListener('click', () => {
+      const form = document.getElementById('agendamentoCargaForm');
+      if (form) {
+        form.reset();
+        form.classList.add('hidden');
+      }
+    });
+  }
   if (cancelVincularModalBtn) cancelVincularModalBtn.addEventListener('click', fecharVincularModal);
 
   if (confirmVincularModalBtn) {
@@ -554,6 +737,40 @@ document.addEventListener('DOMContentLoaded', () => {
     if (contObj && !navUuid) {
         navVal = contObj.navio || contObj.navio_nome || '';
         navUuid = contObj.navio_id || contObj.navioId || null;
+      }
+
+      // Backlog3: vínculo de carga permitido apenas a navios ATRACADOS no
+      // Porto de Santos (DENTRO_DO_PORTO). Contêiner de navio em trânsito ou
+      // no porto de destino não pode receber nova carga.
+      if (navVal || navUuid) {
+        const navioVinc = naviosList.find(n =>
+          (navUuid && (n.id === navUuid || n.rawDbId === navUuid)) ||
+          (navVal && String(n.nome || '').toUpperCase() === String(navVal).toUpperCase())
+        );
+        let locNavio = navioVinc ? (navioVinc.localizacao || 'DENTRO_DO_PORTO') : null;
+
+        // Fonte de verdade: confirma a localização no Supabase quando o
+        // cache local não sabe onde a embarcação está.
+        if (!locNavio && window.nexusSupabase && (navVal || navUuid)) {
+          try {
+            const isUuidR = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            const q = window.nexusSupabase.from('navios').select('localizacao');
+            const { data: navioDb } = isUuidR.test(String(navUuid || ''))
+              ? await q.eq('id', navUuid).maybeSingle()
+              : await q.ilike('nome', String(navVal || '')).maybeSingle();
+            if (navioDb && navioDb.localizacao) locNavio = navioDb.localizacao;
+          } catch (e) {
+            console.warn('[Cargas] Falha ao confirmar localização do navio no Supabase:', e);
+          }
+        }
+
+        if (locNavio && locNavio !== 'DENTRO_DO_PORTO') {
+          const situacao = locNavio === 'FORA_DO_PORTO' ? 'em trânsito (fora do porto)' : 'no porto de destino (já descarregado)';
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('alerta', 'Vinculação Bloqueada', `BLOQUEIO DE REGRA DE NEGÓCIO: O contêiner ${contIdentificacao} está vinculado ao navio \"${navVal}\", que se encontra ${situacao}. Cargas só podem ser vinculadas a embarcações atracadas no Porto de Santos.`);
+          }
+          return;
+        }
       }
 
       const cargaVol = parseFloat(targetCargaParaVinculacao.volume) || 0;
