@@ -40,6 +40,15 @@ Número de usuários ativos naquele momento, atualizado a cada 30 segundos.
 ## Cookie para rastrear cada dispositivo no Google Analytics
 Cookie para rastrear ações de um mesmo dispositivo usando Cookies, de forma que cuja implementação seja funcional e prática, e que o próprio Google Analytics reconheca nativamente. (sem truques)
 
+## Comprimir JS/CSS antes do deploy
+Minify.
+
+## Usar o `GoogleChrome/lighthouse` como workflow pra PRs (localmente, com NodeJS)
+Falha se for encontrado falhas críticas, roda em todo PR aberto, requisito mínimo de PR.
+
+## Reorganizar arquivos `.JS`
+WebMCP vai ter sua própria subpasta, arquivos comuns (usados em todas as páginas) ficam no root da pasta, e específicos de subpastas ficam em pages/. (ainda sim dentro do js/)
+
 ## Atualização em tempo real das tabelas e indicadores
 Corrigir os dados exibidos pelas tabelas e indicadores do sistema quando ocorre uma alteração no Supabase, garantindo que todos os painéis sejam atualizados em tempo real e não apresentem dados antigos ou incorretos.
 
