@@ -5,8 +5,10 @@ Lugar simples aonde o Diretor de Operações pode observar comparações de dado
 
 > **Entregue:** painéis Chart.js por camada de visão no Painel Geral (`dashboard.html`) e em Relatórios (`relatorios.html`), incluindo "% de berços operacionais", fila de liberação, tempo médio de permanência, produtividade por cargo, embarcações mais utilizadas e valor declarado (exclusivo da Direção/Conselho). Módulo: `js/charts.js` · Teste: `node tests/test_graficos_por_cargo.js`.
 
-## Auto-complete de - no login (UX)
+## Auto-complete de - no login (UX) ✅ IMPLEMENTADO
 Quando digitar um login, auotmaticamente insira um - quando o usuario pressionar um numero, de forma que se ele já digitou MAT e apertar 1, ele completa pra MAT-1.
+
+> **Status:** Implementado. Em `js/login.js`, ao digitar o primeiro número logo após o prefixo alfabético o separador entra automaticamente (`MAT` + `1` → `MAT-1`, `NX8821` → `NX-8821`), sem alterar códigos já hifenizados nem matrículas numéricas. Teste: `node tests/test_backlog3_correcoes.js`.
 
 ## Botão de Pânico ser global ✅ IMPLEMENTADO
 Quando o botão de pânco ser ativado, exibir uma mensagem no rodapé da tela informando que está ocorrendo uma emergência.
@@ -15,8 +17,10 @@ Quando o botão de pânco ser ativado, exibir uma mensagem no rodapé da tela in
 >
 > **Alerta no aparelho (vibração/som):** clientes compatíveis podem vibrar com o padrão SOS no acionamento e pulsos a cada 3s enquanto o alarme estiver ativo. A Vibration API exige contexto seguro, sticky user activation e documento visível; Safari/WebKit no iOS e Firefox 129+ não oferecem essa API. Não há workaround web confiável nesses navegadores, então o sistema usa alerta sonoro (quando o navegador permite) e banner visual. `js/haptics.js` valida e normaliza os padrões conforme a especificação, mostra o diagnóstico e oferece controles de preferência/teste em `manutencao.html`. Teste: `node tests/test_haptics.js`.
 
-## Barra de Menu lateral não fica grudada na tela quando scrolla
+## Barra de Menu lateral não fica grudada na tela quando scrolla ✅ IMPLEMENTADO
 Ela parece não ficar parada quando scroll, tanto no PC, quanto no celular.
+
+> **Status:** Implementado. O contêiner principal agora é limitado à viewport no desktop (`js/layout.js`: `md:h-[calc(100vh-4rem)] md:overflow-hidden`), então apenas o `<main>` rola e a sidebar permanece fixa; no celular o menu continua como drawer `fixed` (com fundo escurecido que fecha ao tocar fora). Teste: `node tests/test_backlog3_correcoes.js`.
 
 ## Salvar o login com Cookies ao invés de SESSION_STORAGE
 A não ser que haja problemas de segurança, usar Cookies parece mais prático para usuários.
@@ -43,6 +47,8 @@ Não deve ser possível registrar ou executar uma manutenção para um navio que
 
 > **Regra:** antes de permitir uma manutenção, verificar a localização/status operacional atual do navio. Caso ele esteja fora do porto, bloquear a operação e informar claramente ao usuário o motivo do bloqueio.
 
+> **Status:** Implementado em `js/manutencao.js`. A "Solicitação de Manutenção de Embarcações (Navios)" lista apenas navios com `localizacao = DENTRO_DO_PORTO` (os demais ficam de fora, com o motivo no `title` do select) e o `submit` do formulário bloqueia novamente a operação caso o navio saia do porto entre a abertura e o envio. Teste: `node tests/test_backlog3_correcoes.js`.
+
 ## Impedir vinculação de carga a navio fora do Porto de Santos
 Não deve ser possível vincular uma carga a um navio que esteja atualmente **fora do Porto de Santos**.
 
@@ -53,12 +59,16 @@ Uma carga que já esteja **em trânsito** não pode ser movimentada pelo sistema
 
 > **Regra:** quando a carga estiver em trânsito, as ações de movimentação devem ficar bloqueadas/desabilitadas. O sistema deve informar que a carga não pode ser movimentada enquanto estiver em trânsito.
 
+> **Status:** Implementado em `js/cargas.js`. A carga `EM_TRANSITO` renderiza o botão **Movimentar** desabilitado (com `title` explicando o bloqueio) e a função `executarAcaoCarga` também recusa a ação — nenhuma tarefa de guindaste é criada. Teste: `node tests/test_backlog3_correcoes.js`.
+
 ## Corrigir momento em que a carga entra em trânsito
 Atualmente a carga passa a aparecer como **em trânsito** quando o botão **"Pronto para entrega"** é acionado, mas esse comportamento está incorreto.
 
 > **Regra:** uma carga só deve entrar no estado **em trânsito quando o navio for efetivamente liberado**. O botão **"Pronto para entrega"** não deve alterar o status da carga para trânsito.
 >
 > **Fluxo esperado:** carga preparada → pronta para entrega → navio liberado → carga em trânsito.
+
+> **Status:** Verificado (já correto no código atual). O botão **"Pronta"** grava `PRONTA_PARA_ENTREGA` (`js/cargas.js`) e a carga só vira `EM_TRANSITO` na liberação de saída (carga ou navio), com a chegada ao destino marcando `ENTREGUE`. Nenhuma alteração necessária.
 
 ## Seleção de rotas marítimas no cadastro de navios
 No cadastro de navios deve existir uma caixa de seleção contendo **somente as rotas marítimas cadastradas no Supabase**.
@@ -73,6 +83,8 @@ Ao acessar o sistema pelo celular, o scanner de QR Code atualmente fica em um fo
 > **Objetivo:** o scanner deve manter uma área de leitura **quadrada**, independentemente do tamanho ou orientação da tela.
 >
 > Garantir que o elemento de câmera/preview e a área visual de leitura preservem proporção `1:1` em dispositivos móveis, sem distorcer a imagem da câmera.
+
+> **Status:** Implementado. `scanner.html` usa `aspect-square` + CSS `aspect-ratio: 1 / 1` (com `object-fit: cover` no vídeo, sem distorção) e `js/scanner.js` calcula o `qrbox` quadrado proporcional ao preview. Teste: `node tests/test_backlog3_correcoes.js`.
 
 # Anotações
 
@@ -109,6 +121,8 @@ window.autorizarRetornoNavio = async function (imo) {
 
 * **Extra:** aplicar a mesma checagem em **Liberar Saída** (`liberarNavioPeloDiretor`): `navio.localizacao === 'DENTRO_DO_PORTO'` dentro da função.
 
+> **Status:** ✅ Implementado em `js/embarcacoes.js`. O botão de navios `FORA_DO_PORTO` agora tem `disabled`/`aria-disabled` de verdade e **sem** `onclick`; `autorizarRetornoNavio` exige `NO_PORTO_DE_DESTINO` e `liberarNavioPeloDiretor` exige `DENTRO_DO_PORTO` (com mensagem clara do motivo). Teste: `node tests/test_backlog3_correcoes.js`.
+
 ---
 
 ## 2) Correção — Botão de pânico pode ser acionado com o alarme já ativo
@@ -117,6 +131,8 @@ window.autorizarRetornoNavio = async function (imo) {
 * **Local:** Faixa vermelha "Protocolo de Emergência / Botão de Pânico (Inspetor)" (HTML ~93–107) e listener do `panicButton` (JS ~664–680). Estado em `localStorage['nexus_emergency_active']`.
 * **Causa:** o clique não verifica se a emergência já está ativa; pede confirmação, grava de novo e registra outro log. O botão nunca muda de aparência.
 * **Solução:**
+
+> **Status:** ✅ Implementado em `js/manutencao.js` (+ estado do botão): o acionamento com alarme já ativo é recusado com aviso e sem novo log, o botão passa a refletir o estado (`EMERGÊNCIA ATIVA`, `disabled`), o reset é desabilitado sem alarme e o estado é sincronizado entre abas via `storage`. Complemento do item 6 aplicado: com o alarme ativo, **Movimentar**, **Liberar** (carga), **Liberar Saída** e **Autorizar Retorno** ficam bloqueados (`window.nexusEmergenciaAtiva()` em `js/layout.js`).
 
 ```js
 function aplicarEstadoEmergencia(ativa) {
@@ -193,11 +209,15 @@ const badge = (cls, txt) =>
 
 * Trocar **"Concluir Manutenção"** por **"Concluir"**, utilizando o ícone `task_alt` e `title="Concluir manutenção"`.
 
+> **Status:** ✅ Implementado em `js/manutencao.js` (`renderOsTable`): status traduzidos ("Aguardando aprovação", "Em manutenção", "Concluída", "Reprovada"), prioridade com cor própria (incluindo BAIXA), ações em `flex` com `gap`/`min-w` e botão "Concluir" com ícone. As datas da coluna passaram a `dd/mm/aaaa` (item 8.8). Teste: `node tests/test_backlog3_correcoes.js`.
+
 ### 3.2 Manutenção & OS — "Alerta de Manutenção Preventiva Sugerida"
 
 * **Local:** `#alertaPreventivaList` (`js/manutencao.js` ~485).
 * **Problema:** cada item é uma linha corrida `1. [TIPO] ID: motivo`.
 * **Solução:**
+
+> **Status:** ✅ Implementado em `js/manutencao.js` (`carregarEquipamentosEAlertas`): cada equipamento aparece em bloco próprio, com etiqueta do tipo, identificação e motivo.
 
 ```js
 alertaList.innerHTML = equipamentos.map(e => `
@@ -275,6 +295,8 @@ const btnSec = (icone, titulo, acao, cor = 'slate') =>
 * **Problema:** três botões coloridos lado a lado (Vincular, Liberar/Autorizar, Excluir), todos em `font-mono`.
 * **Solução:** manter **Vincular** e **Liberar Saída / Autorizar Retorno** com texto; **Excluir** vira botão somente de ícone, separado por um divisor.
 
+> **Status:** ✅ Implementado em `js/embarcacoes.js` (coluna Ações sem `font-mono`, divisor + botão **Excluir** só de ícone com `aria-label`, `title` e foco visível).
+
 ```js
 acoesHtml += `<span class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1"></span>
   <button type="button"
@@ -299,6 +321,8 @@ const LOCAL = {
   NO_PORTO_DE_DESTINO: { txt: 'Chegou ao destino', cls: 'bg-purple-100 text-purple-800' },
 };
 ```
+
+> **Status:** ✅ Implementado em `js/embarcacoes.js` (`LOCALIZACAO_NAVIO` / `localizacaoBadgeHtml`): a coluna mostra "No porto", "Em trânsito" ou "Chegou ao destino", mantendo o código técnico no `title` para rastreabilidade. Teste: `node tests/test_backlog3_correcoes.js`.
 
 ---
 
@@ -430,6 +454,8 @@ if (localStorage.getItem('nexus_emergency_active') === 'true') {
 
 * **Complemento:** desabilitar **Liberar Saída**, **Autorizar Retorno** e **Movimentar** enquanto o alarme estiver ativo.
 
+> **Status:** ✅ Implementado (a faixa global já existia em `js/panic-realtime.js`, fixa no rodapé de todas as telas). O complemento foi aplicado: `window.nexusEmergenciaAtiva()` (`js/layout.js`) bloqueia **Movimentar**/**Liberar** (`js/cargas.js`) e **Liberar Saída**/**Autorizar Retorno** (`js/embarcacoes.js`), que aparecem desabilitados com o motivo no `title`. Teste: `node tests/test_backlog3_correcoes.js`.
+
 ---
 
 ## 7) Adições simples
@@ -440,7 +466,7 @@ if (localStorage.getItem('nexus_emergency_active') === 'true') {
 | b | Todas as tabelas | Acima de cada tabela   | Campo de busca rápida (nome / IMO / ID) e contador **"Exibindo X de Y"**.                                                  |
 | c | Todas as tabelas | Quando vazia           | Estado vazio com ícone e frase útil, por exemplo: **"Nenhuma OS cadastrada. Use + Nova Ordem de Serviço"**.                |
 | d | Embarcações      | Coluna ETA             | Barra de progresso da viagem (tempo decorrido ÷ previsto, já calculados em ~273–292).                                      |
-| e | Painel Geral     | Cabeçalho              | Hora da última atualização, por exemplo **"Atualizado às 14:32"**.                                                         |
+| e | Painel Geral     | Cabeçalho              | Hora da última atualização, por exemplo **"Atualizado às 14:32"**. ✅ IMPLEMENTADO (`#cardsLastUpdate` em `dashboard.html` + `registrarUltimaAtualizacao()` em `js/dashboard.js`) |
 | f | Painel Geral     | Planilha de desempenho | Botão **Exportar CSV**.                                                                                                    |
 | g | Relatórios       | Topo                   | Atalhos de período (**Hoje · 7 dias · 30 dias · Este mês**).                                                               |
 | h | Manutenção       | Tabela de OS           | Filtro por status (**Todas · Pendentes · Em manutenção · Concluídas**).                                                    |
@@ -462,6 +488,8 @@ if (localStorage.getItem('nexus_emergency_active') === 'true') {
 | 8 | Todas            | Datas                                     | Padronizar `dd/mm/aaaa` (a tabela de OS mostra `2026-09-27` ou "N/A").                                                                                                                   | `new Date(os.data).toLocaleDateString('pt-BR')`                                                              |
 
 ### Código do ajuste 6 — `carregarEquipamentosEAlertas` (`js/manutencao.js`)
+
+> **Status:** ✅ Implementado em `js/manutencao.js`: cada `<optgroup>` é montado de uma só vez (`optGroup()`), então as opções voltam a aparecer dentro dos grupos "Guindastes & Pórticos" e "Contêineres".
 
 ```js
 const optGroup = (label, itens) =>

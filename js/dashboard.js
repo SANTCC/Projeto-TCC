@@ -406,11 +406,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 1. Renderiza os 7 Cards Indicadores Operacionais (RF 7 / A1 / A9) com dados unificados do Supabase (Item 1.1)
+  // Item 7e (backlog3): hora da última atualização dos indicadores no cabeçalho
+  function registrarUltimaAtualizacao() {
+    const el = document.getElementById('cardsLastUpdate');
+    if (!el) return;
+    const agora = new Date();
+    el.textContent = `Atualizado às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    el.setAttribute('title', `Última atualização dos indicadores: ${agora.toLocaleString('pt-BR')}`);
+  }
+
   async function renderCardsOperacionais() {
     let indic = null;
     if (window.NexusRepository && window.NexusRepository.buscarIndicadoresOperacionais) {
       indic = await window.NexusRepository.buscarIndicadoresOperacionais();
     }
+
+    registrarUltimaAtualizacao();
 
     if (!indic) return;
 
