@@ -46,6 +46,17 @@ document.addEventListener('DOMContentLoaded', () => {
   let cargaAtual = null;
   let itemsEstado = {};
 
+  // Pontos de uso pelo agente WebMCP (mesma lógica da interface; não alteram a tela por si).
+  window.nexusInspecaoModeloChecklist = getChecklistTemplate;
+  window.nexusInspecaoEstado = function () {
+    return {
+      cargaId: cargaAtual ? cargaAtual.id : null,
+      carga_status: cargaAtual ? cargaAtual.status : null,
+      itens: Object.keys(itemsEstado).map((id) => ({ id, critico: itemsEstado[id].critico, conforme: itemsEstado[id].conforme })),
+      aprovarHabilitado: aprovarBtn ? !aprovarBtn.disabled : false
+    };
+  };
+
   // Item 9: Popula seletor apenas com cargas cadastradas e ativas na tabela de cargas
   async function popularSeletor() {
     if (!selectCarga) return;
@@ -210,9 +221,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
   // Aprovar Carga (RN 14)
-  if (aprovarBtn) {
-    aprovarBtn.addEventListener('click', async () => {
-      if (!cargaAtual) return;
+  async function aprovarCargaAtual() {
+      if (!cargaAtual) return false;
 
       cargaAtual.status = 'ARMAZENAGEM';
       cargaAtual.resultadoInspecao = 'APROVADA';
@@ -303,17 +313,22 @@ document.addEventListener('DOMContentLoaded', () => {
         window.mostrarFeedback('sucesso', 'Inspeção Concluída', `Sucesso! Carga ${cargaAtual.id} APROVADA na inspeção técnica. Status atualizado para ARMAZENAGEM no pátio.`);
       }
       setTimeout(() => { window.location.href = 'cargas.html'; }, 1000);
-    });
+      return true;
+  }
+
+  window.nexusInspecaoAprovar = aprovarCargaAtual;
+  if (aprovarBtn) {
+    aprovarBtn.addEventListener('click', () => aprovarCargaAtual());
   }
 
   // Recusar Carga (RN 14 & Item 10: campo obrigatório de motivo de recusa)
-  if (recusarBtn) {
-    recusarBtn.addEventListener('click', async () => {
-      if (!cargaAtual) return;
+  async function recusarCargaAtual(opcoes) {
+      if (!cargaAtual) return false;
 
       if (motivoBox) motivoBox.classList.remove('hidden');
 
-      let motivo = motivoInput ? motivoInput.value.trim() : '';
+      let motivo = (opcoes && opcoes.motivo) ? String(opcoes.motivo).trim() : (motivoInput ? motivoInput.value.trim() : '');
+      if (motivoInput && motivo) motivoInput.value = motivo;
       if (!motivo) {
         motivo = await window.nexusPrompt('Motivo de Recusa da Carga', 'Informe obrigatoriamente o MOTIVO FORMAL do cancelamento/recusa da carga:');
         if (motivoInput && motivo) motivoInput.value = motivo;
@@ -415,7 +430,12 @@ document.addEventListener('DOMContentLoaded', () => {
         window.mostrarFeedback('sucesso', 'Inspeção Registrada', `Carga ${cargaAtual.id} RECUSADA na inspeção técnica. Motivo registrado: "${motivo}". Status mantido em RECUSADA.`);
       }
       setTimeout(() => { window.location.href = 'cargas.html'; }, 1000);
-    });
+      return true;
+  }
+
+  window.nexusInspecaoRecusar = recusarCargaAtual;
+  if (recusarBtn) {
+    recusarBtn.addEventListener('click', () => recusarCargaAtual({}));
   }
 
   // Sincronização viva em tempo real (Item 2)

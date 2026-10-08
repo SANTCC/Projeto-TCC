@@ -254,9 +254,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (revogarBtn) {
-    revogarBtn.addEventListener('click', async () => {
-      const confirmou = window.nexusConfirm ? await window.nexusConfirm('Revogar Delegação', 'ATENÇÃO: Deseja REVOGAR IMEDIATAMENTE os poderes do substituto temporário?') : true;
+  // opcoes (uso do agente WebMCP): { confirmado? } — a interface chama sem opções.
+  async function revogarDelegacaoAtiva(opcoes) {
+      const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Revogar Delegação', 'ATENÇÃO: Deseja REVOGAR IMEDIATAMENTE os poderes do substituto temporário?') : true;
       if (confirmou) {
         const activeDeleg = JSON.parse(localStorage.getItem('nexus_active_delegation') || '{}');
         localStorage.removeItem('nexus_active_delegation');
@@ -301,7 +301,12 @@ document.addEventListener('DOMContentLoaded', () => {
           window.mostrarFeedback('sucesso', 'Delegação Revogada', 'Delegação revogada com sucesso! Poderes operacionais do substituto encerrados imediatamente.');
         }
       }
-    });
+      return confirmou === true;
+  }
+
+  window.nexusRevogarDelegacao = revogarDelegacaoAtiva;
+  if (revogarBtn) {
+    revogarBtn.addEventListener('click', () => revogarDelegacaoAtiva({}));
   }
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {

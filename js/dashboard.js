@@ -7,6 +7,11 @@
 
 // Funções utilitárias globais exigidas para integração (T7.1, T7.3, T8.3 - T8.6, T6.8)
 window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes = '') {
+  // Ações feitas por agente de IA (WebMCP) ficam marcadas na auditoria. Sem agente, nada muda.
+  const marcaAgente = (window.NexusWebMCP && typeof window.NexusWebMCP.marcaAuditoria === 'function') ? window.NexusWebMCP.marcaAuditoria() : '';
+  if (marcaAgente) {
+    detalhes = typeof detalhes === 'string' ? marcaAgente + detalhes : Object.assign({}, detalhes, { origem_agente: window.NexusWebMCP.origemAtual() });
+  }
   const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null) || {};
   const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -109,6 +114,9 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
 };
 
 window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
+  // Decisões tomadas via agente de IA (WebMCP) ficam marcadas na trilha imutável.
+  const marcaAgente = (window.NexusWebMCP && typeof window.NexusWebMCP.marcaAuditoria === 'function') ? window.NexusWebMCP.marcaAuditoria() : '';
+  if (marcaAgente) motivo = marcaAgente + (motivo || 'Decisão registrada pelo agente');
   const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null) || {};
   const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 

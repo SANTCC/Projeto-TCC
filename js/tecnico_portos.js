@@ -27,12 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedEmp = null;
   const employeeList = [];
 
-  if (searchBtn && searchInput) {
-    searchBtn.addEventListener('click', async () => {
-      const q = searchInput.value.trim().toUpperCase();
+  // Busca por matrícula (usada pela interface e pelas ferramentas WebMCP).
+  async function buscarFuncionarioPorMatricula(q) {
       if (!q) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Matrícula Obrigatória', 'Informe a matrícula para buscar.');
-        return;
+        return null;
       }
 
       const formattedMatricula = q.startsWith('MAT-') ? q : `MAT-${q}`;
@@ -96,14 +95,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (resultBox) resultBox.classList.add('hidden');
         if (regenBtn) regenBtn.disabled = true;
       }
-    });
+      return selectedEmp;
   }
 
-  if (regenBtn) {
-    regenBtn.addEventListener('click', async () => {
-      if (!selectedEmp) return;
+  if (searchBtn && searchInput) {
+    searchBtn.addEventListener('click', () => buscarFuncionarioPorMatricula(searchInput.value.trim().toUpperCase()));
+  }
 
-      const confirmou = window.nexusConfirm ? await window.nexusConfirm('Invalidar Código', `Confirma a INVALIDAÇÃO do código atual (${resCodigo.textContent}) para ${selectedEmp.nome}?`) : true;
+  // Reemissão de código (RN 15). Só a interface do Técnico exibe o novo código; ele nunca volta para o agente.
+  async function reemitirCodigoSelecionado(opcoes) {
+      if (!selectedEmp) return false;
+
+      const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Invalidar Código', `Confirma a INVALIDAÇÃO do código atual (${resCodigo.textContent}) para ${selectedEmp.nome}?`) : true;
 
       if (confirmou) {
         const suffix = Math.floor(1000 + Math.random() * 9000);
@@ -149,7 +152,21 @@ document.addEventListener('DOMContentLoaded', () => {
           window.mostrarFeedback('sucesso', 'Código Reemitido', `Código antigo invalidado com sucesso. O novo código de acesso é: ${newCode}`);
         }
       }
-    });
+      return confirmou === true;
+  }
+
+  // Pontos de uso pelo agente WebMCP (mesma lógica da interface).
+  window.nexusTecnicoBuscar = buscarFuncionarioPorMatricula;
+  window.nexusTecnicoReemitir = async function (matricula, opcoes) {
+    if (matricula !== undefined) {
+      const achado = await buscarFuncionarioPorMatricula(String(matricula).trim().toUpperCase());
+      if (!achado) return false;
+    }
+    return reemitirCodigoSelecionado(opcoes);
+  };
+
+  if (regenBtn) {
+    regenBtn.addEventListener('click', () => reemitirCodigoSelecionado({}));
   }
 
   // CRUD Funcionários (T2.1 & Conexão Supabase)
@@ -208,8 +225,8 @@ document.addEventListener('DOMContentLoaded', () => {
     `).join('');
   }
 
-  window.excluirFuncionarioReal = async function(matricula) {
-    const confirmou = window.nexusConfirm ? await window.nexusConfirm('Excluir Funcionário', `Tem certeza que deseja desativar/excluir o funcionário de matrícula ${matricula}?`) : true;
+  window.excluirFuncionarioReal = async function(matricula, opcoes) {
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Excluir Funcionário', `Tem certeza que deseja desativar/excluir o funcionário de matrícula ${matricula}?`) : true;
     if (confirmou) {
       if (window.NexusRepository && window.NexusRepository.deleteFuncionario) {
         await window.NexusRepository.deleteFuncionario(matricula);
@@ -493,14 +510,14 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Registrar Saída do Visitante (Move do Ativo para o Histórico)
-  window.registrarSaidaVisitante = async function(visitorKey) {
+  window.registrarSaidaVisitante = async function(visitorKey, opcoes) {
     const visitor = visList.find(v => (v.id && v.id === visitorKey) || (`${v.nome}_${v.documento}` === visitorKey));
     if (!visitor) return;
 
-    const dataSaidaStr = window.nexusPrompt ? await window.nexusPrompt('Registrar Saída', `Informe a data/hora de saída do visitante ${visitor.nome}:`, new Date().toLocaleString('pt-BR')) : new Date().toLocaleString('pt-BR');
+    const dataSaidaStr = (opcoes && opcoes.dataSaida) ? opcoes.dataSaida : window.nexusPrompt ? await window.nexusPrompt('Registrar Saída', `Informe a data/hora de saída do visitante ${visitor.nome}:`, new Date().toLocaleString('pt-BR')) : new Date().toLocaleString('pt-BR');
     if (!dataSaidaStr) return;
 
-    const parecerVistoria = window.nexusPrompt ? await window.nexusPrompt('Parecer da Vistoria', `Informe o parecer da vistoria para ${visitor.nome}:`, 'Vistoria em Ordem - Sem Anormalidades') : 'Vistoria em Ordem - Sem Anormalidades';
+    const parecerVistoria = (opcoes && opcoes.parecer) ? opcoes.parecer : window.nexusPrompt ? await window.nexusPrompt('Parecer da Vistoria', `Informe o parecer da vistoria para ${visitor.nome}:`, 'Vistoria em Ordem - Sem Anormalidades') : 'Vistoria em Ordem - Sem Anormalidades';
 
     visitor.status = 'CONCLUIDO';
     visitor.data_saida = dataSaidaStr;
