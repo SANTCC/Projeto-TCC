@@ -80,6 +80,38 @@
     return window.nexusSupabase || null;
   }
 
+  function getUtils() {
+    return window.NexusSupabaseUtils || null;
+  }
+
+  /**
+   * Cliente Supabase somente quando a tabela informada já foi provisionada.
+   * Se a tabela não existe no banco (404 / PGRST205), devolve null e a
+   * aplicação segue pelo caminho local — sem enxurrada de erros no console.
+   */
+  function getSupabaseTabela(tabela) {
+    const utils = getUtils();
+    if (utils && typeof utils.clientePara === 'function') return utils.clientePara(tabela);
+    return getSupabase();
+  }
+
+  /** Registra o erro; true quando o motivo é "tabela ausente" (falta migração). */
+  function tratarErroTabela(tabela, error) {
+    const utils = getUtils();
+    if (utils && typeof utils.registrarErroTabela === 'function') {
+      return utils.registrarErroTabela(tabela, error);
+    }
+    console.warn(`[NexusPanic] Erro na tabela '${tabela}':`, (error && error.message) || error);
+    return false;
+  }
+
+  /** Migração SQL que cria a tabela (usada nas mensagens de diagnóstico). */
+  function migracaoDaTabela(tabela) {
+    const utils = getUtils();
+    return (utils && typeof utils.migracaoDaTabela === 'function' && utils.migracaoDaTabela(tabela)) ||
+      'supabase/migrations/20261008000000_emergencias_fix_404.sql';
+  }
+
   function canTrigger() {
     return window.NexusAuth ? window.NexusAuth.hasPermission('ACIONAR_EMERGENCIA') : false;
   }
@@ -466,8 +498,43 @@
 
   // Estado inicial: consulta a tabela `emergencias` (clientes que conectam
   // durante uma emergência ativa também precisam ver o alerta no rodapé).
+  //
+  // Tabela ausente (404 / PGRST205): NÃO é falha do navegador — falta aplicar
+  // a migração SQL no projeto Supabase. O módulo marca a tabela como
+  // indisponível, mantém o flag local e agenda rechecagens com backoff: se a
+  // migração for aplicada com a tela aberta, o estado global volta sozinho,
+  // sem recarregar a página.
+  const ESTADO_RETRY_MS = [5000, 15000, 45000, 120000];
+  let estadoRetryTimer = null;
+  let estadoRetryIndex = 0;
+
+  function agendarRechecagemEstado() {
+    if (estadoRetryTimer !== null) return;
+    if (!getUtils()) return;
+    if (estadoRetryIndex >= ESTADO_RETRY_MS.length) return; // desiste após ~3 min
+    const espera = ESTADO_RETRY_MS[estadoRetryIndex++];
+    estadoRetryTimer = setTimeout(() => {
+      estadoRetryTimer = null;
+      rechecarTabelaEmergencias();
+    }, espera);
+  }
+
+  // Rechecagem ativa: um HEAD barato (diagnosticar) libera a tabela caso a
+  // migração tenha sido aplicada depois do carregamento da página.
+  async function rechecarTabelaEmergencias() {
+    const utils = getUtils();
+    if (!utils || typeof utils.diagnosticar !== 'function') return;
+    const diag = await utils.diagnosticar('emergencias');
+    if (diag && diag.disponivel) {
+      estadoRetryIndex = 0;
+      await loadStateFromDb();
+    } else {
+      agendarRechecagemEstado();
+    }
+  }
+
   async function loadStateFromDb() {
-    const sb = getSupabase();
+    const sb = getSupabaseTabela('emergencias');
     if (sb) {
       try {
         const { data, error } = await sb
@@ -479,6 +546,9 @@
           .maybeSingle();
 
         if (!error) {
+          estadoRetryIndex = 0;
+          const utils = getUtils();
+          if (utils && typeof utils.liberarTabela === 'function') utils.liberarTabela('emergencias');
           if (data) {
             setState({
               active: true,
@@ -497,6 +567,9 @@
           }
           return;
         }
+
+        // Tabela fora do schema cache do PostgREST (HTTP 404 / PGRST205)?
+        tratarErroTabela('emergencias', error);
       } catch (e) {
         console.warn('[NexusPanic] Falha ao ler emergencias do Supabase:', e);
       }
@@ -506,17 +579,23 @@
     if (localStorage.getItem(LS_KEY) === 'true') {
       setState({ active: true, origem: 'local' });
     }
+
+    // A tabela ainda não existe? Tenta de novo em alguns segundos.
+    const utils = getUtils();
+    if (utils && typeof utils.tabelaIndisponivel === 'function' && utils.tabelaIndisponivel('emergencias')) {
+      agendarRechecagemEstado();
+    }
   }
 
   // ------------------------------------------------------------------
   // Persistência local (fallback quando a Edge Function está indisponível)
   // ------------------------------------------------------------------
   async function persistEmergencyLocal(identity, motivo, dataHora) {
-    const sb = getSupabase();
+    const sb = getSupabaseTabela('emergencias');
     if (!sb) return null;
     const session = getSession() || {};
     try {
-      const { data } = await sb.from('emergencias').insert({
+      const { data, error } = await sb.from('emergencias').insert({
         estado: 'ATIVA',
         motivo: motivo || `Emergência crítica declarada no Terminal ${TERMINAL}.`,
         funcionario_id: isUuid(session.id) ? session.id : null,
@@ -526,6 +605,10 @@
         data_hora: dataHora,
         origem: 'CLIENT_FALLBACK'
       }).select().maybeSingle();
+      if (error) {
+        tratarErroTabela('emergencias', error);
+        return null;
+      }
       return data && data.id ? data.id : null;
     } catch (e) {
       console.warn('[NexusPanic] Fallback: falha ao persistir emergencia:', e);
@@ -534,23 +617,28 @@
   }
 
   async function resolveEmergencyLocal(identity) {
-    const sb = getSupabase();
+    const sb = getSupabaseTabela('emergencias');
     if (!sb) return state.emergencia_id;
     try {
-      const { data: ativa } = await sb
+      const { data: ativa, error } = await sb
         .from('emergencias')
         .select('*')
         .eq('estado', 'ATIVA')
         .order('data_hora', { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (error) {
+        tratarErroTabela('emergencias', error);
+        return null;
+      }
       if (ativa && ativa.id) {
-        await sb.from('emergencias').update({
+        const { error: erroUpdate } = await sb.from('emergencias').update({
           estado: 'RESOLVIDA',
           resolvido_por_nome: identity.nome,
           resolvido_por_cargo: CARGOS_VALIDOS.includes(identity.cargo) ? identity.cargo : null,
           data_resolucao: new Date().toISOString()
         }).eq('id', ativa.id);
+        if (erroUpdate) tratarErroTabela('emergencias', erroUpdate);
         return ativa.id;
       }
     } catch (e) {
@@ -733,8 +821,15 @@
       );
 
       // 5) Feedback visual para quem acionou
+      // Quando a origem é o fallback, o operador precisa saber o que NÃO
+      // funcionou — e, se a tabela está ausente (404 / PGRST205), exatamente
+      // qual migração SQL resolve.
+      const utils = getUtils();
+      const tabelaPendente = Boolean(utils && typeof utils.tabelaIndisponivel === 'function' && utils.tabelaIndisponivel('emergencias'));
       const fallbackNote = via === 'client_fallback'
-        ? ' (Edge Function indisponível — broadcast direto via WebSocket; webhook não disparado)'
+        ? ' (Edge Function indisponível — broadcast direto via WebSocket; webhook não disparado' +
+          (tabelaPendente ? `; tabela emergencias ausente no Supabase: aplique ${migracaoDaTabela('emergencias')}` : '') +
+          ')'
         : '';
       if (ativando) {
         let webhookNote = '';
@@ -966,6 +1061,88 @@
   }
 
   // ------------------------------------------------------------------
+  // Diagnóstico das tabelas do pânico (emergencias + panic_webhook_config)
+  // --------------------------------------------------------------
+  // Responde, em uma frase, o motivo do 404 relatado no painel Network:
+  //   GET /rest/v1/emergencias?... -> 404 (PGRST205: tabela fora do cache)
+  // e o que fazer: aplicar a migração SQL indicada.
+  // ------------------------------------------------------------------
+  async function verificarTabelas() {
+    const utils = getUtils();
+    if (!utils || typeof utils.diagnosticar !== 'function') {
+      return {
+        ok: false,
+        mensagem: 'Utilitários do Supabase indisponíveis (js/supabase-client.js não carregado).',
+        tabelas: {}
+      };
+    }
+
+    const nomes = ['emergencias', 'panic_webhook_config'];
+    const tabelas = {};
+    for (const nome of nomes) {
+      tabelas[nome] = await utils.diagnosticar(nome);
+    }
+
+    const pendentes = nomes.filter((nome) => !tabelas[nome].disponivel);
+    const migracao = migracaoDaTabela('emergencias');
+    const mensagem = pendentes.length === 0
+      ? '✔ Tabelas do botão de pânico provisionadas (emergencias + panic_webhook_config).'
+      : `⚠️ Tabela(s) ausente(s) no Supabase: ${pendentes.join(', ')}. ` +
+        `Aplique ${migracao} no SQL Editor do Supabase e clique em "Verificar" novamente.`;
+
+    if (pendentes.length === 0) {
+      // Voltou a existir: reativa o estado global (clientes já abertos
+      // passam a ver emergências ativas sem recarregar a página).
+      estadoRetryIndex = 0;
+      loadStateFromDb();
+    }
+
+    return { ok: pendentes.length === 0, mensagem, tabelas, migracao };
+  }
+
+  /**
+   * Diagnóstico programático (console/testes):
+   *   await NexusPanic.diagnose()
+   */
+  async function diagnose() {
+    const utils = getUtils();
+    const tabela = utils && typeof utils.diagnosticar === 'function'
+      ? await utils.diagnosticar('emergencias')
+      : { tabela: 'emergencias', disponivel: Boolean(getSupabase()), aviso: 'Utilitários do Supabase indisponíveis.', migracao: null };
+    return {
+      tabela: 'emergencias',
+      disponivel: Boolean(tabela.disponivel),
+      aviso: tabela.aviso || null,
+      migracao: tabela.migracao || migracaoDaTabela('emergencias'),
+      supabase_configurado: Boolean(getSupabase()),
+      retry_agendado: estadoRetryTimer !== null,
+      estado_local: Object.assign({}, state)
+    };
+  }
+
+  // Botão "Verificar tabelas" do painel de manutenção (se existir na página)
+  function bindDatabaseDiagnosticsUI() {
+    const botao = document.getElementById('panicTablesCheckBtn');
+    const status = document.getElementById('panicTablesStatus');
+    if (!botao && !status) return null;
+
+    async function executarVerificacao() {
+      if (status) status.textContent = 'Verificando tabelas no Supabase...';
+      const resultado = await verificarTabelas();
+      if (status) status.textContent = resultado.mensagem;
+      if (!resultado.ok && window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Migração Pendente', resultado.mensagem);
+      }
+      return resultado;
+    }
+
+    if (botao) botao.addEventListener('click', executarVerificacao);
+    // Primeira verificação só para preencher o texto do painel
+    if (status && status.textContent.trim() === '') executarVerificacao();
+    return executarVerificacao;
+  }
+
+  // ------------------------------------------------------------------
   // Painel "Alerta no Aparelho" (vibração / som) — presente em manutencao.html
   // Depende de js/haptics.js; sem o módulo o alerta tátil continua usando o
   // caminho direto pela Vibration API.
@@ -995,10 +1172,26 @@
     subscribeRealtime();
     loadStateFromDb();
     bindWebhookSettingsUI();
+    bindDatabaseDiagnosticsUI();
     bindDeviceAlertUI();
 
     // Retoma/paralisa a vibração ao alternar de aba, sem deixar pulsos presos.
     document.addEventListener('visibilitychange', syncDeviceVibration);
+
+    // Se a tabela estava ausente (404 / PGRST205) e a página volta ao primeiro
+    // plano — ou a conexão é restabelecida —, vale a pena tentar de novo: a
+    // migração pode ter sido aplicada no Supabase nesse intervalo.
+    function rechecarSePendente() {
+      const utils = getUtils();
+      if (!utils || typeof utils.tabelaIndisponivel !== 'function') return;
+      if (!utils.tabelaIndisponivel('emergencias')) return;
+      estadoRetryIndex = 0;
+      rechecarTabelaEmergencias();
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') rechecarSePendente();
+    });
+    window.addEventListener('online', rechecarSePendente);
 
     // A primeira interação real libera a ativação persistente do navegador e,
     // se o aparelho só recebeu o SOS via rede, repete o pulso imediatamente.
@@ -1028,7 +1221,10 @@
     getState: () => Object.assign({}, state),
     isActive: () => Boolean(state.active),
     bindWebhookSettingsUI,
+    bindDatabaseDiagnosticsUI,
     bindDeviceAlertUI,
+    verificarTabelas,
+    diagnose,
     deviceAlertHint,
     CHANNEL_NAME,
     BROADCAST_EVENT,

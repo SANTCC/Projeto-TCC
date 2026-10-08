@@ -353,6 +353,8 @@
 ## Table `emergencias`
 
 > Botão de Pânico Global — estado da emergência (ATIVA/RESOLVIDA). Escrita feita pela Edge Function `panic-alert` (service role); leitura usada pelos clientes ao carregar a página. Tempo real via broadcast WebSocket no canal `nexus-emergency`.
+>
+> **Provisão:** aplicada por `supabase/migrations/20261007000000_panic_button_global.sql`; se o banco ainda não foi migrado (`HTTP 404` / `PGRST205` na consulta do rodapé), aplique `supabase/migrations/20261008000000_emergencias_fix_404.sql` (idempotente e reparadora) — ver `SPECs/diagnostico/404-emergencias.md`.
 
 ### Columns
 

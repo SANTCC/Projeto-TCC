@@ -510,6 +510,9 @@ on conflict (nome) do nothing;
 -- ============================================================
 -- Obs.: a migração canônica desta seção está em
 -- supabase/migrations/20261007000000_panic_button_global.sql
+-- Banco já existente que ainda responde 404 / PGRST205 em /rest/v1/emergencias:
+-- aplicar supabase/migrations/20261008000000_emergencias_fix_404.sql
+-- (idempotente e reparadora — ver SPECs/diagnostico/404-emergencias.md).
 
 -- Novo tipo de entidade para auditoria de emergências
 alter type tipo_entidade_enum add value if not exists 'EMERGENCIA';
