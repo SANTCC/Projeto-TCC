@@ -18,6 +18,9 @@ Quando o botão de pânco ser ativado, exibir uma mensagem no rodapé da tela in
 ## Barra de Menu lateral não fica grudada na tela quando scrolla
 Ela parece não ficar parada quando scroll, tanto no PC, quanto no celular.
 
+## Salvar o login com Cookies ao invés de SESSION_STORAGE
+A não ser que haja problemas de segurança, usar Cookies parece mais prático para usuários.
+
 ## Atualização em tempo real das tabelas e indicadores
 Corrigir os dados exibidos pelas tabelas e indicadores do sistema quando ocorre uma alteração no Supabase, garantindo que todos os painéis sejam atualizados em tempo real e não apresentem dados antigos ou incorretos.
 
