@@ -65,6 +65,7 @@ Acesse `http://localhost:3000` no seu navegador.
 ```bash
 npm test              # suite Playwright (fluxos ponta a ponta)
 npm run test:graficos # gráficos por camada de visão (Node, sem dependências)
+npm run test:bercos   # vínculo navio × berço: constraints de public.bercos (jsdom)
 ```
 
 ---

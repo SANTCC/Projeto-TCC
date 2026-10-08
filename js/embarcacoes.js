@@ -45,12 +45,66 @@ document.addEventListener('DOMContentLoaded', () => {
     return false;
   }
 
+  /**
+   * Delega a normalização do berço para a definição única das regras de
+   * `public.bercos` (js/supabase-client.js). Se o utilitário não estiver
+   * carregado, devolve payload nulo — falha fechada, nada é gravado.
+   */
+  function normalizarBerco(berco) {
+    const utils = window.NexusSupabaseUtils;
+    if (utils && typeof utils.normalizarBerco === 'function') {
+      return utils.normalizarBerco(berco);
+    }
+    return { payload: null, corrigido: false, motivo: 'utilitário de normalização indisponível' };
+  }
+
+  /**
+   * Corrige o cache local (e o array em memória) para que nenhuma linha viole
+   * as constraints de public.bercos — em especial
+   * `bercos_vinculo_navio_check` (OCUPADO exige navio_nome ou navio_imo).
+   * Sem isso, um único berço legado inválido derruba o upsert em lote com o
+   * erro 23514 e o painel para de sincronizar.
+   *
+   * @returns {boolean} true se algum berço precisou ser corrigido.
+   */
+  function sanearBercosLocais(lista) {
+    let alterado = false;
+    (lista || []).forEach(b => {
+      const resultado = normalizarBerco(b);
+      if (!resultado.payload) {
+        if (resultado.motivo) {
+          console.warn(`[NexusPort] Berço ignorado na sincronização: ${resultado.motivo}.`);
+        }
+        return;
+      }
+      b.id = resultado.payload.id;
+      b.nome = resultado.payload.nome;
+      b.estado = resultado.payload.estado;
+      b.navio_nome = resultado.payload.navio_nome;
+      b.navio_imo = resultado.payload.navio_imo;
+      b.navio_id = resultado.payload.navio_id;
+      if (resultado.corrigido) {
+        alterado = true;
+        console.warn(`[NexusPort] Berço ${b.nome} ajustado para gravação: ${resultado.motivo || 'registro fora do padrão de public.bercos'}.`);
+      }
+    });
+    return alterado;
+  }
+
   /** Upsert resiliente de um berço no Supabase (no-op se a tabela não existir) */
-  function upsertBercoRemoto(payload) {
+  function upsertBercoRemoto(berco) {
     const client = clienteBercos();
+    const resultado = normalizarBerco(berco);
+    if (!resultado.payload) {
+      console.warn(`[NexusPort] Berço não sincronizado: ${resultado.motivo}.`);
+      return Promise.resolve();
+    }
+    if (resultado.corrigido) {
+      console.warn(`[NexusPort] Berço ${resultado.payload.nome} ajustado para gravação: ${resultado.motivo || 'registro fora do padrão de public.bercos'}.`);
+    }
     if (!client) return Promise.resolve();
     return client.from('bercos')
-      .upsert(payload, { onConflict: 'nome' })
+      .upsert(resultado.payload, { onConflict: 'nome' })
       .then(({ error }) => { tratarErroBercos(error); })
       .catch(err => { tratarErroBercos(err); });
   }
@@ -102,16 +156,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const clientSync = clienteBercos();
       if (clientSync) {
         try {
-          const bercosPayload = bercosList.map(b => ({
-            id: b.id,
-            nome: b.nome,
-            estado: b.estado || 'LIVRE',
-            navio_nome: b.navio_nome || null,
-            navio_imo: b.navio_imo || null,
-            navio_id: b.navio_id || null
-          }));
-          const { error } = await clientSync.from('bercos').upsert(bercosPayload, { onConflict: 'nome' });
-          tratarErroBercos(error);
+          // Normaliza antes de enviar: um único berço fora das constraints de
+          // public.bercos (erro 23514) aborta o lote inteiro de 15 berços.
+          sanearBercosLocais(bercosList);
+          const bercosPayload = bercosList
+            .map(b => normalizarBerco(b).payload)
+            .filter(Boolean);
+          if (bercosPayload.length > 0) {
+            const { error } = await clientSync.from('bercos').upsert(bercosPayload, { onConflict: 'nome' });
+            tratarErroBercos(error);
+          }
         } catch (e) {
           if (!tratarErroBercos(e)) {
             console.warn('[NexusPort] Erro ao sincronizar berços no Supabase:', e);
@@ -121,6 +175,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       bercosList = loaded;
     }
+
+    sanearBercosLocais(bercosList);
 
     localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
     renderBercosPanel();
@@ -137,11 +193,14 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    // Corrige cache legado (OCUPADO sem navio / id fora do padrão) antes de
+    // renderizar e antes de qualquer gravação.
+    let bercosAlterados = sanearBercosLocais(bercosList);
+
     const currentNavios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
     const activeImoSet = new Set(currentNavios.map(n => (n.imo || '').toLowerCase()));
     const activeNomeSet = new Set(currentNavios.map(n => (n.nome || '').toLowerCase()));
 
-    let bercosAlterados = false;
     bercosList.forEach(b => {
       if (b.estado === 'OCUPADO') {
         const matchImo = b.navio_imo ? activeImoSet.has(b.navio_imo.toLowerCase()) : false;
@@ -698,20 +757,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const bercoReal = bercosList.find(b => b.nome === bercoAlvo.nome);
       if (bercoReal) {
-        bercoReal.estado = 'OCUPADO';
-        bercoReal.navio_nome = navio.nome;
-        bercoReal.navio_imo = navio.imo;
-        bercoReal.navio_id = navio.id || null;
-
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        upsertBercoRemoto({
-          id: bercoReal.id || `BERCO-${bercoReal.nome.replace(/\D/g, '')}`,
+        // A constraint bercos_vinculo_navio_check exige navio_nome ou navio_imo
+        // em berço OCUPADO: se o navio não tiver identificação, não ocupamos.
+        const ocupacao = normalizarBerco({
+          id: bercoReal.id,
           nome: bercoReal.nome,
           estado: 'OCUPADO',
           navio_nome: navio.nome,
           navio_imo: navio.imo,
           navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
         });
+        if (!ocupacao.payload || ocupacao.payload.estado !== 'OCUPADO') {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Vínculo Não Registrado', 'Não foi possível identificar o navio (nome/IMO) para ocupar o berço. Verifique o cadastro da embarcação.');
+          }
+          return;
+        }
+
+        bercoReal.estado = ocupacao.payload.estado;
+        bercoReal.navio_nome = ocupacao.payload.navio_nome;
+        bercoReal.navio_imo = ocupacao.payload.navio_imo;
+        bercoReal.navio_id = ocupacao.payload.navio_id;
+
+        upsertBercoRemoto(ocupacao.payload);
       }
 
       localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
