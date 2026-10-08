@@ -67,6 +67,7 @@ npm test              # suite Playwright (fluxos ponta a ponta)
 npm run test:graficos # gráficos por camada de visão (Node, sem dependências)
 npm run test:refresh  # botão "Atualizar" dos gráficos: dado novo vem do servidor (jsdom)
 npm run test:bercos   # vínculo navio × berço: constraints de public.bercos (jsdom)
+npm run test:net-debug # depuração de conexões no console (Node, sem dependências)
 ```
 
 ---
@@ -121,6 +122,42 @@ npm run audit:xss    # roda o scanner estático + a suíte de regressão XSS
   injeta payloads de ataque (quebra de tag, quebra de atributo, quebra de string
   JavaScript, entidades HTML, backslash) via `localStorage`, sessão e QR Code, e
   confirma que nada é executado e que tudo é renderizado como texto.
+
+---
+
+## 🔎 Depuração de Conexões no Console (js/net-debug.js)
+
+O módulo `js/net-debug.js` registra no console do navegador cada conexão entre o front-end e o Supabase.
+Ele apenas observa: requisições e respostas chegam ao código da aplicação exatamente como antes.
+
+- **HTTP** (REST, Auth, Edge Functions e Storage): método, URL com filtros decodificados, cabeçalhos e corpo
+  (segredos ocultos), quem disparou a chamada (`arquivo.js:linha`), tempos, status, corpo da resposta, número
+  de linhas (`content-range`) e dicas para erros comuns (PGRST205, PGRST116, 42501, 23505, 401/403/404 de funções
+  e falhas de rede).
+- **Realtime** (WebSocket): conexão, abertura, fechamento com o significado do código (ex.: `1006`), erros,
+  heartbeats com latência e os eventos `phx_join`, `broadcast` e `phx_reply`.
+- **Página**: eventos online/offline, troca de aba e descarregamento com requisições em andamento.
+
+Cada registro começa com `[NexusNet`, e os detalhes de cada requisição ficam em um grupo recolhível (clique para expandir).
+
+| Comando (console do DevTools) | Efeito |
+|---|---|
+| `NexusNetDebug.help()` | Lista os comandos |
+| `NexusNetDebug.disable()` / `NexusNetDebug.enable()` | Desliga/liga o log (chave `nexus_debug_net` no `localStorage`; persiste entre recargas) |
+| `NexusNetDebug.verbose(true)` | Também mostra os quadros WebSocket brutos e os logs internos do Auth (`false` desliga) |
+| `NexusNetDebug.summary()` | Contadores: requisições, erros, tempo médio e requisições em andamento |
+| `NexusNetDebug.pending()` | Requisições ainda em andamento, com idade e origem |
+| `NexusNetDebug.table()` / `history()` | Últimas 200 requisições concluídas, em tabela ou como array |
+
+**Privacidade e segurança**
+
+- Ligado por padrão em todas as páginas que usam o Supabase. Ele é carregado antes de `js/supabase-client.js`.
+- `apikey`, `Authorization`, tokens, senhas, `service_role` e o código individual de login (`codigo_individual`)
+  aparecem como `[redacted]`.
+- Os demais dados de negócio aparecem no console como estão. Em computadores compartilhados, use
+  `NexusNetDebug.disable()`.
+- O módulo avisa no console se uma chave `sb_secret_...` ou JWT `service_role` estiver no front-end, porque ela
+  contorna o RLS.
 
 ---
 
