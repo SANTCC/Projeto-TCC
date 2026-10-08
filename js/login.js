@@ -78,8 +78,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // 3. Formatação e Indicador Visual do Campo Código Individual
   if (operatorCodeInput) {
     operatorCodeInput.addEventListener('input', (e) => {
-      let val = e.target.value.toUpperCase().replace(/\s+/g, '');
-      e.target.value = val;
+      const valorDigitado = e.target.value;
+      const cursor = typeof e.target.selectionStart === 'number' ? e.target.selectionStart : valorDigitado.length;
+      const digitandoNoFim = cursor >= valorDigitado.length;
+
+      let val = valorDigitado.toUpperCase().replace(/\s+/g, '');
+
+      // Auto-complete de UX: ao digitar o primeiro número logo após o prefixo
+      // alfabético, o separador é inserido automaticamente ("MAT" + "1" → "MAT-1",
+      // "NX8821" → "NX-8821"). Códigos já separados por hífen não são alterados.
+      if (digitandoNoFim) {
+        const prefixoNumerico = /^([A-Z]+)(\d.*)$/.exec(val);
+        if (prefixoNumerico) {
+          val = `${prefixoNumerico[1]}-${prefixoNumerico[2]}`;
+        }
+      }
+
+      if (val !== valorDigitado) {
+        e.target.value = val;
+        // Mantém o cursor no fim do texto após a normalização/auto-complete
+        try { e.target.setSelectionRange(val.length, val.length); } catch (err) {}
+      }
       hideAuthNotice();
 
       if (val.length >= 4) {

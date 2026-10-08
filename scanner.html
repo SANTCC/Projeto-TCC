@@ -51,6 +51,19 @@
     };
   </script>
 
+  <!-- Área de leitura 1:1 (mobile): quadrada em qualquer tamanho/orientação,
+       sem distorcer a imagem da câmera (object-fit: cover). -->
+  <style>
+    #qrReader { aspect-ratio: 1 / 1; }
+    #qrReader video,
+    #qrReader canvas,
+    #qrReader img {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover;
+    }
+  </style>
+
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
   <script src="js/auth-guard.js"></script>
@@ -90,7 +103,7 @@
 
         <!-- Viewport da Câmera -->
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col items-center gap-4">
-          <div id="qrReader" class="w-full max-w-md h-64 bg-slate-900 rounded-xl overflow-hidden border border-slate-700 flex items-center justify-center text-white text-xs">
+          <div id="qrReader" class="w-full max-w-md aspect-square h-auto bg-slate-900 rounded-xl overflow-hidden border border-slate-700 flex items-center justify-center text-white text-xs">
             <div class="p-6 text-center text-slate-400 flex flex-col items-center gap-2">
               <span class="material-symbols-outlined text-4xl text-slate-500">camera_alt</span>
               <span>Clique no botão acima para iniciar a câmera do dispositivo móvel.</span>

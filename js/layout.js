@@ -333,10 +333,13 @@
       document.body.appendChild(promptModal);
     }
 
-    // Ajusta o contêiner principal para considerar a navbar fixa (Item 7)
+    // Ajusta o contêiner principal para considerar a navbar fixa (Item 7).
+    // A altura é limitada à viewport no desktop (md+) para que apenas o <main>
+    // role: assim a barra lateral permanece fixa na tela durante a rolagem do
+    // conteúdo (antes o documento inteiro rolava e o menu "subia" com a página).
     const mainWrapper = document.querySelector('.flex-1.flex');
     if (mainWrapper) {
-      mainWrapper.classList.add('pt-16');
+      mainWrapper.classList.add('pt-16', 'md:h-[calc(100vh-4rem)]', 'md:overflow-hidden');
     }
   }
 
@@ -447,6 +450,23 @@
     }
 
     modal.classList.remove('hidden');
+  };
+
+  /**
+   * Estado GLOBAL de emergência (botão de pânico). Enquanto o alarme estiver
+   * ativo, as operações críticas do pátio (movimentar carga, liberar saída de
+   * navio, autorizar retorno) ficam bloqueadas — o alerta é exibido no rodapé
+   * de todas as telas por js/panic-realtime.js.
+   */
+  window.nexusEmergenciaAtiva = function () {
+    try {
+      if (window.NexusPanic && typeof window.NexusPanic.isActive === 'function' && window.NexusPanic.isActive()) {
+        return true;
+      }
+      return localStorage.getItem('nexus_emergency_active') === 'true';
+    } catch (e) {
+      return false;
+    }
   };
 
   if (document.readyState === 'loading') {

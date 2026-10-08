@@ -44,10 +44,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const elem = document.getElementById('qrReader');
       if (elem) elem.innerHTML = '';
 
+      // Área de leitura quadrada (1:1) proporcional ao tamanho do preview —
+      // garante enquadramento correto tanto no desktop quanto no celular.
+      const ladoPreview = (elem && elem.clientWidth) ? elem.clientWidth : 260;
+      const ladoLeitura = Math.max(160, Math.min(240, Math.round(ladoPreview * 0.8)));
+
       html5QrCodeScanner = new Html5Qrcode("qrReader");
       html5QrCodeScanner.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
+        { fps: 10, qrbox: { width: ladoLeitura, height: ladoLeitura } },
         (decodedText) => {
           processarScan(decodedText);
           html5QrCodeScanner.stop();
