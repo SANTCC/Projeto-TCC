@@ -64,3 +64,86 @@ prontas para quando o login migrar para Supabase Auth.
 | `bercos_id_formato_check` | `id ~ '^BERCO-[0-9]{2}$'` — bloqueia ids arbitrários como `TESTE`. |
 | `bercos_vinculo_navio_check` | Impede `LIVRE` com navio preenchido e `OCUPADO` sem identificação do navio. |
 | `bercos_navio_id_fkey` | FK para `navios(id)` com `on delete set null` (apagar navio nunca apaga o berço). |
+
+## Erro 23514 em `bercos` (constraint `bercos_vinculo_navio_check`)
+
+Mensagem típica no SQL Editor / API:
+
+```
+ERROR: 23514: new row for relation "bercos" violates check constraint "bercos_vinculo_navio_check"
+DETAIL: Failing row contains (BERCO-06, Berço 06, OCUPADO, null, null, null, ...).
+```
+
+**Causa:** berço `OCUPADO` precisa identificar o navio (`navio_nome` **ou**
+`navio_imo`). O comando tentou gravar `estado = 'OCUPADO'` deixando as três
+colunas de vínculo nulas — exatamente o `null, null, null` do `DETAIL`. O
+inverso também é barrado: berço `LIVRE`/`MANUTENCAO` não pode carregar resíduo
+de vínculo.
+
+A regra de negócio é **1 navio por berço** (15 posições do terminal STS-01).
+
+### Ocupar um berço (SQL correto)
+
+```sql
+-- A) Navio já cadastrado em public.navios: grava nome, IMO e a FK
+update public.bercos b
+   set estado     = 'OCUPADO',
+       navio_nome = n.nome,
+       navio_imo  = n.numero_imo,
+       navio_id   = n.id
+  from public.navios n
+ where b.id = 'BERCO-06'
+   and n.numero_imo = 'IMO9999999';   -- ajuste para o numero_imo real
+
+-- B) Teste/demonstração sem navio no banco: snapshot por nome + IMO
+--    (navio_id fica null, pois a FK só aceita uuid de public.navios)
+update public.bercos
+   set estado     = 'OCUPADO',
+       navio_nome = 'Navio Demonstração',
+       navio_imo  = 'IMO0000000',
+       navio_id   = null
+ where id = 'BERCO-06';
+```
+
+### Liberar o berço
+
+```sql
+update public.bercos
+   set estado = 'LIVRE', navio_nome = null, navio_imo = null, navio_id = null
+ where id = 'BERCO-06';
+```
+
+### Conferir o estado do painel
+
+```sql
+select id, nome, estado, navio_nome, navio_imo, navio_id
+  from public.bercos
+ order by id;
+-- Nenhuma linha pode ter OCUPADO sem nome/IMO, nem LIVRE/MANUTENCAO com navio_*.
+```
+
+Pela aplicação o caminho equivalente é **Embarcações & GPS → cadastrar o navio
+→ botão “Vincular”** (a lista mostra apenas berços `LIVRE`). A tela normaliza
+cada berço antes de gravar (`NexusSupabaseUtils.normalizarBerco`, em
+`js/supabase-client.js`), então um cache local legado — por exemplo berço
+marcado `OCUPADO` por carga em versões antigas, sem navio — não derruba mais o
+upsert em lote dos 15 berços. Regressão coberta por
+`node tests/test_bercos_vinculo.js`.
+
+### Se a intenção for ocupar sem identificar o navio (opcional, não recomendado)
+
+O ajuste correto é decidir o modelo e versioná-lo em migração — trocar a
+constraint por uma versão mais permissiva:
+
+```sql
+alter table public.bercos drop constraint bercos_vinculo_navio_check;
+alter table public.bercos add constraint bercos_vinculo_navio_check check (
+  (estado <> 'OCUPADO' and navio_nome is null and navio_imo is null and navio_id is null)
+  or
+  (estado = 'OCUPADO')  -- passa a aceitar OCUPADO sem identificação (reserva/demonstração)
+);
+```
+
+Observação: o painel de Embarcações exibe “Navio Alocado” quando o berço está
+`OCUPADO` sem nome/IMO, então a flexibilização não quebra a interface — mas
+perde-se a garantia de rastrear qual embarcação ocupa a posição.
