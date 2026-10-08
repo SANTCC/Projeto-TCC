@@ -34,6 +34,10 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
   else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
   else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
   else if (entUpper.startsWith('VIS') || entUpper.includes('VISITANTE')) entidadeTipo = 'VISITANTE';
+  // Auditoria das emergências (botão de pânico). O valor EMERGENCIA vive no
+  // tipo tipo_entidade_enum; se o banco ainda não o tiver, o insert é recusado
+  // com 22P02 — por isso o erro é tratado logo abaixo.
+  else if (entUpper.includes('EMERGENCIA')) entidadeTipo = 'EMERGENCIA';
 
   const validCargos = [
     'ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 
@@ -59,10 +63,25 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
       };
       if (funcId) payload.funcionario_id = funcId;
 
-      const { error } = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+      let { error } = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
       if (error && payload.funcionario_id) {
+        // funcionario_id pode não existir em public.funcionarios (sessão
+        // antiga): repete sem a FK, mantendo o restante da linha.
         delete payload.funcionario_id;
-        await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+        const retentativa = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+        error = retentativa && retentativa.error;
+      }
+      if (error) {
+        // Recusa do banco (ex.: 22P02 — valor 'EMERGENCIA' ausente no enum
+        // tipo_entidade_enum): o insert devolvia erro e ninguém o lia, então
+        // a auditoria se perdia em silêncio. Agora fica no console uma única
+        // vez, apontando o arquivo .sql que cria o valor.
+        const utils = window.NexusSupabaseUtils;
+        if (utils && typeof utils.registrarEnumDesconhecido === 'function') {
+          utils.registrarEnumDesconhecido(error);
+        } else {
+          console.warn('[NexusPort] Auditoria não gravada em logs_alteracoes:', error.message || error);
+        }
       }
     } catch (err) {
       console.warn('[NexusPort] Erro ao invocar log Supabase:', err);

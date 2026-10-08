@@ -650,10 +650,42 @@
   // ------------------------------------------------------------------
   // Auditoria (logs_alteracoes) — mesmo padrão dos demais módulos
   // ------------------------------------------------------------------
+  /**
+   * Classifica a falha do insert de auditoria e devolve uma nota curta para o
+   * operador (ou null). O caso que motivou esta função veio dos logs do
+   * Supabase (service_name "postgres_logs"):
+   *
+   *   sql_state_code: "22P02"
+   *   event_message : invalid input value for enum tipo_entidade_enum: "EMERGENCIA"
+   *   parsed.query  : WITH pgrst_source AS (INSERT INTO "public"."logs_alteracoes" ...
+   *
+   * O banco não tinha o valor no enum (schema anterior à seção 15 do
+   * SPECs/schema.sql) e o resultado do insert era DESCARTADO — a auditoria da
+   * emergência se perdia em silêncio. Agora o erro é detectado, avisado uma
+   * única vez e o arquivo .sql que corrige aparece na tela.
+   */
+  function tratarErroAuditoria(error) {
+    const utils = getUtils();
+    if (utils && typeof utils.registrarEnumDesconhecido === 'function') {
+      const info = utils.registrarEnumDesconhecido(error);
+      if (info) {
+        return {
+          ok: false,
+          motivo: 'enum_desconhecido',
+          enum_desconhecido: { tipo: info.tipo, valor: info.valor, code: info.code },
+          migracao: info.migracao,
+          error: error
+        };
+      }
+    }
+    console.warn('[NexusPanic] Falha ao registrar auditoria do pânico:', (error && error.message) || error);
+    return { ok: false, motivo: 'erro_escrita', error: error };
+  }
+
   async function registrarAuditoria(estadoAudit, detalhes) {
     const sb = getSupabase();
     const session = getSession() || {};
-    if (!sb) return;
+    if (!sb) return { ok: false, motivo: 'sem_cliente' };
     try {
       const cargoEnum = CARGOS_VALIDOS.includes(session.cargo) ? session.cargo : 'ESTIVADOR';
       const payload = {
@@ -666,9 +698,14 @@
         detalhes: Object.assign({ estado: estadoAudit, via: detalhes && detalhes.via }, detalhes)
       };
       if (isUuid(session.id)) payload.funcionario_id = session.id;
-      await sb.from('logs_alteracoes').insert(payload);
+      // O supabase-js devolve o erro do PostgREST no objeto de resposta (não
+      // lança): sem ler `error`, uma recusa do banco passaria invisível.
+      const { error } = await sb.from('logs_alteracoes').insert(payload);
+      if (error) return tratarErroAuditoria(error);
+      return { ok: true };
     } catch (e) {
       console.warn('[NexusPanic] Falha ao registrar auditoria do pânico:', e);
+      return { ok: false, motivo: 'excecao', error: e };
     }
   }
 
@@ -809,7 +846,10 @@
       }
 
       // 4) Auditoria imutável em logs_alteracoes
-      registrarAuditoria(
+      // O resultado é lido (antes era descartado): se o banco recusar a
+      // gravação — caso real do 22P02 no enum tipo_entidade_enum —, o
+      // operador fica sabendo na hora, com o arquivo .sql que corrige.
+      const auditoria = await registrarAuditoria(
         ativando ? 'EMERGENCIA_CRITICA_ATIVADA' : 'EMERGENCIA_DESATIVADA',
         {
           emergencia_id: emergenciaId,
@@ -831,6 +871,15 @@
           (tabelaPendente ? `; tabela emergencias ausente no Supabase: aplique ${migracaoDaTabela('emergencias')}` : '') +
           ')'
         : '';
+      // O alarme, o broadcast e o estado global já estão válidos; o que falhou
+      // foi só o registro de auditoria — a nota diz o que fazer, sem alarmar
+      // de novo sobre a emergência em si.
+      let auditoriaNote = '';
+      if (auditoria && auditoria.ok === false) {
+        auditoriaNote = auditoria.motivo === 'enum_desconhecido'
+          ? ` ⚠️ Auditoria NÃO gravada: o valor 'EMERGENCIA' não existe no enum do banco (22P02). Aplique ${auditoria.migracao || migracaoDaTabela('emergencias')}.`
+          : ' ⚠️ Auditoria não gravada (detalhe no console).';
+      }
       if (ativando) {
         let webhookNote = '';
         if (webhook && webhook.fired) {
@@ -841,17 +890,17 @@
         feedback(
           'erro',
           'EMERGÊNCIA CRÍTICA DECLARADA',
-          `Alarme global enviado a todos os clientes conectados via WebSocket. Operações do pátio ${TERMINAL} bloqueadas temporariamente.${webhookNote}${fallbackNote}`
+          `Alarme global enviado a todos os clientes conectados via WebSocket. Operações do pátio ${TERMINAL} bloqueadas temporariamente.${webhookNote}${fallbackNote}${auditoriaNote}`
         );
       } else {
         feedback(
           'sucesso',
           'Emergência Desativada',
-          `Alarme de emergência desativado em todos os clientes conectados. Operações normalizadas.${fallbackNote}`
+          `Alarme de emergência desativado em todos os clientes conectados. Operações normalizadas.${fallbackNote}${auditoriaNote}`
         );
       }
 
-      return { ok: true, via, webhook, emergencia_id: emergenciaId };
+      return { ok: true, via, webhook, emergencia_id: emergenciaId, auditoria };
     } finally {
       inFlight = false;
     }
@@ -1073,7 +1122,8 @@
       return {
         ok: false,
         mensagem: 'Utilitários do Supabase indisponíveis (js/supabase-client.js não carregado).',
-        tabelas: {}
+        tabelas: {},
+        auditoria: null
       };
     }
 
@@ -1083,12 +1133,34 @@
       tabelas[nome] = await utils.diagnosticar(nome);
     }
 
+    // Auditoria (logs_alteracoes.entidade_tipo = 'EMERGENCIA'): é a única
+    // parte do protocolo que depende de um VALOR de enum do banco. Sem ele o
+    // PostgreSQL recusa o insert com 22P02 (o erro relatado nos logs do
+    // Supabase) e a trilha de auditoria da emergência se perde — o alarme em
+    // si continua funcionando. A sonda é um select com limit(0): não escreve.
+    const auditoria = typeof utils.verificarEnumAuditoria === 'function'
+      ? await utils.verificarEnumAuditoria()
+      : null;
+
     const pendentes = nomes.filter((nome) => !tabelas[nome].disponivel);
+    const enumPendente = Boolean(auditoria && !auditoria.disponivel);
     const migracao = migracaoDaTabela('emergencias');
-    const mensagem = pendentes.length === 0
-      ? '✔ Tabelas do botão de pânico provisionadas (emergencias + panic_webhook_config).'
-      : `⚠️ Tabela(s) ausente(s) no Supabase: ${pendentes.join(', ')}. ` +
+
+    let mensagem;
+    if (pendentes.length === 0 && !enumPendente) {
+      mensagem = '✔ Tabelas do botão de pânico provisionadas (emergencias + panic_webhook_config) ' +
+        'e auditoria com o valor EMERGENCIA disponível.';
+    } else if (pendentes.length > 0) {
+      mensagem = `⚠️ Tabela(s) ausente(s) no Supabase: ${pendentes.join(', ')}. ` +
         `Aplique ${migracao} no SQL Editor do Supabase e clique em "Verificar" novamente.`;
+      if (enumPendente) {
+        mensagem += ` Auditoria do pânico: aplique também ${auditoria.migracao}.`;
+      }
+    } else {
+      mensagem = `⚠️ Auditoria do pânico pendente: o valor '${auditoria.valor}' não existe no enum ` +
+        `'${auditoria.tipo}' (22P02). Aplique ${auditoria.migracao} no SQL Editor do Supabase e ` +
+        'clique em "Verificar" novamente.';
+    }
 
     if (pendentes.length === 0) {
       // Voltou a existir: reativa o estado global (clientes já abertos
@@ -1097,7 +1169,7 @@
       loadStateFromDb();
     }
 
-    return { ok: pendentes.length === 0, mensagem, tabelas, migracao };
+    return { ok: pendentes.length === 0 && !enumPendente, mensagem, tabelas, auditoria, migracao };
   }
 
   /**
@@ -1109,11 +1181,25 @@
     const tabela = utils && typeof utils.diagnosticar === 'function'
       ? await utils.diagnosticar('emergencias')
       : { tabela: 'emergencias', disponivel: Boolean(getSupabase()), aviso: 'Utilitários do Supabase indisponíveis.', migracao: null };
+    // Auditoria (enum 22P02): o estado global pode estar perfeito e, ainda
+    // assim, a trilha de auditoria não gravar — este campo separa os dois.
+    const auditoria = utils && typeof utils.verificarEnumAuditoria === 'function'
+      ? await utils.verificarEnumAuditoria()
+      : null;
     return {
       tabela: 'emergencias',
       disponivel: Boolean(tabela.disponivel),
       aviso: tabela.aviso || null,
       migracao: tabela.migracao || migracaoDaTabela('emergencias'),
+      auditoria_enum: auditoria
+        ? {
+            valor: auditoria.valor,
+            tipo: auditoria.tipo,
+            disponivel: Boolean(auditoria.disponivel),
+            migracao: auditoria.migracao,
+            aviso: auditoria.aviso || null
+          }
+        : null,
       supabase_configurado: Boolean(getSupabase()),
       retry_agendado: estadoRetryTimer !== null,
       estado_local: Object.assign({}, state)

@@ -49,7 +49,7 @@ listava, o que escondia a pendência de quem operava o banco.
 | Rodapé de emergência | Funciona, mas só pelo flag local (`nexus_emergency_active`) |
 | Cliente que conecta **depois** do acionamento | **Não vê** a emergência (não há estado global persistido) |
 | Webhook externo opcional | **Nunca dispara** (a integração vive no servidor/Edge Function) |
-| Auditoria em `logs_alteracoes` (`entidade_tipo = EMERGENCIA`) | Falha silenciosa se o valor não existir em `tipo_entidade_enum` |
+| Auditoria em `logs_alteracoes` (`entidade_tipo = EMERGENCIA`) | Falha silenciosa se o valor não existir em `tipo_entidade_enum` — **ocorreu em produção** (erro `22P02`): ver [`22P02-enum-emergencia.md`](22P02-enum-emergencia.md) |
 
 ## 4. Correção aplicada
 
@@ -64,7 +64,7 @@ metade:
 1. checa pré-requisitos (`public.funcionarios`, `cargo_enum`) e **avisa** quando já existe uma `emergencias` em outro schema (causa comum de `PGRST205`);
 2. cria/reconcilia `public.emergencias` (colunas, defaults, `NOT NULL`, `CHECK` de `estado`/`origem`, FK para `funcionarios`, índice `(estado, data_hora desc)`);
 3. cria/reconcilia `public.panic_webhook_config` e garante a **linha única com o webhook desativado**;
-4. adiciona o valor `EMERGENCIA` ao `tipo_entidade_enum` (auditoria);
+4. adiciona o valor `EMERGENCIA` ao `tipo_entidade_enum` (auditoria) — se o projeto só precisa desse valor, a migração focada é `20261008010000_enum_emergencia_auditoria.sql` (ver [`22P02-enum-emergencia.md`](22P02-enum-emergencia.md));
 5. habilita RLS e **recria as políticas `nexus_*` para `anon, authenticated`** (o projeto não usa Supabase Auth — ver `SPECs/migrations/README.md`), com *fallback* para `PUBLIC` em PostgreSQL local;
 6. termina com `notify pgrst, 'reload schema'` (fora da transação) e um `select` de conferência visível no SQL Editor.
 
