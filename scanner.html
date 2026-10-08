@@ -162,6 +162,10 @@
           </div>
 
           <div class="flex flex-wrap justify-end gap-2 pt-2">
+            <button id="imprimirEtiquetaScanBtn" type="button" class="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm" title="Imprime a etiqueta da carga identificada">
+              <span class="material-symbols-outlined text-[18px]">print</span>
+              <span>Imprimir Etiqueta</span>
+            </button>
             <button id="irChecklistBtn" type="button" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm">
               <span class="material-symbols-outlined text-[18px]">fact_check</span>
               <span>Ir para Checklist da Carga</span>
@@ -175,6 +179,27 @@
       </div>
     </main>
   </div>
+
+  <!-- Impressão da etiqueta: somente o cartão de resultado (Backlog 3 - 7i) -->
+  <style>
+    @media print {
+      body * { visibility: hidden !important; }
+      #qrResultCard, #qrResultCard * { visibility: visible !important; }
+      #qrResultCard {
+        position: fixed !important;
+        inset: 0 auto auto 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        border: 2px solid #334155 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
+      #qrResultCard button,
+      #qrResultCard #irChecklistBtn,
+      #qrResultCard #executarAcaoScanBtn,
+      #qrResultCard #imprimirEtiquetaScanBtn { display: none !important; }
+    }
+  </style>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

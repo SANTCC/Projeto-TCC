@@ -37,6 +37,48 @@
   } catch (e) {}
 
   const SESSION_KEY = 'nexus_session';
+  const SESSION_COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60; // turno operacional de 12h (Backlog 3)
+
+  /**
+   * Grava a sessão ativa em cookie (Backlog 3: Cookies-Session).
+   * Usa SameSite=Lax (mesma origem, navegação top-level permitida para redirects)
+   * e Secure quando servido via HTTPS (Vercel). Observação: cookies gravados via
+   * JavaScript não podem ser HttpOnly — a exposição via XSS é a mesma que o
+   * armazenamento local já tinha, por isso soma-se a hierarquia `nexusEsc`.
+   */
+  function setSessionCookie(rawValue) {
+    try {
+      const attrs = [`path=/`, `SameSite=Lax`, `max-age=${SESSION_COOKIE_MAX_AGE_SECONDS}`];
+      if (window.location && window.location.protocol === 'https:') {
+        attrs.push('Secure');
+      }
+      document.cookie = `${SESSION_KEY}=${encodeURIComponent(rawValue)}; ${attrs.join('; ')}`;
+    } catch (e) {
+      console.warn('[NexusAuth] Não foi possível gravar cookie de sessão:', e);
+    }
+  }
+
+  function getSessionCookie() {
+    try {
+      const prefix = `${SESSION_KEY}=`;
+      const parts = (document.cookie || '').split(';');
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (trimmed.indexOf(prefix) === 0) {
+          return decodeURIComponent(trimmed.substring(prefix.length));
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearSessionCookie() {
+    try {
+      document.cookie = `${SESSION_KEY}=; path=/; SameSite=Lax; max-age=0`;
+    } catch (e) {}
+  }
 
   // Matriz de Ações x Cargos com base no Spec.md RF 1
   const ACTION_PERMISSIONS = {
@@ -93,11 +135,14 @@
 
   const NexusAuth = {
     /**
-     * Obtém a sessão ativa armazenada no sessionStorage ou localStorage
+     * Obtém a sessão ativa. Prioridade: cookie de sessão (Backlog 3), com
+     * leitura legada de sessionStorage/localStorage para sessões já ativas.
      */
     getSession: function () {
       try {
-        const raw = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
+        const raw = getSessionCookie()
+          || sessionStorage.getItem(SESSION_KEY)
+          || localStorage.getItem(SESSION_KEY);
         if (!raw) return null;
         const session = JSON.parse(raw);
         if (!session || !session.codigo_individual) return null;
@@ -197,15 +242,63 @@
     },
 
     /**
+     * Estabelece a sessão ativa após a confirmação do cargo (T1.2/T1.3).
+     * Grava em cookie (principal) e localStorage (espelho legado de outras
+     * telas/guards) e limpa o espelho antigo no sessionStorage.
+     */
+    establishSession: function (sessionData) {
+      const raw = JSON.stringify(sessionData);
+      setSessionCookie(raw);
+      try {
+        localStorage.setItem(SESSION_KEY, raw);
+        sessionStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem('nexus_pending_auth');
+      } catch (e) {}
+    },
+
+    /**
      * Encerra a sessão ativa do usuário e redireciona para o login
      */
     logout: function () {
-      sessionStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem('nexus_pending_auth');
+      clearSessionCookie();
+      try {
+        sessionStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem('nexus_pending_auth');
+      } catch (e) {}
       window.location.href = 'index.html';
     }
   };
 
   window.NexusAuth = NexusAuth;
+
+  /**
+   * Vigia de expiração da sessão (Backlog 3): se o cookie expirar enquanto
+   * o usuário navega — ou se o carimbo `login_at` ultrapassar o turno de
+   * 12h — a sessão é invalidada e o operador é redirecionado para o login.
+   * A verificação periódica é necessária porque páginas já abertas não
+   * recarregam o cookie sozinhas.
+   */
+  function sessionExpired(session) {
+    if (!session) return true;
+    if (session.login_at) {
+      const loginTs = Date.parse(session.login_at);
+      if (!Number.isNaN(loginTs) && Date.now() - loginTs > SESSION_COOKIE_MAX_AGE_SECONDS * 1000) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  setInterval(() => {
+    try {
+      const session = NexusAuth.getSession();
+      if (!sessionExpired(session)) return;
+      const pageName = (window.location && window.location.pathname.split('/').pop()) || '';
+      if (pageName && pageName !== 'index.html' && pageName !== '' && pageName !== 'confirm-role.html') {
+        console.warn('[NexusAuth] Sessão expirada em uso. Redirecionando para login.');
+        NexusAuth.logout();
+      }
+    } catch (e) {}
+  }, 60000);
 })(window);

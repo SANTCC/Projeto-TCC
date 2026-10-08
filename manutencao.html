@@ -304,6 +304,22 @@
             </div>
           </form>
 
+          <!-- Busca + filtros por status das OS (Backlog 3 - 7b/7h) -->
+          <div class="flex flex-col gap-2">
+            <div class="relative">
+              <span class="material-symbols-outlined text-[18px] text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <input type="search" id="buscarOsInput" placeholder="Buscar OS por número, equipamento ou descrição..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
+            </div>
+            <div id="osStatusChips" class="flex flex-wrap items-center gap-1.5">
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Status:</span>
+              <button type="button" data-status="PENDENTE_APROVACAO" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-blue-300 text-blue-600 dark:text-blue-400 font-bold text-[11px]">Aguardando aprovação</button>
+              <button type="button" data-status="EM_MANUTENCAO" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-amber-300 text-amber-600 dark:text-amber-400 font-bold text-[11px]">Em manutenção</button>
+              <button type="button" data-status="CONCLUIDA" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">Concluída</button>
+              <button type="button" data-status="REPROVADA" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-red-300 text-red-600 dark:text-red-400 font-bold text-[11px]">Reprovada</button>
+              <span id="osCounter" class="ml-auto text-[11px] font-mono text-slate-400">Exibindo 0 de 0 OS</span>
+            </div>
+          </div>
+
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">

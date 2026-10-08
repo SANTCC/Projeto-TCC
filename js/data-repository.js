@@ -106,9 +106,28 @@
       const client = this.getSupabase();
       if (client) {
         try {
-          const { data, error, count } = await client.from('cargas').select('*, navios(id, nome)', { count: 'exact' });
-          if (!error && Array.isArray(data)) {
-            const mapped = data.map((c) => ({
+          // Tenta trazer também a atribuição do funcionário responsável
+          // (Backlog 3 — estivador_cargas); se a relação não estiver
+          // disponível no schema cache, repete a consulta sem o join.
+          let data = null;
+          let count = null;
+          {
+            const rJoined = await client.from('cargas').select('*, navios(id, nome), estivador_cargas(estivador_id, funcionarios(nome, matricula))', { count: 'exact' });
+            if (!rJoined.error && Array.isArray(rJoined.data)) {
+              data = rJoined.data;
+              count = rJoined.count;
+            } else {
+              const rPlain = await client.from('cargas').select('*, navios(id, nome)', { count: 'exact' });
+              if (!rPlain.error && Array.isArray(rPlain.data)) {
+                data = rPlain.data;
+                count = rPlain.count;
+              }
+            }
+          }
+          if (Array.isArray(data)) {
+            const mapped = data.map((c) => {
+              const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0 ? c.estivador_cargas[0] : null;
+              return {
               id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
               tipo: c.natureza || 'Carga Geral',
               peso: `${c.peso || 0} t`,
@@ -125,8 +144,12 @@
               motivoCancelamento: c.motivo_recusa || null,
               rawDbId: c.id,
               data_cadastro: c.created_at || c.data_cadastro || null,
-              created_at: c.created_at || null
-            }));
+              created_at: c.created_at || null,
+              estivador_id: vinculo ? vinculo.estivador_id : null,
+              estivadorMatricula: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.matricula : null,
+              estivador: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.nome : null
+              };
+            });
             localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
             return mapped;
           }
@@ -561,6 +584,89 @@
     },
 
     /**
+     * SINCRONIZAÇÃO AUTOMÁTICA VIA SUPABASE REALTIME (Backlog 3 — Realtime-Sync)
+     * Assina mudanças (INSERT/UPDATE/DELETE) das tabelas operacionais no schema
+     * público e dispara o evento local `nexus_data_changed` (com debounce), que
+     * já é o gatilho de re-render das telas. Assim, quando outro operador —
+     * por exemplo o pessoal do scanner — altera um registro, as telas abertas
+     * atualizam sem intervenção manual. Se o Realtime não estiver habilitado
+     * no projeto Supabase, cai silenciosamente no polling de 10s existente.
+     */
+    REALTIME_TABLES: [
+      'cargas',
+      'containers',
+      'navios',
+      'guindastes',
+      'manutencoes',
+      'funcionarios',
+      'visitantes',
+      'bercos',
+      'rotas_maritimas',
+      'delegacoes_supervisor',
+      'inspecoes',
+      'inspecao_itens',
+      'tipos_carga',
+      'leituras_qr_code',
+      'logs_alteracoes',
+      'trail_decisoes',
+      'emergencias'
+    ],
+
+    _realtimeChannel: null,
+    _realtimeDebounce: null,
+
+    iniciarSincronizacaoRealtime: function () {
+      const client = this.getSupabase();
+      if (!client || typeof client.channel !== 'function') return null;
+      if (this._realtimeChannel) return this._realtimeChannel;
+
+      try {
+        const channel = client.channel('nexus_data_sync');
+        this.REALTIME_TABLES.forEach((tabela) => {
+          channel.on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: tabela },
+            () => {
+              // Debounce: rajadas de mudanças viram uma única notificação,
+              // e NÃO retransmitimos via BroadcastChannel — cada aba possui
+              // sua própria assinatura Realtime, o que evita loops/duplas
+              // notificações entre abas do mesmo dispositivo.
+              if (this._realtimeDebounce) clearTimeout(this._realtimeDebounce);
+              this._realtimeDebounce = setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('nexus_data_changed', {
+                  detail: { entity: tabela, origem: 'realtime' }
+                }));
+              }, 400);
+            }
+          );
+        });
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('[NexusRepository] Sincronização Realtime ativa.');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.warn('[NexusRepository] Realtime indisponível (' + status + '); mantendo polling de 10s como fallback.');
+          }
+        });
+        this._realtimeChannel = channel;
+        return channel;
+      } catch (err) {
+        console.warn('[NexusRepository] Falha ao iniciar Realtime (fallback: polling):', err);
+        return null;
+      }
+    },
+
+    /**
+     * Encerra a assinatura Realtime (ex.: logout/troca de sessão).
+     */
+    pararSincronizacaoRealtime: function () {
+      const client = this.getSupabase();
+      if (client && this._realtimeChannel && typeof client.removeChannel === 'function') {
+        try { client.removeChannel(this._realtimeChannel); } catch (e) {}
+      }
+      this._realtimeChannel = null;
+    },
+
+    /**
      * NOTIFICAÇÃO DE ALTERAÇÃO EM TEMPO REAL (Item 2)
      */
     notifyChange: function (entity) {
@@ -600,6 +706,15 @@
   setInterval(() => {
     NexusRepository.notifyChange('periodic_sync');
   }, 60000);
+
+  // Inicia a assinatura Realtime em todas as telas que carregam o repositório
+  // (o cliente Supabase é criado antes deste módulo na ordem dos <script>).
+  // Em contextos de teste/offline sem cliente, não faz nada.
+  if (typeof window !== 'undefined') {
+    try {
+      NexusRepository.iniciarSincronizacaoRealtime();
+    } catch (e) {}
+  }
 
   window.NexusRepository = NexusRepository;
 })(window);

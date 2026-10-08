@@ -162,13 +162,13 @@
               <label class="block font-bold text-slate-500 mb-1">Número IMO</label>
               <input type="text" id="navioImo" required placeholder="Ex: IMO-9821034" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
-            <div>
-              <label class="block font-bold text-slate-500 mb-1">Porto de Origem</label>
-              <input type="text" id="navioOrigem" required placeholder="Ex: Porto de Santos" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
-            </div>
-            <div>
-              <label class="block font-bold text-slate-500 mb-1">Porto de Destino</label>
-              <input type="text" id="navioDestino" required placeholder="Ex: Porto de Roterdã" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
+            <div class="sm:col-span-2">
+              <label class="block font-bold text-slate-500 mb-1">Rota Marítima (cadastrada pelo Supervisor)</label>
+              <select id="navioRotaSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
+                <!-- Preenchido via JS com as rotas registradas no Supabase (rotas_maritimas) -->
+                <option value="">Carregando rotas cadastradas...</option>
+              </select>
+              <p class="text-[11px] text-slate-400 mt-1">A embarcação herda origem, destino e distância da rota selecionada. Novas rotas são registradas por níveis superiores na seção "Gestão de Rotas Marítimas".</p>
             </div>
             <div>
               <label class="block font-bold text-slate-500 mb-1">Localização Operacional</label>
@@ -182,10 +182,6 @@
               <label class="block font-bold text-slate-500 mb-1">Coordenadas GPS</label>
               <input type="text" id="navioGps" placeholder="Ex: 23.9608° S, 46.3022° W" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
-            <div>
-              <label class="block font-bold text-slate-500 mb-1">Distância da Rota (km)</label>
-              <input type="number" id="navioDistancia" required placeholder="Ex: 10200" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
-            </div>
             <div class="flex justify-end gap-2 items-end">
               <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 w-full justify-center">
                 <span class="material-symbols-outlined text-[16px]">save</span>
@@ -193,6 +189,15 @@
               </button>
             </div>
           </form>
+
+          <!-- Busca local na tabela de embarcações + contador (Backlog 3 - 7b) -->
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div class="relative flex-1">
+              <span class="material-symbols-outlined text-[18px] text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <input type="search" id="buscarNavioInput" placeholder="Buscar embarcação por nome, IMO, GPS ou destino..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
+            </div>
+            <span id="embarcacoesCounter" class="text-[11px] font-mono text-slate-400 whitespace-nowrap">Exibindo 0 de 0 embarcações</span>
+          </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs min-w-[700px]">

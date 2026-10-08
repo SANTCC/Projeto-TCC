@@ -5,6 +5,24 @@
  * e estabelece a sessão do usuário.
  */
 
+/**
+ * Fallback de persistência de sessão usado caso o auth-guard não esteja
+ * carregado nesta página (mantém cookie + espelhos locais consistentes).
+ */
+function setSessionAndRedirectFallback(sessionData) {
+  try {
+    const raw = JSON.stringify(sessionData);
+    const attrs = ['path=/', 'SameSite=Lax', 'max-age=43200'];
+    if (window.location && window.location.protocol === 'https:') attrs.push('Secure');
+    document.cookie = `nexus_session=${encodeURIComponent(raw)}; ${attrs.join('; ')}`;
+    localStorage.setItem('nexus_session', raw);
+    sessionStorage.removeItem('nexus_session');
+    sessionStorage.removeItem('nexus_pending_auth');
+  } catch (e) {
+    console.warn('[ConfirmRole] Falha ao persistir sessão de fallback:', e);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Elementos do DOM
   const themeToggle = document.getElementById('themeToggle');
@@ -180,10 +198,12 @@ document.addEventListener('DOMContentLoaded', () => {
         login_at: new Date().toISOString()
       };
 
-      // Salva sessão no sessionStorage e localStorage para suporte a guards (T1.3)
-      sessionStorage.setItem('nexus_session', JSON.stringify(sessionData));
-      localStorage.setItem('nexus_session', JSON.stringify(sessionData));
-      sessionStorage.removeItem('nexus_pending_auth');
+      // Persiste a sessão em cookie (principal) + localStorage (espelho legado) (T1.3 / Backlog 3)
+      if (window.NexusAuth && window.NexusAuth.establishSession) {
+        window.NexusAuth.establishSession(sessionData);
+      } else {
+        setSessionAndRedirectFallback(sessionData);
+      }
 
       setTimeout(() => {
         // Redireciona para o portal principal ou dashboard do cargo

@@ -238,12 +238,45 @@
       });
     }
 
+    // Backlog 3 (8.2): sinal de rolagem horizontal nas tabelas grandes em telas móveis
+    function aplicarHintDeRolagemTabelas() {
+      document.querySelectorAll('.overflow-x-auto').forEach(box => {
+        if (box.dataset.scrollHintApplied === '1') return;
+        box.dataset.scrollHintApplied = '1';
+        box.classList.add('relative');
+        const needsScroll = () => box.scrollWidth > box.clientWidth + 8;
+        const hint = document.createElement('div');
+        hint.className = 'sticky left-full float-right pointer-events-none select-none text-[10px] font-bold text-nexus-500 bg-indigo-50/90 dark:bg-slate-800/90 border border-nexus-border dark:border-slate-700 rounded-full px-2 py-1 m-2 shadow-sm items-center gap-1 sm:hidden';
+        hint.style.display = 'none';
+        hint.innerHTML = '<span class="material-symbols-outlined text-[14px] align-middle">swipe</span> <span class="align-middle">Deslize</span>';
+        box.appendChild(hint);
+        const atualizar = () => {
+          hint.style.display = (needsScroll() && box.scrollLeft <= 4) ? 'inline-flex' : 'none';
+        };
+        box.addEventListener('scroll', () => {
+          if (box.scrollLeft > 4) hint.style.display = 'none';
+        }, { passive: true });
+        window.addEventListener('resize', atualizar);
+        // avalia após o primeiro render das tabelas
+        setTimeout(atualizar, 0);
+      });
+    }
+    aplicarHintDeRolagemTabelas();
+    // tabelas renderizadas depois (Realtime / filtros) também recebem a dica
+    if (window.MutationObserver) {
+      const mo = new MutationObserver(() => { if (!document.__nexusScrollHintBusy) { document.__nexusScrollHintBusy = true; setTimeout(() => { aplicarHintDeRolagemTabelas(); document.__nexusScrollHintBusy = false; }, 120); } });
+      mo.observe(document.body, { childList: true, subtree: true });
+    }
+
     // Injeta Estrutura de Modal / Toast de Feedback Global (Tarefa 7)
     let feedbackModal = document.getElementById('globalFeedbackModal');
     if (!feedbackModal) {
       feedbackModal = document.createElement('div');
       feedbackModal.id = 'globalFeedbackModal';
       feedbackModal.className = 'fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-nexus-900/60 backdrop-blur-sm transition-all duration-200';
+      feedbackModal.setAttribute('role', 'alertdialog');
+      feedbackModal.setAttribute('aria-modal', 'true');
+      feedbackModal.setAttribute('aria-live', 'polite');
       feedbackModal.innerHTML = `
         <div class="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-5 flex flex-col items-center text-center gap-3 transform transition-all scale-100">
           <div id="globalFeedbackIconBox" class="w-12 h-12 rounded-2xl flex items-center justify-center bg-indigo-100 dark:bg-indigo-950/60 text-nexus-500 shrink-0">
@@ -253,7 +286,7 @@
             <h4 id="globalFeedbackTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Mensagem do Sistema</h4>
             <p id="globalFeedbackMsg" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">--</p>
           </div>
-          <button type="button" id="globalFeedbackBtn" class="w-full mt-2 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm">
+          <button type="button" id="globalFeedbackBtn" aria-label="Fechar mensagem de feedback" class="w-full mt-2 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">
             OK
           </button>
         </div>
@@ -275,6 +308,8 @@
       confirmModal = document.createElement('div');
       confirmModal.id = 'nexusConfirmModal';
       confirmModal.className = 'fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-nexus-900/60 backdrop-blur-sm transition-all duration-200';
+      confirmModal.setAttribute('role', 'dialog');
+      confirmModal.setAttribute('aria-modal', 'true');
       confirmModal.innerHTML = `
         <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-6 flex flex-col gap-4 transform transition-all scale-100">
           <div class="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
@@ -288,10 +323,10 @@
           </div>
           <p id="nexusConfirmMsg" class="text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed">Deseja confirmar esta ação?</p>
           <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-            <button type="button" id="nexusConfirmCancelBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors">
+            <button type="button" id="nexusConfirmCancelBtn" aria-label="Cancelar ação" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">
               Cancelar
             </button>
-            <button type="button" id="nexusConfirmOkBtn" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm">
+            <button type="button" id="nexusConfirmOkBtn" aria-label="Confirmar ação" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">
               Confirmar
             </button>
           </div>
@@ -450,6 +485,19 @@
     }
 
     modal.classList.remove('hidden');
+
+    // Backlog 3 (8.7): feedbacks de sucesso/info se fecham sozinhos em 5 segundos —
+    // o usuário não precisa do clique de confirmação. Erros e alertas exigem clique.
+    if (window.__nexusFeedbackTimer) {
+      clearTimeout(window.__nexusFeedbackTimer);
+      window.__nexusFeedbackTimer = null;
+    }
+    if (tipo === 'sucesso' || tipo === 'success' || tipo === 'info') {
+      window.__nexusFeedbackTimer = setTimeout(() => {
+        modal.classList.add('hidden');
+        window.__nexusFeedbackTimer = null;
+      }, 5000);
+    }
   };
 
   /**

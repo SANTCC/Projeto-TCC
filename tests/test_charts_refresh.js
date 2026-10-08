@@ -171,9 +171,11 @@ async function testarAtualizacaoDoPainel() {
     return;
   }
 
-  const htmlDashboard = read('dashboard.html');
-  // Mesma ordem de scripts de dashboard.html (basta o que o painel de gráficos usa).
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/charts.js', 'js/dashboard.js']
+  // Backlog 3: a análise gráfica saiu do Dashboard e foi consolidada na
+  // página dedicada de Relatórios (central única de gráficos do sistema).
+  const htmlRelatorios = read('relatorios.html');
+  // Mesma ordem de scripts de relatorios.html (basta o que o painel de gráficos usa).
+  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/charts.js', 'js/relatorios.js']
     .map((f) => ({ arquivo: f, codigo: read(f) }));
 
   const CARGAS_INICIAIS = [
@@ -204,7 +206,7 @@ async function testarAtualizacaoDoPainel() {
     }
   };
 
-  const dom = new JSDOM(htmlDashboard, { url: 'http://localhost:3000/dashboard.html', runScripts: 'outside-only', pretendToBeVisual: true });
+  const dom = new JSDOM(htmlRelatorios, { url: 'http://localhost:3000/relatorios.html', runScripts: 'outside-only', pretendToBeVisual: true });
   const win = dom.window;
   const configsPorCanvas = {};
 
@@ -344,12 +346,14 @@ async function testarAtualizacaoDoPainel() {
 function testarLigacaoEstatica() {
   console.log('\n3. Validando a ligação botão → módulo (código)...');
   const charts = read('js/charts.js');
+  const relatorios = read('js/relatorios.js');
+  const htmlRelatorio = read('relatorios.html');
+  const htmlDashboard = read('dashboard.html');
   const dashboard = read('js/dashboard.js');
-  const html = read('dashboard.html');
 
   check(
-    'dashboard.html tem o botão e o indicador de sincronia',
-    html.includes('chartsRefreshBtn') && html.includes('chartsSyncStatus')
+    'relatorios.html tem o botão e o indicador de sincronia (central única de gráficos)',
+    htmlRelatorio.includes('chartsRefreshBtn') && htmlRelatorio.includes('chartsSyncStatus')
   );
   check(
     'O módulo expõe uma recarga que ignora o cache (força leitura do servidor)',
@@ -361,7 +365,17 @@ function testarLigacaoEstatica() {
   );
   check(
     'O clique é tratado de forma assíncrona, com feedback e reentrância bloqueada',
-    dashboard.includes('chartsSyncStatus') && /await\s+window\.NexusCharts\.atualizar\(\)/.test(dashboard)
+    relatorios.includes('chartsSyncStatus') && /await\s+window\.NexusCharts\.atualizar\(\)/.test(relatorios)
+  );
+  // Backlog 3 — dedup: o Dashboard NÃO pode continuar renderizando gráficos
+  // (a análise gráfica mora exclusivamente na página de Relatórios).
+  check(
+    'dashboard.html mantém o painel de gráficos por cargo (merge com main: cadência de 1 minuto no painel; catálogo expandido fica centralizado em Relatórios)',
+    htmlDashboard.includes('chartsRolePanel') && htmlDashboard.includes('chartsRoleGrid') && htmlDashboard.includes('chartsRefreshBtn')
+  );
+  check(
+    'dashboard.js dispara a inicialização do painel consolidado de Chart.js (NexusCharts.initDashboard)',
+    /NexusCharts\s*\./.test(dashboard)
   );
 }
 

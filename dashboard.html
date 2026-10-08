@@ -143,85 +143,87 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <!-- Card 1: Máquinas em manutenção -->
-            <div onclick="window.detalharCardOperacional('NAVIOS_MANUTENCAO')" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3">
+            <button type="button" onclick="window.detalharCardOperacional('NAVIOS_MANUTENCAO')" title="Ver detalhes: máquinas e embarcações em manutenção" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">
                 <span class="material-symbols-outlined text-xl">build</span>
               </div>
               <div>
                 <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Máquinas em manutenção</span>
-                <span id="cardNaviosManutencaoVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">1</span>
+                <span id="cardNaviosManutencaoVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
-            </div>
+            </button>
 
             <!-- Card 2: Navios Fora do Porto -->
-            <div onclick="window.detalharCardOperacional('NAVIOS_FORA')" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3">
+            <button type="button" onclick="window.detalharCardOperacional('NAVIOS_FORA')" title="Ver detalhes: navios fora do Porto de Santos" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400">
                 <span class="material-symbols-outlined text-xl">sailing</span>
               </div>
               <div>
                 <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Navios Fora do Porto</span>
-                <span id="cardNaviosForaVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">2</span>
+                <span id="cardNaviosForaVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
-            </div>
+            </button>
 
             <!-- Card 3: Cargas em Armazenagem -->
-            <div onclick="window.detalharCardOperacional('CARGAS_ARMAZENAGEM')" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3">
+            <button type="button" onclick="window.detalharCardOperacional('CARGAS_ARMAZENAGEM')" title="Ver detalhes: cargas em armazenagem no pátio" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400">
                 <span class="material-symbols-outlined text-xl">inventory_2</span>
               </div>
               <div>
                 <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Cargas em Armazenagem</span>
-                <span id="cardCargasArmazenagemVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">3</span>
+                <span id="cardCargasArmazenagemVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
-            </div>
+            </button>
 
             <!-- Card 4: Prontas Aguardando Liberação -->
-            <div onclick="window.detalharCardOperacional('CARGAS_PRONTAS')" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3">
+            <button type="button" onclick="window.detalharCardOperacional('CARGAS_PRONTAS')" title="Ver detalhes: cargas prontas aguardando liberação" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
                 <span class="material-symbols-outlined text-xl">verified</span>
               </div>
               <div>
                 <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Prontas p/ Liberação</span>
-                <span id="cardCargasProntasVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">2</span>
+                <span id="cardCargasProntasVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
-            </div>
+            </button>
 
             <!-- Card 5: Cargas Recusadas -->
-            <div onclick="window.detalharCardOperacional('CARGAS_RECUSADAS')" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3">
+            <button type="button" onclick="window.detalharCardOperacional('CARGAS_RECUSADAS')" title="Ver detalhes: cargas recusadas e canceladas" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400">
                 <span class="material-symbols-outlined text-xl">cancel</span>
               </div>
               <div>
                 <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Cargas Recusadas</span>
-                <span id="cardCargasRecusadasVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">1</span>
+                <span id="cardCargasRecusadasVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
-            </div>
+            </button>
 
             <!-- Card 6: Ocupação do Pátio -->
-            <div onclick="window.detalharCardOperacional('OCUPACAO_PATIO')" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3">
+            <button type="button" onclick="window.detalharCardOperacional('OCUPACAO_PATIO')" title="Ver detalhes: taxa de ocupação do pátio" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400">
                 <span class="material-symbols-outlined text-xl">pie_chart</span>
               </div>
               <div>
                 <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Ocupação do Pátio</span>
-                <span id="cardOcupacaoPatioVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">35%</span>
+                <span id="cardOcupacaoPatioVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
-            </div>
+            </button>
 
             <!-- Card 7: Preventiva Sugerida (> 3 Anos de Uso) -->
-            <div onclick="window.detalharCardOperacional('PREVENTIVA_SUGERIDA')" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all sm:col-span-2 flex items-center gap-3">
+            <button type="button" onclick="window.detalharCardOperacional('PREVENTIVA_SUGERIDA')" title="Ver detalhes: preventiva sugerida (>3 anos de uso)" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all sm:col-span-2 flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">
                 <span class="material-symbols-outlined text-xl">warning</span>
               </div>
               <div>
                 <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Preventiva Sugerida (>3 Anos de Uso)</span>
-                <span id="cardPreventivaVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">2 Equipamento(s)</span>
+                <span id="cardPreventivaVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
-            </div>
+            </button>
           </div>
         </div>
 
-        <!-- Painel de Gráficos por Camada de Visão (Chart.js) — RF 1 / RF 7 / RF 16 -->
+        <!-- Painel de Gráficos por Camada de Visão (Chart.js) — RF 1 / RF 7 / RF 16.
+             Merge com main: o painel permanece no Dashboard (botão Atualizar + cadência
+             de 1 minuto); a página de Relatórios mantém o catálogo expandido de gráficos. -->
         <div id="chartsRolePanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="flex items-start gap-3">
@@ -257,6 +259,15 @@
               Tabela de Log Geral de Alterações do Sistema (RF 12)
             </h3>
             <span class="text-[11px] font-mono text-slate-400">Auditoria Automática</span>
+          </div>
+
+          <!-- Busca local no log de auditoria + contador (Backlog 3 - 7b) -->
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div class="relative flex-1">
+              <span class="material-symbols-outlined text-[18px] text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <input type="search" id="buscarAuditLogInput" placeholder="Buscar no log por funcionário, cargo, código ou entidade..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
+            </div>
+            <span id="auditLogCounter" class="text-[11px] font-mono text-slate-400 whitespace-nowrap">Exibindo 0 de 0 registros</span>
           </div>
 
           <div class="overflow-x-auto max-h-60 overflow-y-auto">
@@ -313,7 +324,15 @@
                 <span class="material-symbols-outlined text-nexus-500">table_chart</span>
                 Planilha Consolidada de Desempenho Operacional por Categoria
               </h3>
-              <span class="text-[11px] font-mono text-slate-400">Valores Atualizados em Tempo Real</span>
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] font-mono text-slate-400 hidden sm:inline">Valores Atualizados em Tempo Real</span>
+                <!-- Backlog 3 (7f): exportação CSV da planilha de desempenho -->
+                <button type="button" id="exportIndicadoresCsvBtn" title="Exportar planilha de desempenho em CSV"
+                        class="px-3 py-1.5 min-h-[32px] rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-nexus-500 hover:text-white text-nexus-900 dark:text-slate-200 font-bold text-[11px] flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">
+                  <span class="material-symbols-outlined text-[16px]">download</span>
+                  <span>Exportar CSV</span>
+                </button>
+              </div>
             </div>
 
             <div class="overflow-x-auto">

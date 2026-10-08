@@ -253,10 +253,35 @@
       const f = formularioOuErro('navioForm');
       if (f.erro) return f.erro;
       const erroCampos = preencher(f.form, {
-        navioNome: args.nome, navioImo: imoNormalizado(args.imo), navioOrigem: args.origem, navioDestino: args.destino,
-        navioLocalizacao: args.localizacao, navioGps: args.gps, navioDistancia: args.distancia_km
+        navioNome: args.nome, navioImo: imoNormalizado(args.imo),
+        navioLocalizacao: args.localizacao, navioGps: args.gps
       });
       if (erroCampos) return erroCampos;
+
+      // Backlog 3 (rotas): origem, destino e distância vêm de uma rota marítima
+      // já registrada — o agente escolhe, no select da tela, a rota que casa
+      // com a origem/destino pedidos. A regra RN 9 é respeitada da mesma forma
+      // que no uso humano do formulário.
+      const rotaSel = f.form.querySelector('#navioRotaSelect');
+      if (!rotaSel) {
+        return { codigo: 'FORMULARIO_INCOMPLETO', mensagem: 'O formulário da página não expõe o select de rota marítima (#navioRotaSelect).' };
+      }
+      await D.esperar(() => rotaSel.options.length > 1, 4000);
+      const origemAlvo = String(args.origem || '').trim().toLowerCase();
+      const destinoAlvo = String(args.destino || '').trim().toLowerCase();
+      const opcaoRota = Array.from(rotaSel.options).find((o, i) => {
+        if (!o.value) return false;
+        const rotulo = (o.textContent || '').toLowerCase();
+        return rotulo.includes(origemAlvo) && rotulo.includes(destinoAlvo);
+      });
+      if (!opcaoRota) {
+        return {
+          codigo: 'ROTA_NAO_CADASTRADA',
+          mensagem: `Não existe rota marítima registrada de "${args.origem}" para "${args.destino}". Peça à supervisão para cadastrar a rota na Gestão de Rotas Marítimas antes de registrar o navio.`
+        };
+      }
+      rotaSel.value = opcaoRota.value;
+      rotaSel.dispatchEvent(new Event('change', { bubbles: true }));
       const invalido = camposInvalidos(f.form);
       if (invalido) return invalido;
       const imo = imoNormalizado(args.imo);

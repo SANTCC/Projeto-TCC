@@ -217,7 +217,7 @@
       `Peso ${args.peso} t · volume ${args.volume} m³ · valor declarado ${D.moeda(args.valor)}.`,
       `Setor ${args.porto_descarga} · destino ${args.destino} · previsão ${args.data_prevista || hojeIso()}.`
     ],
-    executar: (args) => {
+    executar: async (args) => {
       const form = document.getElementById('agendamentoCargaForm');
       if (!form) return { ok: false, codigo: 'INDISPONIVEL', mensagem: 'Formulário de agendamento indisponível nesta página.' };
       const antes = new Set(D.lerLista('nexus_cargas_fluxo').map((c) => c.id));
@@ -233,6 +233,18 @@
         D.definirCampo(form, 'agDataPrevista', args.data_prevista || hojeIso());
       } catch (erro) {
         return { ok: false, codigo: 'ARGUMENTOS_INVALIDOS', mensagem: `Um valor não corresponde às opções da tela (${erro.message}).` };
+      }
+      // Backlog 3 (3.4 / WebMCP): o formulário exige o Responsável pela Carga
+      // (#agEstivadorResponsavel), preenchido de forma assíncrona pela página.
+      // O agente aguarda o preenchimento e, se nada tiver sido escolhido, assume
+      // a opção padrão da sessão (o operador logado), como no uso humano.
+      const selResp = form.querySelector('#agEstivadorResponsavel');
+      if (selResp && D.esperar) {
+        await D.esperar(() => Array.from(selResp.options).some((o) => o.value), 4000);
+        if (!selResp.value) {
+          const padrao = Array.from(selResp.options).find((o) => o.value);
+          if (padrao) selResp.value = padrao.value;
+        }
       }
       if (!form.checkValidity()) {
         const invalidos = Array.from(form.querySelectorAll(':invalid')).map((c) => c.name || c.id);

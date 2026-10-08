@@ -319,6 +319,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // A análise gráfica (Chart.js) foi consolidada na página dedicada de
+  // Relatórios e Gráficos (Backlog 3 — dedup de gráficos). O Dashboard mantém
+  // os cards de indicadores operacionais e apenas aponta para a página de
+  // gráficos, evitando renderizar dois pipelines de Chart.js por parada.
+
   // Painel de gráficos (Chart.js) adaptado ao cargo do usuário autenticado
   if (window.NexusCharts && typeof window.NexusCharts.initDashboard === 'function') {
     window.NexusCharts.initDashboard();
@@ -417,6 +422,9 @@ document.addEventListener('DOMContentLoaded', () => {
       { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto, meta: 5, atingimento: Math.min(100, Math.round((naviosNoPorto / 5) * 100)), tempo: 18.4, status: 'IDEAL' },
       { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas, meta: 5, atingimento: osAtivas === 0 ? 100 : Math.max(10, 100 - (osAtivas * 10)), tempo: 4.8, status: 'IDEAL' }
     ];
+
+    // Backlog 3 (7f): mantém a cópia em memória para a exportação CSV
+    window.__nexusIndicadoresExecutivos = indicadores;
 
     execTableBody.innerHTML = indicadores.map((i, idx) => `
       <tr class="${idx % 2 === 0 ? 'bg-slate-50/60 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'} hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -560,6 +568,32 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cardModal) cardModal.classList.remove('hidden');
   };
 
+    // Item do backlog3 (audit-funcionarios): quando um registro traz apenas o
+    // código individual (sem JOIN resolvido — ex.: log registrado sem
+    // funcionario_id) e o cache local não contém o funcionário (dispositivo
+    // novo), o nome aparece como ID/"Operador do Sistema". Esta rotina busca
+    // os códigos faltantes diretamente na tabela `funcionarios` do Supabase.
+    async function buscarFuncionariosPorCodigos(codigos) {
+      const mapa = {};
+      if (!window.nexusSupabase || !codigos || codigos.length === 0) return mapa;
+      try {
+        const { data, error } = await window.nexusSupabase
+          .from('funcionarios')
+          .select('nome, cargo, codigo_individual, matricula')
+          .in('codigo_individual', codigos);
+        if (!error && Array.isArray(data)) {
+          data.forEach(f => {
+            if (!mapa[f.codigo_individual]) {
+              mapa[f.codigo_individual] = { nome: f.nome, cargo: f.cargo };
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[NexusPort] Falha ao resolver nomes de funcionários no Supabase:', err);
+      }
+      return mapa;
+    }
+
   // 2. Renderiza Log Geral de Alterações com Nome do Funcionário Real
   async function renderAuditLogTable() {
     if (!auditTableBody) return;
@@ -586,6 +620,8 @@ document.addEventListener('DOMContentLoaded', () => {
               }
             }
             return {
+              _semNome: !nomeFunc,
+              _codigoPendente: l.codigo_individual || null,
               data_hora: l.data_hora,
               nome_funcionario: nomeFunc || 'Operador do Sistema',
               cargo: cargoFunc || 'OPERACIONAL',
@@ -594,6 +630,23 @@ document.addEventListener('DOMContentLoaded', () => {
               tipo_alteracao: l.tipo_alteracao
             };
           });
+
+          // Segunda tentativa de resolver nomes: consultar funcionarios no
+          // Supabase pelos códigos ainda pendentes (backlog3 audit-funcionarios)
+          const pendentes = [...new Set(mappedDbLogs.filter(x => x._semNome && x._codigoPendente && x._codigoPendente !== '--').map(x => x._codigoPendente))];
+          if (pendentes.length > 0) {
+            const mapaDb = await buscarFuncionariosPorCodigos(pendentes);
+            mappedDbLogs.forEach(x => {
+              if (x._semNome && mapaDb[x._codigoPendente]) {
+                x.nome_funcionario = mapaDb[x._codigoPendente].nome || x.nome_funcionario;
+                if (mapaDb[x._codigoPendente].cargo) x.cargo = mapaDb[x._codigoPendente].cargo;
+              }
+              delete x._semNome;
+              delete x._codigoPendente;
+            });
+          } else {
+            mappedDbLogs.forEach(x => { delete x._semNome; delete x._codigoPendente; });
+          }
 
           // Combinar logs do Supabase e do LocalStorage para garantir exibição das alterações
           const keys = new Set(mappedDbLogs.map(x => `${x.data_hora}-${x.codigo_usuario}`));
@@ -615,16 +668,30 @@ document.addEventListener('DOMContentLoaded', () => {
     // Ordena logs do mais recente para o mais antigo
     logs.sort((a, b) => new Date(b.data_hora || 0) - new Date(a.data_hora || 0));
 
-    if (logs.length === 0) {
+    // Backlog 3 (7b): busca local no log de auditoria + contador "X de Y"
+    const buscaAuditVal = (document.getElementById('buscarAuditLogInput')?.value || '').trim().toLowerCase();
+    const totalAuditRegistros = logs.length;
+    const logsVisiveis = logs.filter(l => {
+      if (!buscaAuditVal) return true;
+      const haystack = `${l.nome_funcionario || l.nome || ''} ${l.cargo || ''} ${l.codigo_usuario || l.codigo_individual || ''} ${l.entidade || ''} ${l.tipo_alteracao || ''}`.toLowerCase();
+      return haystack.includes(buscaAuditVal);
+    });
+
+    const auditCounterEl = document.getElementById('auditLogCounter');
+    if (auditCounterEl) {
+      auditCounterEl.textContent = `Exibindo ${logsVisiveis.length} de ${totalAuditRegistros} registro(s)`;
+    }
+
+    if (logsVisiveis.length === 0) {
       auditTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="p-4 text-center text-slate-400 italic">Nenhum log de alteração registrado no momento.</td>
+          <td colspan="6" class="p-4 text-center text-slate-400 italic">${totalAuditRegistros === 0 ? 'Nenhum log de alteração registrado no momento.' : 'Nenhum log corresponde à busca aplicada. Ajuste o termo para listar novamente.'}</td>
         </tr>
       `;
       return;
     }
 
-    auditTableBody.innerHTML = logs.map(l => `
+    auditTableBody.innerHTML = logsVisiveis.map(l => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <td class="p-2.5 text-slate-500 whitespace-nowrap">${l.data_hora ? esc(new Date(l.data_hora).toLocaleString('pt-BR')) : 'N/A'}</td>
         <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${esc(l.nome_funcionario || l.nome || session.nome || 'Operador')}</td>
@@ -632,13 +699,52 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-2.5 text-nexus-500 font-bold whitespace-nowrap">${esc(l.codigo_usuario || l.codigo_individual || '--')}</td>
         <td class="p-2.5 font-bold whitespace-nowrap">${esc(l.entidade || 'Sistema')}</td>
         <td class="p-2.5">
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 whitespace-nowrap">${esc(l.tipo_alteracao || 'EDICAO')}</span>
+          <span class="px-2 py-0.5 rounded text-xs font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 whitespace-nowrap">${esc(l.tipo_alteracao || 'EDICAO')}</span>
         </td>
       </tr>
     `).join('');
   }
 
   renderAuditLogTable();
+
+  // Backlog 3 (7b): busca local no log de auditoria
+  const buscarAuditLogInput = document.getElementById('buscarAuditLogInput');
+  if (buscarAuditLogInput) {
+    buscarAuditLogInput.addEventListener('input', renderAuditLogTable);
+  }
+
+  // Backlog 3 (7f): exportação da planilha consolidada em CSV (separador ';',
+  // BOM UTF-8 para abrir corretamente no Excel pt-BR).
+  const exportCsvBtn = document.getElementById('exportIndicadoresCsvBtn');
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', () => {
+      const dados = window.__nexusIndicadoresExecutivos || [];
+      if (dados.length === 0) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Sem Dados', 'A planilha de desempenho ainda não foi carregada. Aguarde a atualização e tente exportar novamente.');
+        }
+        return;
+      }
+      const csvEscape = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+      const linhas = [
+        ['Categoria / Operação', 'Volume Processado', 'Meta Mensal', 'Atingimento (%)', 'Tempo Médio (Horas)', 'Status Operacional'].map(csvEscape).join(';'),
+        ...dados.map(i => [i.categoria, i.volume, i.meta, `${i.atingimento}%`, String(i.tempo).replace('.', ','), i.status].map(csvEscape).join(';')),
+      ];
+      const blob = new Blob(['\uFEFF' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const agora = new Date();
+      a.href = url;
+      a.download = `nexusport_desempenho_${agora.getFullYear()}${String(agora.getMonth() + 1).padStart(2, '0')}${String(agora.getDate()).padStart(2, '0')}_${String(agora.getHours()).padStart(2, '0')}${String(agora.getMinutes()).padStart(2, '0')}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (window.registrarLogAlteracao) {
+        window.registrarLogAlteracao('EXPORTACAO_CSV', 'dashboard', null, `Exportação CSV da planilha de desempenho (${dados.length} linhas) em ${agora.toLocaleString('pt-BR')}`);
+      }
+    });
+  }
 
   // 3. Renderiza Trail de Decisões Críticas Imutável Organizado a partir do Supabase (Item 1.4)
   async function renderTrailDecisoesTable() {
@@ -667,6 +773,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 respCargo = match.cargo || respCargo;
               }
             }
+            const pendenteNome = !respNome && t.codigo_individual;
             const retificacaoTxt = t.retificacoes_trail && t.retificacoes_trail.length > 0 
               ? t.retificacoes_trail.map(r => r.retificacao).join(' | ') 
               : null;
@@ -679,9 +786,25 @@ document.addEventListener('DOMContentLoaded', () => {
               decisao: t.tipo_decisao,
               entidade: `${t.entidade_tipo} ${t.entidade_id}`,
               motivo: t.motivo || 'Decisão homologada conforme fluxo operacional',
-              retificacao: retificacaoTxt
+              retificacao: retificacaoTxt,
+              _codigoPendente: pendenteNome ? t.codigo_individual : null
             };
           });
+
+          // Resolve nomes pendentes diretamente no Supabase (backlog3 audit-funcionarios)
+          const codigosPendentes = [...new Set(mappedDbTrail.filter(x => x._codigoPendente).map(x => x._codigoPendente))];
+          if (codigosPendentes.length > 0) {
+            const mapaDb = await buscarFuncionariosPorCodigos(codigosPendentes);
+            mappedDbTrail.forEach(x => {
+              const info = mapaDb[x._codigoPendente];
+              if (info) {
+                x.responsavel = `${info.nome || 'Responsável'} (${info.cargo || 'Supervisor'}) - ${x._codigoPendente}`;
+              }
+              delete x._codigoPendente;
+            });
+          } else {
+            mappedDbTrail.forEach(x => { delete x._codigoPendente; });
+          }
 
           // Unir com localTrail para preservar registros inseridos localmente ou offline
           const keys = new Set(mappedDbTrail.map(x => x.dbId || x.id));
@@ -719,7 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="flex items-center gap-2">
             <span class="font-mono font-bold text-xs text-nexus-500">${esc(t.id)}</span>
             <span class="text-slate-300 dark:text-slate-600">•</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">${esc(t.decisao)}</span>
+            <span class="px-2 py-0.5 rounded text-xs font-bold uppercase bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">${esc(t.decisao)}</span>
             <span class="font-mono text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">${esc(t.entidade)}</span>
           </div>
           <span class="text-slate-400 font-mono text-[11px]">${esc(new Date(t.data_hora).toLocaleString('pt-BR'))}</span>
