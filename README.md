@@ -206,7 +206,7 @@ Os padrões usam pulsos de **300 ms** e respeitam os limites de 10 entradas e 10
 # 1. Aplicar a migração (tabelas emergencias + panic_webhook_config + RLS)
 supabase link --project-ref <ref-do-projeto>
 supabase db push
-#    (ou executar supabase/migrations/20261007000000_panic_button_global.sql
+#    (ou executar supabase/migrations/20261008000000_emergencias_fix_404.sql
 #     manualmente no SQL Editor do Supabase)
 
 # 2. Implantar a Edge Function
@@ -214,6 +214,71 @@ supabase db push
 #    a identidade/RBAC é validada DENTRO da função contra a tabela funcionarios.
 supabase functions deploy panic-alert --no-verify-jwt
 ```
+
+#### ❗ HTTP 404 / PGRST205 em `/rest/v1/emergencias` (e em `panic_webhook_config`)
+
+**Sintoma.** O painel *Network* do navegador mostra, em toda tela interna:
+
+```
+GET /rest/v1/emergencias?select=*&estado=eq.ATIVA&order=data_hora.desc&limit=1
+→ 404 Not Found
+{ "code": "PGRST205",
+  "message": "Could not find the table 'public.emergencias' in the schema cache",
+  "hint": "Perhaps you meant the table 'public.funcionarios'" }
+```
+
+**Causa.** As tabelas do botão de pânico (`emergencias` e `panic_webhook_config`)
+não existem no projeto Supabase — a migração `20261007000000_panic_button_global.sql`
+nunca foi aplicada. O PostgREST devolve **404** para qualquer requisição a uma
+tabela que não está no *schema cache*. O 404 não é CORS, não é RLS e não é
+política de referenciador: com a mesma URL e a mesma chave, o erro se repete.
+
+**Correção.** Aplique a migração reparadora (idempotente — pode ser executada
+sobre um banco já parcialmente migrado e mais de uma vez):
+
+```
+supabase/migrations/20261008000000_emergencias_fix_404.sql
+```
+
+```bash
+supabase link --project-ref <ref-do-projeto> && supabase db push
+#   ou: Dashboard → SQL Editor → New query → colar o arquivo → Run
+```
+
+Ela cria/repara as duas tabelas (colunas, `CHECK`, FK, índice), recria as
+políticas `nexus_*` para `anon, authenticated`, garante a linha única de
+configuração do webhook **desativada** e termina com `notify pgrst,
+'reload schema'` — sem isso o PostgREST pode continuar respondendo 404 por
+alguns segundos (alternativa no painel: *Settings → API → Restart server*).
+
+**Verificação** (deve responder `200` com `[]` ou com uma linha):
+
+```bash
+curl "<SUPABASE_URL>/rest/v1/emergencias?select=*&estado=eq.ATIVA&order=data_hora.desc&limit=1" \
+     -H "apikey: <ANON_OU_PUBLISHABLE_KEY>"
+```
+
+No app, o painel **Manutenção → Webhook de Emergência → Banco de dados** tem o
+botão **Verificar**, que testa as duas tabelas e diz exatamente o que falta.
+Também é possível rodar no console do navegador:
+
+```js
+await NexusPanic.diagnose()      // { disponivel, migracao, estado_local, retry_agendado }
+await NexusPanic.verificarTabelas()
+```
+
+**Comportamento durante a pendência.** O módulo não quebra: a tabela ausente é
+detectada uma única vez (aviso no console apontando a migração), o alerta segue
+funcionando via WebSocket (canal `nexus-emergency`) e o rodapé de emergência cai
+para o flag local. Ao aplicar a migração, clientes já abertos fazem uma
+rechecagem automática (backoff de 5 s → 15 s → 45 s → 2 min, e também ao voltar
+para a aba ou reconectar) e passam a ler o estado global sem recarregar a página.
+
+| Verificação | Como rodar |
+| --- | --- |
+| Migração contra PostgreSQL real (5 cenários, RLS, idempotência) | `python3 tests/verify_migration_emergencias.py` (requer `pip install psycopg2-binary pgserver`) |
+| Regressão do 404 no front-end (jsdom) | `npm run test:migracao` |
+| Suíte do pânico | `npm run test:panic` |
 
 ---
 

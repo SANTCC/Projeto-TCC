@@ -19,6 +19,27 @@ Scripts incrementais para aplicar no banco Supabase **já existente**
 | Arquivo | Descrição |
 | --- | --- |
 | `001_create_bercos.sql` | Cria `public.bercos` (15 berços do terminal STS-01), constraints, índices, trigger de `updated_at`, RLS e carga inicial. Corrige `Could not find the table 'public.bercos' in the schema cache` (PGRST205) na tela de Embarcações. |
+| `../supabase/migrations/20261007000000_panic_button_global.sql` | Migração canônica do Botão de Pânico GLOBAL: tabelas `emergencias` e `panic_webhook_config`, RLS, políticas `nexus_*` e valor `EMERGENCIA` no `tipo_entidade_enum`. |
+| `../supabase/migrations/20261008000000_emergencias_fix_404.sql` | **Correção do 404 / PGRST205 em `/rest/v1/emergencias`**: versão idempotente e reparadora da migração acima (reconcilia estrutura parcial, normaliza dado legado, recria as políticas `nexus_*` para `anon, authenticated`, recarrega o *schema cache* com `notify pgrst, 'reload schema'` e termina com um `select` de verificação). Pode ser aplicada depois da `20261007000000` sem erro. |
+
+### Migrações do botão de pânico: qual aplicar?
+
+| Estado do banco | O que fazer |
+| --- | --- |
+| Nunca migrado (é o caso do erro 404 em `/rest/v1/emergencias`) | Aplique **`20261008000000_emergencias_fix_404.sql`**. Ela cria tudo o que a `20261007000000` criaria e ainda deixa o banco verificável. |
+| Já migrado com a `20261007000000` | A `20261008000000` vira um *no-op* de verificação — segura para rodar, útil para recarregar o *schema cache*. |
+| Tabela criada pela metade / alterada manualmente | A `20261008000000` reconcilia colunas, defaults, `NOT NULL`, `CHECK`s e a FK antes de seguir. |
+
+O erro `PGRST205` (`Could not find the table 'public.x' in the schema cache`)
+significa apenas que o PostgREST não conhece a tabela: as três causas usuais são
+(a) a migração não foi aplicada, (b) ela foi aplicada em outro schema (o
+PostgREST expõe só `public`) ou (c) o *schema cache* ainda não recarregou. A
+migração `20261008000000` detecta e informa os três casos por `NOTICE`.
+
+**Prova de execução:** `python3 tests/verify_migration_emergencias.py` aplica a
+migração em um PostgreSQL real e cobre cinco cenários (banco virgem, migração
+antiga aplicada, estado parcial, tabela em outro schema, pré-requisito ausente)
+e o acesso pela role `anon` — 24 verificações, todas cobertas por asserção.
 
 ## Modelo de segurança (importante)
 
