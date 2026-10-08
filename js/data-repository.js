@@ -221,19 +221,29 @@
 
     /**
      * SALVAR / ATUALIZAR BERÇO
+     * O payload passa pela normalização de `NexusSupabaseUtils.normalizarBerco`
+     * (regras de `bercos_vinculo_navio_check` / `bercos_id_formato_check`):
+     * berço OCUPADO sem navio_nome/navio_imo e ids fora de 'BERCO-NN' faziam o
+     * upsert falhar com 23514 e a linha nunca era persistida.
      */
     saveBerco: async function (berco) {
+      const resultado = (window.NexusSupabaseUtils && window.NexusSupabaseUtils.normalizarBerco)
+        ? window.NexusSupabaseUtils.normalizarBerco(berco)
+        : { payload: null, corrigido: false, motivo: 'utilitário de normalização indisponível' };
+
+      if (!resultado.payload) {
+        console.warn(`[NexusRepository] Berço não salvo: ${resultado.motivo}.`);
+        return berco;
+      }
+      if (resultado.corrigido) {
+        console.warn(`[NexusRepository] Berço ${resultado.payload.nome} ajustado para gravação: ${resultado.motivo || 'registro fora do padrão de public.bercos'}.`);
+      }
+
+      const registro = resultado.payload;
       const client = this.getSupabaseTabela('bercos');
       if (client) {
         try {
-          const { error } = await client.from('bercos').upsert({
-            id: berco.id || `BERCO-${berco.nome.replace(/\D/g, '')}`,
-            nome: berco.nome,
-            estado: berco.estado || 'LIVRE',
-            navio_nome: berco.navio_nome || null,
-            navio_imo: berco.navio_imo || null,
-            navio_id: berco.navio_id || null
-          }, { onConflict: 'nome' });
+          const { error } = await client.from('bercos').upsert(registro, { onConflict: 'nome' });
           this.tratarErroTabela('bercos', error);
         } catch (err) {
           if (!this.tratarErroTabela('bercos', err)) {
@@ -242,14 +252,14 @@
         }
       }
       let list = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-      const idx = list.findIndex(b => b.nome === berco.nome || b.id === berco.id);
+      const idx = list.findIndex(b => b.nome === registro.nome || b.id === registro.id);
       if (idx >= 0) {
-        list[idx] = { ...list[idx], ...berco };
+        list[idx] = { ...list[idx], ...registro };
       } else {
-        list.push(berco);
+        list.push(registro);
       }
       localStorage.setItem('nexus_bercos_list', JSON.stringify(list));
-      return berco;
+      return registro;
     },
 
     /**
