@@ -14,7 +14,8 @@
     "audit:xss": "node tools/xss-scan.js && node tests/xss.test.js",
     "test:haptics": "node tests/test_haptics.js",
     "test:migracao": "node tests/test_emergencias_404.js",
-    "test:panic": "node tests/test_panic_global.js && node tests/test_emergencias_404.js"
+    "test:panic": "node tests/test_panic_global.js && node tests/test_emergencias_404.js",
+    "test:net-debug": "node tests/test_net_debug.js"
   },
   "keywords": [
     "nexusport",

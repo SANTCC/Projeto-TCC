@@ -19,25 +19,55 @@
 (function () {
   const config = window.NEXUS_CONFIG || {};
   let supabaseClient = null;
+  // Network debug (optional): js/net-debug.js, loaded before this file, logs every
+  // client -> server connection to the console. Without it nothing changes.
+  const netDebug = window.NexusNetDebug || null;
 
   const urlParams = typeof window !== 'undefined' && window.location ? new URLSearchParams(window.location.search) : null;
   const url = config.SUPABASE_URL || window.SUPABASE_URL || (typeof localStorage !== 'undefined' && localStorage.getItem('SUPABASE_URL')) || (urlParams && urlParams.get('supabase_url'));
   const key = config.SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || (typeof localStorage !== 'undefined' && localStorage.getItem('SUPABASE_ANON_KEY')) || (urlParams && urlParams.get('supabase_key'));
 
+  // Only used by the network debug log (js/net-debug.js).
+  function origemUrl() {
+    if (config.SUPABASE_URL) return 'js/config.js (window.NEXUS_CONFIG)';
+    if (window.SUPABASE_URL) return 'window.SUPABASE_URL';
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('SUPABASE_URL')) return 'localStorage';
+    if (urlParams && urlParams.get('supabase_url')) return 'query string ?supabase_url=';
+    return 'unknown';
+  }
+  function motivoSemCliente() {
+    if (typeof supabase === 'undefined') {
+      return 'supabase-js library not loaded (the CDN script failed or was blocked). No server connection will be made.';
+    }
+    if (!url) return 'Supabase URL missing (js/config.js missing or empty). No server connection will be made.';
+    return 'Supabase anon key missing (js/config.js missing or empty). No server connection will be made.';
+  }
+
   if (typeof supabase !== 'undefined' && url && key) {
     try {
-      supabaseClient = supabase.createClient(url, key, {
+      const clientOptions = {
         auth: {
           persistSession: true,
           autoRefreshToken: true
         }
-      });
+      };
+      if (netDebug) {
+        // fetch (REST, Auth, Functions, Storage), WebSocket (Realtime) and GoTrue internals.
+        const debugOptions = netDebug.clientOptions();
+        clientOptions.auth = Object.assign({}, clientOptions.auth, debugOptions.auth);
+        clientOptions.global = debugOptions.global;
+        clientOptions.realtime = debugOptions.realtime;
+      }
+      supabaseClient = supabase.createClient(url, key, clientOptions);
       console.log("[NexusPort] Cliente Supabase inicializado com sucesso.");
+      if (netDebug) netDebug.clientCreated({ url: url, key: key, urlSource: origemUrl() });
     } catch (err) {
       console.warn("[NexusPort] Erro ao inicializar o cliente Supabase:", err);
+      if (netDebug) netDebug.note('error', 'createClient() failed', err);
     }
   } else {
     console.log("[NexusPort] Aguardando credenciais do Supabase para inicialização.");
+    if (netDebug) netDebug.note('warn', motivoSemCliente());
   }
 
   window.nexusSupabase = supabaseClient;
