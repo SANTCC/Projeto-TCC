@@ -25,6 +25,15 @@ Ela parece não ficar parada quando scroll, tanto no PC, quanto no celular.
 ## Salvar o login com Cookies ao invés de SESSION_STORAGE
 A não ser que haja problemas de segurança, usar Cookies parece mais prático para usuários.
 
+## PDF renderizado no lado do servidor ao invés do lado do cliente + cache/armazenamento no supabase storage
+Atualmente, PDFs são renderizados pelo lado do cliente toda a vez que requisistados.
+
+## Popular cargos
+Adicionar usuários "mock" pra cada cargo, cada um com nome no formato [CARGO] + "_mock" + [NUMERO (123 OU 321 OU 456)], cada cargo com 2 usuários mocks.
+
+## Popular ações
+Adicionar histórico de mudanças, novos cargas, novos navios, tudo pra fazer isso realmente parecer algo 100% polido.
+
 ## Atualização em tempo real das tabelas e indicadores
 Corrigir os dados exibidos pelas tabelas e indicadores do sistema quando ocorre uma alteração no Supabase, garantindo que todos os painéis sejam atualizados em tempo real e não apresentem dados antigos ou incorretos.
 
