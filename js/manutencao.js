@@ -782,7 +782,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aplicarEstadoEmergencia(true);
 
         if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'emergencia', null, { estado: 'EMERGENCIA_CRITICA_ATIVADA', acionado_por: session.nome || session.cargo });
+          await window.registrarLogAlteracao('emergencia', 'EDICAO', { estado: 'EMERGENCIA_CRITICA_ATIVADA', acionado_por: session.nome || session.cargo });
         }
 
         if (window.mostrarFeedback) {
@@ -810,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aplicarEstadoEmergencia(false);
 
         if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'emergencia', null, { estado: 'EMERGENCIA_DESATIVADA', desativado_por: session.nome || session.cargo });
+          await window.registrarLogAlteracao('emergencia', 'EDICAO', { estado: 'EMERGENCIA_DESATIVADA', desativado_por: session.nome || session.cargo });
         }
 
         if (window.mostrarFeedback) {

@@ -513,6 +513,10 @@ on conflict (nome) do nothing;
 -- Banco já existente que ainda responde 404 / PGRST205 em /rest/v1/emergencias:
 -- aplicar supabase/migrations/20261008000000_emergencias_fix_404.sql
 -- (idempotente e reparadora — ver SPECs/diagnostico/404-emergencias.md).
+-- Banco já existente que registra 22P02 ("invalid input value for enum
+-- tipo_entidade_enum: EMERGENCIA") ao gravar a auditoria do pânico: aplicar
+-- supabase/migrations/20261008010000_enum_emergencia_auditoria.sql
+-- (idempotente — ver SPECs/diagnostico/22P02-enum-emergencia.md).
 
 -- Novo tipo de entidade para auditoria de emergências
 alter type tipo_entidade_enum add value if not exists 'EMERGENCIA';
