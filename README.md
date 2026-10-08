@@ -68,6 +68,7 @@ npm run test:graficos # gráficos por camada de visão (Node, sem dependências)
 npm run test:refresh  # botão "Atualizar" dos gráficos: dado novo vem do servidor (jsdom)
 npm run test:bercos   # vínculo navio × berço: constraints de public.bercos (jsdom)
 npm run test:net-debug # depuração de conexões no console (Node, sem dependências)
+npm run test:backlog3 # correções do backlog3: login, layout, scanner e travas operacionais (jsdom)
 ```
 
 ---
