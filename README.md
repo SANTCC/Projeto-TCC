@@ -65,6 +65,7 @@ Acesse `http://localhost:3000` no seu navegador.
 ```bash
 npm test              # suite Playwright (fluxos ponta a ponta)
 npm run test:graficos # gráficos por camada de visão (Node, sem dependências)
+npm run test:refresh  # botão "Atualizar" dos gráficos: dado novo vem do servidor (jsdom)
 npm run test:bercos   # vínculo navio × berço: constraints de public.bercos (jsdom)
 ```
 
@@ -90,6 +91,23 @@ Regras de privacidade aplicadas no próprio módulo:
 Os painéis são exibidos no Painel Geral (`dashboard.html`) e no módulo de Relatórios (`relatorios.html`),
 com atualização automática a cada 60 s, re-renderização ao alternar o tema claro/escuro e estado vazio
 explícito quando ainda não há dados (nunca dados fictícios).
+
+### Botão "Atualizar" do painel de gráficos
+
+O botão `#chartsRefreshBtn` (painel "Análise gráfica por camada de visão") faz uma **recarga manual
+de verdade**: descarta o cache em memória (TTL de 4 s), reabre tabelas marcadas como ausentes na
+sessão (auto-cura quando a migração é aplicada com a tela aberta) e reconsulta o Supabase antes de
+redesenhar. O resultado é informado ao operador:
+
+- ao lado do botão (`#chartsSyncStatus`) — "Dados do servidor recebidos às HH:MM:SS",
+  "Servidor indisponível — gráficos exibidos a partir do cache local" ou "atualizado parcialmente";
+- no rodapé (`#chartsRoleFooter`) — origem dos dados (*servidor* / *cache local* / misto) e horário
+  da última leitura, além das fontes consultadas.
+
+> Este comportamento depende de `js/supabase-client.js` carregar sem erro, pois é ele que define
+> `window.nexusSupabase`. Um erro de sintaxe nesse arquivo faz **todas** as telas caírem
+> silenciosamente no cache local — os gráficos redesenham, mas nunca com dado novo do servidor.
+> A regressão é coberta por `npm run test:refresh`.
 
 ### 5. Verificações de Segurança (Anti-XSS)
 ```bash

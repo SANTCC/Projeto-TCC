@@ -234,8 +234,9 @@
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
+              <span id="chartsSyncStatus" role="status" aria-live="polite" class="text-[10px] font-mono text-slate-400 dark:text-slate-500 max-w-[220px] truncate"></span>
               <span id="chartsRoleBadge" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[10px] font-bold uppercase">RLS</span>
-              <button id="chartsRefreshBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1 transition-colors">
+              <button id="chartsRefreshBtn" type="button" title="Consulta o servidor e redesenha os gráficos com os dados mais recentes" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 disabled:opacity-60 disabled:cursor-wait text-white font-bold text-xs flex items-center gap-1 transition-colors">
                 <span class="material-symbols-outlined text-[16px]">refresh</span>
                 <span>Atualizar</span>
               </button>

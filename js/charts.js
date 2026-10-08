@@ -25,7 +25,11 @@
  * Uso:
  *   NexusCharts.initDashboard()   -> painel do dashboard.html (auto-detecta cargo)
  *   NexusCharts.initRelatorios()  -> gráficos do relatorios.html (RF 16)
- *   NexusCharts.atualizar()       -> força nova renderização do painel ativo
+ *   NexusCharts.atualizar()       -> recarga MANUAL do painel ativo: ignora o
+ *                                    cache em memória, reconsulta o Supabase e
+ *                                    devolve de onde vieram os dados (servidor
+ *                                    × cache local) para a interface informar
+ *                                    o operador do botão "Atualizar"
  * ---------------------------------------------------------------------------
  */
 
@@ -703,6 +707,19 @@
   // ---------------------------------------------------------------------
 
   const cacheDados = { chave: '', timestamp: 0, dados: null, promessa: null };
+  let tokenCarregamento = 0;
+
+  // Metadados do último carregamento concluído: de ONDE vieram as linhas de cada
+  // tabela (servidor Supabase × cache local) e quando. É o que permite ao botão
+  // "Atualizar" informar o operador se o painel realmente trouxe dado novo do
+  // servidor ou se está operando com o cache local (fallback offline) — antes o
+  // clique redesenha o gráfico sem que ninguém saiba que nada novo foi lido.
+  const ROTULOS_ORIGEM = {
+    supabase: 'servidor (Supabase)',
+    local: 'cache local',
+    misto: 'servidor + cache local'
+  };
+  let metaCarregamento = { origem: 'local', atualizadoEm: null, porFonte: {}, forcar: false };
 
   function lerLocalStorage(chave) {
     try {
@@ -712,7 +729,37 @@
     }
   }
 
-  async function consultarTabela(tabela, sessao) {
+  /** Marca a tabela como atendida pelo cache local e devolve as linhas. */
+  function dadosLocais(tabela, chaveLocal, meta) {
+    if (meta) meta.porFonte[tabela] = 'local';
+    return lerLocalStorage(chaveLocal);
+  }
+
+  /**
+   * Consulta uma tabela no Supabase (fonte oficial dos gráficos).
+   *
+   * @param {string} tabela
+   * @param {object} sessao
+   * @param {{forcar?: boolean, meta?: object}} [opcoes]
+   *        `forcar: true` = recarga manual (botão "Atualizar"): reabre tabelas
+   *        marcadas como ausentes nesta sessão, para que uma migração aplicada
+   *        com a tela aberta passe a trazer dados reais sem recarregar a página.
+   * @returns {Promise<Array|null>} linhas do servidor, ou null para usar o cache local
+   */
+  async function consultarTabela(tabela, sessao, opcoes) {
+    const cfg = opcoes || {};
+    const meta = cfg.meta;
+    const utils = window.NexusSupabaseUtils;
+
+    if (cfg.forcar && utils && typeof utils.liberarTabela === 'function') {
+      utils.liberarTabela(tabela);
+    }
+
+    // Tabela já diagnosticada como ausente (PGRST205 / HTTP 404): não repete uma
+    // requisição condenada ao 404 — o painel segue com o cache local e o aviso
+    // aponta exatamente a migração pendente.
+    if (utils && typeof utils.clientePara === 'function' && !utils.clientePara(tabela)) return null;
+
     const client = window.nexusSupabase;
     if (!client) return null;
     try {
@@ -726,9 +773,17 @@
       }
       const { data, error } = await query;
       if (error) throw error;
-      return Array.isArray(data) ? data : null;
+      if (!Array.isArray(data)) return null;
+      if (meta) meta.porFonte[tabela] = 'supabase';
+      return data;
     } catch (erro) {
-      console.warn(`[NexusCharts] Tabela ${tabela} indisponível no Supabase, usando cache local.`, erro && erro.message);
+      if (meta) meta.porFonte[tabela] = 'local';
+      // Registra o erro (uma vez por tabela/sessão) e mantém o app operando.
+      if (utils && typeof utils.registrarErroTabela === 'function') {
+        utils.registrarErroTabela(tabela, erro);
+      } else {
+        console.warn(`[NexusCharts] Tabela ${tabela} indisponível no Supabase, usando cache local.`, erro && erro.message);
+      }
       return null;
     }
   }
@@ -736,20 +791,33 @@
   /**
    * Monta o pacote de dados necessário para o grupo de gráficos do cargo,
    * carregando estritamente as fontes permitidas pela camada de visão.
+   *
+   * @param {object} sessao
+   * @param {Array<string>} fontes
+   * @param {{forcar?: boolean}} [opcoes] - `forcar: true` (botão "Atualizar")
+   *        ignora o cache em memória e reconsulta o servidor agora.
    */
-  async function carregarDados(sessao, fontes) {
+  async function carregarDados(sessao, fontes, opcoes) {
+    const forcar = !!(opcoes && opcoes.forcar);
     const listaFontes = Array.isArray(fontes) ? fontes : [];
     const chaveCache = `${sessao && sessao.cargo}|${listaFontes.join(',')}|${sessao && sessao.codigo_individual}`;
     const agora = Date.now();
 
-    if (cacheDados.dados && cacheDados.chave === chaveCache && (agora - cacheDados.timestamp) < TTL_CACHE_MS) {
+    // Recarga manual nunca reaproveita o cache em memória (TTL de 4s): o
+    // operador pediu o estado do servidor AGORA e o clique precisa refleti-lo.
+    if (!forcar && cacheDados.dados && cacheDados.chave === chaveCache && (agora - cacheDados.timestamp) < TTL_CACHE_MS) {
       return cacheDados.dados;
     }
-    if (cacheDados.promessa && cacheDados.chave === chaveCache) {
+    if (!forcar && cacheDados.promessa && cacheDados.chave === chaveCache) {
       return cacheDados.promessa;
     }
+    if (forcar) invalidarCache();
 
     const promessa = (async () => {
+      const meta = { origem: 'local', atualizadoEm: null, porFonte: {}, forcar: forcar };
+      const meuTokenCarga = ++tokenCarregamento;
+      const buscar = tabela => consultarTabela(tabela, sessao, { forcar: forcar, meta: meta });
+
       const dados = {
         cargas: [],
         navios: [],
@@ -764,60 +832,71 @@
 
       // ---- Cargas (Visão Própria aplica filtro por atribuição)
       if (listaFontes.includes('cargas')) {
-        const bruto = await consultarTabela('cargas', sessao);
-        const origem = bruto || lerLocalStorage('nexus_cargas_fluxo');
+        const bruto = await buscar('cargas');
+        const origem = bruto || dadosLocais('cargas', 'nexus_cargas_fluxo', meta);
         dados.cargas = filtrarCargasPorVisao(origem.map(normalizarCarga), sessao);
       }
 
       // ---- Navios e contêineres
       if (listaFontes.includes('navios')) {
-        const bruto = await consultarTabela('navios', sessao);
-        dados.navios = (bruto || lerLocalStorage('nexus_navios_list')).map(normalizarNavio);
+        const bruto = await buscar('navios');
+        dados.navios = (bruto || dadosLocais('navios', 'nexus_navios_list', meta)).map(normalizarNavio);
       }
       if (listaFontes.includes('containers')) {
-        const bruto = await consultarTabela('containers', sessao);
-        dados.containers = (bruto || lerLocalStorage('nexus_containers_list')).map(normalizarContainer);
+        const bruto = await buscar('containers');
+        dados.containers = (bruto || dadosLocais('containers', 'nexus_containers_list', meta)).map(normalizarContainer);
       }
 
       // ---- Manutenções
       if (listaFontes.includes('manutencoes')) {
-        const bruto = await consultarTabela('manutencoes', sessao);
-        dados.manutencoes = (bruto || lerLocalStorage('nexus_os_list')).map(normalizarManutencao);
+        const bruto = await buscar('manutencoes');
+        dados.manutencoes = (bruto || dadosLocais('manutencoes', 'nexus_os_list', meta)).map(normalizarManutencao);
       }
 
       // ---- Berços de atracação
       if (listaFontes.includes('bercos')) {
-        const bruto = await consultarTabela('bercos', sessao);
-        dados.bercos = (bruto || lerLocalStorage('nexus_bercos_list')).map(normalizarBerco);
+        const bruto = await buscar('bercos');
+        dados.bercos = (bruto || dadosLocais('bercos', 'nexus_bercos_list', meta)).map(normalizarBerco);
       }
 
       // ---- Trail de decisões críticas
       if (listaFontes.includes('trail')) {
-        const bruto = await consultarTabela('trail_decisoes', sessao);
-        dados.trail = (bruto || lerLocalStorage('nexus_trail_decisoes')).map(normalizarTrail);
+        const bruto = await buscar('trail_decisoes');
+        dados.trail = (bruto || dadosLocais('trail_decisoes', 'nexus_trail_decisoes', meta)).map(normalizarTrail);
       }
 
       // ---- Logs de auditoria (escopo próprio ou operacional completo)
       if (listaFontes.includes('logs')) {
-        const bruto = await consultarTabela('logs_alteracoes', sessao);
-        dados.logs = filtrarLogsPorVisao((bruto || lerLocalStorage('nexus_audit_logs')).map(normalizarLog), sessao);
+        const bruto = await buscar('logs_alteracoes');
+        dados.logs = filtrarLogsPorVisao((bruto || dadosLocais('logs_alteracoes', 'nexus_audit_logs', meta)).map(normalizarLog), sessao);
       }
 
       // ---- Pessoas: somente cargos autorizados pela Vision Layer (RF 1)
       if (listaFontes.includes('funcionarios') && podeVerDadosDePessoas(sessao, 'documentacao_funcionarios')) {
-        const bruto = await consultarTabela('funcionarios', sessao);
-        dados.funcionarios = (bruto || lerLocalStorage('nexus_func_list')).map(normalizarFuncionario);
+        const bruto = await buscar('funcionarios');
+        dados.funcionarios = (bruto || dadosLocais('funcionarios', 'nexus_func_list', meta)).map(normalizarFuncionario);
       }
 
       if (listaFontes.includes('visitantes') && podeVerDadosDePessoas(sessao, 'visitantes')) {
-        const bruto = await consultarTabela('visitantes', sessao);
-        dados.visitantes = (bruto || lerLocalStorage('nexus_vis_list')).map(normalizarVisitante);
+        const bruto = await buscar('visitantes');
+        dados.visitantes = (bruto || dadosLocais('visitantes', 'nexus_vis_list', meta)).map(normalizarVisitante);
       }
 
       // Sanitização estratégica: valor declarado só transita na Visão Estratégica.
       if (!sessao || !CARGOS_DIRETOR.includes(String(sessao.cargo || '').toUpperCase())) {
         dados.cargas = dados.cargas.map(c => Object.assign({}, c, { valor: 0 }));
       }
+
+      // Resumo da origem: o que veio do servidor e o que caiu no cache local.
+      const origens = Object.keys(meta.porFonte).map(tabela => meta.porFonte[tabela]);
+      const usouServidor = origens.indexOf('supabase') >= 0;
+      const usouLocal = origens.indexOf('local') >= 0;
+      meta.origem = usouServidor ? (usouLocal ? 'misto' : 'supabase') : 'local';
+      meta.atualizadoEm = new Date().toISOString();
+
+      // Uma carga mais recente pode ter sido disparada durante os awaits: a
+      // última concluída é a que descreve os dados realmente disponíveis.
+      if (meuTokenCarga === tokenCarregamento) metaCarregamento = meta;
 
       return dados;
     })();
@@ -836,6 +915,11 @@
     cacheDados.promessa = null;
     cacheDados.timestamp = 0;
     cacheDados.chave = '';
+  }
+
+  /** Texto legível da origem do último carregamento (servidor × cache local). */
+  function textoOrigem(origem) {
+    return ROTULOS_ORIGEM[origem] || ROTULOS_ORIGEM.local;
   }
 
   // ---------------------------------------------------------------------
@@ -1481,13 +1565,28 @@
     const elTitulo = window.document ? window.document.getElementById('chartsRoleTitle') : null;
     const elSubtitulo = window.document ? window.document.getElementById('chartsRoleSubtitle') : null;
     const elBadge = window.document ? window.document.getElementById('chartsRoleBadge') : null;
-    const elFooter = window.document ? window.document.getElementById('chartsRoleFooter') : null;
     if (elTitulo) elTitulo.textContent = painel.titulo;
     if (elSubtitulo) elSubtitulo.textContent = painel.subtitulo;
     if (elBadge) elBadge.textContent = painel.camada;
-    if (elFooter) {
-      elFooter.textContent = `${total} indicador(es) gráfico(s) da camada ${painel.camada} • fontes: ${painel.fontes.join(', ')} • atualização periódica automática`;
+  }
+
+  /**
+   * Rodapé do painel: além das fontes, informa de onde vieram os dados
+   * (servidor × cache local) e o horário da última leitura. É o rastro que
+   * faltava para o operador confiar (ou não) no botão "Atualizar".
+   */
+  function atualizarRodape(painel, total, opcoes) {
+    const elFooter = window.document ? window.document.getElementById('chartsRoleFooter') : null;
+    if (!elFooter) return;
+    const base = `${total} indicador(es) gráfico(s) da camada ${painel.camada} • fontes: ${painel.fontes.join(', ')}`;
+    if (opcoes && opcoes.carregando) {
+      elFooter.textContent = `${base} • consultando o servidor...`;
+      return;
     }
+    const hora = metaCarregamento.atualizadoEm
+      ? new Date(metaCarregamento.atualizadoEm).toLocaleTimeString('pt-BR')
+      : '--';
+    elFooter.textContent = `${base} • dados de ${textoOrigem(metaCarregamento.origem)} • atualizado às ${hora} • atualização periódica automática`;
   }
 
   function observadorDeTema() {
@@ -1503,14 +1602,19 @@
   /**
    * Renderiza o painel gráfico do cargo informado.
    * @param {object} sessao - sessão autenticada (NexusAuth.getSession())
-   * @param {object} [opcoes] - { containerId, charts, tituloPainel, fontes }
+   * @param {object} [opcoes] - { containerId, charts, tituloPainel, fontes, forcar }
+   *        `forcar: true` = recarga manual: ignora o cache em memória e
+   *        reconsulta o servidor (usado pelo botão "Atualizar").
+   * @returns {Promise<{ok: boolean, origem?: string, origemTexto?: string,
+   *                    atualizadoEm?: string|null, motivo?: string}>}
    */
   async function renderPainel(sessao, opcoes) {
     const cfg = opcoes || padraoAtual;
+    const forcar = !!cfg.forcar;
     const doc = window.document;
-    if (!doc) return;
+    if (!doc) return { ok: false, motivo: 'sem-documento' };
     const container = doc.getElementById(cfg.containerId || 'chartsRoleGrid');
-    if (!container || !sessao) return;
+    if (!container || !sessao) return { ok: false, motivo: 'sem-container' };
     const meuToken = ++tokenRender;
 
     const grupo = grupoDoCargo(sessao.cargo);
@@ -1527,12 +1631,13 @@
 
     destruirInstancias();
     container.innerHTML = definicoes.map(def => cartaoCarregando(def)).join('');
+    atualizarRodape(painel, definicoes.length, { carregando: true });
 
     const disponivel = await garantirChartJs();
-    const dados = await carregarDados(sessao, fontes);
+    const dados = await carregarDados(sessao, fontes, { forcar: forcar });
 
     // Uma renderização mais recente pode ter sido disparada durante os awaits.
-    if (meuToken !== tokenRender) return;
+    if (meuToken !== tokenRender) return { ok: false, motivo: 'substituido' };
 
     let html = '';
     const paraRenderizar = [];
@@ -1560,7 +1665,14 @@
           </div>`;
         }
       });
-      return;
+      atualizarRodape(painel, definicoes.length);
+      return {
+        ok: false,
+        motivo: 'chartjs-indisponivel',
+        origem: metaCarregamento.origem,
+        origemTexto: textoOrigem(metaCarregamento.origem),
+        atualizadoEm: metaCarregamento.atualizadoEm
+      };
     }
 
     aplicarPadroesGlobais();
@@ -1577,6 +1689,17 @@
     });
 
     observadorDeTema();
+    atualizarRodape(painel, definicoes.length);
+
+    return {
+      ok: true,
+      origem: metaCarregamento.origem,
+      origemTexto: textoOrigem(metaCarregamento.origem),
+      atualizadoEm: metaCarregamento.atualizadoEm,
+      forcar: forcar,
+      indicadores: definicoes.length,
+      graficos: paraRenderizar.length
+    };
   }
 
   function sessaoAtual() {
@@ -1615,7 +1738,7 @@
     /** Inicializa o painel de gráficos do dashboard.html conforme o cargo. */
     initDashboard: function () {
       const sessao = sessaoAtual();
-      if (!sessao) return Promise.resolve(false);
+      if (!sessao) return Promise.resolve({ ok: false, motivo: 'sem-sessao' });
       ligarEventos();
       return renderPainel(sessao, { containerId: 'chartsRoleGrid' });
     },
@@ -1627,7 +1750,7 @@
      */
     initRelatorios: function () {
       const sessao = sessaoAtual();
-      if (!sessao) return Promise.resolve(false);
+      if (!sessao) return Promise.resolve({ ok: false, motivo: 'sem-sessao' });
       const grupo = grupoDoCargo(sessao.cargo);
       const conjuntos = {
         DIRETOR: { charts: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes'], fontes: ['cargas', 'logs', 'funcionarios'] },
@@ -1646,11 +1769,34 @@
       });
     },
 
-    /** Força a recarga manual (usada pelo botão "Atualizar" do painel). */
-    atualizar: function () {
+    /**
+     * Força a recarga manual (botão "Atualizar" do painel).
+     *
+     * Diferente da renovação periódica, aqui o cache em memória (TTL de 4s) é
+     * ignorado e as tabelas marcadas como ausentes são reabertas: cada clique
+     * consulta o Supabase de verdade e o resultado diz de onde os dados vieram,
+     * para a interface informar o operador (servidor × cache local).
+     *
+     * @returns {Promise<{ok: boolean, origem: string, origemTexto: string,
+     *                    atualizadoEm: string|null, motivo?: string}>}
+     */
+    atualizar: function (opcoes) {
       invalidarCache();
-      if (!padraoAtual.sessao) return Promise.resolve(false);
-      return renderPainel(padraoAtual.sessao, padraoAtual);
+      if (!padraoAtual.sessao) {
+        return Promise.resolve({ ok: false, motivo: 'sem-sessao', origem: 'local', origemTexto: textoOrigem('local'), atualizadoEm: null });
+      }
+      return renderPainel(padraoAtual.sessao, Object.assign({}, padraoAtual, { forcar: true }, opcoes || {}));
+    },
+
+    /** Origem dos dados do último carregamento (auditoria do refresh). */
+    ultimaAtualizacao: function () {
+      return {
+        origem: metaCarregamento.origem,
+        origemTexto: textoOrigem(metaCarregamento.origem),
+        atualizadoEm: metaCarregamento.atualizadoEm,
+        forcar: !!metaCarregamento.forcar,
+        porFonte: Object.assign({}, metaCarregamento.porFonte)
+      };
     },
 
     grupoDoCargo: grupoDoCargo,
@@ -1681,7 +1827,8 @@
       normalizarCargo: normalizarCargo,
       nomeCargo: nomeCargo,
       chaveMes: chaveMes,
-      montarConfig: montarConfig
+      montarConfig: montarConfig,
+      textoOrigem: textoOrigem
     }
   };
 

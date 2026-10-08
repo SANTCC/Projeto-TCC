@@ -135,6 +135,8 @@
     /** Lista as tabelas marcadas como ausentes nesta sessão (diagnóstico) */
     tabelasIndisponiveis: function () {
       return Array.from(tabelasAusentes);
+    },
+
     /**
      * Normaliza um berço para o formato aceito pelas constraints de public.bercos.
      *
