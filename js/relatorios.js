@@ -310,6 +310,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Tabela de Produtividade Real (T6.9, T6.10, Tarefa 4.1)
+  // Uso do agente WebMCP: mesma geração de PDF do botão da página.
+  window.nexusRelatorioGerarPdf = gerarRelatorioPdfA4;
+
   async function renderProdutividadeTable() {
     if (!prodTableBody) return;
 

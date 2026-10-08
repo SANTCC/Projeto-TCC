@@ -210,6 +210,20 @@
     },
 
     /**
+     * Informa, sem redirecionar, se o cargo da sessão pode abrir a página (mesma regra de requireAuth).
+     * Usado pelas ferramentas WebMCP (js/webmcp-core.js) para o mesmo controle de acesso das páginas.
+     * @param {string} pageName - Nome do arquivo HTML (ex.: 'cargas.html')
+     * @returns {boolean}
+     */
+    canAccessPage: function (pageName) {
+      const session = this.getSession();
+      if (!session || !session.cargo) return false;
+      const allowed = PAGE_PERMISSIONS[pageName];
+      if (!allowed || !Array.isArray(allowed) || allowed.length === 0) return true;
+      return allowed.includes(session.cargo);
+    },
+
+    /**
      * Verifica se o usuário autenticado possui permissão para executar determinada ação (RBAC T1.7)
      * @param {string} actionKey - Identificador da ação (ex: 'LIBERAR_NAVIO')
      * @returns {boolean}

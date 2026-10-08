@@ -69,6 +69,7 @@ npm run test:refresh  # botão "Atualizar" dos gráficos: dado novo vem do servi
 npm run test:bercos   # vínculo navio × berço: constraints de public.bercos (jsdom)
 npm run test:net-debug # depuração de conexões no console (Node, sem dependências)
 npm run test:backlog3 # correções do backlog3: login, layout, scanner e travas operacionais (jsdom)
+npm run test:webmcp   # agentes de IA (WebMCP): núcleo, polyfill, painel e páginas reais (jsdom)
 ```
 
 ---
@@ -336,6 +337,104 @@ para a aba ou reconectar) e passam a ler o estado global sem recarregar a págin
 | Migração contra PostgreSQL real (5 cenários, RLS, idempotência) | `python3 tests/verify_migration_emergencias.py` (requer `pip install psycopg2-binary pgserver`) |
 | Regressão do 404 no front-end (jsdom) | `npm run test:migracao` |
 | Suíte do pânico | `npm run test:panic` |
+
+#### ❗ `ERROR 22P02 invalid input value for enum tipo_entidade_enum: "EMERGENCIA"` (auditoria)
+
+**Sintoma.** Nos logs do Postgres do Supabase (Logs Explorer → `postgres_logs`),
+a cada acionamento/desativação do botão de pânico:
+
+```
+parsed.sql_state_code: "22P02"
+event_message: invalid input value for enum tipo_entidade_enum: "EMERGENCIA"
+parsed.query : WITH pgrst_source AS (INSERT INTO "public"."logs_alteracoes"
+               ("cargo", ..., "entidade_tipo", ...) ...
+```
+
+**Causa.** O tipo `public.tipo_entidade_enum` **não tem o valor `EMERGENCIA`**
+(banco provisionado antes da seção 15 do `SPECs/schema.sql`; o valor é criado no
+fim daquele arquivo e também pela migração do pânico). O `INSERT` da auditoria é
+recusado pelo banco na conversão do valor — **o alarme funciona**, mas a trilha
+de auditoria da emergência se perde. Antes desta correção o erro não aparecia na
+tela: o resultado do `insert` era descartado pelo front-end (o supabase-js
+devolve a falha em `{ error }`, sem lançar exceção).
+
+**Correção.**
+
+```
+supabase/migrations/20261008010000_enum_emergencia_auditoria.sql
+```
+
+```bash
+supabase link --project-ref <ref-do-projeto> && supabase db push
+#   ou: Dashboard → SQL Editor → New query → colar o arquivo → Run
+```
+
+Idempotente, avisa por `NOTICE` quando o tipo não existe em `public` (ou quando
+`logs_alteracoes.entidade_tipo` não é desse enum) e termina com uma conferência
+pelo catálogo `pg_enum`. Caminho rápido, se preferir uma linha:
+
+```sql
+alter type public.tipo_entidade_enum add value if not exists 'EMERGENCIA';
+```
+
+> Não junte o `ADD VALUE` e um `INSERT` de teste no **mesmo** script: o
+> PostgreSQL recusa o uso do valor na mesma transação
+> (`55P04 unsafe use of new value`), e o SQL Editor envia o script inteiro como
+> uma transação. A migração traz o teste como passo separado (seção 4).
+
+**Verificação.** `select e.enumlabel from pg_enum e join pg_type t on t.oid =
+e.enumtypid where t.typname = 'tipo_entidade_enum';` deve listar `EMERGENCIA`;
+no app, **Manutenção → Webhook de Emergência → Banco de dados → Verificar** passa
+a sondar também o valor do enum (select com `limit(0)`, sem escrever nada), e o
+feedback do pânico avisa na hora se a auditoria não gravou.
+
+| Verificação | Como rodar |
+| --- | --- |
+| `22P02` reproduzido e corrigido em PostgreSQL real (enum, role `anon`, idempotência, armadilha `55P04`) | `python3 tests/verify_enum_emergencia.py` |
+| Regressão do `22P02` no front-end (jsdom: pânico com auditoria pendente → migração aplicada) | `npm run test:enum` |
+
+Diagnóstico completo: `SPECs/diagnostico/22P02-enum-emergencia.md`.
+
+---
+
+## 🤖 Agentes de IA (WebMCP)
+
+O NexusPort expõe **ferramentas para agentes de IA do navegador** (WebMCP, `document.modelContext`). Um agente pode consultar cargas, navios, indicadores e pedir ações. **Toda ação que altera dados exige a confirmação do operador** em um diálogo da própria tela, e a camada inteira pode ser desligada pelo painel.
+
+### Como usar
+- Em qualquer tela autenticada, clique em **Agentes IA** (canto inferior direito).
+- No painel: veja as ferramentas desta página (com o motivo de cada bloqueio), a atividade recente e a chave **"Permitir que agentes usem as ferramentas deste navegador"**. Desligar remove todas as ferramentas.
+- Quando um agente pede uma ação, o diálogo mostra o impacto. O botão **Confirmar** só fica ativo após 1,5 s, e **Cancelar**, a tecla Esc ou o prazo de 60 s recusam a ação.
+
+### Modos de API
+| Situação | Modo |
+|---|---|
+| Navegador com `document.modelContext` | nativo |
+| Navegador com `navigator.modelContext` (versão preliminar) | legado (adaptador) |
+| HTTPS sem API nativa | polyfill do projeto (sem dependências) |
+| HTTP fora de `localhost` | indisponível (contexto inseguro) |
+
+### Garantias de segurança
+- **Mínimo privilégio:** cada ferramenta existe só para o cargo que pode executar a ação na tela (mesma regra de `js/auth-guard.js`) e é verificada de novo na execução.
+- **Confirmação humana:** ações que alteram dados pedem confirmação; sem o diálogo, a ação é negada.
+- **Entradas e saídas:** argumentos validados por esquema estrito; saídas higienizadas (sem código de acesso, token ou CPF) e limitadas em tamanho.
+- **Dados pessoais fora do agente:** CPF, documento de visitante e data de nascimento não são parâmetros; o operador completa esses campos e envia os formulários.
+- **Auditoria:** trilha de decisões e logs são somente leitura para agentes; ações feitas por agente recebem a marca `[Agente WebMCP: <ferramenta>]`.
+- **Controles operacionais:** limites de taxa, bloqueio das ações de pátio durante emergência (leituras continuam), tempo limite e nenhuma telemetria externa.
+
+### Arquivos
+- `js/webmcp-core.js` (núcleo), `js/webmcp-ui.js` (diálogo e painel), `js/webmcp-dados.js` (leitores), `js/webmcp-global.js` (ferramentas globais), `js/webmcp-<página>.js` (adaptadores de cada tela).
+
+### Testar
+- `npm run test:webmcp` (jsdom, sem rede).
+- No navegador, use `chrome://flags/#enable-webmcp-testing` e o *Model Context Tool Inspector*.
+
+### Limitações
+- Não há transporte MCP ativo nem `sampling`.
+- A API nativa do Chrome depende de versão ou origin trial; o polyfill cobre os demais casos.
+- Um agente que executa JavaScript dentro da própria página não é contido por controles da página; a barreira definitiva é a confirmação do navegador/host. Detalhes em `SPECs/webmcp.md` (seções 5 e 11).
+
+Documentação completa (fontes, arquitetura, catálogo de ferramentas, matriz de conformidade e achados): **`SPECs/webmcp.md`**.
 
 ---
 

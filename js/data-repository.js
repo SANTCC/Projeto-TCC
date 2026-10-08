@@ -705,7 +705,7 @@
 
   setInterval(() => {
     NexusRepository.notifyChange('periodic_sync');
-  }, 10000);
+  }, 60000);
 
   // Inicia a assinatura Realtime em todas as telas que carregam o repositório
   // (o cliente Supabase é criado antes deste módulo na ordem dos <script>).

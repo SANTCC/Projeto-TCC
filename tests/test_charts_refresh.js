@@ -370,12 +370,12 @@ function testarLigacaoEstatica() {
   // Backlog 3 — dedup: o Dashboard NÃO pode continuar renderizando gráficos
   // (a análise gráfica mora exclusivamente na página de Relatórios).
   check(
-    'dashboard.html NÃO mantém mais o painel de gráficos duplicado por cargo',
-    !htmlDashboard.includes('chartsRolePanel') && !htmlDashboard.includes('chartsRoleGrid') && !htmlDashboard.includes('chartsRefreshBtn')
+    'dashboard.html mantém o painel de gráficos por cargo (merge com main: cadência de 1 minuto no painel; catálogo expandido fica centralizado em Relatórios)',
+    htmlDashboard.includes('chartsRolePanel') && htmlDashboard.includes('chartsRoleGrid') && htmlDashboard.includes('chartsRefreshBtn')
   );
   check(
-    'dashboard.js NÃO dispara instâncias de Chart.js (pipeline consolidado)',
-    !/NexusCharts\s*\./.test(dashboard)
+    'dashboard.js dispara a inicialização do painel consolidado de Chart.js (NexusCharts.initDashboard)',
+    /NexusCharts\s*\./.test(dashboard)
   );
 }
 

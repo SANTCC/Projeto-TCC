@@ -33,6 +33,10 @@ function testPanicGlobal() {
   check('Persiste estado global na tabela emergencias', fn.includes('from("emergencias")'));
   check('RBAC no servidor (ROLES_ACIONAR / ACIONAR_EMERGENCIA)', fn.includes('ROLES_ACIONAR') && fn.includes('INSPETOR') && fn.includes('resolveIdentity'));
   check('CORS liberado para o frontend', fn.includes('Access-Control-Allow-Origin'));
+  check('Responde ao preflight OPTIONS com 200 + CORS', fn.includes('req.method === \"OPTIONS\"') && fn.includes('new Response(\"ok\", { headers: CORS_HEADERS })'));
+  // Sem verify_jwt=false, o gateway do Supabase devolve 401 no preflight e o navegador bloqueia (CORS)
+  const cfg = read('supabase/config.toml');
+  check('config.toml desliga verify_jwt do panic-alert (evita 401 no preflight CORS)', /\[functions\.panic-alert\]\s*\nverify_jwt\s*=\s*false/.test(cfg));
 
   // 2. Webhook OPCIONAL — DESATIVADO POR PADRÃO
   console.log('\n2. Validando webhook opcional (OFF por padrão)...');

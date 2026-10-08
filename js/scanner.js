@@ -246,7 +246,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (resRoleMsg) resRoleMsg.textContent = msgAcao;
 
     if (resultCard) resultCard.classList.remove('hidden');
+    // Resultado estruturado (usado pelo agente WebMCP; a interface não depende do retorno).
+    return {
+      encontrado: Boolean(match),
+      codigo_lido: rawCode,
+      id: displayId,
+      tipo: displayTipo,
+      natureza: displayNatureza,
+      peso_volume: displayPeso,
+      porto_descarga: displayPorto,
+      destino: displayDestino,
+      container: displayContainer,
+      navio: displayNavio,
+      status: displayStatus,
+      acao_sugerida: msgAcao
+    };
   }
+  window.nexusScannerProcessar = processarScan;
 
   if (irChecklistBtn) {
     irChecklistBtn.addEventListener('click', () => {

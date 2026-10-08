@@ -21,6 +21,7 @@ Scripts incrementais para aplicar no banco Supabase **já existente**
 | `001_create_bercos.sql` | Cria `public.bercos` (15 berços do terminal STS-01), constraints, índices, trigger de `updated_at`, RLS e carga inicial. Corrige `Could not find the table 'public.bercos' in the schema cache` (PGRST205) na tela de Embarcações. |
 | `../supabase/migrations/20261007000000_panic_button_global.sql` | Migração canônica do Botão de Pânico GLOBAL: tabelas `emergencias` e `panic_webhook_config`, RLS, políticas `nexus_*` e valor `EMERGENCIA` no `tipo_entidade_enum`. |
 | `../supabase/migrations/20261008000000_emergencias_fix_404.sql` | **Correção do 404 / PGRST205 em `/rest/v1/emergencias`**: versão idempotente e reparadora da migração acima (reconcilia estrutura parcial, normaliza dado legado, recria as políticas `nexus_*` para `anon, authenticated`, recarrega o *schema cache* com `notify pgrst, 'reload schema'` e termina com um `select` de verificação). Pode ser aplicada depois da `20261007000000` sem erro. |
+| `../supabase/migrations/20261008010000_enum_emergencia_auditoria.sql` | **Correção do `22P02 invalid input value for enum tipo_entidade_enum: "EMERGENCIA"`** na auditoria do botão de pânico (`INSERT` em `logs_alteracoes`): garante o valor `EMERGENCIA` no enum, avisa por `NOTICE` quando o tipo não existe em `public` (ou quando `logs_alteracoes.entidade_tipo` não é desse enum), recarrega o *schema cache* e confere pelo catálogo `pg_enum`. Não usa o valor novo na mesma transação — é o que impede o erro `55P04 unsafe use of new value` quando o arquivo inteiro é colado no SQL Editor. |
 
 ### Migrações do botão de pânico: qual aplicar?
 
@@ -35,6 +36,31 @@ significa apenas que o PostgREST não conhece a tabela: as três causas usuais s
 (a) a migração não foi aplicada, (b) ela foi aplicada em outro schema (o
 PostgREST expõe só `public`) ou (c) o *schema cache* ainda não recarregou. A
 migração `20261008000000` detecta e informa os três casos por `NOTICE`.
+
+### Erro `22P02` em valor de enum (`tipo_entidade_enum`)
+
+Mensagem típica nos **logs do Postgres** (Logs Explorer → `postgres_logs`):
+
+```
+ERROR  22P02  invalid input value for enum tipo_entidade_enum: "EMERGENCIA"
+parsed.query: WITH pgrst_source AS (INSERT INTO "public"."logs_alteracoes" ...
+```
+
+**Causa:** o **valor** não existe no tipo — a tabela existe e as permissões
+estão certas (o `INSERT` chega ao banco e é recusado na conversão para o enum).
+Diferente do `PGRST205`, aqui o PostgREST/`schema cache` não tem culpa: `NOTIFY`
+e *Restart server* não resolvem. O valor precisa ser criado por
+`ALTER TYPE … ADD VALUE` (migração `20261008010000`), que também é idempotente.
+
+**Armadilha:** no PostgreSQL 12+, o valor recém-adicionado **não pode ser usado
+na mesma transação** (`ERROR 55P04: unsafe use of new value`). Como o SQL Editor
+do Supabase envia o arquivo inteiro como uma transação, nunca escreva no mesmo
+script o `ADD VALUE` e um `INSERT`/`SELECT` que use o valor — a migração
+`20261008010000` deixa esse teste como passo separado, de propósito.
+
+**Diagnóstico completo:** `SPECs/diagnostico/22P02-enum-emergencia.md`.
+**Evidência:** `python3 tests/verify_enum_emergencia.py` (21 verificações em
+PostgreSQL real) e `npm run test:enum` (regressão do front-end).
 
 **Prova de execução:** `python3 tests/verify_migration_emergencias.py` aplica a
 migração em um PostgreSQL real e cobre cinco cenários (banco virgem, migração

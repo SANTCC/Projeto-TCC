@@ -590,6 +590,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }).join('');
   }
 
+  // Leitura somente das rotas carregadas (uso das ferramentas WebMCP: regra RN 9 da saída de navios).
+  window.nexusEmbarcacoesRotas = function () {
+    return rotasMaritimasList.map((r) => ({ origem: r.origem, destino: r.destino, distancia_km: r.distancia_km }));
+  };
+
   function renderRotasTable() {
     if (!rotasTableBody) return;
     if (rotasMaritimasList.length === 0) {
@@ -655,7 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // RN 3: Liberação de Saída de Navios pelo Supervisor de Operações / Diretor
-  window.liberarNavioPeloDiretor = async function(imo) {
+  window.liberarNavioPeloDiretor = async function(imo, opcoes) {
     const podeLiberar = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     if (!podeLiberar) {
       if (window.mostrarFeedback) {
@@ -702,7 +707,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     navio.distancia = parseFloat(rotaCadastrada.distancia_km) || 10200;
 
-    const confirmou = window.nexusConfirm 
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm 
       ? await window.nexusConfirm('Liberar Saída de Navio', `Confirmar liberação de saída do navio ${navio.nome} (${navio.imo}) pela rota cadastrada ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km)?`) 
       : true;
 
@@ -788,7 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Autorização de retorno do navio ao porto de origem
-  window.autorizarRetornoNavio = async function(imo) {
+  window.autorizarRetornoNavio = async function(imo, opcoes) {
     const podeLiberar = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     if (!podeLiberar) {
       if (window.mostrarFeedback) {
@@ -816,7 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const confirmou = window.nexusConfirm ? await window.nexusConfirm('Autorizar Retorno de Embarcação', `Autorizar o retorno da embarcação ${navio.nome} ao Porto de Origem (${navio.origem})?`) : true;
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Autorizar Retorno de Embarcação', `Autorizar o retorno da embarcação ${navio.nome} ao Porto de Origem (${navio.origem})?`) : true;
 
     if (confirmou) {
       // Inverte Origem e Destino para a viagem de regresso
@@ -861,7 +866,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Vincular Navio a um dos 15 Berços (Tarefa 6)
-  window.vincularNavioABerco = async function(imo) {
+  window.vincularNavioABerco = async function(imo, opcoes) {
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
@@ -876,7 +881,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const optionsText = bercosLivres.map((b, idx) => `${idx + 1} - ${b.nome}`).join('\n');
-    const selecao = await window.nexusPrompt('Vincular Navio a Berço', `Selecione um Berço Desocupado para o navio ${navio.nome} (${navio.imo}):\n${optionsText}`);
+    let selecao;
+    if (opcoes && opcoes.bercoNome !== undefined) {
+      // Uso do agente WebMCP: escolhe o berço livre pelo nome, sem diálogo.
+      const idxBerco = bercosLivres.findIndex((b) => b.nome === opcoes.bercoNome);
+      selecao = idxBerco >= 0 ? String(idxBerco + 1) : '';
+    } else {
+      selecao = await window.nexusPrompt('Vincular Navio a Berço', `Selecione um Berço Desocupado para o navio ${navio.nome} (${navio.imo}):\n${optionsText}`);
+    }
 
     if (!selecao) return;
 
@@ -963,11 +975,11 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Excluir Navio (Tarefa 6)
-  window.excluirNavio = async function(imo) {
+  window.excluirNavio = async function(imo, opcoes) {
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
-    const confirmou = window.nexusConfirm
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Navio', `Tem certeza que deseja EXCLUIR o navio ${navio.nome} (${navio.imo})? essa ação desocupará berços e removerá o navio do sistema.`)
       : true;
 
@@ -1262,7 +1274,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
-  window.vincularContainerANavio = async function(contIdentificacao) {
+  window.vincularContainerANavio = async function(contIdentificacao, opcoes) {
     const cont = containersList.find(c => (c.identificacao || '').toUpperCase() === contIdentificacao.toUpperCase());
     if (!cont) return;
 
@@ -1285,7 +1297,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const optionsText = naviosElegiveis.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo})`).join('\n');
-    const selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao} (apenas embarcações no Porto de Santos):\n${optionsText}`);
+    let selecao;
+    if (opcoes && opcoes.navioImo !== undefined) {
+      // Uso do agente WebMCP: escolhe o navio pelo IMO, sem diálogo.
+      // O filtro do Backlog3 vale também aqui: IMO de navio fora do Porto
+      // de Santos não entra na lista de elegíveis e a vinculação é recusada.
+      const idxNavio = naviosElegiveis.findIndex((n) => n.imo === opcoes.navioImo);
+      selecao = idxNavio >= 0 ? String(idxNavio + 1) : '';
+      if (!selecao && window.mostrarFeedback) {
+        const navioPedido = naviosList.find((n) => n.imo === opcoes.navioImo);
+        const nomePedido = navioPedido ? `${navioPedido.nome} (${navioPedido.imo})` : `IMO ${opcoes.navioImo}`;
+        window.mostrarFeedback('alerta', 'Navio Fora do Porto', `A embarcação ${nomePedido} não está atracada no Porto de Santos (situação: ${navioPedido ? localizacaoInfo(navioPedido.localizacao).txt : 'não encontrada'}) e não pode receber contêineres.`);
+      }
+    } else {
+      selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao} (apenas embarcações no Porto de Santos):\n${optionsText}`);
+    }
 
     if (!selecao) return;
 
@@ -1352,11 +1378,11 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Excluir Contêiner (Tarefa 8)
-  window.excluirContainer = async function(contIdentificacao) {
+  window.excluirContainer = async function(contIdentificacao, opcoes) {
     const cont = containersList.find(c => (c.identificacao || '').toUpperCase() === contIdentificacao.toUpperCase());
     if (!cont) return;
 
-    const confirmou = window.nexusConfirm
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Contêiner', `Tem certeza que deseja EXCLUIR o contêiner ${cont.identificacao}? Essa ação o removerá do sistema.`)
       : true;
 
@@ -1580,11 +1606,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Excluir Guindaste (Item 6)
-  window.excluirGuindaste = async function(gndIdentificacao) {
+  window.excluirGuindaste = async function(gndIdentificacao, opcoes) {
     const guindaste = guindastesList.find(g => (g.identificacao || '').toUpperCase() === gndIdentificacao.toUpperCase());
     if (!guindaste) return;
 
-    const confirmou = window.nexusConfirm
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Guindaste', `Tem certeza que deseja EXCLUIR o guindaste ${guindaste.identificacao}? Esta ação o removerá do sistema.`)
       : true;
 

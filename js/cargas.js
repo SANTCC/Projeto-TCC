@@ -76,34 +76,61 @@ document.addEventListener('DOMContentLoaded', () => {
     }) || null;
   }
 
+  function montarOpcaoSessaoHtml(escala) {
+    const proprio = funcionarioDaSessao(Array.isArray(escala) ? escala : []);
+    const nome = (proprio && proprio.nome) || session.nome || 'Responsável logado';
+    const mat = (proprio && proprio.matricula) || session.matricula || '-';
+    const val = (proprio && (proprio.id || proprio.matricula || proprio.codigo_individual)) || session.matricula || session.codigo_individual || 'SESSAO_ATUAL';
+    return {
+      val: String(val),
+      html: `<option value="${esc(String(val))}" data-matricula="${esc(mat)}" data-nome="${esc(nome)}" data-cargo="${esc(session.cargo)}">${esc(nome)} — ${esc(session.cargo_nome || session.cargo)} (você)</option>`
+    };
+  }
+
+  function montarOpEscalaHtml(f) {
+    const val = f.id || f.matricula || f.codigo_individual || '';
+    return `<option value="${esc(String(val))}" data-matricula="${esc(f.matricula || '')}" data-nome="${esc(f.nome || '')}" data-cargo="${esc(f.cargo || '')}">${esc(f.nome || 'Funcionário')} — ${esc(f.cargo_nome || f.cargo || 'Operacional')} (Mat: ${esc(f.matricula || '-')})</option>`;
+  }
+
   async function preencherSelectEstivadorResponsavel() {
     if (!agEstivadorSel) return;
-    const escala = await carregarFuncionariosEscala();
 
     if (isGestorRole) {
-      // Gestor escolhe livremente entre funcionários em escala (ativos)
+      // Gestor (ou agente WebMCP): a opção da PRÓPRIA SESSÃO entra
+      // sincronicamente como padrão — mesmo com a escala ainda carregando o
+      // campo required fica válido (corrige o agendamento sem interação humana).
+      const sessaoPadrao = montarOpcaoSessaoHtml(funcionariosEscalaCache || []);
       agEstivadorSel.disabled = false;
       agEstivadorSel.required = true;
-      agEstivadorSel.innerHTML = '<option value="">Selecione o funcionário responsável em escala...</option>' +
-        escala.map(f => {
-          const val = f.id || f.matricula || f.codigo_individual || '';
-          return `<option value="${esc(String(val))}" data-matricula="${esc(f.matricula || '')}" data-nome="${esc(f.nome || '')}" data-cargo="${esc(f.cargo || '')}">${esc(f.nome || 'Funcionário')} — ${esc(f.cargo_nome || f.cargo || 'Operacional')} (Mat: ${esc(f.matricula || '-')})</option>`;
-        }).join('');
+      agEstivadorSel.innerHTML = sessaoPadrao.html.replace('<option value=', '<option selected value=');
+      agEstivadorSel.value = sessaoPadrao.val;
+
+      // Upgrade: quando a escala resolver, anexa os funcionários ativos.
+      const escala = await carregarFuncionariosEscala();
+      const escolada = agEstivadorSel.value; // preserva a escolha feita no intervalo
+      const sessaoAtual = montarOpcaoSessaoHtml(escala);
+      agEstivadorSel.innerHTML = sessaoAtual.html.replace('<option value=', '<option selected value=') +
+        escala.map(montarOpEscalaHtml).join('');
+      agEstivadorSel.value = escolada && escolada !== '' ? escolada : sessaoAtual.val;
       if (agEstivadorHint) {
         agEstivadorHint.textContent = escala.length > 0
           ? `${escala.length} funcionário(s) em escala disponíveis para assumir a carga.`
-          : 'Nenhum funcionário ativo em escala encontrado. Verifique o cadastro (Técnico em Portos).';
+          : 'Nenhum funcionário ativo em escala — a carga fica atribuída a você por padrão.';
       }
     } else {
-      // Funcionário operacional: auto-seleção e travamento do campo
-      const proprio = funcionarioDaSessao(escala);
-      const nomeExib = (proprio && proprio.nome) || session.nome || 'Funcionário logado';
-      const matExib = (proprio && proprio.matricula) || session.matricula || '-';
-      const val = (proprio && (proprio.id || proprio.matricula || proprio.codigo_individual)) || session.matricula || session.codigo_individual || 'SESSAO_ATUAL';
-      agEstivadorSel.innerHTML = `<option value="${esc(String(val))}" selected data-matricula="${esc(matExib)}" data-nome="${esc(nomeExib)}" data-cargo="${esc(session.cargo)}">${esc(nomeExib)} — ${esc(session.cargo_nome || session.cargo)} (você)</option>`;
-      agEstivadorSel.value = String(val);
+      // Funcionário operacional: auto-seleção e travamento do campo (sincrona).
+      const sessoOp = montarOpcaoSessaoHtml(funcionariosEscalaCache || []);
+      agEstivadorSel.innerHTML = sessoOp.html.replace('<option value=', '<option selected value=');
+      agEstivadorSel.value = sessoOp.val;
       agEstivadorSel.disabled = true;
       agEstivadorSel.required = false;
+      // Aproveita para refinar com a escala quando chegar (sem destravar o campo).
+      const escala = await carregarFuncionariosEscala();
+      const sessoOpRef = montarOpcaoSessaoHtml(escala);
+      if (sessoOpRef.val !== sessoOp.val) {
+        agEstivadorSel.innerHTML = sessoOpRef.html.replace('<option value=', '<option selected value=');
+        agEstivadorSel.value = sessoOpRef.val;
+      }
       if (agEstivadorHint) {
         agEstivadorHint.textContent = 'Carga atribuída automaticamente à sua sessão (campo travado por segurança).';
       }
@@ -435,6 +462,10 @@ document.addEventListener('DOMContentLoaded', () => {
     agDataPrevistaEl.setAttribute('min', todayStr);
   }
 
+  // A opção padrão da sessão precisa existir mesmo com o formulário oculto
+  // (o agente WebMCP abre o formulário sem clicar no botão superior).
+  preencherSelectEstivadorResponsavel();
+
   if (toggleFormBtn && agendamentoForm) {
     toggleFormBtn.addEventListener('click', () => {
       agendamentoForm.classList.toggle('hidden');
@@ -676,7 +707,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const dispVol = Math.max(0, 75 - volCargasNoCont);
       const statusText = cont.estado !== 'OPERANTE' ? ` [INDISPONÍVEL: ${cont.estado}]` : '';
-      const containerUuid = cont.rawDbId || cont.id;
+      // Contêineres só locais não têm id: a identificação serve de valor (a confirmação resolve o id no Supabase).
+      const containerUuid = cont.rawDbId || cont.id || cont.identificacao;
       vincularContainerSelect.innerHTML += `
         <option value="${esc(containerUuid)}" data-identificacao="${esc(cont.identificacao)}" data-disp="${esc(dispVol)}" data-estado="${esc(cont.estado)}" ${dispVol <= 0 ? 'disabled' : ''}>
           ${esc(cont.identificacao)} (${esc(cont.tipo)}) - Disp: ${esc(dispVol.toFixed(1))} m³ / 75.0 m³${esc(statusText)}
@@ -879,7 +911,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Executa Ações Operacionais
-  window.executarAcaoCarga = async function(idCarga, acao) {
+  // opcoes (uso do agente WebMCP; a interface não envia): { guindasteIdentificacao?, motivo? } evitam os diálogos.
+  window.executarAcaoCarga = async function(idCarga, acao, opcoes) {
+    const op = opcoes || {};
     const carga = cargasFluxoList.find(c => c.id === idCarga);
     if (!carga) return;
 
@@ -917,7 +951,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const gndOptionsText = guindastes.map((g, idx) => `${idx + 1} - ${g.identificacao} (${g.estado})`).join('\n');
-      const selecaoGnd = await window.nexusPrompt('Movimentar para Sala de Contêiner', `Selecione o Guindaste que será usado para movimentar a carga ${idCarga} até a Sala de Contêiner:\n${gndOptionsText}`);
+      let selecaoGnd;
+      if (op.guindasteIdentificacao !== undefined) {
+        const idxGnd = guindastes.findIndex((g) => g.identificacao === op.guindasteIdentificacao);
+        selecaoGnd = idxGnd >= 0 ? String(idxGnd + 1) : '';
+      } else {
+        selecaoGnd = await window.nexusPrompt('Movimentar para Sala de Contêiner', `Selecione o Guindaste que será usado para movimentar a carga ${idCarga} até a Sala de Contêiner:\n${gndOptionsText}`);
+      }
 
       if (!selecaoGnd) return;
 
@@ -951,7 +991,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Movimentação Solicitada', `Carga ${idCarga} associada ao Guindaste ${gndSelecionado.identificacao} com destino à Sala de Contêiner. Tarefa criada em Embarcações & GPS.`);
       }
-      window.dispatchEvent(new CustomEvent('nexus_data_changed'));
     } else if (acao === 'RECEBER') {
       if (!isConferenteRole) {
         if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Conferentes de Carga podem registrar o recebimento físico!');
@@ -1031,7 +1070,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const motivo = await window.nexusPrompt('Cancelar Carga', 'Informe obrigatoriamente o MOTIVO do cancelamento:');
+      const motivo = op.motivo !== undefined ? op.motivo : await window.nexusPrompt('Cancelar Carga', 'Informe obrigatoriamente o MOTIVO do cancelamento:');
       if (motivo) {
         // C9: Carga cancelada sai da tabela principal, desocupa contêiner e navio e retorna ao berço
         carga.status = 'CANCELADA';

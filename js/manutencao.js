@@ -229,13 +229,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  window.solicitarManutencaoGuindaste = async function(identificacao) {
+  // opcoes (uso do agente WebMCP): { descricao? } evita o diálogo de justificativa.
+  window.solicitarManutencaoGuindaste = async function(identificacao, opcoes) {
     if (!isSupervisor) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor pode solicitar manutenção de guindastes!');
       return;
     }
 
-    const descricao = window.nexusPrompt ? await window.nexusPrompt('Solicitar Manutenção de Guindaste', `Informe a justificativa/falha para solicitar manutenção do Guindaste ${identificacao}:`, 'Revisão periódica dos cabos de aço e motores') : 'Revisão periódica';
+    const descricao = (opcoes && opcoes.descricao) ? opcoes.descricao : window.nexusPrompt ? await window.nexusPrompt('Solicitar Manutenção de Guindaste', `Informe a justificativa/falha para solicitar manutenção do Guindaste ${identificacao}:`, 'Revisão periódica dos cabos de aço e motores') : 'Revisão periódica';
     if (!descricao) return;
 
     const gnd = guindastesList.find(x => x.identificacao === identificacao);
@@ -289,14 +290,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    renderGuindastesTable();
+    if (typeof renderGuindastesTable === 'function') renderGuindastesTable();
     renderOsTable();
     if (window.mostrarFeedback) {
       window.mostrarFeedback('sucesso', 'Manutenção Solicitada', `Manutenção solicitada para o Guindaste ${identificacao}! Ordem de Serviço ${newOsId} criada.`);
     }
   };
 
-  window.concluirManutencaoGuindaste = async function(identificacao) {
+  window.concluirManutencaoGuindaste = async function(identificacao, opcoes) {
     if (!isSupervisor) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor pode aprovar/concluir manutenção de guindastes!');
       return;
@@ -350,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    renderGuindastesTable();
+    if (typeof renderGuindastesTable === 'function') renderGuindastesTable();
     renderOsTable();
     if (window.mostrarFeedback) {
       window.mostrarFeedback('sucesso', 'Manutenção Concluída', `Manutenção do Guindaste ${identificacao} CONCLUÍDA! Equipamento reativado e no estado OPERANTE.`);
@@ -850,7 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aplicarEstadoEmergencia(true);
 
         if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'emergencia', null, { estado: 'EMERGENCIA_CRITICA_ATIVADA', acionado_por: session.nome || session.cargo });
+          await window.registrarLogAlteracao('emergencia', 'EDICAO', { estado: 'EMERGENCIA_CRITICA_ATIVADA', acionado_por: session.nome || session.cargo });
         }
 
         if (window.mostrarFeedback) {
@@ -878,7 +879,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aplicarEstadoEmergencia(false);
 
         if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'emergencia', null, { estado: 'EMERGENCIA_DESATIVADA', desativado_por: session.nome || session.cargo });
+          await window.registrarLogAlteracao('emergencia', 'EDICAO', { estado: 'EMERGENCIA_DESATIVADA', desativado_por: session.nome || session.cargo });
         }
 
         if (window.mostrarFeedback) {

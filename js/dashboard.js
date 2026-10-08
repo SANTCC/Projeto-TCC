@@ -7,6 +7,11 @@
 
 // Funções utilitárias globais exigidas para integração (T7.1, T7.3, T8.3 - T8.6, T6.8)
 window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes = '') {
+  // Ações feitas por agente de IA (WebMCP) ficam marcadas na auditoria. Sem agente, nada muda.
+  const marcaAgente = (window.NexusWebMCP && typeof window.NexusWebMCP.marcaAuditoria === 'function') ? window.NexusWebMCP.marcaAuditoria() : '';
+  if (marcaAgente) {
+    detalhes = typeof detalhes === 'string' ? marcaAgente + detalhes : Object.assign({}, detalhes, { origem_agente: window.NexusWebMCP.origemAtual() });
+  }
   const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null) || {};
   const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -34,6 +39,10 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
   else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
   else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
   else if (entUpper.startsWith('VIS') || entUpper.includes('VISITANTE')) entidadeTipo = 'VISITANTE';
+  // Auditoria das emergências (botão de pânico). O valor EMERGENCIA vive no
+  // tipo tipo_entidade_enum; se o banco ainda não o tiver, o insert é recusado
+  // com 22P02 — por isso o erro é tratado logo abaixo.
+  else if (entUpper.includes('EMERGENCIA')) entidadeTipo = 'EMERGENCIA';
 
   const validCargos = [
     'ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 
@@ -59,10 +68,25 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
       };
       if (funcId) payload.funcionario_id = funcId;
 
-      const { error } = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+      let { error } = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
       if (error && payload.funcionario_id) {
+        // funcionario_id pode não existir em public.funcionarios (sessão
+        // antiga): repete sem a FK, mantendo o restante da linha.
         delete payload.funcionario_id;
-        await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+        const retentativa = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
+        error = retentativa && retentativa.error;
+      }
+      if (error) {
+        // Recusa do banco (ex.: 22P02 — valor 'EMERGENCIA' ausente no enum
+        // tipo_entidade_enum): o insert devolvia erro e ninguém o lia, então
+        // a auditoria se perdia em silêncio. Agora fica no console uma única
+        // vez, apontando o arquivo .sql que cria o valor.
+        const utils = window.NexusSupabaseUtils;
+        if (utils && typeof utils.registrarEnumDesconhecido === 'function') {
+          utils.registrarEnumDesconhecido(error);
+        } else {
+          console.warn('[NexusPort] Auditoria não gravada em logs_alteracoes:', error.message || error);
+        }
       }
     } catch (err) {
       console.warn('[NexusPort] Erro ao invocar log Supabase:', err);
@@ -90,6 +114,9 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
 };
 
 window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
+  // Decisões tomadas via agente de IA (WebMCP) ficam marcadas na trilha imutável.
+  const marcaAgente = (window.NexusWebMCP && typeof window.NexusWebMCP.marcaAuditoria === 'function') ? window.NexusWebMCP.marcaAuditoria() : '';
+  if (marcaAgente) motivo = marcaAgente + (motivo || 'Decisão registrada pelo agente');
   const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null) || {};
   const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -296,6 +323,63 @@ document.addEventListener('DOMContentLoaded', () => {
   // Relatórios e Gráficos (Backlog 3 — dedup de gráficos). O Dashboard mantém
   // os cards de indicadores operacionais e apenas aponta para a página de
   // gráficos, evitando renderizar dois pipelines de Chart.js por parada.
+
+  // Painel de gráficos (Chart.js) adaptado ao cargo do usuário autenticado
+  if (window.NexusCharts && typeof window.NexusCharts.initDashboard === 'function') {
+    window.NexusCharts.initDashboard();
+
+    // Botão "Atualizar": reconsulta o SERVIDOR (ignora o cache em memória) e
+    // informa o resultado. Sem esse retorno visual o operador não tinha como
+    // saber se o clique trouxe dado novo ou apenas redesenhou o mesmo gráfico.
+    const chartsRefreshBtn = document.getElementById('chartsRefreshBtn');
+    if (chartsRefreshBtn) {
+      const chartsSyncStatus = document.getElementById('chartsSyncStatus');
+      const chartsRefreshIcon = chartsRefreshBtn.querySelector('.material-symbols-outlined');
+
+      const informarSincronia = (texto) => {
+        if (!chartsSyncStatus) return;
+        chartsSyncStatus.textContent = texto;
+        chartsSyncStatus.setAttribute('title', texto);
+      };
+
+      const horaDe = (iso) => {
+        const data = iso ? new Date(iso) : new Date();
+        return isNaN(data.getTime()) ? '--:--:--' : data.toLocaleTimeString('pt-BR');
+      };
+
+      chartsRefreshBtn.addEventListener('click', async () => {
+        if (chartsRefreshBtn.disabled) return; // evita cliques concorrentes
+        chartsRefreshBtn.disabled = true;
+        chartsRefreshBtn.setAttribute('aria-busy', 'true');
+        if (chartsRefreshIcon) chartsRefreshIcon.classList.add('animate-spin');
+        informarSincronia('Consultando o servidor...');
+
+        try {
+          const resultado = (await window.NexusCharts.atualizar()) || {};
+          const hora = horaDe(resultado.atualizadoEm);
+
+          if (!resultado.ok && resultado.motivo === 'chartjs-indisponivel') {
+            informarSincronia('Chart.js indisponível — não foi possível redesenhar os gráficos.');
+          } else if (!resultado.ok) {
+            informarSincronia('Não foi possível atualizar os gráficos agora.');
+          } else if (resultado.origem === 'supabase') {
+            informarSincronia(`Dados do servidor recebidos às ${hora}.`);
+          } else if (resultado.origem === 'misto') {
+            informarSincronia(`Atualizado parcialmente do servidor às ${hora} — fontes sem resposta usaram o cache local.`);
+          } else {
+            informarSincronia(`Servidor indisponível — gráficos exibidos a partir do cache local (${hora}).`);
+          }
+        } catch (erro) {
+          console.warn('[NexusPort] Falha ao atualizar os gráficos:', erro);
+          informarSincronia('Falha ao atualizar os gráficos — os dados anteriores foram mantidos.');
+        } finally {
+          chartsRefreshBtn.disabled = false;
+          chartsRefreshBtn.removeAttribute('aria-busy');
+          if (chartsRefreshIcon) chartsRefreshIcon.classList.remove('animate-spin');
+        }
+      });
+    }
+  }
 
   // Renderiza Planilha Consolidada de Desempenho Operacional por Categoria (A3 / Item 1.5)
   async function renderIndicadoresExecutivosTable() {

@@ -15,6 +15,16 @@
  * erro vermelho no console e a sensação de sistema quebrado. Aqui a tabela é
  * marcada como indisponível, a aplicação continua operando com o cache local e
  * a mensagem aponta EXATAMENTE qual migração SQL deve ser aplicada.
+ *
+ * Segundo caso real atendido (Supabase > Logs Explorer > postgres_logs):
+ *   ERROR  22P02  invalid input value for enum tipo_entidade_enum: "EMERGENCIA"
+ *   parsed.query: WITH pgrst_source AS (INSERT INTO "public"."logs_alteracoes" ...
+ * Era a auditoria do botão de pânico: o valor do enum não existia no banco, o
+ * insert era recusado e o erro não aparecia na aplicação (o resultado do
+ * insert era descartado). Aqui o erro é classificado
+ * (`isEnumDesconhecidoError`), avisado uma única vez com o arquivo .sql que o
+ * cria (`registrarEnumDesconhecido`) e verificável pelo painel de manutenção
+ * (`verificarEnumAuditoria`, sonda read-only).
  */
 (function () {
   const config = window.NEXUS_CONFIG || {};
@@ -79,13 +89,65 @@
   const MIGRACOES_CONHECIDAS = {
     bercos: 'SPECs/migrations/001_create_bercos.sql',
     emergencias: 'supabase/migrations/20261008000000_emergencias_fix_404.sql',
-    panic_webhook_config: 'supabase/migrations/20261008000000_emergencias_fix_404.sql'
+    panic_webhook_config: 'supabase/migrations/20261008000000_emergencias_fix_404.sql',
+    // Auditoria (seção 8 do schema completo — não há migração incremental):
+    logs_alteracoes: 'SPECs/schema.sql',
+    trail_decisoes: 'SPECs/schema.sql'
   };
 
   const COMO_APLICAR =
     'Aplique a migração no painel do Supabase (SQL Editor > New query > colar > Run) ' +
     'ou pela CLI (supabase link --project-ref <ref> && supabase db push). ' +
     'Se o erro PGRST205 persistir por alguns segundos, use Settings > API > Restart server.';
+
+  // ------------------------------------------------------------------
+  // Valores de enum que a aplicação grava — e a migração que os cria.
+  //
+  // Caso real atendido aqui (Logs Explorer do Supabase, service_name
+  // "postgres_logs", sql_state_code "22P02"):
+  //
+  //   POST /rest/v1/logs_alteracoes   { "entidade_tipo": "EMERGENCIA", ... }
+  //   -> ERROR  22P02  invalid input value for enum
+  //            tipo_entidade_enum: "EMERGENCIA"
+  //
+  // O banco não tinha o valor no tipo (schema aplicado antes da seção 15 do
+  // SPECs/schema.sql). O insert da auditoria era disparado com o resultado
+  // DESCARTADO, então o erro existia só nos logs do Postgres: a auditoria da
+  // emergência se perdia em silêncio e a tela não avisava nada.
+  // ------------------------------------------------------------------
+  const ENUMS_CONHECIDOS = {
+    tipo_entidade_enum: {
+      valores: {
+        EMERGENCIA: 'supabase/migrations/20261008010000_enum_emergencia_auditoria.sql'
+      }
+    }
+  };
+
+  // Sonda do valor de enum usado pela auditoria do botão de pânico.
+  const ENUM_AUDITORIA = {
+    tabela: 'logs_alteracoes',
+    coluna: 'entidade_tipo',
+    tipo: 'tipo_entidade_enum',
+    valor: 'EMERGENCIA'
+  };
+
+  function migracaoDoValorEnum(tipo, valor) {
+    const mapa = ENUMS_CONHECIDOS[tipo];
+    return (mapa && mapa.valores && mapa.valores[valor]) || null;
+  }
+
+  function descricaoEnum(info) {
+    const migracao = info.migracao ? `Aplique ${info.migracao}. ` : '';
+    return (
+      `O valor '${info.valor}' não existe no enum '${info.tipo}' deste banco ` +
+      `(erro PostgreSQL ${info.code} — HTTP 400 no PostgREST). ` +
+      `Gravações que usam esse valor são recusadas pelo banco; nenhuma linha é perdida ou fica pela metade. ` +
+      migracao + COMO_APLICAR
+    );
+  }
+
+  // Valores já avisados nesta sessão: um aviso por tipo/valor, não um por clique.
+  const enumsAusentes = new Set();
 
   // Tabelas já identificadas como ausentes nesta sessão: evita repetir
   // requisições condenadas ao 404 e repetir o aviso no console.
@@ -264,6 +326,141 @@
         corrigido: JSON.stringify(payload) !== JSON.stringify(original),
         motivo: motivo
       };
+    },
+
+    /**
+     * Extrai `{ tipo, valor }` de um erro de enum do PostgreSQL/PostgREST.
+     *
+     * Aceita o objeto de erro do supabase-js v2 ({ code, message }), o corpo
+     * devolvido pelo PostgREST ({ code: '22P02', message: 'invalid input value
+     * for enum ...' }) e o próprio registro de log do Postgres
+     * (event_message/error_severity). Devolve null quando não é esse erro.
+     *
+     * @returns {{tipo: string, valor: string, migracao: string|null, code: string}|null}
+     */
+    enumDesconhecido: function (error) {
+      if (!error) return null;
+      const mensagem = String(
+        error.message || error.event_message || error.error_description || error.details || ''
+      );
+      const casado = /invalid input value for enum\s+"?([A-Za-z0-9_."]+)"?\s*:\s*"([^"]+)"/i.exec(mensagem);
+      if (!casado) return null;
+      const tipo = String(casado[1]).replace(/"/g, '').split('.').pop();
+      const valor = casado[2];
+      return {
+        // 22P02 = invalid_text_representation; o PostgREST responde HTTP 400.
+        code: String(error.code || error.sql_state_code || '22P02'),
+        tipo: tipo,
+        valor: valor,
+        migracao: migracaoDoValorEnum(tipo, valor)
+      };
+    },
+
+    /** true quando o erro é "valor inexistente no enum" (ex.: EMERGENCIA). */
+    isEnumDesconhecidoError: function (error) {
+      return this.enumDesconhecido(error) !== null;
+    },
+
+    /**
+     * Registra o erro de enum no console UMA única vez por tipo/valor e
+     * devolve o detalhe (ou null). Espelha `registrarErroTabela`, que já faz o
+     * mesmo para tabela ausente (PGRST205).
+     */
+    registrarEnumDesconhecido: function (error) {
+      const info = this.enumDesconhecido(error);
+      if (!info) {
+        if (error) console.warn('[NexusPort] Erro de escrita no banco:', error.message || error);
+        return null;
+      }
+      const chave = `${info.tipo}:${info.valor}`;
+      if (!enumsAusentes.has(chave)) {
+        enumsAusentes.add(chave);
+        console.warn(`[NexusPort] ${descricaoEnum(info)}`);
+      }
+      return info;
+    },
+
+    /** Indica se um valor de enum já foi identificado como ausente nesta sessão */
+    enumIndisponivel: function (tipo, valor) {
+      return enumsAusentes.has(`${tipo}:${valor}`);
+    },
+
+    /** Aviso textual padronizado sobre um valor de enum ausente (UI/diagnóstico) */
+    avisoEnum: function (error) {
+      const info = this.enumDesconhecido(error);
+      return info ? descricaoEnum(info) : null;
+    },
+
+    /**
+     * Sonda READ-ONLY do valor de enum usado pela auditoria do pânico.
+     *
+     * Filtra `logs_alteracoes.entidade_tipo = 'EMERGENCIA'` com `limit(0)`.
+     * O PostgREST envia o valor como literal do tipo da coluna e é o próprio
+     * PostgreSQL que responde `22P02` quando o valor não existe — o MESMO erro
+     * que derruba o insert da auditoria, porém sem escrever nada (é o teste que
+     * faltava no painel de manutenção).
+     *
+     * @returns {Promise<{tabela, coluna, tipo, valor, disponivel: boolean,
+     *                    erro: Object|null, aviso: string|null, migracao: string|null}>}
+     */
+    verificarEnumAuditoria: function () {
+      const self = this;
+      const alvo = ENUM_AUDITORIA;
+      const migracao = migracaoDoValorEnum(alvo.tipo, alvo.valor);
+      const base = {
+        tabela: alvo.tabela,
+        coluna: alvo.coluna,
+        tipo: alvo.tipo,
+        valor: alvo.valor,
+        migracao: migracao
+      };
+      const sb = window.nexusSupabase;
+
+      if (!sb) {
+        return Promise.resolve(Object.assign({}, base, {
+          disponivel: false,
+          erro: null,
+          aviso: 'Supabase não configurado (js/config.js ausente ou sem credenciais). Auditoria em modo local.'
+        }));
+      }
+
+      return sb
+        .from(alvo.tabela)
+        .select(alvo.coluna)
+        .eq(alvo.coluna, alvo.valor)
+        .limit(0)
+        .then(function (res) {
+          const error = res && res.error;
+          if (!error) {
+            enumsAusentes.delete(`${alvo.tipo}:${alvo.valor}`);
+            return Object.assign({}, base, { disponivel: true, erro: null, aviso: null });
+          }
+          if (self.isEnumDesconhecidoError(error)) {
+            self.registrarEnumDesconhecido(error);
+            return Object.assign({}, base, {
+              disponivel: false,
+              erro: error,
+              aviso: descricaoEnum(self.enumDesconhecido(error))
+            });
+          }
+          // Tabela ausente (PGRST205) ou qualquer outro erro: reporta a
+          // pendência sem afirmar que o enum está errado.
+          self.registrarErroTabela(alvo.tabela, error);
+          return Object.assign({}, base, {
+            disponivel: false,
+            erro: error,
+            aviso: `Não foi possível verificar '${alvo.coluna}' em 'public.${alvo.tabela}': ` +
+              `${(error && error.message) || error}`
+          });
+        })
+        .catch(function (e) {
+          return Object.assign({}, base, {
+            disponivel: false,
+            erro: e,
+            aviso: `Falha de rede ao verificar o enum em 'public.${alvo.tabela}': ` +
+              `${e && e.message ? e.message : e}`
+          });
+        });
     },
 
     /** Cliente pronto para uso em uma tabela específica (ou null) */
