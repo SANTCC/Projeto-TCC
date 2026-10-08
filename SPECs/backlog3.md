@@ -37,6 +37,9 @@ Adicionar histórico de mudanças, novos cargas, novos navios, tudo pra fazer is
 ## Nº de usuários on-line no momento
 Número de usuários ativos naquele momento, atualizado a cada 30 segundos.
 
+## Cookie para rastrear cada dispositivo no Google Analytics
+Cookie para rastrear ações de um mesmo dispositivo usando Cookies, de forma que cuja implementação seja funcional e prática, e que o próprio Google Analytics reconheca nativamente. (sem truques)
+
 ## Atualização em tempo real das tabelas e indicadores
 Corrigir os dados exibidos pelas tabelas e indicadores do sistema quando ocorre uma alteração no Supabase, garantindo que todos os painéis sejam atualizados em tempo real e não apresentem dados antigos ou incorretos.
 
