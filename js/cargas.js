@@ -505,7 +505,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const dispVol = Math.max(0, 75 - volCargasNoCont);
       const statusText = cont.estado !== 'OPERANTE' ? ` [INDISPONÍVEL: ${cont.estado}]` : '';
-      const containerUuid = cont.rawDbId || cont.id;
+      // Contêineres só locais não têm id: a identificação serve de valor (a confirmação resolve o id no Supabase).
+      const containerUuid = cont.rawDbId || cont.id || cont.identificacao;
       vincularContainerSelect.innerHTML += `
         <option value="${esc(containerUuid)}" data-identificacao="${esc(cont.identificacao)}" data-disp="${esc(dispVol)}" data-estado="${esc(cont.estado)}" ${dispVol <= 0 ? 'disabled' : ''}>
           ${esc(cont.identificacao)} (${esc(cont.tipo)}) - Disp: ${esc(dispVol.toFixed(1))} m³ / 75.0 m³${esc(statusText)}
@@ -662,7 +663,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Executa Ações Operacionais
-  window.executarAcaoCarga = async function(idCarga, acao) {
+  // opcoes (uso do agente WebMCP; a interface não envia): { guindasteIdentificacao?, motivo? } evitam os diálogos.
+  window.executarAcaoCarga = async function(idCarga, acao, opcoes) {
+    const op = opcoes || {};
     const carga = cargasFluxoList.find(c => c.id === idCarga);
     if (!carga) return;
 
@@ -700,7 +703,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const gndOptionsText = guindastes.map((g, idx) => `${idx + 1} - ${g.identificacao} (${g.estado})`).join('\n');
-      const selecaoGnd = await window.nexusPrompt('Movimentar para Sala de Contêiner', `Selecione o Guindaste que será usado para movimentar a carga ${idCarga} até a Sala de Contêiner:\n${gndOptionsText}`);
+      let selecaoGnd;
+      if (op.guindasteIdentificacao !== undefined) {
+        const idxGnd = guindastes.findIndex((g) => g.identificacao === op.guindasteIdentificacao);
+        selecaoGnd = idxGnd >= 0 ? String(idxGnd + 1) : '';
+      } else {
+        selecaoGnd = await window.nexusPrompt('Movimentar para Sala de Contêiner', `Selecione o Guindaste que será usado para movimentar a carga ${idCarga} até a Sala de Contêiner:\n${gndOptionsText}`);
+      }
 
       if (!selecaoGnd) return;
 
@@ -734,7 +743,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Movimentação Solicitada', `Carga ${idCarga} associada ao Guindaste ${gndSelecionado.identificacao} com destino à Sala de Contêiner. Tarefa criada em Embarcações & GPS.`);
       }
-      window.dispatchEvent(new CustomEvent('nexus_data_changed'));
     } else if (acao === 'RECEBER') {
       if (!isConferenteRole) {
         if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Conferentes de Carga podem registrar o recebimento físico!');
@@ -814,7 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const motivo = await window.nexusPrompt('Cancelar Carga', 'Informe obrigatoriamente o MOTIVO do cancelamento:');
+      const motivo = op.motivo !== undefined ? op.motivo : await window.nexusPrompt('Cancelar Carga', 'Informe obrigatoriamente o MOTIVO do cancelamento:');
       if (motivo) {
         // C9: Carga cancelada sai da tabela principal, desocupa contêiner e navio e retorna ao berço
         carga.status = 'CANCELADA';

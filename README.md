@@ -69,6 +69,7 @@ npm run test:refresh  # botão "Atualizar" dos gráficos: dado novo vem do servi
 npm run test:bercos   # vínculo navio × berço: constraints de public.bercos (jsdom)
 npm run test:net-debug # depuração de conexões no console (Node, sem dependências)
 npm run test:backlog3 # correções do backlog3: login, layout, scanner e travas operacionais (jsdom)
+npm run test:webmcp   # agentes de IA (WebMCP): núcleo, polyfill, painel e páginas reais (jsdom)
 ```
 
 ---
@@ -393,6 +394,47 @@ feedback do pânico avisa na hora se a auditoria não gravou.
 | Regressão do `22P02` no front-end (jsdom: pânico com auditoria pendente → migração aplicada) | `npm run test:enum` |
 
 Diagnóstico completo: `SPECs/diagnostico/22P02-enum-emergencia.md`.
+
+---
+
+## 🤖 Agentes de IA (WebMCP)
+
+O NexusPort expõe **ferramentas para agentes de IA do navegador** (WebMCP, `document.modelContext`). Um agente pode consultar cargas, navios, indicadores e pedir ações. **Toda ação que altera dados exige a confirmação do operador** em um diálogo da própria tela, e a camada inteira pode ser desligada pelo painel.
+
+### Como usar
+- Em qualquer tela autenticada, clique em **Agentes IA** (canto inferior direito).
+- No painel: veja as ferramentas desta página (com o motivo de cada bloqueio), a atividade recente e a chave **"Permitir que agentes usem as ferramentas deste navegador"**. Desligar remove todas as ferramentas.
+- Quando um agente pede uma ação, o diálogo mostra o impacto. O botão **Confirmar** só fica ativo após 1,5 s, e **Cancelar**, a tecla Esc ou o prazo de 60 s recusam a ação.
+
+### Modos de API
+| Situação | Modo |
+|---|---|
+| Navegador com `document.modelContext` | nativo |
+| Navegador com `navigator.modelContext` (versão preliminar) | legado (adaptador) |
+| HTTPS sem API nativa | polyfill do projeto (sem dependências) |
+| HTTP fora de `localhost` | indisponível (contexto inseguro) |
+
+### Garantias de segurança
+- **Mínimo privilégio:** cada ferramenta existe só para o cargo que pode executar a ação na tela (mesma regra de `js/auth-guard.js`) e é verificada de novo na execução.
+- **Confirmação humana:** ações que alteram dados pedem confirmação; sem o diálogo, a ação é negada.
+- **Entradas e saídas:** argumentos validados por esquema estrito; saídas higienizadas (sem código de acesso, token ou CPF) e limitadas em tamanho.
+- **Dados pessoais fora do agente:** CPF, documento de visitante e data de nascimento não são parâmetros; o operador completa esses campos e envia os formulários.
+- **Auditoria:** trilha de decisões e logs são somente leitura para agentes; ações feitas por agente recebem a marca `[Agente WebMCP: <ferramenta>]`.
+- **Controles operacionais:** limites de taxa, bloqueio das ações de pátio durante emergência (leituras continuam), tempo limite e nenhuma telemetria externa.
+
+### Arquivos
+- `js/webmcp-core.js` (núcleo), `js/webmcp-ui.js` (diálogo e painel), `js/webmcp-dados.js` (leitores), `js/webmcp-global.js` (ferramentas globais), `js/webmcp-<página>.js` (adaptadores de cada tela).
+
+### Testar
+- `npm run test:webmcp` (jsdom, sem rede).
+- No navegador, use `chrome://flags/#enable-webmcp-testing` e o *Model Context Tool Inspector*.
+
+### Limitações
+- Não há transporte MCP ativo nem `sampling`.
+- A API nativa do Chrome depende de versão ou origin trial; o polyfill cobre os demais casos.
+- Um agente que executa JavaScript dentro da própria página não é contido por controles da página; a barreira definitiva é a confirmação do navegador/host. Detalhes em `SPECs/webmcp.md` (seções 5 e 11).
+
+Documentação completa (fontes, arquitetura, catálogo de ferramentas, matriz de conformidade e achados): **`SPECs/webmcp.md`**.
 
 ---
 
