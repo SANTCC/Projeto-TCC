@@ -8,6 +8,7 @@
     "test": "python3 verify_phase4.py && python3 verify_phase5.py && python3 verify_phase6.py && python3 verify_phase7.py && python3 verify_phase8.py && python3 verify_phase9.py",
     "test:graficos": "node tests/test_graficos_por_cargo.js",
     "test:refresh": "node tests/test_charts_refresh.js",
+    "test:autorefresh": "node tests/test_charts_autorefresh.js",
     "test:bercos": "node tests/test_bercos_vinculo.js",
     "test:xss": "node tests/xss.test.js",
     "scan:xss": "node tools/xss-scan.js",
