@@ -172,10 +172,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const isSupervisor = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
       const isEstivador = ['ESTIVADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
 
+      const cargaEmTransito = c.status === 'EM_TRANSITO';
+      const emergenciaAtiva = typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva();
+
       let actionButtonsHtml = '';
 
       if (isEstivador) {
-        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
+        if (cargaEmTransito) {
+          // Carga em trânsito não pode ser movimentada pelo sistema
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
+        } else if (emergenciaAtiva) {
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
+        } else {
+          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">forklift</span><span>Movimentar</span></button>`;
+        }
       }
 
       if (c.status === 'AGENDAMENTO' && isConferente) {
@@ -196,7 +206,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (c.status === 'PRONTA_PARA_ENTREGA' && isSupervisor) {
-        actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'LIBERAR')" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">local_shipping</span><span>Liberar</span></button>`;
+        if (emergenciaAtiva) {
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: liberação de saída bloqueada temporariamente" class="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[14px]">local_shipping</span><span>Liberar</span></button>`;
+        } else {
+          actionButtonsHtml += `<button type="button" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'LIBERAR')" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">local_shipping</span><span>Liberar</span></button>`;
+        }
       }
 
       // C10: Botão manual de "Entregar" REMOVIDO — a entrega ocorre automaticamente quando o navio chega ao destino
@@ -218,7 +232,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 whitespace-nowrap">${esc(c.tipo)} <span class="block text-[10px] text-slate-400">${esc(c.natureza || '')}</span></td>
           <td class="p-3 font-mono whitespace-nowrap">${esc(c.peso)} / ${esc(c.volume)}</td>
           <td class="p-3 font-bold whitespace-nowrap">${esc(c.portoDescarga)}</td>
-          <td class="p-3 font-mono text-xs whitespace-nowrap">${esc(c.container || 'Não vinculado')} / ${esc(c.navio || 'Não vinculado')}</td>
+          <td class="p-3 text-xs whitespace-nowrap">
+            <span class="block font-mono ${c.container ? '' : 'text-slate-400 italic'}">${c.container ? esc(c.container) : 'Contêiner: não vinculado'}</span>
+            <span class="block text-[10px] ${c.navio ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
+          </td>
           <td class="p-3 whitespace-nowrap">
             <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
               c.status === 'AGENDAMENTO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
@@ -655,6 +672,22 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Regra de negócio: carga em trânsito não pode ser movimentada pelo sistema
+      if (carga.status === 'EM_TRANSITO') {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Movimentação Bloqueada', `A carga ${idCarga} está EM TRÂNSITO e não pode ser movimentada. A movimentação volta a ser permitida somente após a entrega no porto de destino.`);
+        }
+        return;
+      }
+
+      // Item 6 (backlog): operações do pátio bloqueadas enquanto o alarme de emergência estiver ativo
+      if (typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva()) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Emergência Ativa', 'Operações do pátio bloqueadas temporariamente enquanto o alarme de emergência estiver ativo.');
+        }
+        return;
+      }
+
       // Validacao de ocupacao de berço e concorrência: bercoAlvo.estado === 'OCUPADO' && bercoAlvo.carga_id !== idCarga
       // Seleção do Guindaste para movimentar a carga até a Sala de Contêiner
       let guindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
@@ -748,6 +781,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // C4, A6, A7: Modal centralizado de vinculação com trava de capacidade max 75 m³
       window.abrirModalVinculacao(idCarga);
     } else if (acao === 'LIBERAR') {
+      // Item 6 (backlog): nenhuma liberação de saída com o alarme de emergência ativo
+      if (typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva()) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Emergência Ativa', 'Operações do pátio bloqueadas temporariamente enquanto o alarme de emergência estiver ativo.');
+        }
+        return;
+      }
+
       // C17 & Regra A6: Carga não pode sair do porto ou ir para trânsito sem vincular a contêiner e navio
       if (!carga.container || !carga.navio) {
         if (window.mostrarFeedback) {

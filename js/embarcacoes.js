@@ -258,6 +258,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   carregarBercosSupabase();
 
+  // Rótulos amigáveis para as localizações técnicas da embarcação (RN 12)
+  const LOCALIZACAO_NAVIO = {
+    DENTRO_DO_PORTO: { txt: 'No porto', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' },
+    FORA_DO_PORTO: { txt: 'Em trânsito', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' },
+    NO_PORTO_DE_DESTINO: { txt: 'Chegou ao destino', cls: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' }
+  };
+
+  function localizacaoInfo(localizacao) {
+    return LOCALIZACAO_NAVIO[localizacao] || { txt: localizacao || 'Indefinida', cls: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' };
+  }
+
+  // Etiqueta da coluna Localização (nome amigável + situação técnica no title)
+  function localizacaoBadgeHtml(localizacao) {
+    return `
+      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+        localizacao === 'DENTRO_DO_PORTO' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+        localizacao === 'FORA_DO_PORTO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
+        localizacao === 'NO_PORTO_DE_DESTINO' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' :
+        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+      }" title="${esc(`Situação técnica: ${localizacao || 'Indefinida'}`)}">${esc(localizacaoInfo(localizacao).txt)}</span>`;
+  }
+
   // Cálculo de ETA a 33 km/h
   function calcularETA(distanciaKm) {
     if (!distanciaKm || distanciaKm <= 0) return 'Atracado / Viagem Concluída';
@@ -405,25 +427,47 @@ document.addEventListener('DOMContentLoaded', () => {
       // RN 3: Liberação de saída de navios é competência do Supervisor de Operações e Direção
       const podeLiberarNavio = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
 
-      let acoesHtml = '<div class="flex items-center justify-end gap-1.5 font-mono text-[11px] flex-wrap">';
+      const emergenciaAtiva = typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva();
+
+      let acoesHtml = '<div class="flex items-center justify-end gap-1.5 text-[11px] flex-wrap">';
 
       // Botão Vincular a Berço (Tarefa 6)
       acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
 
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
-          acoesHtml += `<button type="button" onclick="window.liberarNavioPeloDiretor(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Liberar Saída</button>`;
+          if (emergenciaAtiva) {
+            acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed opacity-70" title="Emergência ativa: operações do pátio bloqueadas temporariamente">Liberar Saída</button>`;
+          } else {
+            acoesHtml += `<button type="button" onclick="window.liberarNavioPeloDiretor(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Liberar Saída</button>`;
+          }
         } else if (n.localizacao === 'NO_PORTO_DE_DESTINO') {
-          acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Autorizar Retorno</button>`;
+          if (emergenciaAtiva) {
+            acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed opacity-70" title="Emergência ativa: operações do pátio bloqueadas temporariamente">Autorizar Retorno</button>`;
+          } else {
+            acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Autorizar Retorno</button>`;
+          }
         } else if (n.localizacao === 'FORA_DO_PORTO') {
-          acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-slate-400 text-white font-bold cursor-not-allowed" title="Navio precisa chegar ao porto de destino antes de autorizar retorno">Autorizar Retorno</button>`;
+          // Botão realmente desabilitado: o navio precisa chegar ao porto de destino
+          acoesHtml += `<button type="button" disabled aria-disabled="true"
+            class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed opacity-70"
+            title="O navio precisa chegar ao porto de destino antes de autorizar o retorno">Autorizar Retorno</button>`;
         }
       }
 
-      // Botão Excluir Navio (Tarefa 6)
-      acoesHtml += `<button type="button" onclick="window.excluirNavio(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>`;
+      // Botão Excluir Navio (Tarefa 6) — ação secundária, separada por divisor
+      acoesHtml += `<span class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1"></span>
+        <button type="button"
+          title="Excluir navio"
+          aria-label="Excluir navio ${esc(n.nome)}"
+          onclick="window.excluirNavio(${jsArg(n.imo)})"
+          class="p-1.5 rounded bg-red-50 hover:bg-red-600 text-red-600 hover:text-white focus-visible:ring-2 focus-visible:ring-nexus-500 focus-visible:outline-none transition-colors">
+          <span class="material-symbols-outlined text-[16px]">delete</span>
+        </button>`;
 
       acoesHtml += '</div>';
+
+      const localizacaoHtml = localizacaoBadgeHtml(n.localizacao);
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -433,13 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td class="p-3 font-mono text-xs">${bercosInfoHtml}</td>
           <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(n.gps)}</td>
-          <td class="p-3">
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-              n.localizacao === 'DENTRO_DO_PORTO' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
-              n.localizacao === 'FORA_DO_PORTO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' :
-              'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
-            }">${esc(n.localizacao)}</span>
-          </td>
+          <td class="p-3">${localizacaoHtml}</td>
           <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino)}</strong></td>
           <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}</td>
           <td class="p-3 font-mono text-xs font-bold ${n.localizacao === 'NO_PORTO_DE_DESTINO' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${esc(tempoForaText)}</td>
@@ -551,6 +589,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
+
+    // Trava de regra de negócio: só libera a saída de navio que está no porto
+    if (navio.localizacao !== 'DENTRO_DO_PORTO') {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Liberação Não Permitida', `O navio ${navio.nome} não está no Porto de Santos (situação atual: ${localizacaoInfo(navio.localizacao).txt}). Apenas embarcações atracadas no porto podem ter a saída liberada.`);
+      }
+      return;
+    }
+
+    // Item 6 (backlog): operações do pátio bloqueadas com o alarme de emergência ativo
+    if (typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva()) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Emergência Ativa', 'Operações do pátio bloqueadas temporariamente enquanto o alarme de emergência estiver ativo.');
+      }
+      return;
+    }
 
     // RN 9: Bloqueia saída se NÃO houver rota cadastrada entre a origem e o destino do navio
     const origBusca = (navio.origem || 'Porto de Santos').trim().toLowerCase();
@@ -668,6 +722,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
+
+    // Trava de regra de negócio: o navio precisa ter chegado ao porto de destino
+    if (navio.localizacao !== 'NO_PORTO_DE_DESTINO') {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Retorno Não Permitido', `O navio ${navio.nome} ainda não chegou ao porto de destino (situação atual: ${localizacaoInfo(navio.localizacao).txt}). O retorno só pode ser autorizado após a chegada ao destino.`);
+      }
+      return;
+    }
+
+    // Item 6 (backlog): operações do pátio bloqueadas com o alarme de emergência ativo
+    if (typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva()) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Emergência Ativa', 'Operações do pátio bloqueadas temporariamente enquanto o alarme de emergência estiver ativo.');
+      }
+      return;
+    }
 
     const confirmou = window.nexusConfirm ? await window.nexusConfirm('Autorizar Retorno de Embarcação', `Autorizar o retorno da embarcação ${navio.nome} ao Porto de Origem (${navio.origem})?`) : true;
 
