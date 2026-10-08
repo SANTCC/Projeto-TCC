@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
             id: n.id,
             nome: n.nome,
             imo: n.numero_imo || n.imo,
+            localizacao: n.localizacao || 'DENTRO_DO_PORTO',
             data_construcao: n.data_registro_sistema || '',
             data_ultima_manutencao_geral: ''
           }));
@@ -54,14 +55,27 @@ document.addEventListener('DOMContentLoaded', () => {
       try { navs = await window.NexusRepository.getNavios(); } catch (e) {}
     }
     naviosListLocal = navs;
+
+    // Regra de negócio: só é possível registrar/executar manutenção para navio
+    // que esteja atualmente DENTRO do Porto de Santos (RN 11 / backlog3).
+    const naviosNoPorto = navs.filter(n => !n.localizacao || n.localizacao === 'DENTRO_DO_PORTO');
+    const naviosBloqueados = navs.filter(n => n.localizacao && n.localizacao !== 'DENTRO_DO_PORTO');
+
     navioManutSelect.innerHTML = '<option value="">Selecione a Embarcação...</option>';
-    if (navs.length === 0) {
-      navioManutSelect.innerHTML = '<option value="" disabled>Nenhuma embarcação cadastrada no sistema</option>';
-      return;
+    if (naviosNoPorto.length === 0) {
+      navioManutSelect.innerHTML = navs.length === 0
+        ? '<option value="" disabled>Nenhuma embarcação cadastrada no sistema</option>'
+        : '<option value="" disabled>Nenhuma embarcação no Porto de Santos no momento</option>';
+    } else {
+      naviosNoPorto.forEach(n => {
+        navioManutSelect.innerHTML += `<option value="${esc(n.nome)}">${esc(n.nome)} (${esc(n.imo || n.id)})</option>`;
+      });
     }
-    navs.forEach(n => {
-      navioManutSelect.innerHTML += `<option value="${esc(n.nome)}">${esc(n.nome)} (${esc(n.imo || n.id)})</option>`;
-    });
+
+    if (naviosBloqueados.length > 0) {
+      navioManutSelect.setAttribute('title',
+        `Navios fora do Porto de Santos não podem receber manutenção: ${naviosBloqueados.map(n => n.nome).join(', ')}.`);
+    }
   }
 
   carregarNaviosParaManutencao();
@@ -83,6 +97,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const navio = naviosListLocal.find(n => n.nome === navioNome);
+
+      // Regra de negócio: manutenção bloqueada para navio fora do Porto de Santos
+      if (navio && navio.localizacao && navio.localizacao !== 'DENTRO_DO_PORTO') {
+        const situacao = navio.localizacao === 'FORA_DO_PORTO' ? 'em trânsito (fora do porto)' : 'no porto de destino';
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Manutenção Bloqueada', `O navio "${navioNome}" está ${situacao} e a manutenção só pode ser registrada com a embarcação atracada no Porto de Santos.`);
+        }
+        return;
+      }
 
       // Tarefa 9.3: Bloqueio de duplicidade de pedido de manutenção para o mesmo navio
       const osExistente = osList.find(o => o.equipamento.includes(navioNome) && o.status !== 'CONCLUIDA' && o.status !== 'REPROVADA');
@@ -379,6 +402,43 @@ document.addEventListener('DOMContentLoaded', () => {
     renderOsTable();
   }
 
+  // Rótulos legíveis (pt-BR) para os status e prioridades crus do banco (Item 3.1)
+  const STATUS_OS = {
+    PENDENTE_APROVACAO: { txt: 'Aguardando aprovação', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' },
+    EM_MANUTENCAO: { txt: 'Em manutenção', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' },
+    CONCLUIDA: { txt: 'Concluída', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' },
+    REPROVADA: { txt: 'Reprovada', cls: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' }
+  };
+
+  // Badges montados aqui (classes em ternário estático) — o valor exibido
+  // vem sempre de esc(), nunca interpolado cru.
+  const statusBadgeOs = (status) => `
+    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap ${
+      status === 'EM_MANUTENCAO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+      status === 'CONCLUIDA' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+      status === 'REPROVADA' ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' :
+      'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+    }">${esc((STATUS_OS[status] || {}).txt || status || 'Desconhecido')}</span>`;
+
+  const prioridadeBadgeOs = (prioridade) => `
+    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap ${
+      prioridade === 'ALTA' ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' :
+      prioridade === 'MEDIA' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+      prioridade === 'BAIXA' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+      'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+    }">${esc(prioridade || 'N/D')}</span>`;
+
+  // Datas padronizadas em dd/mm/aaaa (Item 8.8) sem sofrer deslocamento de fuso
+  function formatarDataOs(valor) {
+    if (!valor) return 'N/A';
+    const texto = String(valor).trim();
+    const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+    const data = new Date(texto);
+    return isNaN(data.getTime()) ? texto : data.toLocaleDateString('pt-BR');
+  }
+
+
   carregarOsSupabase();
 
   function renderOsTable() {
@@ -387,43 +447,40 @@ document.addEventListener('DOMContentLoaded', () => {
     if (osList.length === 0) {
       osTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="p-4 text-center text-slate-400 italic">Nenhuma ordem de serviço cadastrada no banco de dados.</td>
+          <td colspan="7" class="p-4 text-center text-slate-400 italic">
+            <span class="material-symbols-outlined text-[28px] block mb-1 text-slate-300 dark:text-slate-600">build_circle</span>
+            Nenhuma OS cadastrada. Use "+ Nova Ordem de Serviço" para abrir a primeira.
+          </td>
         </tr>
       `;
       return;
     }
 
-    osTableBody.innerHTML = osList.map(os => `
+    osTableBody.innerHTML = osList.map(os => {
+      const statusHtml = statusBadgeOs(os.status);
+      const prioridadeHtml = prioridadeBadgeOs(os.prioridade);
+
+      return `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <td class="p-3 font-mono font-bold text-nexus-500">${esc(os.id)}</td>
         <td class="p-3 font-bold">${esc(os.equipamento)}</td>
-        <td class="p-3">
-          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-            os.prioridade === 'ALTA' ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' :
-            os.prioridade === 'MEDIA' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
-            'bg-slate-100 text-slate-800'
-          }">${esc(os.prioridade)}</span>
-        </td>
+        <td class="p-3">${prioridadeHtml}</td>
         <td class="p-3 text-xs">${esc(os.descricao)}</td>
-        <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(os.data || 'N/A')}</td>
-        <td class="p-3 font-mono text-xs">
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-            os.status === 'EM_MANUTENCAO' ? 'bg-amber-100 text-amber-800' :
-            os.status === 'CONCLUIDA' ? 'bg-emerald-100 text-emerald-800' :
-            os.status === 'REPROVADA' ? 'bg-red-100 text-red-800' :
-            'bg-blue-100 text-blue-800'
-          }">${esc(os.status)}</span>
-        </td>
-        <td class="p-3 text-right font-mono text-[11px]">
+        <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(formatarDataOs(os.data))}</td>
+        <td class="p-3 text-xs">${statusHtml}</td>
+        <td class="p-3 text-right text-[11px]">
+          <div class="flex items-center justify-end gap-1.5 flex-wrap min-w-[150px]">
           ${os.status === 'PENDENTE_APROVACAO' ? `
-            <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'APROVAR')" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold mr-1">Aprovar</button>
-            <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'REPROVAR')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold">Reprovar</button>
+            <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'APROVAR')" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Aprovar</button>
+            <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'REPROVAR')" class="px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold">Reprovar</button>
           ` : os.status === 'EM_MANUTENCAO' ? `
-            <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'CONCLUIR')" class="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Concluir Manutenção</button>
+            <button type="button" title="Concluir manutenção" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'CONCLUIR')" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">task_alt</span><span>Concluir</span></button>
           ` : `<span class="text-slate-400 font-sans italic">Finalizada</span>`}
+          </div>
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
   }
 
   renderOsTable();
@@ -456,23 +513,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (osSelect) {
-      osSelect.innerHTML = '<option value="">Selecione o Equipamento / Ativo...</option>';
+      // Item 8.6: cada <optgroup> é montado de uma só vez. O padrão antigo
+      // (innerHTML += '<optgroup>' ... += '</optgroup>') fazia o navegador
+      // fechar o grupo automaticamente e as opções ficavam fora dele.
+      const optGroup = (label, opcoes) => {
+        if (!opcoes.length) return '';
+        const opcoesHtml = opcoes
+          .map(o => `<option value="${esc(o.valor)}">${esc(o.rotulo)}</option>`)
+          .join('');
+        return `<optgroup label="${esc(label)}">${opcoesHtml}</optgroup>`;
+      };
 
-      if (gnds.length > 0) {
-        osSelect.innerHTML += '<optgroup label="Guindastes & Pórticos">';
-        gnds.forEach(g => {
-          osSelect.innerHTML += `<option value="${esc('Guindaste ' + (g.identificacao || g.id))}">Guindaste ${esc(g.identificacao || g.id)}</option>`;
-        });
-        osSelect.innerHTML += '</optgroup>';
-      }
-
-      if (conts.length > 0) {
-        osSelect.innerHTML += '<optgroup label="Contêineres">';
-        conts.forEach(c => {
-          osSelect.innerHTML += `<option value="${esc('Contêiner ' + c.identificacao)}">Contêiner ${esc(c.identificacao)}</option>`;
-        });
-        osSelect.innerHTML += '</optgroup>';
-      }
+      osSelect.innerHTML =
+        '<option value="">Selecione o Equipamento / Ativo...</option>' +
+        optGroup('Guindastes & Pórticos', gnds.map(g => {
+          const identificacao = g.identificacao || g.id;
+          return { valor: `Guindaste ${identificacao}`, rotulo: `Guindaste ${identificacao}` };
+        })) +
+        optGroup('Contêineres', conts.map(c => ({
+          valor: `Contêiner ${c.identificacao}`,
+          rotulo: `Contêiner ${c.identificacao}`
+        })));
 
       // Tarefa 9.2: Opção de pedir manutenção de navios REMOVIDA de Ordens de Serviço (deixada apenas em Solicitação de Manutenção de Embarcações)
     }
@@ -487,9 +548,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (equipamentos.length > 0) {
-        alertaList.innerHTML = equipamentos.map((e, idx) => 
-          `<div class="py-1"><strong>${esc(idx + 1)}. [${esc(e.tipo)}] ${esc(e.identificacao)}:</strong> ${esc(e.motivo)}</div>`
-        ).join('');
+        // Item 3.2: cada equipamento em bloco próprio (tipo + identificação + motivo)
+        alertaList.innerHTML = equipamentos.map(e => `
+          <div class="flex items-start gap-2 py-1.5 border-b last:border-0 border-amber-200/60 dark:border-amber-900/40">
+            <span class="shrink-0 px-1.5 py-0.5 rounded bg-amber-200/70 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 text-[10px] font-bold uppercase">${esc(e.tipo)}</span>
+            <div class="min-w-0">
+              <strong class="block text-nexus-900 dark:text-white">${esc(e.identificacao)}</strong>
+              <span class="text-amber-800/90 dark:text-amber-300/90">${esc(e.motivo)}</span>
+            </div>
+          </div>`).join('');
       } else {
         alertaList.innerHTML = '<span class="text-slate-400 italic">Nenhum equipamento com ciclo de preventiva vencido (> 3 anos) no momento. Todos os ativos operam dentro do ciclo recomendado.</span>';
       }
@@ -667,8 +734,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Botão de Pânico — GLOBAL (js/panic-realtime.js → Edge Function "panic-alert"
   // → broadcast WebSocket para todos os clientes + webhook opcional)
+  // Reflete o estado da emergência no botão e no banner da página.
+  function aplicarEstadoEmergencia(ativa) {
+    if (emergencyBanner) emergencyBanner.classList.toggle('hidden', !ativa);
+    if (resetEmergencyBtn) resetEmergencyBtn.disabled = !ativa;
+    if (!panicBtn) return;
+    panicBtn.disabled = !!ativa;
+    panicBtn.setAttribute('aria-disabled', String(!!ativa));
+    panicBtn.classList.toggle('opacity-50', !!ativa);
+    panicBtn.classList.toggle('cursor-not-allowed', !!ativa);
+    const rotulo = panicBtn.querySelector('span:last-child');
+    if (rotulo) rotulo.textContent = ativa ? 'EMERGÊNCIA ATIVA' : 'BOTÃO DE PÂNICO';
+  }
+
+  function emergenciaJaAtiva() {
+    if (window.NexusPanic && typeof window.NexusPanic.isActive === 'function' && window.NexusPanic.isActive()) return true;
+    try { return localStorage.getItem('nexus_emergency_active') === 'true'; } catch (e) { return false; }
+  }
+
   if (panicBtn) {
     panicBtn.addEventListener('click', async () => {
+      // Trava: um alarme já ativo não pode ser acionado novamente (evita
+      // confirmações, novos registros e logs duplicados de emergência).
+      if (emergenciaJaAtiva()) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Emergência Já Ativa', 'O alarme de emergência já está ativo em todos os clientes conectados. Use o botão "Desativar Alarme" para normalizar as operações.');
+        }
+        return;
+      }
+
       if (window.NexusPanic) {
         // Fluxo global: confirmação, RBAC, Edge Function, broadcast e webhook
         // são tratados pelo módulo NexusPanic.triggerPanic().
@@ -676,7 +770,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (resultado && resultado.ok) {
           // Mantém estado local e banner da página sincronizados (EMERGENCIA_CRITICA_ATIVADA)
           localStorage.setItem('nexus_emergency_active', 'true');
-          if (emergencyBanner) emergencyBanner.classList.remove('hidden');
+          aplicarEstadoEmergencia(true);
         }
         return;
       }
@@ -685,7 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const confirmou = window.nexusConfirm ? await window.nexusConfirm('DECLARAÇÃO DE EMERGÊNCIA', 'ATENÇÃO: Deseja acionar o BOTÃO DE PÂNICO e declarar EMERGÊNCIA CRÍTICA no Terminal STS-01?') : true;
       if (confirmou) {
         localStorage.setItem('nexus_emergency_active', 'true');
-        if (emergencyBanner) emergencyBanner.classList.remove('hidden');
+        aplicarEstadoEmergencia(true);
 
         if (window.registrarLogAlteracao) {
           await window.registrarLogAlteracao('EDICAO', 'emergencia', null, { estado: 'EMERGENCIA_CRITICA_ATIVADA', acionado_por: session.nome || session.cargo });
@@ -704,7 +798,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const resultado = await window.NexusPanic.clearPanic({ confirmar: true });
         if (resultado && resultado.ok) {
           localStorage.removeItem('nexus_emergency_active');
-          if (emergencyBanner) emergencyBanner.classList.add('hidden');
+          aplicarEstadoEmergencia(false);
         }
         return;
       }
@@ -713,7 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const confirmou = window.nexusConfirm ? await window.nexusConfirm('Desativar Emergência', 'Confirmar desativação do alarme de emergência?') : true;
       if (confirmou) {
         localStorage.removeItem('nexus_emergency_active');
-        if (emergencyBanner) emergencyBanner.classList.add('hidden');
+        aplicarEstadoEmergencia(false);
 
         if (window.registrarLogAlteracao) {
           await window.registrarLogAlteracao('EDICAO', 'emergencia', null, { estado: 'EMERGENCIA_DESATIVADA', desativado_por: session.nome || session.cargo });
@@ -729,18 +823,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sincroniza o banner desta página com o estado GLOBAL do pânico
   // (eventos disparados por este ou por qualquer outro cliente conectado)
   window.addEventListener('nexus_panic_changed', (evt) => {
-    if (!emergencyBanner) return;
     const ativo = Boolean(evt && evt.detail && evt.detail.active);
-    if (ativo) emergencyBanner.classList.remove('hidden');
-    else emergencyBanner.classList.add('hidden');
+    aplicarEstadoEmergencia(ativo);
   });
 
-  if (localStorage.getItem('nexus_emergency_active') === 'true' && emergencyBanner) {
-    emergencyBanner.classList.remove('hidden');
-  }
-  if (window.NexusPanic && window.NexusPanic.isActive() && emergencyBanner) {
-    emergencyBanner.classList.remove('hidden');
-  }
+  // Estado inicial da página (recarregamentos e sincronização entre abas)
+  aplicarEstadoEmergencia(emergenciaJaAtiva());
+  window.addEventListener('storage', (evt) => {
+    if (evt.key === 'nexus_emergency_active') aplicarEstadoEmergencia(emergenciaJaAtiva());
+  });
 
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {
