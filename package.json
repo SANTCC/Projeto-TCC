@@ -25,7 +25,8 @@
     "test:webmcp": "node tests/test_webmcp.js && node tests/test_webmcp_paginas.js",
     "test:gravacao": "node tests/test_gravacao_inspecao_login.js",
     "test:single-flight": "node tests/test_single_flight.js",
-    "test:tempo-real": "node tests/test_tempo_real.js"
+    "test:tempo-real": "node tests/test_tempo_real.js",
+    "test:presenca": "node tests/test_presenca_online.js"
   },
   "keywords": [
     "nexusport",

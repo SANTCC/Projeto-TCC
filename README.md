@@ -128,6 +128,8 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 - **Implantação:** aplique a migração `supabase/migrations/20261009000000_realtime_publication.sql` (`supabase db push`). Sem ela, o canal conecta mas não recebe eventos, e as telas atualizam só pela sincronização de 60 s.
 - **Testes:** `npm run test:tempo-real`.
 
+- **Usuários on-line:** o cabeçalho mostra quantos códigos de funcionário estão conectados (Supabase Realtime Presence, canal `nexus-online`), atualizado a cada 30 s. Sem Supabase, mostra "—". Teste: `npm run test:presenca`.
+
 ---
 
 ## 🔒 Banco de Dados e Schemas

@@ -36,8 +36,10 @@ Adicionar usuários "mock" pra cada cargo, cada um com nome no formato [CARGO] +
 ## Popular ações
 Adicionar histórico de mudanças, novos cargas, novos navios, tudo pra fazer isso realmente parecer algo 100% polido.
 
-## Nº de usuários on-line no momento
+## Nº de usuários on-line no momento ✅ IMPLEMENTADO
 Número de usuários ativos naquele momento, atualizado a cada 30 segundos.
+
+> **Status:** ✅ Implementado. O indicador `#headerOnlineCount` fica no cabeçalho (criado por `js/layout.js`). O módulo `js/online-presence.js` entra no canal Supabase Realtime Presence `nexus-online` com a chave `codigo_individual`, então um mesmo código conta uma vez, mesmo com várias abas ou aparelhos. O número é lido na primeira sincronização e atualizado a cada **30 s**. Sem Supabase, sem sessão ou sem canal sincronizado, mostra **"—"** (nunca um número fictício). O payload leva só o instante de entrada (sem nome nem matrícula). Não exige tabela nem migração. Teste: `node tests/test_presenca_online.js` (também em `npm run test:presenca`).
 
 ## Cookie para rastrear cada dispositivo no Google Analytics
 Cookie para rastrear ações de um mesmo dispositivo usando Cookies, de forma que cuja implementação seja funcional e prática, e que o próprio Google Analytics reconheca nativamente. (sem truques)
