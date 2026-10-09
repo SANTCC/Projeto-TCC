@@ -367,15 +367,23 @@ function testarLigacaoEstatica() {
     'O clique é tratado de forma assíncrona, com feedback e reentrância bloqueada',
     relatorios.includes('chartsSyncStatus') && /await\s+window\.NexusCharts\.atualizar\(\)/.test(relatorios)
   );
-  // Backlog 3 — dedup: o Dashboard NÃO pode continuar renderizando gráficos
-  // (a análise gráfica mora exclusivamente na página de Relatórios).
+  // Backlog 3 — remoção de gráficos duplicados: o Painel Geral NÃO renderiza mais
+  // gráficos; a análise gráfica mora exclusivamente em Relatórios & PDF.
   check(
-    'dashboard.html mantém o painel de gráficos por cargo (merge com main: cadência de 1 minuto no painel; catálogo expandido fica centralizado em Relatórios)',
-    htmlDashboard.includes('chartsRolePanel') && htmlDashboard.includes('chartsRoleGrid') && htmlDashboard.includes('chartsRefreshBtn')
+    'dashboard.html não tem mais o painel de gráficos nem o botão de atualização dos gráficos',
+    !htmlDashboard.includes('chartsRolePanel') && !htmlDashboard.includes('chartsRoleGrid') && !htmlDashboard.includes('chartsRefreshBtn')
   );
   check(
-    'dashboard.js dispara a inicialização do painel consolidado de Chart.js (NexusCharts.initDashboard)',
-    /NexusCharts\s*\./.test(dashboard)
+    'dashboard.html não carrega mais a biblioteca Chart.js nem js/pages/charts.js',
+    !htmlDashboard.includes('cdn.jsdelivr.net/npm/chart.js') && !htmlDashboard.includes('js/pages/charts.js')
+  );
+  check(
+    'dashboard.js não inicializa mais gráficos (sem NexusCharts)',
+    !dashboard.includes('NexusCharts')
+  );
+  check(
+    'relatorios.html continua carregando os gráficos e o painel consolidado (central única)',
+    htmlRelatorio.includes('js/pages/charts.js') && htmlRelatorio.includes('relatoriosChartsGrid')
   );
 }
 

@@ -308,8 +308,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cardVisionLayer) cardVisionLayer.textContent = derivedVision;
 
   // Planilha consolidada com metas: exclusiva da Visão Estratégica (RF 1).
-  // Cargos operacionais/táticos recebem, no lugar dela, os gráficos do seu
-  // próprio escopo (js/pages/charts.js), evitando ruído e exposição de metas.
+  // Cargos operacionais/táticos não a veem; a análise gráfica do escopo de cada
+  // cargo fica em Relatórios & PDF (js/pages/charts.js), evitando ruído e exposição de metas.
   if (estrategicoPanel) {
     if (isDiretor) {
       estrategicoPanel.classList.remove('hidden');
@@ -319,67 +319,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // A análise gráfica (Chart.js) foi consolidada na página dedicada de
-  // Relatórios e Gráficos (Backlog 3 — dedup de gráficos). O Dashboard mantém
-  // os cards de indicadores operacionais e apenas aponta para a página de
-  // gráficos, evitando renderizar dois pipelines de Chart.js por parada.
-
-  // Painel de gráficos (Chart.js) adaptado ao cargo do usuário autenticado
-  if (window.NexusCharts && typeof window.NexusCharts.initDashboard === 'function') {
-    window.NexusCharts.initDashboard();
-
-    // Botão "Atualizar": reconsulta o SERVIDOR (ignora o cache em memória) e
-    // informa o resultado. Sem esse retorno visual o operador não tinha como
-    // saber se o clique trouxe dado novo ou apenas redesenhou o mesmo gráfico.
-    const chartsRefreshBtn = document.getElementById('chartsRefreshBtn');
-    if (chartsRefreshBtn) {
-      const chartsSyncStatus = document.getElementById('chartsSyncStatus');
-      const chartsRefreshIcon = chartsRefreshBtn.querySelector('.material-symbols-outlined');
-
-      const informarSincronia = (texto) => {
-        if (!chartsSyncStatus) return;
-        chartsSyncStatus.textContent = texto;
-        chartsSyncStatus.setAttribute('title', texto);
-      };
-
-      const horaDe = (iso) => {
-        const data = iso ? new Date(iso) : new Date();
-        return isNaN(data.getTime()) ? '--:--:--' : data.toLocaleTimeString('pt-BR');
-      };
-
-      chartsRefreshBtn.addEventListener('click', async () => {
-        if (chartsRefreshBtn.disabled) return; // evita cliques concorrentes
-        chartsRefreshBtn.disabled = true;
-        chartsRefreshBtn.setAttribute('aria-busy', 'true');
-        if (chartsRefreshIcon) chartsRefreshIcon.classList.add('animate-spin');
-        informarSincronia('Consultando o servidor...');
-
-        try {
-          const resultado = (await window.NexusCharts.atualizar()) || {};
-          const hora = horaDe(resultado.atualizadoEm);
-
-          if (!resultado.ok && resultado.motivo === 'chartjs-indisponivel') {
-            informarSincronia('Chart.js indisponível — não foi possível redesenhar os gráficos.');
-          } else if (!resultado.ok) {
-            informarSincronia('Não foi possível atualizar os gráficos agora.');
-          } else if (resultado.origem === 'supabase') {
-            informarSincronia(`Dados do servidor recebidos às ${hora}.`);
-          } else if (resultado.origem === 'misto') {
-            informarSincronia(`Atualizado parcialmente do servidor às ${hora} — fontes sem resposta usaram o cache local.`);
-          } else {
-            informarSincronia(`Servidor indisponível — gráficos exibidos a partir do cache local (${hora}).`);
-          }
-        } catch (erro) {
-          console.warn('[NexusPort] Falha ao atualizar os gráficos:', erro);
-          informarSincronia('Falha ao atualizar os gráficos — os dados anteriores foram mantidos.');
-        } finally {
-          chartsRefreshBtn.disabled = false;
-          chartsRefreshBtn.removeAttribute('aria-busy');
-          if (chartsRefreshIcon) chartsRefreshIcon.classList.remove('animate-spin');
-        }
-      });
-    }
-  }
+  // Os gráficos (Chart.js) não fazem mais parte do Painel Geral (Backlog 3 — dedup):
+  // a análise gráfica fica concentrada em Relatórios & PDF (relatorios.html), onde
+  // o botão "Atualizar" e a cadência de 1 minuto também são tratados.
 
   // Renderiza Planilha Consolidada de Desempenho Operacional por Categoria (A3 / Item 1.5)
   async function renderIndicadoresExecutivosTable() {

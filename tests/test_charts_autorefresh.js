@@ -82,15 +82,16 @@ function testarCodigo() {
  * 2. DOM real (jsdom): 30 s de operação não redesenham por heartbeat
  * ================================================================== */
 async function testarComportamentoNoPainel() {
-  console.log('\n2. Validando o comportamento no painel real (jsdom)...');
+  console.log('\n2. Validando o comportamento no painel de Relatórios real (jsdom)...');
 
   if (!JSDOM) {
     console.log('  ⏭️  [SKIP] jsdom não instalado (execute `npm install` para a validação em DOM real).');
     return;
   }
 
-  const htmlDashboard = read('dashboard.html');
-  const fontes = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/data-repository.js', 'js/pages/charts.js', 'js/pages/dashboard.js']
+  // Backlog 3 (remoção de gráficos duplicados): o painel de gráficos vive em Relatórios.
+  const htmlRelatorios = read('relatorios.html');
+  const fontes = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/data-repository.js', 'js/pages/charts.js', 'js/pages/relatorios.js']
     .map((f) => ({ arquivo: f, codigo: read(f) }));
 
   const tabelas = {
@@ -104,6 +105,7 @@ async function testarComportamentoNoPainel() {
         select() { return builder; },
         order() { return builder; },
         limit() { return builder; },
+        range() { return builder; },
         eq() { return builder; },
         in() { return builder; },
         maybeSingle() { return Promise.resolve({ data: null, error: null }); },
@@ -127,7 +129,7 @@ async function testarComportamentoNoPainel() {
     }
   };
 
-  const dom = new JSDOM(htmlDashboard, { url: 'http://localhost:3000/dashboard.html', runScripts: 'outside-only', pretendToBeVisual: true });
+  const dom = new JSDOM(htmlRelatorios, { url: 'http://localhost:3000/relatorios.html', runScripts: 'outside-only', pretendToBeVisual: true });
   const win = dom.window;
 
   let renderizacoes = 0;
@@ -149,7 +151,7 @@ async function testarComportamentoNoPainel() {
   await espera(400);
 
   const inicial = renderizacoes;
-  check('A carga inicial renderiza os gráficos do painel', inicial > 0, `renderizações = ${inicial}`);
+  check('A carga inicial renderiza os gráficos em Relatórios', inicial > 0, `renderizações = ${inicial}`);
 
   // 30 segundos de operação: 3 heartbeats de 10 s + 1 foco de janela.
   for (let i = 0; i < 3; i++) {
@@ -184,7 +186,7 @@ async function testarComportamentoNoPainel() {
 
   // O botão "Atualizar" continua funcionando (recarga manual independente da cadência).
   const botao = win.document.getElementById('chartsRefreshBtn');
-  check('O botão #chartsRefreshBtn continua no painel', !!botao);
+  check('O botão #chartsRefreshBtn continua em Relatórios', !!botao);
   if (botao) {
     const antesDoClique = renderizacoes;
     botao.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));

@@ -23,7 +23,6 @@
  *     - O indicador financeiro (valor declarado) é EXCLUSIVO deste nível.
  *
  * Uso:
- *   NexusCharts.initDashboard()   -> painel do dashboard.html (auto-detecta cargo)
  *   NexusCharts.initRelatorios()  -> gráficos do relatorios.html (RF 16)
  *   NexusCharts.atualizar()       -> recarga MANUAL do painel ativo: ignora o
  *                                    cache em memória, reconsulta o Supabase e
@@ -1385,7 +1384,7 @@
 
   const instancias = new Map();
   let tokenRender = 0;
-  let padraoAtual = { containerId: 'chartsRoleGrid', sessao: null, grupo: null, charts: null };
+  let padraoAtual = { containerId: 'relatoriosChartsGrid', sessao: null, grupo: null, charts: null };
   let chartJsPromessa = null;
   let observadorTema = null;
   let debounceTimer = null;
@@ -1639,7 +1638,7 @@
     const forcar = !!cfg.forcar;
     const doc = window.document;
     if (!doc) return { ok: false, motivo: 'sem-documento' };
-    const container = doc.getElementById(cfg.containerId || 'chartsRoleGrid');
+    const container = doc.getElementById(cfg.containerId || 'relatoriosChartsGrid');
     if (!container || !sessao) return { ok: false, motivo: 'sem-container' };
     const meuToken = ++tokenRender;
 
@@ -1652,7 +1651,7 @@
     });
     const fontes = cfg.fontes || painel.fontes;
 
-    padraoAtual = { containerId: cfg.containerId || 'chartsRoleGrid', sessao: sessao, grupo: grupo, charts: definicoes, fontes: fontes };
+    padraoAtual = { containerId: cfg.containerId || 'relatoriosChartsGrid', sessao: sessao, grupo: grupo, charts: definicoes, fontes: fontes };
     definirCabecalho(painel, definicoes.length);
 
     destruirInstancias();
@@ -1772,14 +1771,6 @@
     INTERVALO_AUTO_REFRESH_MS: INTERVALO_AUTO_REFRESH_MS,
     /** Entidades de sincronização de fundo que NÃO disparam redesenho imediato. */
     ENTIDADES_SYNC_FUNDO: ENTIDADES_SYNC_FUNDO,
-
-    /** Inicializa o painel de gráficos do dashboard.html conforme o cargo. */
-    initDashboard: function () {
-      const sessao = sessaoAtual();
-      if (!sessao) return Promise.resolve({ ok: false, motivo: 'sem-sessao' });
-      ligarEventos();
-      return renderPainel(sessao, { containerId: 'chartsRoleGrid' });
-    },
 
     /**
      * Inicializa os gráficos do relatórios.html (RF 16).

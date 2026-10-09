@@ -66,5 +66,20 @@
     }
   };
 
-  D.quandoPronto(() => W.registrarPagina({ id: 'relatorios', arquivo: 'relatorios.html', ferramentas: [gerarPdf, exportarCsv] }));
+  const atualizarGraficos = {
+    nome: 'atualizar_graficos',
+    titulo: 'Atualizar gráficos',
+    descricao: 'Consulta o servidor e redesenha os gráficos de Relatórios. Não altera dados.',
+    anotacoes: { readOnlyHint: true },
+    cargos: CARGOS_PAGINA,
+    esquema: { type: 'object', properties: {}, additionalProperties: false },
+    executar: () => {
+      const botao = document.getElementById('chartsRefreshBtn');
+      if (!botao) return { ok: false, codigo: 'INDISPONIVEL', mensagem: 'Botão de atualização indisponível nesta página.' };
+      botao.click();
+      return { mensagem: 'Atualização dos gráficos solicitada.' };
+    }
+  };
+
+  D.quandoPronto(() => W.registrarPagina({ id: 'relatorios', arquivo: 'relatorios.html', ferramentas: [gerarPdf, exportarCsv, atualizarGraficos] }));
 })(window, document);

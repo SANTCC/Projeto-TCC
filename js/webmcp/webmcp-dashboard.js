@@ -157,23 +157,8 @@
     }
   };
 
-  const atualizarGraficos = {
-    nome: 'atualizar_graficos',
-    titulo: 'Atualizar gráficos',
-    descricao: 'Consulta o servidor e redesenha os gráficos do painel. Não altera dados.',
-    anotacoes: { readOnlyHint: true },
-    cargos: CARGOS_PAGINA,
-    esquema: { type: 'object', properties: {}, additionalProperties: false },
-    executar: () => {
-      const botao = document.getElementById('chartsRefreshBtn');
-      if (!botao) return { ok: false, codigo: 'INDISPONIVEL', mensagem: 'Botão de atualização indisponível nesta página.' };
-      botao.click();
-      return { mensagem: 'Atualização dos gráficos solicitada.' };
-    }
-  };
-
   D.quandoPronto(() => W.registrarPagina({
     id: 'dashboard', arquivo: 'dashboard.html',
-    ferramentas: [resumo, detalhar, trilha, auditoria, chegada, atualizarGraficos]
+    ferramentas: [resumo, detalhar, trilha, auditoria, chegada]
   }));
 })(window, document);

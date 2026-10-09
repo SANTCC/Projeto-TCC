@@ -140,7 +140,6 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
 | `dashboard.html` | `listar_trilha_decisoes` | leitura | todos |
 | `dashboard.html` | `listar_auditoria` | leitura | todos |
 | `dashboard.html` | `calcular_chegada_navio` | leitura | todos |
-| `dashboard.html` | `atualizar_graficos` | leitura | todos |
 | `cargas.html` | `listar_cargas` | leitura | todos |
 | `cargas.html` | `obter_carga` | leitura | todos |
 | `cargas.html` | `exibir_etiqueta_qr` | leitura | todos |
@@ -195,6 +194,7 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
 | `tecnico_portos.html` | `registrar_saida_visitante` | ação (confirmação) | Técnico, Dir.Oper, Dir.Pres, Conselho · CADASTRAR_VISITANTE |
 | `tecnico_portos.html` | `preparar_cadastro_visitante` | preenche formulário | Técnico, Dir.Oper, Dir.Pres, Conselho · CADASTRAR_VISITANTE |
 | `tecnico_portos.html` | `preparar_cadastro_funcionario` | preenche formulário | Técnico, Dir.Oper, Dir.Pres, Conselho |
+| `relatorios.html` | `atualizar_graficos` | leitura | todos |
 | `relatorios.html` | `gerar_relatorio_carga` | leitura | todos |
 | `relatorios.html` | `exportar_historico_csv` | ação (confirmação) | Dir.Oper, Dir.Pres, Conselho · EXPORTAR_HISTORICO |
 | `teste-vibracao.html` | `obter_estado_vibracao` | leitura | público |

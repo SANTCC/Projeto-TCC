@@ -285,7 +285,8 @@ async function main() {
 
   // 1. Disponibilidade do módulo e catálogo de painéis
   console.log('1. Validando carregamento do módulo e catálogo de gráficos...');
-  verificar(!!NexusCharts && typeof NexusCharts.initDashboard === 'function', 'NexusCharts exposto com initDashboard/initRelatorios.');
+  verificar(!!NexusCharts && typeof NexusCharts.initRelatorios === 'function', 'NexusCharts exposto com initRelatorios (central única de gráficos).');
+  verificar(!!NexusCharts && typeof NexusCharts.initDashboard === 'undefined', 'NexusCharts não expõe mais initDashboard (gráficos removidos do Painel Geral).');
 
   // 2. Painéis coerentes com as três camadas de visão (RF 1)
   console.log('\n2. Validando painéis gráficos por cargo (RF 1)...');

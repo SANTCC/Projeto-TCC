@@ -21,6 +21,7 @@
     "test:backlog3": "node tests/test_backlog3_correcoes.js && node tests/test_backlog3_restantes.js && node tests/test_sessao_cookies.js",
     "test:backlog3:restantes": "node tests/test_backlog3_restantes.js",
     "test:sessao": "node tests/test_sessao_cookies.js",
+    "test:pendentes": "node tests/test_backlog3_pendentes.js",
     "test:webmcp": "node tests/test_webmcp.js && node tests/test_webmcp_paginas.js"
   },
   "keywords": [

@@ -15,7 +15,7 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 - **Fluxo Core de Cargas & Pátio:** Agendamento, recebimento, checklist de avarias, armazenamento em baia, vinculação e trânsito.
 - **QR Code & Etiquetas:** Geração de QR Code com canvas em tempo real, download de etiqueta A4/PDF 10x10cm e scanner via câmera/simulação.
 - **Dashboards & Relatórios:** KPIs em tempo real, busca operacional com 5 filtros e emissão de relatório PDF A4 com logotipo.
-- **Gráficos por Camada de Visão (Chart.js):** painéis gráficos recortados por cargo — Visão Própria (operações do próprio funcionário), Visão Operacional (inspeções, fila de liberação, manutenções, berços e trail) e Visão Estratégica (aprovação/recusa, permanência, frota, produtividade por cargo, % de berços e valor declarado).
+- **Gráficos por Camada de Visão (Chart.js, em Relatórios & PDF):** painéis gráficos recortados por cargo — Visão Própria (operações do próprio funcionário), Visão Operacional (inspeções, fila de liberação, manutenções, berços e trail) e Visão Estratégica (aprovação/recusa, permanência, frota, produtividade por cargo, % de berços e valor declarado).
 - **Auditoria, Trail & Delegação:** Trilha imutável de decisões críticas com anexação de retificações e gestão de substituto ativo.
 - **Localização & Tempos:** Posicionamento GPS dos navios, classificação automática de status e cálculo de ETA com velocidade fixa de 33 km/h (RN 9).
 - **🚨 Botão de Pânico Global (Tempo Real):** O botão de emergência dispara a Edge Function `panic-alert`, que transmite o alerta via WebSocket (Supabase Realtime) para **todos os clientes conectados** — exibindo aviso fixo no rodapé de cada tela — e dispara um **webhook opcional (desativado por padrão)**.
@@ -91,13 +91,14 @@ Regras de privacidade aplicadas no próprio módulo:
 - Dados de pessoas (`visitantes` e documentação de funcionários) **nunca** são carregados para Inspetor/Supervisor (restrição obrigatória do RF 1), mesmo que existam no banco.
 - Cargos operacionais enxergam apenas os próprios registros de auditoria e as cargas ligadas à sua atribuição (Vision Layer).
 
-Os painéis são exibidos no Painel Geral (`dashboard.html`) e no módulo de Relatórios (`relatorios.html`),
-com atualização automática a cada 60 s, re-renderização ao alternar o tema claro/escuro e estado vazio
+Os painéis ficam **somente** no módulo de Relatórios & PDF (`relatorios.html`). O Painel Geral
+(`dashboard.html`) não exibe mais gráficos (Backlog 3 — gráficos duplicados removidos) e mantém apenas
+os indicadores operacionais. Os gráficos têm atualização automática a cada 60 s, re-renderização ao alternar o tema claro/escuro e estado vazio
 explícito quando ainda não há dados (nunca dados fictícios).
 
 ### Botão "Atualizar" do painel de gráficos
 
-O botão `#chartsRefreshBtn` (painel "Análise gráfica por camada de visão") faz uma **recarga manual
+O botão `#chartsRefreshBtn` (em **Relatórios & PDF**, painel "Análise Gráfica de Produtividade") faz uma **recarga manual
 de verdade**: descarta o cache em memória (TTL de 4 s), reabre tabelas marcadas como ausentes na
 sessão (auto-cura quando a migração é aplicada com a tela aberta) e reconsulta o Supabase antes de
 redesenhar. O resultado é informado ao operador:

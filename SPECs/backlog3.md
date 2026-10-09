@@ -61,12 +61,14 @@ Atualmente existem inconsistências como:
 - Garantir que os filtros, contadores, tabelas e cards derivados dos dados do Supabase sejam recalculados após cada atualização.
 - Evitar inconsistências causadas por cache, estado local desatualizado ou consultas que não sejam refeitas após alterações.
 
-## Remover gráficos duplicados do Painel Geral
+## Remover gráficos duplicados do Painel Geral ✅ IMPLEMENTADO
 Os gráficos atualmente aparecem tanto no **Painel Geral** quanto na página **Relatórios & PDF**, gerando duplicação de informações.
 
 Os gráficos funcionam essencialmente como uma forma de relatório e, portanto, devem ficar concentrados na página **Relatórios & PDF**.
 
 > **Objetivo:** remover os gráficos do `dashboard.html`/Painel Geral e manter a visualização gráfica na página `relatorios.html`, evitando duplicidade e deixando o Painel Geral focado em indicadores operacionais em tempo real.
+
+> **Status:** ✅ Implementado. `dashboard.html` não tem mais o painel `#chartsRolePanel`, o botão de atualização nem a biblioteca Chart.js; `dashboard.js` deixou de chamar `NexusCharts`, e `NexusCharts.initDashboard` foi removido de `js/pages/charts.js`. Os gráficos permanecem em `relatorios.html` (`initRelatorios`, grade `#relatoriosChartsGrid`, botão Atualizar). A ferramenta WebMCP `atualizar_graficos` foi movida para a página de Relatórios. Teste: `node tests/test_backlog3_pendentes.js` (seção K), `node tests/test_charts_refresh.js`, `node tests/test_charts_autorefresh.js`.
 
 ## Impedir manutenção de navio fora do Porto de Santos
 Não deve ser possível registrar ou executar uma manutenção para um navio que esteja atualmente **fora do Porto de Santos**.
