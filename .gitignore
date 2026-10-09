@@ -11,3 +11,8 @@ dist/
 out/
 .DS_Store
 *.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
