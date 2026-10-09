@@ -218,7 +218,7 @@
   const cadastrarNavio = {
     nome: 'cadastrar_navio',
     titulo: 'Cadastrar navio',
-    descricao: 'Cadastra um navio pelo IMO único, com origem, destino, localização, GPS e distância. Só Inspetor ou Direção. Exige confirmação.',
+    descricao: 'Cadastra um navio pelo IMO único, com localização e GPS. Origem, destino e distância vêm da rota marítima cadastrada escolhida (não há distância manual). Só Inspetor ou Direção. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: G.inspecao,
     permissao: 'CADASTRAR_NAVIO',
@@ -230,10 +230,9 @@
         origem: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Origem', description: 'Porto de origem.' },
         destino: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Destino', description: 'Porto de destino.' },
         localizacao: { type: 'string', enum: LOCALIZACOES, rotulo: 'Localização', description: 'Situação inicial em relação ao porto.' },
-        gps: { type: 'string', minLength: 5, maxLength: 60, rotulo: 'GPS', description: 'Coordenadas, por exemplo -23.9608, -46.3022.' },
-        distancia_km: { type: 'number', minimum: 1, maximum: 50000, rotulo: 'Distância (km)', description: 'Distância da rota em quilômetros.' }
+        gps: { type: 'string', minLength: 5, maxLength: 60, rotulo: 'GPS', description: 'Coordenadas, por exemplo -23.9608, -46.3022.' }
       },
-      required: ['nome', 'imo', 'origem', 'destino', 'localizacao', 'gps', 'distancia_km'],
+      required: ['nome', 'imo', 'origem', 'destino', 'localizacao', 'gps'],
       additionalProperties: false
     },
     precondicao: async (args) => {
@@ -247,7 +246,7 @@
     },
     resumo: (args) => [
       `Cadastrar o navio ${args.nome} (IMO ${imoNormalizado(args.imo)}).`,
-      `Rota ${args.origem} → ${args.destino} · ${args.distancia_km} km · situação ${args.localizacao}.`
+      `Rota ${args.origem} → ${args.destino} (distância da rota cadastrada) · situação ${args.localizacao}.`
     ],
     executar: async (args) => {
       const f = formularioOuErro('navioForm');

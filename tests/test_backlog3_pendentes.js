@@ -26,6 +26,8 @@ function check(label, ok, detalhe) {
 
 let JSDOM = null;
 try { JSDOM = require('jsdom').JSDOM; } catch (e) { /* validação em DOM real é pulada sem jsdom */ }
+const H = require('./webmcp-harness.js');
+const criarJanelaTeste = (opcoes) => H.criarJanela(opcoes);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // K. Remover gráficos duplicados do Painel Geral
@@ -72,11 +74,74 @@ function testarRemocaoGraficosDashboard() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// M. Rotas marítimas no cadastro de navios (sem rotas estáticas)
+// ─────────────────────────────────────────────────────────────────────────────
+function testarRotasMaritimas() {
+  console.log('\nM. Rotas marítimas no cadastro de navios');
+
+  const emb = read('js/pages/embarcacoes.js');
+  const cargas = read('js/pages/cargas.js');
+  const html = read('embarcacoes.html');
+  const webmcpEmb = read('js/webmcp/webmcp-embarcacoes.js');
+
+  check('embarcacoes.js não tem mais lista estática de rotas (rotasMaritimasList = [ ... ])',
+    !/rotasMaritimasList\s*=\s*\[\s*\{/.test(emb));
+  check('embarcacoes.js não cita rotas fixas (Roterdã, Xangai, Hamburgo)',
+    !/Roterdã|Xangai|Hamburgo/.test(emb));
+  check('embarcacoes.js não usa distância padrão de 10200 km (ETA e progresso vêm da rota)',
+    !/10200/.test(emb));
+  check('cargas.js não usa destino padrão fictício na liberação de saída',
+    !/Porto de Roterdã/.test(cargas) && /destino não informado no cadastro da carga/.test(cargas));
+  check('carregamento de rotas lê somente rotas_maritimas do Supabase',
+    /from\('rotas_maritimas'\)\.select\('\*'\)/.test(emb));
+  check('mensagem explícita quando não há rotas (vazio e indisponível)',
+    /Nenhuma rota cadastrada/.test(emb) && /Não foi possível carregar as rotas do Supabase/.test(emb));
+  check('ETA sem distância cadastrada é informado, não calculado com número inventado',
+    /ETA indisponível: rota sem distância cadastrada/.test(emb));
+  check('cadastro de rota só informa sucesso depois de gravar no Supabase (insert com verificação de erro)',
+    /from\('rotas_maritimas'\)\.insert\(\{ origem, destino, distancia_km \}\);\s*if \(error\) throw error;/.test(emb));
+  check('placeholders do cadastro de rota não trazem rota real como exemplo',
+    !/Roterdã|10200/.test(html.slice(html.indexOf('id="rotaForm"'), html.indexOf('id="rotaForm"') + 2000)));
+  check('WebMCP cadastrar_navio não aceita distância manual (required sem distancia_km)',
+    /required: \['nome', 'imo', 'origem', 'destino', 'localizacao', 'gps'\]/.test(webmcpEmb));
+
+  if (!JSDOM) {
+    console.log('  ⏭️  [SKIP] jsdom não instalado — verificação de DOM real pulada.');
+    return;
+  }
+  // DOM real: navio fora do porto sem rota cadastrada → ETA informado como indisponível
+  const { JSDOM: JSDOM_ } = { JSDOM };
+  const sessao = { id: undefined, nome: 'Teste Inspetor', matricula: 'MAT-9001', codigo_individual: 'NX-9001-SP', cargo: 'INSPETOR', cargo_nome: 'Inspetor' };
+  const navios = [{ id: 'n1', nome: 'MV Sem Rota', imo: 'DEF7654321', localizacao: 'FORA_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Tóquio', gps: '-23.9700, -46.3100', dataSaida: new Date(Date.now() - 3600 * 1000).toISOString() }];
+  const scripts = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/supabase-client.js', 'js/pages/embarcacoes.js'];
+  const janela = criarJanelaTeste({
+    url: 'https://nexusport.test/embarcacoes.html',
+    html: read('embarcacoes.html'),
+    session: sessao,
+    storage: { nexus_navios_list: navios, nexus_bercos_list: [], nexus_containers_list: [], nexus_cargas_fluxo: [] },
+    scripts
+  });
+  const w = janela.w;
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const corpo = w.document.body.textContent || '';
+      check('DOM real: navio sem rota cadastrada mostra "ETA indisponível" (sem valor padrão)',
+        /ETA indisponível: rota sem distância cadastrada/.test(corpo) && !/10\.200/.test(corpo) && !/10200/.test(corpo));
+      check('DOM real: destino sem rota cadastrada aparece como informado (Porto de Tóquio)', /Porto de Tóquio/.test(corpo));
+      check('DOM real: nenhuma rota estática aparece na página', !/Roterdã|Xangai|Hamburgo/.test(corpo));
+      w.close();
+      resolve();
+    }, 60);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Execução
 // ─────────────────────────────────────────────────────────────────────────────
-(function main() {
+(async function main() {
   console.log('\n=== Backlog 3 — itens pendentes ===');
   testarRemocaoGraficosDashboard();
+  await testarRotasMaritimas();
 
   console.log(`\nResultado: ${passou} aprovado(s), ${falhou} falha(s).`);
   if (falhou > 0) process.exit(1);

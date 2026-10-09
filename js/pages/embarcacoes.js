@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const containersTableBody = document.getElementById('containersTableBody');
 
   let naviosList = [];
+  // Backlog 3 (rotas): única fonte de origem/destino/distância = rotas_maritimas do Supabase.
+  let rotasMaritimasList = [];
+  let rotasCarregamentoFalhou = false;
 
   // Gestão e Painel de Berços Livres do Terminal STS-01 (15 Berços para Navios)
   const bercosGrid = document.getElementById('bercosGrid');
@@ -290,7 +293,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!dataSaida) return null;
     const saidaTime = new Date(dataSaida).getTime();
     if (isNaN(saidaTime)) return null;
-    const dist = parseFloat(distanciaKm) || 10200;
+    // Sem rota cadastrada não há distância: nunca se usa um valor padrão.
+    const dist = parseFloat(distanciaKm);
+    if (!(dist > 0)) return null;
     const msPrevistos = (dist / 33) * 3600 * 1000;
     if (msPrevistos <= 0) return null;
     const decorridos = Math.max(0, Date.now() - saidaTime);
@@ -304,6 +309,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const dias = Math.floor(horasTotais / 24);
     const horas = Math.round(horasTotais % 24);
     return `${dias}d ${horas}h (Distância: ${distanciaKm} km @ 33 km/h)`;
+  }
+
+  /**
+   * Distância (km) cadastrada na rota marítima origem → destino (rotas_maritimas).
+   * Retorna null quando não há rota ou a distância não é válida — nunca um valor padrão.
+   */
+  function distanciaDaRota(origem, destino) {
+    const o = String(origem || '').trim().toLowerCase();
+    const d = String(destino || '').trim().toLowerCase();
+    if (!o || !d) return null;
+    const rota = rotasMaritimasList.find((r) =>
+      String(r.origem || '').trim().toLowerCase() === o &&
+      String(r.destino || '').trim().toLowerCase() === d);
+    const km = rota ? parseFloat(rota.distancia_km) : NaN;
+    return km > 0 ? km : null;
+  }
+
+  /** Distância oficial do navio: a da rota cadastrada (ETA e progresso dependem dela). */
+  function distanciaDoNavio(navio) {
+    const km = parseFloat(navio && navio.distancia);
+    if (km > 0) return km;
+    return distanciaDaRota(navio && navio.origem, navio && navio.destino);
   }
 
   // Carrega navios mantendo persistência rigorosa do Supabase / Local
@@ -322,8 +349,9 @@ document.addEventListener('DOMContentLoaded', () => {
             gps: n.coordenadas_gps || '23.9608° S, 46.3022° W',
             localizacao: n.localizacao || 'DENTRO_DO_PORTO',
             origem: n.porto_origem || 'Porto de Santos',
-            destino: n.porto_destino || 'Porto de Roterdã',
-            distancia: 10200,
+            destino: n.porto_destino || '',
+            // A distância não é gravada no navio: vem da rota marítima cadastrada (distanciaDoNavio)
+            distancia: null,
             dataSaida: n.data_saida || (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null)
           }));
           localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
@@ -438,31 +466,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tempoForaText = `${diasDecorridos}d ${horasDecorridas}h ${minutosDecorridos}m ${segundosDecorridos}s fora`;
 
-        // Cálculo dinâmico do tempo total previsto
-        const horasTotaisPrevistas = (n.distancia || 10200) / 33; // 33 km/h
-        const msTotaisPrevistos = horasTotaisPrevistas * 3600 * 1000;
-        const msRestantes = Math.max(0, msTotaisPrevistos - diffMs);
+        // Distância oficial = rota marítima cadastrada (sem valor padrão)
+        const distanciaKm = distanciaDoNavio(n);
+        if (!distanciaKm) {
+          etaText = 'ETA indisponível: rota sem distância cadastrada';
+        } else {
+          // Cálculo dinâmico do tempo total previsto
+          const horasTotaisPrevistas = distanciaKm / 33; // 33 km/h
+          const msTotaisPrevistos = horasTotaisPrevistas * 3600 * 1000;
+          const msRestantes = Math.max(0, msTotaisPrevistos - diffMs);
 
-        const diasRestantes = Math.floor(msRestantes / (1000 * 60 * 60 * 24));
-        const horasRestantes = Math.floor((msRestantes % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minRestantes = Math.floor((msRestantes % (1000 * 60 * 60)) / (1000 * 60));
-        const segRestantes = Math.floor((msRestantes % (1000 * 60)) / 1000);
+          const diasRestantes = Math.floor(msRestantes / (1000 * 60 * 60 * 24));
+          const horasRestantes = Math.floor((msRestantes % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const minRestantes = Math.floor((msRestantes % (1000 * 60 * 60)) / (1000 * 60));
+          const segRestantes = Math.floor((msRestantes % (1000 * 60)) / 1000);
 
-        etaText = `ETA: ${diasRestantes}d ${horasRestantes}h ${minRestantes}m ${segRestantes}s (@33km/h)`;
+          etaText = `ETA: ${diasRestantes}d ${horasRestantes}h ${minRestantes}m ${segRestantes}s (@33km/h)`;
 
-        // Backlog 3 (7d): barra de progresso visual da viagem (X% decorrido do tempo previsto)
-        const progressoPct = calcularProgressoViagem(n.dataSaida, n.distancia);
-        if (progressoPct !== null) {
-          etaExtraHtml = `
-            <div class="mt-1.5">
-              <div class="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase mb-0.5">
-                <span>Progresso da viagem</span>
-                <span class="text-indigo-600 dark:text-indigo-400">${esc(String(progressoPct))}%</span>
-              </div>
-              <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow="${esc(String(progressoPct))}" aria-valuemin="0" aria-valuemax="100" title="Progresso da viagem: ${esc(String(progressoPct))}% do tempo previsto decorrido">
-                <div class="h-1.5 rounded-full ${progressoPct >= 100 ? 'bg-emerald-500' : 'bg-nexus-500'}" style="width:${esc(String(progressoPct))}%"></div>
-              </div>
-            </div>`;
+          // Backlog 3 (7d): barra de progresso visual da viagem (X% decorrido do tempo previsto)
+          const progressoPct = calcularProgressoViagem(n.dataSaida, distanciaKm);
+          if (progressoPct !== null) {
+            etaExtraHtml = `
+              <div class="mt-1.5">
+                <div class="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase mb-0.5">
+                  <span>Progresso da viagem</span>
+                  <span class="text-indigo-600 dark:text-indigo-400">${esc(String(progressoPct))}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow="${esc(String(progressoPct))}" aria-valuemin="0" aria-valuemax="100" title="Progresso da viagem: ${esc(String(progressoPct))}% do tempo previsto decorrido">
+                  <div class="h-1.5 rounded-full ${progressoPct >= 100 ? 'bg-emerald-500' : 'bg-nexus-500'}" style="width:${esc(String(progressoPct))}%"></div>
+                </div>
+              </div>`;
+          }
         }
       }
 
@@ -533,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 font-mono text-xs">${bercosInfoHtml}</td>
           <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(n.gps)}</td>
           <td class="p-3">${localizacaoHtml}</td>
-          <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino)}</strong></td>
+          <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino || 'Destino não informado')}</strong></td>
           <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}${etaExtraHtml}</td>
           <td class="p-3 font-mono text-xs font-bold ${n.localizacao === 'NO_PORTO_DE_DESTINO' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${esc(tempoForaText)}</td>
           <td class="p-3 text-right whitespace-nowrap">${acoesHtml}</td>
@@ -546,28 +580,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleRotaBtn = document.getElementById('toggleRotaFormBtn');
   const rotaForm = document.getElementById('rotaForm');
   const rotasTableBody = document.getElementById('rotasTableBody');
-  let rotasMaritimasList = [];
 
+  /**
+   * Carrega as rotas marítimas SOMENTE do Supabase (tabela rotas_maritimas).
+   * Backlog 3 (rotas): não existe lista estática de rotas; sem dados do banco o
+   * select e a tabela informam a situação em vez de exibir rotas inventadas.
+   */
   async function carregarRotasMaritimas() {
+    let rotas = [];
+    rotasCarregamentoFalhou = false;
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase.from('rotas_maritimas').select('*');
-        if (!error && data && data.length > 0) {
-          rotasMaritimasList = data;
-        }
+        if (error) throw error;
+        rotas = Array.isArray(data) ? data : [];
       } catch (e) {
+        rotasCarregamentoFalhou = true;
         console.warn('Erro ao carregar rotas marítimas do Supabase:', e);
       }
+    } else {
+      rotasCarregamentoFalhou = true;
     }
-    if (rotasMaritimasList.length === 0) {
-      rotasMaritimasList = [
-        { origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 },
-        { origem: 'Porto de Santos', destino: 'Porto de Xangai', distancia_km: 18500 },
-        { origem: 'Porto de Santos', destino: 'Porto de Hamburgo', distancia_km: 10100 }
-      ];
-    }
+    rotasMaritimasList = rotas;
     renderRotasTable();
     preencherSelectRotasNavio();
+    renderGpsTable();
   }
 
   /**
@@ -580,13 +617,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const rotaSel = document.getElementById('navioRotaSelect');
     if (!rotaSel) return;
     if (!Array.isArray(rotasMaritimasList) || rotasMaritimasList.length === 0) {
-      rotaSel.innerHTML = '<option value="">Nenhuma rota cadastrada — peça ao Supervisor para registrar na Gestão de Rotas Marítimas.</option>';
+      rotaSel.innerHTML = rotasCarregamentoFalhou
+        ? '<option value="">Não foi possível carregar as rotas do Supabase — tente novamente.</option>'
+        : '<option value="">Nenhuma rota cadastrada — peça ao Supervisor para registrar na Gestão de Rotas Marítimas.</option>';
       return;
     }
     rotaSel.innerHTML = '<option value="">Selecione a Rota Marítima...</option>' +
       rotasMaritimasList.map((r, idx) => {
-        const dist = parseFloat(r.distancia_km) || 0;
-        return `<option value="${idx}">${esc(r.origem)} ➔ ${esc(r.destino)} (${esc(dist.toLocaleString('pt-BR'))} km)</option>`;
+        const dist = parseFloat(r.distancia_km);
+        // Montado e codificado aqui mesmo (variável ...Html, verificada pelo scan anti-XSS)
+        const trechoKmHtml = dist > 0 ? ` (${esc(dist.toLocaleString('pt-BR'))} km)` : ' (distância não cadastrada)';
+        return `<option value="${idx}">${esc(r.origem)} ➔ ${esc(r.destino)}${trechoKmHtml}</option>`;
       }).join('');
   }
 
@@ -598,21 +639,25 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderRotasTable() {
     if (!rotasTableBody) return;
     if (rotasMaritimasList.length === 0) {
+      const texto = rotasCarregamentoFalhou
+        ? 'Não foi possível carregar as rotas marítimas do Supabase.'
+        : 'Nenhuma rota marítima cadastrada no sistema.';
       rotasTableBody.innerHTML = `
         <tr>
-          <td colspan="4" class="p-4 text-center text-slate-400 italic">Nenhuma rota marítima cadastrada no sistema.</td>
+          <td colspan="4" class="p-4 text-center text-slate-400 italic">${esc(texto)}</td>
         </tr>
       `;
       return;
     }
     rotasTableBody.innerHTML = rotasMaritimasList.map(r => {
-      const dist = parseFloat(r.distancia_km) || 10200;
-      const eta = calcularETA(dist);
+      const dist = parseFloat(r.distancia_km);
+      const temDistancia = dist > 0;
+      const eta = temDistancia ? calcularETA(dist) : '—';
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 font-mono text-xs">
           <td class="p-3 font-bold">${esc(r.origem)}</td>
           <td class="p-3 text-nexus-900 dark:text-white font-bold">${esc(r.destino)}</td>
-          <td class="p-3 text-emerald-600 font-bold">${esc(dist.toLocaleString('pt-BR'))} km</td>
+          <td class="p-3 text-emerald-600 font-bold">${temDistancia ? `${esc(dist.toLocaleString('pt-BR'))} km` : '—'}</td>
           <td class="p-3 text-indigo-600 font-bold">${esc(eta)}</td>
         </tr>
       `;
@@ -630,27 +675,41 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       const origem = document.getElementById('rotaOrigem').value.trim();
       const destino = document.getElementById('rotaDestino').value.trim();
-      const distancia_km = parseFloat(document.getElementById('rotaDistancia').value) || 10200;
+      const distancia_km = parseFloat(document.getElementById('rotaDistancia').value);
 
-      const novaRota = { origem, destino, distancia_km };
-      rotasMaritimasList.push(novaRota);
-
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('rotas_maritimas').insert(novaRota);
-          if (window.registrarLogAlteracao) {
-            await window.registrarLogAlteracao('CRIACAO', 'rotas_maritimas', null, { origem, destino, distancia_km });
-          }
-          if (window.NexusRepository && window.NexusRepository.notifyChange) {
-            window.NexusRepository.notifyChange('rotas_maritimas');
-          }
-        } catch (e) {
-          console.warn('Erro ao salvar rota marítima no Supabase:', e);
-        }
+      if (!origem || !destino) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Dados Incompletos', 'Informe o porto de origem e o porto de destino da rota.');
+        return;
+      }
+      if (!(distancia_km > 0)) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Distância Inválida', 'Informe uma distância em km maior que zero.');
+        return;
+      }
+      if (!window.nexusSupabase) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Sem Conexão', 'A rota só pode ser cadastrada com conexão ao Supabase. Nada foi salvo.');
+        return;
       }
 
-      renderRotasTable();
-      preencherSelectRotasNavio();
+      // Backlog 3 (rotas): a rota só existe na tela depois de gravada no Supabase.
+      try {
+        const { error } = await window.nexusSupabase.from('rotas_maritimas').insert({ origem, destino, distancia_km });
+        if (error) throw error;
+      } catch (erro) {
+        console.warn('Erro ao salvar rota marítima no Supabase:', erro);
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Rota Não Cadastrada', 'Não foi possível salvar a rota no Supabase. Verifique a conexão ou se a rota já existe (origem e destino devem ser únicos).');
+        }
+        return;
+      }
+
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('CRIACAO', 'rotas_maritimas', null, { origem, destino, distancia_km });
+      }
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('rotas_maritimas');
+      }
+
+      await carregarRotasMaritimas();
       rotaForm.reset();
       rotaForm.classList.add('hidden');
       if (window.mostrarFeedback) {
@@ -705,7 +764,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    navio.distancia = parseFloat(rotaCadastrada.distancia_km) || 10200;
+    // Distância oficial = da rota cadastrada (sem valor padrão)
+    const kmRota = parseFloat(rotaCadastrada.distancia_km);
+    if (!(kmRota > 0)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', 'Rota Sem Distância', `A rota ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} não tem distância válida cadastrada. Corrija o cadastro da rota antes de liberar o navio.`);
+      }
+      return;
+    }
+    navio.distancia = kmRota;
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm 
       ? await window.nexusConfirm('Liberar Saída de Navio', `Confirmar liberação de saída do navio ${navio.nome} (${navio.imo}) pela rota cadastrada ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km)?`) 
@@ -1100,7 +1167,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const origem = (rota.origem || 'Porto de Santos').trim();
       const destino = (rota.destino || '').trim();
-      const distancia = parseFloat(rota.distancia_km) || 10200;
+      const distancia = parseFloat(rota.distancia_km);
+      if (!(distancia > 0)) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Rota Sem Distância', 'A rota selecionada não tem distância válida cadastrada. Corrija o cadastro da rota em Gestão de Rotas Marítimas.');
+        }
+        return;
+      }
 
       // Item 11: Validação do padrão do Número IMO (3 letras + 7 números)
       const imoRegex = /^[A-Z]{3}\d{7}$/;

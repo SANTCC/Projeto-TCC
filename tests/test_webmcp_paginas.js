@@ -32,6 +32,43 @@ function provedorDeTeste(w) {
   });
 }
 
+/**
+ * Cliente Supabase falso mínimo para a tabela rotas_maritimas (única fonte de rotas do
+ * módulo de embarcações desde o Backlog 3). Qualquer encadeamento é aceito (select, insert,
+ * upsert, order...); as demais tabelas respondem com erro "indisponível", o que aciona o
+ * fallback local já existente. `opcoes.falharInsert` simula falha de gravação.
+ */
+function supabaseRotasFalso(rotas, opcoes) {
+  const o = opcoes || {};
+  function resolver(tabela, estado) {
+    if (tabela !== 'rotas_maritimas') {
+      return Promise.resolve({ data: null, error: { message: 'tabela indisponível no teste' } });
+    }
+    if (estado.insert) {
+      if (o.falharInsert) return Promise.resolve({ data: null, error: { message: 'falha simulada na gravação' } });
+      rotas.push(Object.assign({}, estado.insert));
+      return Promise.resolve({ data: estado.insert, error: null });
+    }
+    return Promise.resolve({ data: rotas.map((x) => Object.assign({}, x)), error: null });
+  }
+  function construir(tabela) {
+    const estado = { insert: null };
+    const proxy = new Proxy({}, {
+      get(_, prop) {
+        if (prop === 'then') return (res, rej) => resolver(tabela, estado).then(res, rej);
+        if (prop === 'catch') return (rej) => resolver(tabela, estado).catch(rej);
+        if (typeof prop !== 'string') return undefined;
+        return (...args) => {
+          if (prop === 'insert') estado.insert = args[0];
+          return proxy;
+        };
+      }
+    });
+    return proxy;
+  }
+  return { from: (tabela) => construir(tabela) };
+}
+
 /** Carrega uma página real com seus scripts e o WebMCP correspondente. */
 function pagina(arquivo, opcoes) {
   const o = opcoes || {};
@@ -235,6 +272,8 @@ async function testesInspecao() {
 // ------------------------------------------------------------------
 async function testesEmbarcacoes() {
   log('\n[3] Embarcações & GPS (embarcacoes.html)');
+  const rotasSupabase = [{ origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }];
+  const supaRotas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasSupabase); };
   const navios = [
     { id: 'n1', nome: 'MV Santos Star', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia: 10200, gps: '-23.9608, -46.3022', dataSaida: null },
     { id: 'n2', nome: 'MV Sem Rota', imo: 'DEF7654321', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Tóquio', distancia: 20000, gps: '-23.9700, -46.3100', dataSaida: null }
@@ -248,7 +287,7 @@ async function testesEmbarcacoes() {
   };
   const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
   const scr = ['js/pages/embarcacoes.js'];
-  let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
+  let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
   let r = await w.NexusWebMCP.executar('listar_navios', { localizacao: 'DENTRO_DO_PORTO' });
   check('listar_navios: filtro por localização', r.ok && r.dados.total === 2);
   r = await w.NexusWebMCP.executar('obter_navio', { imo: 'abc 1234567' });
@@ -268,14 +307,16 @@ async function testesEmbarcacoes() {
   check('vincular navio a berço: berço LIVRE recebe o navio (confirmado no estado)', r.ok === true && local.find((b) => b.nome === 'Berço 01').navio_imo === 'DEF7654321', JSON.stringify(r).slice(0, 160));
 
   w.__resposta = true;
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3', distancia_km: 10200 });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
   check('cadastrar navio: supervisor não cadastra (não é inspetor)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
 
-  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3', distancia_km: 10200 });
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
   check('cadastrar navio: IMO duplicado é recusado (Item 11)', r.codigo === 'IMO_DUPLICADO', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3', distancia_km: 10200 });
+  check('cadastrar navio: distância digitada manualmente é recusada pelo esquema (vem da rota)', r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r).slice(0, 160));
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
   local = JSON.parse(w.localStorage.getItem('nexus_navios_list'));
   check('cadastrar navio: cria pelo formulário da página (confirmado no estado)', r.ok === true && local.some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r).slice(0, 200));
   r = await w.NexusWebMCP.executar('excluir_navio', { imo: 'XYZ7654321' });
@@ -289,7 +330,7 @@ async function testesEmbarcacoes() {
   w.close();
 
   // Planejador: lê, mas não libera nem cadastra
-  w = await pronta(pagina('embarcacoes.html', { session: sessao('PLANEJADOR_PATIO_NAVIOS'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('PLANEJADOR_PATIO_NAVIOS'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
   r = await w.NexusWebMCP.executar('listar_navios', {});
   check('planejador lê navios', r.ok === true && r.dados.total >= 1);
   r = await w.NexusWebMCP.executar('liberar_saida_navio', { imo: 'ABC1234567' });
@@ -298,6 +339,75 @@ async function testesEmbarcacoes() {
 }
 
 // ------------------------------------------------------------------
+/**
+ * Backlog 3 (rotas marítimas): nenhuma rota estática; o select e a tabela mostram
+ * somente o que o Supabase devolve; falha de gravação não cria rota na tela.
+ */
+async function testesRotasMaritimas() {
+  log('\n[3b] Rotas marítimas (Supabase como única fonte)');
+  const scr = ['js/pages/embarcacoes.js'];
+  const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
+  const storage = { nexus_navios_list: [] };
+
+  // Banco vazio: nada de rota estática — mensagem explícita no select e na tabela
+  let rotas = [];
+  const vazio = (w) => { w.nexusSupabase = supabaseRotasFalso(rotas); };
+  let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', vazio].concat(scr), adaptadores: adapt }));
+  let sel = w.document.getElementById('navioRotaSelect');
+  check('rotas: banco vazio → select só com a mensagem de "nenhuma rota cadastrada"',
+    sel && sel.options.length === 1 && /Nenhuma rota cadastrada/.test(sel.options[0].textContent), sel && sel.options[0] && sel.options[0].textContent);
+  check('rotas: banco vazio → tabela informa ausência (sem rotas inventadas)',
+    /Nenhuma rota marítima cadastrada/.test(w.document.getElementById('rotasTableBody').textContent)
+    && !/Roterdã|Xangai|Hamburgo/.test(w.document.body.textContent));
+  w.close();
+
+  // Sem cliente Supabase (sem credenciais): mensagem de indisponibilidade, não lista padrão
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
+  sel = w.document.getElementById('navioRotaSelect');
+  check('rotas: sem Supabase → select informa que as rotas não puderam ser carregadas',
+    sel && sel.options.length === 1 && /Não foi possível carregar as rotas do Supabase/.test(sel.options[0].textContent),
+    sel && sel.options[0] && sel.options[0].textContent);
+  check('rotas: sem Supabase → nenhuma rota estática no DOM',
+    !/Roterdã|Xangai|Hamburgo/.test(w.document.body.textContent));
+  w.close();
+
+  // Banco com uma rota: o select mostra exatamente a rota do Supabase, com distância formatada
+  rotas = [{ origem: 'Porto de Santos', destino: 'Porto de Hamburgo', distancia_km: 10100 }];
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', vazio].concat(scr), adaptadores: adapt }));
+  sel = w.document.getElementById('navioRotaSelect');
+  check('rotas: select lista somente as rotas do Supabase (placeholder + 1)',
+    sel && sel.options.length === 2 && /Porto de Hamburgo/.test(sel.options[1].textContent) && /10\.100 km/.test(sel.options[1].textContent),
+    sel && Array.from(sel.options).map((o) => o.textContent).join(' | '));
+  w.close();
+
+  // Gravação com falha: a rota NÃO aparece na tela (a lista é a do banco)
+  const antes = rotas.length;
+  const falha = (win) => { win.nexusSupabase = supabaseRotasFalso(rotas, { falharInsert: true }); };
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', falha].concat(scr), adaptadores: adapt }));
+  w.document.getElementById('rotaOrigem').value = 'Porto de Santos';
+  w.document.getElementById('rotaDestino').value = 'Porto de Xangai';
+  w.document.getElementById('rotaDistancia').value = '18500';
+  w.document.getElementById('rotaForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await aguardar(60);
+  check('rotas: falha ao gravar no Supabase não cria rota na tela nem no banco',
+    rotas.length === antes && !/Porto de Xangai/.test(w.document.getElementById('rotasTableBody').textContent));
+  w.close();
+
+  // Gravação com sucesso: a rota aparece na tabela (distância e ETA) e na lista de seleção
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', vazio].concat(scr), adaptadores: adapt }));
+  w.document.getElementById('rotaOrigem').value = 'Porto de Santos';
+  w.document.getElementById('rotaDestino').value = 'Porto de Xangai';
+  w.document.getElementById('rotaDistancia').value = '18500';
+  w.document.getElementById('rotaForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await aguardar(60);
+  const linhaRota = Array.from(w.document.querySelectorAll('#rotasTableBody tr')).map((tr) => tr.textContent).join(' ');
+  check('rotas: rota gravada aparece na tabela com distância e ETA',
+    /Porto de Xangai/.test(linhaRota) && /18\.500 km/.test(linhaRota) && /@ 33 km\/h/.test(linhaRota), linhaRota.slice(0, 200));
+  check('rotas: rota gravada entra na lista de seleção do cadastro de navio',
+    Array.from(w.document.getElementById('navioRotaSelect').options).some((o) => /Porto de Xangai/.test(o.textContent)));
+  w.close();
+}
+
 async function testesManutencao() {
   log('\n[4] Manutenção & OS (manutencao.html)');
   const storage = {
@@ -500,7 +610,7 @@ async function testesGlobaisEAcesso() {
 // ------------------------------------------------------------------
 async function principal() {
   log('=== WebMCP — páginas reais (integração) ===');
-  const todos = [testesCargas, testesInspecao, testesEmbarcacoes, testesManutencao, testesDelegacaoETecnico, testesRelatoriosScannerPainel, testesGlobaisEAcesso];
+  const todos = [testesCargas, testesInspecao, testesEmbarcacoes, testesRotasMaritimas, testesManutencao, testesDelegacaoETecnico, testesRelatoriosScannerPainel, testesGlobaisEAcesso];
   for (const teste of todos) {
     try {
       await silenciarLog(teste);

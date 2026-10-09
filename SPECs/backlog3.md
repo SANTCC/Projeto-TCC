@@ -98,12 +98,14 @@ Atualmente a carga passa a aparecer como **em trânsito** quando o botão **"Pro
 
 > **Status:** Verificado (já correto no código atual). O botão **"Pronta"** grava `PRONTA_PARA_ENTREGA` (`js/cargas.js`) e a carga só vira `EM_TRANSITO` na liberação de saída (carga ou navio), com a chegada ao destino marcando `ENTREGUE`. Nenhuma alteração necessária.
 
-## Seleção de rotas marítimas no cadastro de navios
+## Seleção de rotas marítimas no cadastro de navios ✅ IMPLEMENTADO
 No cadastro de navios deve existir uma caixa de seleção contendo **somente as rotas marítimas cadastradas no Supabase**.
 
 > **Objetivo:** utilizar a rota selecionada como fonte oficial para calcular corretamente a **estimativa de chegada (ETA)** e a **distância da viagem**, evitando que esses valores sejam inseridos ou calculados incorretamente de forma manual.
 >
 > A lista de rotas deve ser carregada diretamente do Supabase e não deve conter rotas fictícias ou opções estáticas que não estejam cadastradas no banco.
+
+> **Status:** ✅ Implementado. Removidas as rotas estáticas (Roterdã, Xangai, Hamburgo) de `js/pages/embarcacoes.js`: o select e a tabela usam somente `rotas_maritimas` do Supabase e exibem mensagem quando estão vazios ou indisponíveis. A distância e o ETA vêm da rota cadastrada (o padrão fixo de 10200 km foi retirado; sem rota, o ETA aparece como indisponível). Uma rota só aparece na tela depois de gravada no Supabase. O WebMCP `cadastrar_navio` deixou de aceitar distância manual, e o destino padrão da liberação de carga em `js/pages/cargas.js` foi removido. Testes: `node tests/test_backlog3_pendentes.js` (seção M) e `node tests/test_webmcp_paginas.js` (rotas marítimas).
 
 ## Scanner QR Code responsivo no celular
 Ao acessar o sistema pelo celular, o scanner de QR Code atualmente fica em um formato **retangular**.

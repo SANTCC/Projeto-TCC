@@ -1052,14 +1052,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
       }
-      const destinoCarga = carga.portoDescarga || carga.destino || 'Porto de Roterdã';
+      // Sem destino cadastrado na carga, a mensagem informa isso (nenhum destino padrão é inventado).
+      const destinoCarga = carga.portoDescarga || carga.destino || null;
+      const trechoDestino = destinoCarga ? `com destino a ${destinoCarga}` : '(destino não informado no cadastro da carga)';
       carga.status = 'EM_TRANSITO';
 
       if (window.registrarTrailDecisao) {
-        await window.registrarTrailDecisao('LIBEROU_CARGA', idCarga, `Liberada para saída pelo Supervisor com destino a ${destinoCarga}. Vínculos: Contêiner ${carga.container} / Navio ${carga.navio}`);
+        await window.registrarTrailDecisao('LIBEROU_CARGA', idCarga, `Liberada para saída pelo Supervisor ${trechoDestino}. Vínculos: Contêiner ${carga.container} / Navio ${carga.navio}`);
       }
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Saída Liberada', `Carga ${idCarga} liberada pelo Supervisor para saída com destino a ${destinoCarga}. Vínculos validados: Contêiner ${carga.container} / Navio ${carga.navio}.`);
+        window.mostrarFeedback('sucesso', 'Saída Liberada', `Carga ${idCarga} liberada pelo Supervisor para saída ${trechoDestino}. Vínculos validados: Contêiner ${carga.container} / Navio ${carga.navio}.`);
       }
     } else if (acao === 'CANCELAR') {
       const statusPermitidos = ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'];
