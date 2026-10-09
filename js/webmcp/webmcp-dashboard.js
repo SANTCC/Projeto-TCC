@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Painel Geral (js/webmcp-dashboard.js) — NexusPort
+ * WebMCP — página Painel Geral (js/webmcp/webmcp-dashboard.js) — NexusPort
  *
  * Indicadores operacionais, detalhamento dos cards, trilha de decisões e auditoria,
  * todas somente leitura. A trilha imutável NÃO pode ser escrita por agentes: registros

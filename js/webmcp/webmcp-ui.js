@@ -1,5 +1,5 @@
 /**
- * WebMCP — interface do operador (js/webmcp-ui.js) — NexusPort
+ * WebMCP — interface do operador (js/webmcp/webmcp-ui.js) — NexusPort
  *
  * Dois componentes, ambos construídos com DOM API (sem innerHTML com dados externos):
  *   1. Diálogo de confirmação humana para ações consequentes solicitadas por agentes.
@@ -12,7 +12,7 @@
  *   2. Painel "Agentes IA": estado da API, chave de desligamento por navegador,
  *      ferramentas disponíveis nesta página (com motivo de bloqueio) e atividade recente.
  *
- * Carregamento: depois de js/webmcp-core.js.
+ * Carregamento: depois de js/webmcp/webmcp-core.js.
  */
 (function (window, document) {
   'use strict';

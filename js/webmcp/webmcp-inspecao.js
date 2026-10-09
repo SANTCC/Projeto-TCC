@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Inspeção & Checklist (js/webmcp-inspecao.js) — NexusPort
+ * WebMCP — página Inspeção & Checklist (js/webmcp/webmcp-inspecao.js) — NexusPort
  *
  * Checklist técnico formal (RN 14): a aprovação exige 100% dos itens críticos
  * CONFORME. A ferramenta de inspeção aplica as respostas pelos mesmos controles

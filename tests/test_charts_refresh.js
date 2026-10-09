@@ -1,5 +1,5 @@
 /**
- * TESTE DE REGRESSÃO — BOTÃO "ATUALIZAR" DOS GRÁFICOS (js/charts.js)
+ * TESTE DE REGRESSÃO — BOTÃO "ATUALIZAR" DOS GRÁFICOS (js/pages/charts.js)
  *
  * Sintoma relatado:
  *   "Clicar no botão Atualizar dos gráficos não traz dado novo do servidor —
@@ -175,7 +175,7 @@ async function testarAtualizacaoDoPainel() {
   // página dedicada de Relatórios (central única de gráficos do sistema).
   const htmlRelatorios = read('relatorios.html');
   // Mesma ordem de scripts de relatorios.html (basta o que o painel de gráficos usa).
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/charts.js', 'js/relatorios.js']
+  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/pages/charts.js', 'js/pages/relatorios.js']
     .map((f) => ({ arquivo: f, codigo: read(f) }));
 
   const CARGAS_INICIAIS = [
@@ -345,11 +345,11 @@ async function testarAtualizacaoDoPainel() {
  * ================================================================== */
 function testarLigacaoEstatica() {
   console.log('\n3. Validando a ligação botão → módulo (código)...');
-  const charts = read('js/charts.js');
-  const relatorios = read('js/relatorios.js');
+  const charts = read('js/pages/charts.js');
+  const relatorios = read('js/pages/relatorios.js');
   const htmlRelatorio = read('relatorios.html');
   const htmlDashboard = read('dashboard.html');
-  const dashboard = read('js/dashboard.js');
+  const dashboard = read('js/pages/dashboard.js');
 
   check(
     'relatorios.html tem o botão e o indicador de sincronia (central única de gráficos)',

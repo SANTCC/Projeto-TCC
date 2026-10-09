@@ -94,7 +94,7 @@ async function loadApp(pageFile, { scripts, seed, session = SESSION }) {
 
   const { window } = dom;
 
-  // Sessão ativa (mesma estrutura gravada por js/confirm-role.js)
+  // Sessão ativa (mesma estrutura gravada por js/pages/confirm-role.js)
   window.localStorage.setItem('nexus_session', JSON.stringify(session));
   window.sessionStorage.setItem('nexus_session', JSON.stringify(session));
   window.localStorage.setItem('nexus_ghost_clean_v1', 'true');
@@ -186,7 +186,7 @@ async function scenarioCargas(collected) {
     data_cadastro: new Date().toISOString()
   };
   const dom = await loadApp('cargas.html', {
-    scripts: ['js/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/cargas.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/cargas.js'],
     seed: { nexus_cargas_fluxo: [carga], nexus_containers_list: [] }
   });
   const { window } = dom;
@@ -251,7 +251,7 @@ async function scenarioModalVinculacao(collected) {
   };
 
   const dom = await loadApp('cargas.html', {
-    scripts: ['js/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/cargas.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/cargas.js'],
     seed: {
       nexus_cargas_fluxo: [carga],
       nexus_containers_list: [containerMalicioso]
@@ -305,7 +305,7 @@ async function scenarioInlineHandlerExecution(collected) {
     data_cadastro: new Date().toISOString()
   };
   const dom = await loadApp('cargas.html', {
-    scripts: ['js/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/cargas.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/cargas.js'],
     seed: { nexus_cargas_fluxo: [carga], nexus_containers_list: [] },
     session: { ...SESSION, cargo: 'ESTIVADOR', cargo_nome: 'Estivador' }
   });
@@ -357,7 +357,7 @@ async function scenarioDashboard(collected) {
     retificacao: PAYLOADS.tagBreak
   };
   const dom = await loadApp('dashboard.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/dashboard.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/dashboard.js'],
     seed: {
       nexus_audit_logs: [log],
       nexus_trail_decisoes: [trail],
@@ -399,7 +399,7 @@ async function scenarioEmbarcacoes(collected) {
     distancia: 100
   };
   const dom = await loadApp('embarcacoes.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/embarcacoes.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/embarcacoes.js'],
     seed: {
       nexus_navios_list: [navio],
       nexus_bercos_list: [{ id: 'B1', nome: PAYLOADS.htmlEvent, estado: 'OCUPADO', navio_nome: PAYLOADS.svgEvent }],
@@ -433,7 +433,7 @@ async function scenarioManutencao(collected) {
     status: 'PENDENTE_APROVACAO'
   };
   const dom = await loadApp('manutencao.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/manutencao.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/manutencao.js'],
     seed: {
       nexus_os_list: [os],
       nexus_guindastes_list: [{ identificacao: PAYLOADS.jsBreakConcat, dataManut: '' }],
@@ -454,7 +454,7 @@ async function scenarioManutencao(collected) {
 async function scenarioTecnicoPortos(collected) {
   const label = 'tecnico_portos.html';
   const dom = await loadApp('tecnico_portos.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/tecnico_portos.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/tecnico_portos.js'],
     seed: {
       nexus_func_list: [{
         matricula: PAYLOADS.jsBreakParen,
@@ -490,7 +490,7 @@ async function scenarioTecnicoPortos(collected) {
 async function scenarioRelatorios(collected) {
   const label = 'relatorios.html';
   const dom = await loadApp('relatorios.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/relatorios.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/relatorios.js'],
     seed: {
       nexus_cargas_fluxo: [{
         id: PAYLOADS.jsBreakParen,
@@ -535,7 +535,7 @@ async function scenarioRelatorios(collected) {
 async function scenarioInspecao(collected) {
   const label = 'inspecao.html';
   const dom = await loadApp('inspecao.html', {
-    scripts: ['js/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/inspecao.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/inspecao.js'],
     seed: {
       nexus_cargas_fluxo: [{
         id: 'CRG-2026-777',
@@ -633,11 +633,11 @@ async function runUnitChecks(collected) {
   }
 
   // --- gate: nenhuma interpolação não codificada no código atual ---
+  // Varredura RECURSIVA: js/pages/ e js/webmcp/ também entram no gate.
   const jsDir = path.join(ROOT, 'js');
-  const alvos = fs.readdirSync(jsDir)
-    .filter(f => f.endsWith('.js') && f !== 'security.js')
-    .map(f => path.join(jsDir, f));
-  const achados = alvos.flatMap(f => xssScan.scan(f).map(x => `${path.basename(f)}:${x.line}`));
+  const alvos = xssScan.listarArquivosJs(jsDir)
+    .filter(f => path.basename(f) !== 'security.js');
+  const achados = alvos.flatMap(f => xssScan.scan(f).map(x => `${path.relative(jsDir, f)}:${x.line}`));
   if (achados.length > 0) {
     fail(collected, 'xss-scan', `interpolações não codificadas: ${achados.slice(0, 3).join(', ')}`);
   }

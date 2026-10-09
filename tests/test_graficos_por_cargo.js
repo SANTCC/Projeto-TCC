@@ -1,6 +1,6 @@
 /**
  * TESTE DEFINITIVO — GRÁFICOS POR CAMADA DE VISÃO (Chart.js)
- * Valida o módulo js/charts.js: painéis por cargo, restrições da Spec (RF 1),
+ * Valida o módulo js/pages/charts.js: painéis por cargo, restrições da Spec (RF 1),
  * cálculos dos indicadores (RF 4 / RF 7 / RF 16) e estados vazios.
  *
  * Parte 1 (sempre executada): carrega o módulo em contexto isolado (vm) com
@@ -59,7 +59,7 @@ function criarSandbox(storage) {
 }
 
 function carregarModulo(win) {
-  const codigo = fs.readFileSync(path.join(ROOT, 'js/charts.js'), 'utf-8');
+  const codigo = fs.readFileSync(path.join(ROOT, 'js/pages/charts.js'), 'utf-8');
   const contexto = vm.createContext({
     window: win,
     document: win.document,
@@ -165,7 +165,7 @@ async function verificarRenderizacaoPorCargo() {
 
   const htmlRelatorios = fs.readFileSync(path.join(ROOT, 'relatorios.html'), 'utf-8');
   // Ordem idêntica à das páginas reais: security.js → auth-guard.js → visão → gráficos → página
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/charts.js', 'js/relatorios.js']
+  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/pages/charts.js', 'js/pages/relatorios.js']
     .map(f => ({ arquivo: f, codigo: fs.readFileSync(path.join(ROOT, f), 'utf-8') }));
 
   for (const cenario of CENARIOS_DOM) {
@@ -239,8 +239,8 @@ async function verificarRenderizacaoPorCargo() {
   winRel.localStorage.setItem('nexus_audit_logs', JSON.stringify([{ data_hora: new Date().toISOString(), cargo: 'INSPETOR', codigo_individual: 'NX-07', entidade: 'CARGA CRG-1', tipo_alteracao: 'EDICAO' }]));
   winRel.localStorage.setItem('nexus_session', JSON.stringify({ cargo: 'INSPETOR', nome: 'Igor', codigo_individual: 'NX-07', matricula: 'MAT-07' }));
   winRel.eval(fs.readFileSync(path.join(ROOT, 'js/vision-layer.js'), 'utf-8'));
-  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/charts.js'), 'utf-8'));
-  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/relatorios.js'), 'utf-8'));
+  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/pages/charts.js'), 'utf-8'));
+  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/pages/relatorios.js'), 'utf-8'));
   winRel.document.dispatchEvent(new winRel.Event('DOMContentLoaded'));
   await new Promise(r => setTimeout(r, 250));
   const idsRel = Array.from(winRel.document.querySelectorAll('#relatoriosChartsGrid [data-chart-card]')).map(c => c.getAttribute('data-chart-card'));
@@ -488,7 +488,7 @@ async function main() {
     console.log('================================================================\n');
     process.exit(0);
   }
-  console.error(`💥 ${falhas} VERIFICAÇÃO(ÕES) FALHARAM. REVISE O MÓDULO js/charts.js!`);
+  console.error(`💥 ${falhas} VERIFICAÇÃO(ÕES) FALHARAM. REVISE O MÓDULO js/pages/charts.js!`);
   console.log('================================================================\n');
   process.exit(1);
 }

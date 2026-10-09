@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Relatórios & PDF (js/webmcp-relatorios.js) — NexusPort
+ * WebMCP — página Relatórios & PDF (js/webmcp/webmcp-relatorios.js) — NexusPort
  *
  * Geração de relatório PDF de uma carga (somente leitura) e exportação do histórico
  * em CSV (ação consequente, restrita à Direção, com confirmação do operador).

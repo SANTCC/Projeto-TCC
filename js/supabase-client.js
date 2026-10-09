@@ -238,7 +238,7 @@
      *   - berço OCUPADO identifique o navio por `navio_nome` ou `navio_imo`.
      * Cache local legado (berços marcados OCUPADO por carga, sem navio) ou ids
      * fora do padrão (`BERCO-6`) faziam o upsert — inclusive o lote de 15 berços
-     * em js/embarcacoes.js — abortar com:
+     * em js/pages/embarcacoes.js — abortar com:
      *   23514: new row for relation "bercos" violates check constraint
      *          "bercos_vinculo_navio_check"
      * como uma única linha inválida derruba a instrução inteira, o painel

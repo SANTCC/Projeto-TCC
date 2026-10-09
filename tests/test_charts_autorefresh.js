@@ -1,5 +1,5 @@
 /**
- * TESTE DE REGRESSÃO — CADÊNCIA DO AUTO REFRESH DOS GRÁFICOS (js/charts.js)
+ * TESTE DE REGRESSÃO — CADÊNCIA DO AUTO REFRESH DOS GRÁFICOS (js/pages/charts.js)
  *
  * Sintoma relatado:
  *   "Os gráficos se recarregam sozinhos a cada 10 segundos."
@@ -48,8 +48,8 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
  * 1. Estático: a cadência é de 1 minuto e o heartbeat é filtrado
  * ================================================================== */
 function testarCodigo() {
-  console.log('\n1. Validando a cadência no código de js/charts.js...');
-  const charts = read('js/charts.js');
+  console.log('\n1. Validando a cadência no código de js/pages/charts.js...');
+  const charts = read('js/pages/charts.js');
 
   check(
     'A renovação automática usa 60000 ms (1 minuto)',
@@ -90,7 +90,7 @@ async function testarComportamentoNoPainel() {
   }
 
   const htmlDashboard = read('dashboard.html');
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/data-repository.js', 'js/charts.js', 'js/dashboard.js']
+  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/data-repository.js', 'js/pages/charts.js', 'js/pages/dashboard.js']
     .map((f) => ({ arquivo: f, codigo: read(f) }));
 
   const tabelas = {

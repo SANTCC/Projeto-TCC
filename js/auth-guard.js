@@ -211,7 +211,7 @@
 
     /**
      * Informa, sem redirecionar, se o cargo da sessão pode abrir a página (mesma regra de requireAuth).
-     * Usado pelas ferramentas WebMCP (js/webmcp-core.js) para o mesmo controle de acesso das páginas.
+     * Usado pelas ferramentas WebMCP (js/webmcp/webmcp-core.js) para o mesmo controle de acesso das páginas.
      * @param {string} pageName - Nome do arquivo HTML (ex.: 'cargas.html')
      * @returns {boolean}
      */

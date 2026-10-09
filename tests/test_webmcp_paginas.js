@@ -13,12 +13,12 @@
 const H = require('./webmcp-harness');
 const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, read } = H;
 
-const BASE = ['js/security.js', 'js/auth-guard.js', 'js/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js'];
+const BASE = ['js/security.js', 'js/auth-guard.js', 'js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js'];
 
 /** Erros não capturados observados em cada página carregada (devem ser zero). */
 const ERROS_DE_PAGINA = [];
-const NUCLEO = ['js/webmcp-core.js'];
-const UI_DADOS_GLOBAL = ['js/webmcp-ui.js', 'js/webmcp-dados.js', 'js/webmcp-global.js'];
+const NUCLEO = ['js/webmcp/webmcp-core.js'];
+const UI_DADOS_GLOBAL = ['js/webmcp/webmcp-ui.js', 'js/webmcp/webmcp-dados.js', 'js/webmcp/webmcp-global.js'];
 
 /** Provedor de confirmação de teste: registra os pedidos e responde o valor de w.__resposta. */
 function provedorDeTeste(w) {
@@ -53,7 +53,7 @@ async function pronta(w) {
   return w;
 }
 
-const PAGINA_CARGAS = ['js/cargas.js', 'js/webmcp-cargas.js'];
+const PAGINA_CARGAS = ['js/pages/cargas.js', 'js/webmcp/webmcp-cargas.js'];
 
 function cargasBase() {
   const agora = new Date().toISOString();
@@ -191,7 +191,7 @@ async function testesInspecao() {
       { id: 'CRG-I2', tipo: 'Reefer (Contêiner Refrigerado)', peso: '8 t', volume: '30 m³', status: 'RECEBIMENTO_INSPECAO', portoDescarga: 'Pátio STS-01 (Setor C)', container: '', navio: '', qrCode: 'QR-CRG-I2', data_cadastro: new Date().toISOString() }
     ]
   };
-  const w = await pronta(pagina('inspecao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/inspecao.js'], adaptadores: ['js/webmcp-inspecao.js'] }));
+  const w = await pronta(pagina('inspecao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/pages/inspecao.js'], adaptadores: ['js/webmcp/webmcp-inspecao.js'] }));
   let r = await w.NexusWebMCP.executar('obter_checklist', { id: 'CRG-I1' });
   const criticos = r.ok ? r.dados.itens.filter((i) => i.critico).map((i) => i.item_id) : [];
   check('checklist: itens críticos do tipo da carga (RN 14)', r.ok && criticos.length === 5, JSON.stringify(r).slice(0, 200));
@@ -226,7 +226,7 @@ async function testesInspecao() {
   check('recusa com motivo: RECUSADA e motivo gravado', r.ok === true && recusada.status === 'RECUSADA' && recusada.motivoRecusa === 'Lacre violado no contêiner', JSON.stringify(r).slice(0, 200));
   w.close();
 
-  const supervisor = await pronta(pagina('inspecao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/inspecao.js'], adaptadores: ['js/webmcp-inspecao.js'] }));
+  const supervisor = await pronta(pagina('inspecao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/inspecao.js'], adaptadores: ['js/webmcp/webmcp-inspecao.js'] }));
   r = await supervisor.NexusWebMCP.executar('inspecionar_carga', { id: 'CRG-I1', decisao: 'APROVAR', respostas: [{ item_id: 'doc_1', conforme: true }] });
   check('supervisor consulta a inspeção, mas não inspeciona (PERMISSAO_NEGADA)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   supervisor.close();
@@ -246,8 +246,8 @@ async function testesEmbarcacoes() {
     nexus_guindastes_list: [{ identificacao: 'ABC123DEF', estado: 'OPERANTE', dataManut: '2026-01-01' }],
     nexus_cargas_fluxo: []
   };
-  const adapt = ['js/webmcp-embarcacoes.js'];
-  const scr = ['js/embarcacoes.js'];
+  const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
+  const scr = ['js/pages/embarcacoes.js'];
   let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
   let r = await w.NexusWebMCP.executar('listar_navios', { localizacao: 'DENTRO_DO_PORTO' });
   check('listar_navios: filtro por localização', r.ok && r.dados.total === 2);
@@ -305,7 +305,7 @@ async function testesManutencao() {
     nexus_os_list: [{ id: 'OS-2026-100', equipamento: 'Guindaste ABC123DEF', prioridade: 'ALTA', descricao: 'Revisão', status: 'SOLICITADA', data: '2026-10-01' }],
     nexus_containers_list: [], nexus_navios_list: []
   };
-  let w = await pronta(pagina('manutencao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/manutencao.js'], adaptadores: ['js/webmcp-manutencao.js'] }));
+  let w = await pronta(pagina('manutencao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/manutencao.js'], adaptadores: ['js/webmcp/webmcp-manutencao.js'] }));
   let r = await w.NexusWebMCP.executar('listar_ordens_servico', { status: 'SOLICITADA' });
   check('listar OS: filtra por status', r.ok && r.dados.total === 1);
   r = await w.NexusWebMCP.executar('obter_ordem_servico', { id: 'OS-2026-100' });
@@ -330,7 +330,7 @@ async function testesManutencao() {
   check('manutenção de navio: ferramenta declarativa de preenchimento registrada', Boolean(prep));
   w.close();
 
-  w = await pronta(pagina('manutencao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/manutencao.js'], adaptadores: ['js/webmcp-manutencao.js'] }));
+  w = await pronta(pagina('manutencao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/pages/manutencao.js'], adaptadores: ['js/webmcp/webmcp-manutencao.js'] }));
   r = await w.NexusWebMCP.executar('solicitar_manutencao_guindaste', { identificacao: 'ABC123DEF', justificativa: 'Teste de permissão' });
   check('inspetor não solicita manutenção de guindaste (só supervisão)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
@@ -342,7 +342,7 @@ async function testesDelegacaoETecnico() {
   const storage = {
     nexus_active_delegation: { substitutoMatricula: 'MAT-7001', substitutoNome: 'Carlos Substituto', substituidoNome: 'Ana Titular', substituidoMatricula: 'MAT-1001', inicio: '2026-10-01T08:00', fim: '2099-01-01T00:00' }
   };
-  let w = await pronta(pagina('delegacao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/delegacao.js'], adaptadores: ['js/webmcp-delegacao.js'] }));
+  let w = await pronta(pagina('delegacao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/delegacao.js'], adaptadores: ['js/webmcp/webmcp-delegacao.js'] }));
   let r = await w.NexusWebMCP.executar('obter_delegacao_ativa', {});
   check('delegação ativa: mostra substituto e vigência, sem CPF', r.ok && r.dados.ativa === true && !/cpf|CPF/.test(JSON.stringify(r.dados)), JSON.stringify(r).slice(0, 200));
   const form = w.document.getElementById('delegacaoForm');
@@ -369,7 +369,7 @@ async function testesDelegacaoETecnico() {
     nexus_vis_list: [{ id: 'VIS-1', nome: 'Visitante Um', documento: '123.456.789-09', motivo: 'Fiscalização', status: 'AGUARDANDO_AUTORIZACAO', data: '08/10/2026 10:00', por: 'MAT-1' }],
     nexus_code_overrides: {}
   };
-  w = await pronta(pagina('tecnico_portos.html', { session: sessao('TECNICO_PORTOS'), storage: storageTec, scriptsPagina: ['js/tecnico_portos.js'], adaptadores: ['js/webmcp-tecnico.js'] }));
+  w = await pronta(pagina('tecnico_portos.html', { session: sessao('TECNICO_PORTOS'), storage: storageTec, scriptsPagina: ['js/pages/tecnico_portos.js'], adaptadores: ['js/webmcp/webmcp-tecnico.js'] }));
   r = await w.NexusWebMCP.executar('pesquisar_funcionario', { matricula: '9900' });
   check('pesquisar funcionário: nome e cargo, sem código de acesso', r.ok === true && r.dados.nome === 'Joana Operadora' && !/NX-9900|codigo/i.test(JSON.stringify(r.dados)), JSON.stringify(r).slice(0, 200));
   r = await w.NexusWebMCP.executar('listar_visitantes', {});
@@ -390,7 +390,7 @@ async function testesDelegacaoETecnico() {
     r.ok === true && w.document.getElementById('visDocumento').value === '' && r.dados.preencher_pelo_operador.includes('visDocumento'));
   w.close();
 
-  w = await pronta(pagina('tecnico_portos.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: storageTec, scriptsPagina: ['js/tecnico_portos.js'], adaptadores: ['js/webmcp-tecnico.js'] }));
+  w = await pronta(pagina('tecnico_portos.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: storageTec, scriptsPagina: ['js/pages/tecnico_portos.js'], adaptadores: ['js/webmcp/webmcp-tecnico.js'] }));
   r = await w.NexusWebMCP.executar('reemitir_codigo_funcionario', { matricula: 'MAT-9900' });
   check('supervisor não reemite códigos (só Técnico e Direção)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
@@ -400,7 +400,7 @@ async function testesDelegacaoETecnico() {
 async function testesRelatoriosScannerPainel() {
   log('\n[7] Relatórios, Scanner e Painel Geral');
   const cargas = cargasBase();
-  let w = await pronta(pagina('relatorios.html', { session: sessao('DIRETOR_OPERACOES_LOGISTICA'), storage: { nexus_cargas_fluxo: cargas }, scriptsPagina: ['js/relatorios.js'], adaptadores: ['js/webmcp-relatorios.js'] }));
+  let w = await pronta(pagina('relatorios.html', { session: sessao('DIRETOR_OPERACOES_LOGISTICA'), storage: { nexus_cargas_fluxo: cargas }, scriptsPagina: ['js/pages/relatorios.js'], adaptadores: ['js/webmcp/webmcp-relatorios.js'] }));
   let exportou = 0;
   w.NexusVision.exportDadosHistoricos = async () => { exportou += 1; };
   w.__pedidos.length = 0;
@@ -409,12 +409,12 @@ async function testesRelatoriosScannerPainel() {
   check('exportar CSV: resumo informa que o conteúdo não vai ao agente', w.__pedidos[0].resumo.some((l) => /não é enviado ao agente/.test(l)));
   w.close();
 
-  w = await pronta(pagina('relatorios.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: { nexus_cargas_fluxo: cargas }, scriptsPagina: ['js/relatorios.js'], adaptadores: ['js/webmcp-relatorios.js'] }));
+  w = await pronta(pagina('relatorios.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: { nexus_cargas_fluxo: cargas }, scriptsPagina: ['js/pages/relatorios.js'], adaptadores: ['js/webmcp/webmcp-relatorios.js'] }));
   r = await w.NexusWebMCP.executar('exportar_historico_csv', {});
   check('exportar CSV: supervisor não exporta o histórico (só Direção)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
 
-  w = await pronta(pagina('scanner.html', { session: sessao('ESTIVADOR'), storage: { nexus_cargas_fluxo: cargas, nexus_audit_logs: [] }, scriptsPagina: ['js/scanner.js'], adaptadores: ['js/webmcp-scanner.js'] }));
+  w = await pronta(pagina('scanner.html', { session: sessao('ESTIVADOR'), storage: { nexus_cargas_fluxo: cargas, nexus_audit_logs: [] }, scriptsPagina: ['js/pages/scanner.js'], adaptadores: ['js/webmcp/webmcp-scanner.js'] }));
   r = await w.NexusWebMCP.executar('ler_codigo_qr', { codigo: 'CRG-A' });
   check('scanner: identifica a carga pelo código (com ação sugerida)', r.ok === true && r.dados.encontrado === true && r.dados.id === 'CRG-A' && typeof r.dados.acao_sugerida === 'string', JSON.stringify(r).slice(0, 220));
   r = await w.NexusWebMCP.executar('ler_codigo_qr', { codigo: "CRG-1,id.neq.0" });
@@ -429,8 +429,8 @@ async function testesRelatoriosScannerPainel() {
       nexus_trail_decisoes: [{ id: 'TRL-1', decisao: 'LIBEROU_NAVIO', entidade: 'NAVIO MV Santos Star', responsavel: 'Ana Titular (Supervisor de Operações) - SUP-0001', data_hora: new Date().toISOString(), motivo: 'Saída autorizada', retificacao: null }],
       nexus_audit_logs: [{ data_hora: new Date().toISOString(), cargo: 'INSPETOR', codigo_usuario: 'INS-6090', entidade: 'CRG-A', tipo_alteracao: 'EDICAO' }]
     },
-    scriptsPagina: ['js/data-repository.js', 'js/dashboard.js'],
-    adaptadores: ['js/webmcp-dashboard.js']
+    scriptsPagina: ['js/data-repository.js', 'js/pages/dashboard.js'],
+    adaptadores: ['js/webmcp/webmcp-dashboard.js']
   }));
   r = await w.NexusWebMCP.executar('listar_trilha_decisoes', {});
   check('trilha: responsável sem código individual (campo redigido)', r.ok && r.dados.itens[0].responsavel === 'Ana Titular (Supervisor de Operações)' && !/SUP-0001/.test(JSON.stringify(r)), JSON.stringify(r).slice(0, 200));
@@ -459,7 +459,7 @@ async function testesRelatoriosScannerPainel() {
 async function testesGlobaisEAcesso() {
   log('\n[8] Ferramentas globais, emergência e telas de acesso');
   const storage = {};
-  let w = await pronta(pagina('dashboard.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/dashboard.js'], adaptadores: ['js/webmcp-dashboard.js'] }));
+  let w = await pronta(pagina('dashboard.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/pages/dashboard.js'], adaptadores: ['js/webmcp/webmcp-dashboard.js'] }));
   let r = await w.NexusWebMCP.executar('obter_sessao', {});
   check('sessão: nome e cargo, sem código individual nem matrícula', r.ok && r.dados.cargo === 'INSPETOR' && !/NX-9001|MAT-9001|codigo|matricula/i.test(JSON.stringify(r.dados)), JSON.stringify(r).slice(0, 200));
   check('sessão: lista as ações permitidas ao cargo', Array.isArray(r.dados.acoes_permitidas) && r.dados.acoes_permitidas.includes('INSPECIONAR_CARGA'));
@@ -475,7 +475,7 @@ async function testesGlobaisEAcesso() {
   check('emergência: motivo chega ao módulo de pânico', chamadas[0] && chamadas[0].motivo === 'Incêndio na área de contêineres');
   w.close();
 
-  w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/cargas.js'], adaptadores: ['js/webmcp-cargas.js'] }));
+  w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/cargas.js'], adaptadores: ['js/webmcp/webmcp-cargas.js'] }));
   check('emergência: supervisor não tem a ferramenta de acionar alarme (sem permissão ACIONAR_EMERGENCIA)', !w.NexusWebMCP.ativas().includes('acionar_emergencia'));
   r = await w.NexusWebMCP.executar('ir_para_pagina', { pagina: 'embarcacoes' });
   check('ir para página: destino permitido ao cargo', r.ok === true && r.dados.destino === 'embarcacoes.html', JSON.stringify(r));

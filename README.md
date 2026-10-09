@@ -74,9 +74,9 @@ npm run test:webmcp   # agentes de IA (WebMCP): núcleo, polyfill, painel e pág
 
 ---
 
-## 📊 Gráficos por Cargo (js/charts.js)
+## 📊 Gráficos por Cargo (js/pages/charts.js)
 
-Os gráficos são montados em tempo de execução pelo módulo `js/charts.js` (Chart.js via CDN),
+Os gráficos são montados em tempo de execução pelo módulo `js/pages/charts.js` (Chart.js via CDN),
 sempre recortados pela **camada de visão do cargo autenticado** (RF 1):
 
 | Camada | Cargos | Indicadores exibidos |
@@ -166,7 +166,7 @@ Cada registro começa com `[NexusNet`, e os detalhes de cada requisição ficam 
 ## 🔒 Modelo de Segurança e Limitações da Arquitetura
 
 ### 1. Modelo de Autenticação e Sessão Client-Side
-O NexusPort foi desenvolvido no contexto de um protótipo operacional portuário (TCC). A verificação de credenciais e permissões (RBAC) é validada no frontend (`js/tecnico_portos.js`, `js/vision-layer.js`), armazenando a sessão ativa em `sessionStorage`/`localStorage` (`nexus_session`).
+O NexusPort foi desenvolvido no contexto de um protótipo operacional portuário (TCC). A verificação de credenciais e permissões (RBAC) é validada no frontend (`js/pages/tecnico_portos.js`, `js/vision-layer.js`), armazenando a sessão ativa em `sessionStorage`/`localStorage` (`nexus_session`).
 
 ### 2. Codificação de Saída contra XSS (DOM-based)
 Todo o front-end monta tabelas, cards e modais via `innerHTML`. Como os dados
@@ -423,7 +423,7 @@ O NexusPort expõe **ferramentas para agentes de IA do navegador** (WebMCP, `doc
 - **Controles operacionais:** limites de taxa, bloqueio das ações de pátio durante emergência (leituras continuam), tempo limite e nenhuma telemetria externa.
 
 ### Arquivos
-- `js/webmcp-core.js` (núcleo), `js/webmcp-ui.js` (diálogo e painel), `js/webmcp-dados.js` (leitores), `js/webmcp-global.js` (ferramentas globais), `js/webmcp-<página>.js` (adaptadores de cada tela).
+- `js/webmcp/webmcp-core.js` (núcleo), `js/webmcp/webmcp-ui.js` (diálogo e painel), `js/webmcp/webmcp-dados.js` (leitores), `js/webmcp/webmcp-global.js` (ferramentas globais), `js/webmcp/webmcp-<página>.js` (adaptadores de cada tela).
 
 ### Testar
 - `npm run test:webmcp` (jsdom, sem rede).

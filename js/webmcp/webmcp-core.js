@@ -1,5 +1,5 @@
 /**
- * WebMCP — núcleo (js/webmcp-core.js) — NexusPort
+ * WebMCP — núcleo (js/webmcp/webmcp-core.js) — NexusPort
  *
  * Expõe ferramentas tipadas para agentes de IA na API WebMCP:
  *   - `document.modelContext` (API nativa, W3C Web Machine Learning CG / Chrome);
@@ -19,7 +19,7 @@
  *   7. Limites de taxa, fila de execução serial, tempo limite e registro de atividade.
  *   8. Chave de desligamento (painel) retira todas as ferramentas da página.
  *
- * Carregamento: <script src="js/webmcp-core.js"> antes de webmcp-ui.js e das páginas WebMCP.
+ * Carregamento: <script src="js/webmcp/webmcp-core.js"> antes de webmcp-ui.js e das páginas WebMCP.
  */
 (function (window, document) {
   'use strict';

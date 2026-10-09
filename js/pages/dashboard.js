@@ -309,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Planilha consolidada com metas: exclusiva da Visão Estratégica (RF 1).
   // Cargos operacionais/táticos recebem, no lugar dela, os gráficos do seu
-  // próprio escopo (js/charts.js), evitando ruído e exposição de metas.
+  // próprio escopo (js/pages/charts.js), evitando ruído e exposição de metas.
   if (estrategicoPanel) {
     if (isDiretor) {
       estrategicoPanel.classList.remove('hidden');

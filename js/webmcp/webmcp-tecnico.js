@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Gestão de Pessoas / Técnico em Portos (js/webmcp-tecnico.js) — NexusPort
+ * WebMCP — página Gestão de Pessoas / Técnico em Portos (js/webmcp/webmcp-tecnico.js) — NexusPort
  *
  * Dados sensíveis desta página (código individual, CPF/documentos, documento de visitante)
  * NUNCA saem para o agente:

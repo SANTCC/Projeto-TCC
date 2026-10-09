@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Cargas & Pátio (js/webmcp-cargas.js) — NexusPort
+ * WebMCP — página Cargas & Pátio (js/webmcp/webmcp-cargas.js) — NexusPort
  *
  * Ferramentas de leitura (listar, obter, etiquetas, cadastros de apoio) e de ação
  * (agendar, receber, movimentar, pronta para entrega, vincular, liberar, cancelar).

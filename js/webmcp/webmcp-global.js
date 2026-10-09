@@ -1,5 +1,5 @@
 /**
- * WebMCP — ferramentas globais (js/webmcp-global.js) — NexusPort
+ * WebMCP — ferramentas globais (js/webmcp/webmcp-global.js) — NexusPort
  *
  * Disponíveis em todas as páginas, conforme a sessão e o cargo:
  *   obter_sessao, obter_estado_emergencia, acionar_emergencia, desativar_emergencia,
@@ -8,7 +8,7 @@
  * obter_etapa_acesso, que informa que credenciais são exclusivas do operador.
  * Também registra os recursos (nexus://…) e os prompts MCP do projeto.
  *
- * Carregamento: depois de js/webmcp-core.js, js/webmcp-ui.js e js/webmcp-dados.js.
+ * Carregamento: depois de js/webmcp/webmcp-core.js, js/webmcp/webmcp-ui.js e js/webmcp/webmcp-dados.js.
  */
 (function (window, document) {
   'use strict';

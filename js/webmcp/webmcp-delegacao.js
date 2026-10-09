@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Delegação de Supervisor (js/webmcp-delegacao.js) — NexusPort
+ * WebMCP — página Delegação de Supervisor (js/webmcp/webmcp-delegacao.js) — NexusPort
  *
  * A designação de um substituto exige CPF e data de nascimento do substituto. Por
  * privacidade, o agente NÃO recebe nem preenche esses dados: a ferramenta declarativa

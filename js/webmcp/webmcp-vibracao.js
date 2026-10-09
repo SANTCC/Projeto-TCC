@@ -1,5 +1,5 @@
 /**
- * WebMCP — página de teste de vibração (js/webmcp-vibracao.js) — NexusPort
+ * WebMCP — página de teste de vibração (js/webmcp/webmcp-vibracao.js) — NexusPort
  *
  * Página de diagnóstico sem login. Ferramentas públicas: estado do alerta tátil
  * (somente leitura) e ativação/desativação da preferência neste navegador. O disparo

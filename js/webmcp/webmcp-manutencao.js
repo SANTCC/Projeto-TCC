@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Manutenção & OS (js/webmcp-manutencao.js) — NexusPort
+ * WebMCP — página Manutenção & OS (js/webmcp/webmcp-manutencao.js) — NexusPort
  *
  * Ordens de serviço (aprovação, reprovação e conclusão pelo Supervisor/Direção),
  * manutenção de guindastes e abertura de OS. O formulário de manutenção de navio

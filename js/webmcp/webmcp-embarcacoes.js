@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Embarcações & GPS (js/webmcp-embarcacoes.js) — NexusPort
+ * WebMCP — página Embarcações & GPS (js/webmcp/webmcp-embarcacoes.js) — NexusPort
  *
  * Navios, contêineres, guindastes, berços e rotas marítimas. Ações consequentes
  * validam o estado e a regra de negócio antes de pedir confirmação, pedem confirmação

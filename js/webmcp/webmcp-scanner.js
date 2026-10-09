@@ -1,5 +1,5 @@
 /**
- * WebMCP — página Scanner QR Code (js/webmcp-scanner.js) — NexusPort
+ * WebMCP — página Scanner QR Code (js/webmcp/webmcp-scanner.js) — NexusPort
  *
  * Interpreta um código lido por QR (como o botão "simular leitura" da tela). Cada
  * leitura gera registro de auditoria e de leitura, como na tela; por isso a ferramenta

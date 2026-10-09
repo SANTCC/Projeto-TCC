@@ -1,5 +1,5 @@
 /**
- * WebMCP — leitores compartilhados (js/webmcp-dados.js) — NexusPort
+ * WebMCP — leitores compartilhados (js/webmcp/webmcp-dados.js) — NexusPort
  *
  * Única porta de saída de dados das ferramentas para o agente. Cada leitor:
  *   - devolve apenas os campos necessários para a tarefa (minimização de dados);
@@ -9,7 +9,7 @@
  *   - usa as mesmas regras de visibilidade da interface (NexusVision) e os mesmos
  *     caches locais que as páginas mantêm sincronizados.
  *
- * Carregamento: depois de js/webmcp-core.js e antes das páginas WebMCP.
+ * Carregamento: depois de js/webmcp/webmcp-core.js e antes das páginas WebMCP.
  */
 (function (window) {
   'use strict';
