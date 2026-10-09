@@ -899,6 +899,26 @@
     } catch (e) {
       // O documento não aceitou a propriedade: a API continua acessível via NexusWebMCP.api().
     }
+    try {
+      if (window.navigator) {
+        Object.defineProperty(window.navigator, 'modelContext', {
+          configurable: true,
+          enumerable: false,
+          get: () => motor
+        });
+      }
+    } catch (e) {
+      // navigator não aceitou a propriedade
+    }
+    try {
+      Object.defineProperty(window, 'modelContext', {
+        configurable: true,
+        enumerable: false,
+        get: () => motor
+      });
+    } catch (e) {
+      // window não aceitou a propriedade
+    }
     return motor;
   }
 
@@ -910,6 +930,9 @@
       const nav = window.navigator;
       if (nav && nav.modelContext && typeof nav.modelContext.registerTool === 'function') {
         return { modo: 'legado', api: adaptadorLegado(nav.modelContext) };
+      }
+      if (window.modelContext && typeof window.modelContext.registerTool === 'function') {
+        return { modo: 'nativo', api: window.modelContext };
       }
     } catch (e) { /* ambiente sem a API */ }
     if (window.isSecureContext === false) return { modo: 'indisponivel', api: null };
