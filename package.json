@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node tools/build.js",
     "start": "npx serve -l 3000 .",
-    "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run audit:xss && npm run test:haptics",
+    "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run audit:xss && npm run test:haptics && npm run test:python",
     "test:graficos": "node tests/test_graficos_por_cargo.js",
     "test:refresh": "node tests/test_charts_refresh.js",
     "test:autorefresh": "node tests/test_charts_autorefresh.js",
@@ -33,7 +33,8 @@
     "lighthouse": "node tools/lighthouse-check.js",
     "test:lighthouse": "node tests/test_lighthouse.js",
     "test:relatorio-pdf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_relatorio_pdf.js",
-    "test:seed": "node tests/test_seed_demo.js"
+    "test:seed": "node tests/test_seed_demo.js",
+    "test:python": "python3 -m unittest discover -s tests -p \"test_python_suite.py\""
   },
   "keywords": [
     "nexusport",
