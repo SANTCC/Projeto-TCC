@@ -22,7 +22,7 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
     if (match && isUUID(match.id)) funcId = match.id;
   }
 
-  const validTipos = ['CRIACAO', 'EDICAO', 'EXCLUSAO', 'REIMPRESSAO_ETIQUETA'];
+  const validTipos = ['CRIACAO', 'EDICAO', 'EXCLUSAO', 'REIMPRESSAO_ETIQUETA', 'EXPORTACAO'];
   let tipoEnum = 'EDICAO';
   const tipoUpper = String(tipoAlteracao || '').toUpperCase();
   if (validTipos.includes(tipoUpper)) {

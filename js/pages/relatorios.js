@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!error && Array.isArray(data)) {
           cargas = data.map(c => ({
             id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
-            tipo: c.natureza || 'Carga Geral',
+            tipo: c.natureza || 'Não informado',
             status: c.status_fluxo || 'AGENDAMENTO',
             navio: c.navio || '',
             container: c.container_id || '',
@@ -124,190 +124,115 @@ document.addEventListener('DOMContentLoaded', () => {
   const loadingStatus = document.getElementById('pdfLoadingStatus');
   const idleStatus = document.getElementById('pdfIdleStatus');
 
+  const UUID_CANONICO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function avisarPdf(tipo, titulo, mensagem) {
+    if (window.mostrarFeedback) window.mostrarFeedback(tipo, titulo, mensagem);
+  }
+
+  function baixarArquivo(blob, nomeArquivo) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nomeArquivo;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   if (gerarPdfBtn) {
-    gerarPdfBtn.addEventListener('click', () => {
+    gerarPdfBtn.addEventListener('click', async () => {
       const idCarga = selectCarga ? selectCarga.value : '';
       if (!idCarga) {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('atencao', 'Seleção Necessária', 'Por favor, selecione uma carga operacional para gerar o relatório PDF A4.');
-        }
+        avisarPdf('atencao', 'Seleção Necessária', 'Por favor, selecione uma carga operacional para gerar o relatório PDF A4.');
         return;
       }
 
       if (loadingStatus) loadingStatus.classList.remove('hidden');
       if (idleStatus) idleStatus.classList.add('hidden');
       gerarPdfBtn.disabled = true;
-
-      setTimeout(() => {
-        gerarRelatorioPdfA4(idCarga);
+      try {
+        await gerarRelatorioPdfA4(idCarga, { origem: 'tela' });
+      } finally {
         if (loadingStatus) loadingStatus.classList.add('hidden');
         if (idleStatus) idleStatus.classList.remove('hidden');
         gerarPdfBtn.disabled = false;
-      }, 600);
+      }
     });
   }
 
-  async function gerarRelatorioPdfA4(idCarga) {
-    let c = cargas.find(item => item.id === idCarga);
+  /**
+   * Emite o relatório PDF A4 pelo servidor (Edge Function relatorio-pdf, Backlog 3, item B).
+   * O navegador não monta o PDF: envia só o identificador da carga e o código da sessão.
+   * O servidor lê os dados no Supabase, devolve o arquivo e grava o cache por hash.
+   * Retorna true quando o arquivo foi baixado; false quando não foi (com aviso ao operador).
+   * opcoes.origem: 'tela' ou 'agente' (WebMCP), só para medição.
+   */
+  async function gerarRelatorioPdfA4(idCarga, opcoes) {
+    const origem = opcoes && opcoes.origem === 'agente' ? 'agente' : 'tela';
+    const carga = cargas.find((item) => item.id === idCarga) || null;
+    const cargaId = carga && carga.rawDbId ? carga.rawDbId : idCarga;
+    const config = window.NEXUS_CONFIG || {};
+    const urlBase = config.SUPABASE_URL || '';
+    const chave = config.SUPABASE_ANON_KEY || '';
 
-    if (window.nexusSupabase) {
+    if (!window.nexusSupabase || !urlBase || !chave) {
+      avisarPdf('erro', 'PDF indisponível', 'O relatório PDF é gerado pelo servidor e exige conexão com o Supabase.');
+      return false;
+    }
+    if (!UUID_CANONICO.test(String(cargaId))) {
+      avisarPdf('atencao', 'Carga sem registro no banco', 'Esta carga ainda não foi salva no Supabase. Salve a carga antes de emitir o PDF.');
+      return false;
+    }
+    const codigo = session && session.codigo_individual;
+    if (!codigo) {
+      avisarPdf('erro', 'Sessão necessária', 'Faça login para emitir o relatório PDF.');
+      return false;
+    }
+
+    let resposta;
+    try {
+      resposta = await fetch(`${urlBase}/functions/v1/relatorio-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: chave, Authorization: `Bearer ${chave}` },
+        body: JSON.stringify({ carga_id: cargaId, codigo_individual: codigo })
+      });
+    } catch (erro) {
+      avisarPdf('erro', 'Falha de conexão', 'Não foi possível gerar o PDF agora. Verifique a conexão e tente novamente.');
+      return false;
+    }
+
+    if (!resposta.ok) {
+      let mensagem = 'Não foi possível gerar o PDF.';
       try {
-        const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-        let query = window.nexusSupabase
-          .from('cargas')
-          .select('*, navios:navio_id(id, nome, numero_imo, porto_origem, porto_destino), containers:container_id(id, numero_identificacao, material_carregado, estado)');
-
-        if (isUuid(idCarga)) {
-          query = query.eq('id', idCarga);
-        } else {
-          query = query.or(`qr_code_url.eq.QR-${idCarga},qr_code_url.eq.${idCarga}`);
-        }
-
-        const { data: dbCarga } = await query.maybeSingle();
-
-        if (dbCarga) {
-          let navioNome = dbCarga.navios?.nome || (c ? c.navio : 'Não Vinculado');
-          let navioImo = dbCarga.navios?.numero_imo || 'Não Informado';
-          let containerIdent = dbCarga.containers?.numero_identificacao || (c ? c.container : 'Não Alocado');
-
-          if (!dbCarga.navios && dbCarga.navio_id) {
-            const { data: nDb } = await window.nexusSupabase.from('navios').select('nome, numero_imo').eq('id', dbCarga.navio_id).maybeSingle();
-            if (nDb) {
-              navioNome = nDb.nome;
-              navioImo = nDb.numero_imo;
-            }
-          }
-
-          if (!dbCarga.containers && dbCarga.container_id) {
-            const { data: cDb } = await window.nexusSupabase.from('containers').select('numero_identificacao').eq('id', dbCarga.container_id).maybeSingle();
-            if (cDb) {
-              containerIdent = cDb.numero_identificacao;
-            }
-          }
-
-          c = {
-            id: idCarga,
-            tipo: dbCarga.natureza || dbCarga.containers?.material_carregado || (c ? c.tipo : 'Carga Geral'),
-            peso: `${dbCarga.peso || dbCarga.peso_toneladas || 25} t`,
-            volume: `${dbCarga.volume || 40} m³`,
-            valor: `R$ ${(dbCarga.valor_declarado || 100000).toLocaleString('pt-BR')}`,
-            natureza: dbCarga.natureza || 'Geral',
-            portoDescarga: dbCarga.porto_descarga || (c ? c.portoDescarga : 'Porto de Santos'),
-            destino: dbCarga.destino || dbCarga.navios?.porto_destino || (c ? c.destino : 'Destino Internacional'),
-            status: dbCarga.status_fluxo || (c ? c.status : 'ARMAZENAGEM'),
-            container: containerIdent,
-            navio: navioNome,
-            imo: navioImo
-          };
-        }
-      } catch (err) { console.warn('Erro ao carregar carga no Supabase para PDF:', err); }
+        const corpo = await resposta.json();
+        if (corpo && corpo.erro) mensagem = corpo.erro;
+      } catch (erro) { /* resposta sem corpo JSON: mantém a mensagem padrão */ }
+      avisarPdf('erro', 'PDF não emitido', mensagem);
+      return false;
     }
 
-    if (!c) {
-      c = {
-        id: idCarga, tipo: 'Carga Geral', peso: '25.0 t', volume: '40 m³', valor: 'R$ 100.000', natureza: 'Geral',
-        portoDescarga: 'Porto de Santos', destino: 'Destino Internacional', status: 'ARMAZENAGEM', container: 'Não Alocado', navio: 'Não Vinculado', imo: 'Não Informado'
-      };
-    }
+    const arquivo = await resposta.blob();
+    baixarArquivo(arquivo, `Relatorio_A4_${cargaId}.pdf`);
+    const hash = resposta.headers.get('X-Relatorio-Hash') || null;
+    const cache = resposta.headers.get('X-Relatorio-Cache') || 'MISS';
 
     if (window.registrarLogAlteracao) {
-      await window.registrarLogAlteracao('EXPORTACAO', 'cargas', null, { carga_id: c.id, tipo_exportacao: 'PDF_A4', exportado_por: session.nome || session.cargo });
+      await window.registrarLogAlteracao(carga ? carga.id : cargaId, 'EXPORTACAO', {
+        tipo_exportacao: 'PDF_A4',
+        carga_id: cargaId,
+        hash_conteudo: hash,
+        exportado_por_codigo: codigo
+      });
     }
-
-    if (window.jspdf && window.jspdf.jsPDF) {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({ format: 'a4' });
-
-      // Cabeçalho Institucional
-      doc.setFillColor(30, 41, 59);
-      doc.rect(0, 0, 210, 25, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
-      doc.text('NEXUSPORT - SISTEMA DE AUTOMAÇÃO PORTUÁRIA', 14, 12);
-      doc.setFontSize(10);
-      doc.text('RELATÓRIO OPERACIONAL INTEGRADO DE CARGA (FORMATO A4)', 14, 18);
-
-      let y = 35;
-
-      // Seção 1: Dados da Carga
-      doc.setFillColor(245, 247, 250);
-      doc.rect(14, y, 182, 8, 'F');
-      doc.setTextColor(30, 41, 59);
-      doc.setFontSize(11);
-      doc.text('1. DADOS DA CARGA', 16, y + 6);
-      y += 12;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text(`Código da Carga: ${c.id}`, 16, y);
-      doc.text(`Tipo de Carga: ${c.tipo}`, 110, y);
-      y += 6;
-      doc.text(`Peso Declarado: ${c.peso}`, 16, y);
-      doc.text(`Volume: ${c.volume}`, 110, y);
-      y += 6;
-      doc.text(`Valor Declarado: ${c.valor || 'R$ 0,00'}`, 16, y);
-      doc.text(`Natureza da Mercadoria: ${c.natureza || 'Geral'}`, 110, y);
-      y += 12;
-
-      // Seção 2: Dados do Navio
-      doc.setFillColor(245, 247, 250);
-      doc.rect(14, y, 182, 8, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.text('2. DADOS DO NAVIO', 16, y + 6);
-      y += 12;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text(`Nome da Embarcação: ${c.navio || 'Não Vinculado'}`, 16, y);
-      doc.text(`Número IMO: ${c.imo || 'Não Informado'}`, 110, y);
-      y += 6;
-      doc.text(`Porto de Origem: Porto de Santos (STS-01)`, 16, y);
-      doc.text(`Porto de Destino da Viagem: ${c.destino || 'Destino Internacional'}`, 110, y);
-      y += 12;
-
-      // Seção 3: Dados do Contêiner
-      doc.setFillColor(245, 247, 250);
-      doc.rect(14, y, 182, 8, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.text('3. DADOS DO CONTÊINER', 16, y + 6);
-      y += 12;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text(`Identificação do Contêiner: ${c.container || 'Não Alocado'}`, 16, y);
-      doc.text(`Tipo de Carga Vinculada: ${c.tipo}`, 110, y);
-      y += 6;
-      doc.text(`Estado Operacional: OPERANTE`, 16, y);
-      doc.text(`Referência Temp. Uso: Data de Fabricação`, 110, y);
-      y += 12;
-
-      // Seção 4: Resumo do Fluxo
-      doc.setFillColor(245, 247, 250);
-      doc.rect(14, y, 182, 8, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.text('4. RESUMO DO FLUXO OPERACIONAL', 16, y + 6);
-      y += 12;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text(`Status Atual no Fluxo: ${c.status}`, 16, y);
-      doc.text(`Porto de Descarga Individual: ${c.portoDescarga}`, 110, y);
-      y += 6;
-      // C15: Data e hora do relatório em tempo real
-      const dataAtualReal = new Date();
-      doc.text(`Data/Hora de Emissão: ${dataAtualReal.toLocaleString('pt-BR')}`, 16, y);
-      doc.text(`Validade da Auditoria: ${dataAtualReal.toLocaleDateString('pt-BR')} 23:59:59`, 110, y);
-
-      doc.save(`Relatorio_A4_${c.id}.pdf`);
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'PDF Emitido', `Relatório PDF A4 em 4 seções gerado com sucesso para a carga ${c.id}!`);
-      }
-    } else {
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('info', 'Relatório Gerado', `Relatório da Carga ${c.id}:\n• Navio: ${c.navio}\n• Contêiner: ${c.container}\n• Status: ${c.status}`);
-      }
-    }
+    if (window.NexusAnalytics) window.NexusAnalytics.track('gerar_pdf', { origem, cache: cache === 'HIT' ? 'hit' : 'miss' });
+    avisarPdf('sucesso', 'PDF Emitido', `Relatório PDF A4 da carga ${carga ? carga.id : cargaId} gerado e baixado.`);
+    return true;
   }
+
+  // Uso do agente WebMCP: mesma geração de PDF do botão da página (retorna true/false).
+  window.nexusRelatorioGerarPdf = gerarRelatorioPdfA4;
 
   // Tabela de Produtividade Real (T6.9, T6.10, Tarefa 4.1)
   // Uso do agente WebMCP: mesma geração de PDF do botão da página.

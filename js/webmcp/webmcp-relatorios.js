@@ -39,7 +39,10 @@
     },
     executar: async (args) => {
       if (typeof window.nexusRelatorioGerarPdf !== 'function') return { ok: false, codigo: 'INDISPONIVEL', mensagem: 'Geração de PDF indisponível nesta página.' };
-      await window.nexusRelatorioGerarPdf(args.id);
+      const emitido = await window.nexusRelatorioGerarPdf(args.id, { origem: 'agente' });
+      if (emitido !== true) {
+        return { ok: false, codigo: 'FALHA_PDF', mensagem: `Não foi possível gerar o PDF da carga ${args.id}. Veja o aviso na tela.` };
+      }
       return { mensagem: `Relatório PDF da carga ${args.id} gerado para download.`, dados: { id: args.id, formato: 'A4' } };
     }
   };

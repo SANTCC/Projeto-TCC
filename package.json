@@ -31,7 +31,8 @@
     "test:analytics": "node tests/test_analytics.js",
     "test:build": "node tests/test_build.js",
     "lighthouse": "node tools/lighthouse-check.js",
-    "test:lighthouse": "node tests/test_lighthouse.js"
+    "test:lighthouse": "node tests/test_lighthouse.js",
+    "test:relatorio-pdf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_relatorio_pdf.js"
   },
   "keywords": [
     "nexusport",
@@ -47,6 +48,7 @@
     "clean-css": "^5.3.3",
     "jsdom": "^30.1.2",
     "lighthouse": "^13.5.0",
+    "pdf-lib": "^1.17.1",
     "puppeteer-core": "^25.13.0",
     "terser": "^5.51.2"
   }

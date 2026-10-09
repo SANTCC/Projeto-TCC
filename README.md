@@ -159,6 +159,15 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 ---
 
+## 📄 Relatório PDF no Servidor
+
+- **Função:** `supabase/functions/relatorio-pdf` gera o PDF A4 (pdf-lib). O navegador envia só o identificador da carga e recebe o arquivo do servidor.
+- **Cache:** bucket privado `relatorios-pdf`. O nome do arquivo é o SHA-256 do conteúdo, então dados iguais reaproveitam o PDF.
+- **Implantação:** `supabase db push` (migrações `20261009010000` e `20261009020000`) e `supabase functions deploy relatorio-pdf --no-verify-jwt`.
+- **Testes:** `npm run test:relatorio-pdf`.
+
+---
+
 ## 🔒 Banco de Dados e Schemas
 
 - **DDL Completo:** `SPECs/schema.sql`
