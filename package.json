@@ -29,7 +29,9 @@
     "test:tempo-real": "node tests/test_tempo_real.js",
     "test:presenca": "node tests/test_presenca_online.js",
     "test:analytics": "node tests/test_analytics.js",
-    "test:build": "node tests/test_build.js"
+    "test:build": "node tests/test_build.js",
+    "lighthouse": "node tools/lighthouse-check.js",
+    "test:lighthouse": "node tests/test_lighthouse.js"
   },
   "keywords": [
     "nexusport",
@@ -41,8 +43,11 @@
   "author": "NexusPort Team",
   "license": "MIT",
   "devDependencies": {
+    "chrome-launcher": "^1.2.2",
     "clean-css": "^5.3.3",
     "jsdom": "^30.1.2",
+    "lighthouse": "^13.5.0",
+    "puppeteer-core": "^25.13.0",
     "terser": "^5.51.2"
   }
 }

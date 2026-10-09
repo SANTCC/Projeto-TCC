@@ -11,3 +11,6 @@ dist/
 out/
 .DS_Store
 *.log
+
+# Relatórios do gate Lighthouse (gerados por npm run lighthouse)
+lighthouse-report/

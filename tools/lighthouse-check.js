@@ -1,0 +1,284 @@
+#!/usr/bin/env node
+/**
+ * GATE LIGHTHOUSE PARA PULL REQUESTS (Backlog 3, item H).
+ *
+ * Fluxo:
+ *   1. Gera o build de produção (dist/, mesmo código que vai para o deploy).
+ *   2. Serve dist/ em uma porta local livre.
+ *   3. Abre o Chrome (CHROME_PATH ou o instalado no sistema) e prepara a sessão de cada página:
+ *      sessão de teste (páginas internas), pendência de confirmação (confirm-role.html) ou nenhuma (login).
+ *   4. Roda o Lighthouse (desktop) em cada página de lighthouse/limiares.json.
+ *   5. Reprova (exit 1) se houver categoria abaixo do mínimo, auditoria crítica reprovada fora das exceções
+ *      ou página sem pontuação. Relatórios JSON completos ficam em lighthouse-report/ (fora do git).
+ *
+ * Os dados de sessão são sintéticos. O Supabase é bloqueado na rede do Lighthouse: a medição não lê nem
+ * escreve dados reais e não aparece na contagem de usuários on-line.
+ *
+ * Uso: npm run lighthouse                      (todas as páginas do limiares.json)
+ *      npm run lighthouse -- dashboard.html    (só as páginas indicadas)
+ * Requisito: Google Chrome ou Chromium instalado; CHROME_PATH aponta o executável se não estiver no PATH.
+ */
+const fs = require('fs');
+const http = require('http');
+const path = require('path');
+const { build, RAIZ } = require('./build');
+
+const LIMIARES_PADRAO = path.join(RAIZ, 'lighthouse', 'limiares.json');
+const PASTA_RELATORIOS = path.join(RAIZ, 'lighthouse-report');
+const CATEGORIAS_PERMITIDAS = ['performance', 'accessibility', 'best-practices', 'seo'];
+const TIPOS_SESSAO = ['publica', 'sessao', 'pendencia'];
+
+const SESSAO_VERIFICACAO = {
+  nome: 'Operador de verificação (Lighthouse)',
+  matricula: 'MAT-LH-0001',
+  codigo_individual: 'NX-LH-0001',
+  cargo: 'DIRETOR_OPERACOES_LOGISTICA',
+  cargo_nome: 'Diretor de Operações'
+};
+
+const TIPOS_MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml'
+};
+
+const fmt = (valor) => (typeof valor === 'number' ? valor.toFixed(2) : String(valor));
+
+/** Lê e valida a configuração. Lança erro com a lista de problemas. */
+function carregarLimiares(arquivo = LIMIARES_PADRAO) {
+  const limiares = JSON.parse(fs.readFileSync(arquivo, 'utf-8'));
+  const problemas = validarLimiares(limiares);
+  if (problemas.length) throw new Error(`limiares.json inválido:\n - ${problemas.join('\n - ')}`);
+  return limiares;
+}
+
+/** Problemas da configuração (lista vazia quando está válida). */
+function validarLimiares(limiares) {
+  const problemas = [];
+  const cats = limiares && limiares.categorias;
+  if (!cats || typeof cats !== 'object') problemas.push('categorias ausentes');
+  else {
+    Object.keys(cats).forEach((id) => {
+      if (!CATEGORIAS_PERMITIDAS.includes(id)) problemas.push(`categoria desconhecida: ${id}`);
+      if (typeof cats[id] !== 'number' || cats[id] < 0 || cats[id] > 1) problemas.push(`mínimo de ${id} deve estar entre 0 e 1`);
+    });
+  }
+  const paginas = (limiares && limiares.paginas) || [];
+  if (!Array.isArray(paginas) || paginas.length === 0) problemas.push('nenhuma página configurada');
+  const arquivos = new Set();
+  paginas.forEach((p) => {
+    if (!p || typeof p.arquivo !== 'string' || !p.arquivo.endsWith('.html')) problemas.push(`página inválida: ${JSON.stringify(p)}`);
+    else if (arquivos.has(p.arquivo)) problemas.push(`página repetida: ${p.arquivo}`);
+    else if (!fs.existsSync(path.join(RAIZ, p.arquivo))) problemas.push(`página inexistente: ${p.arquivo}`);
+    if (p && !TIPOS_SESSAO.includes(p.sessao)) problemas.push(`${p.arquivo}: sessao deve ser ${TIPOS_SESSAO.join(', ')}`);
+    if (p) arquivos.add(p.arquivo);
+  });
+  const criticas = (limiares && limiares.auditoriasCriticas) || [];
+  if (!Array.isArray(criticas) || criticas.some((id) => typeof id !== 'string')) problemas.push('auditoriasCriticas deve ser uma lista de textos');
+  const excecoes = (limiares && limiares.excecoes) || {};
+  Object.keys(excecoes).forEach((id) => {
+    const e = excecoes[id];
+    if (!criticas.includes(id)) problemas.push(`exceção de ${id} que não está em auditoriasCriticas`);
+    if (!e || !Array.isArray(e.paginas) || !e.motivo) problemas.push(`exceção de ${id} precisa de paginas e motivo`);
+    else e.paginas.forEach((p) => { if (!arquivos.has(p)) problemas.push(`exceção de ${id} aponta para página fora da lista: ${p}`); });
+  });
+  return problemas;
+}
+
+function excecaoPara(limiares, auditoria, arquivo) {
+  const e = limiares.excecoes && limiares.excecoes[auditoria];
+  return e && e.paginas.includes(arquivo) ? e : null;
+}
+
+/**
+ * Avalia o resultado do Lighthouse de uma página. Função pura (testada sem navegador).
+ * Retorna { arquivo, ok, categorias, falhas[], avisos[], excecoesAplicadas[] }.
+ */
+function avaliarLhr(lhr, limiares, arquivo) {
+  const falhas = [];
+  const avisos = [];
+  const excecoesAplicadas = [];
+  const categorias = {};
+
+  Object.keys(limiares.categorias).forEach((id) => {
+    const minimo = limiares.categorias[id];
+    const cat = lhr && lhr.categories && lhr.categories[id];
+    const score = cat && typeof cat.score === 'number' ? cat.score : null;
+    categorias[id] = score;
+    if (score === null) falhas.push(`categoria ${id} sem pontuação`);
+    else if (score < minimo) falhas.push(`categoria ${id}: ${fmt(score)} abaixo do mínimo ${fmt(minimo)}`);
+  });
+
+  limiares.auditoriasCriticas.forEach((id) => {
+    const audit = lhr && lhr.audits && lhr.audits[id];
+    if (!audit) {
+      avisos.push(`auditoria ${id} ausente do relatório`);
+      return;
+    }
+    const reprovada = typeof audit.score === 'number' && audit.score < 1;
+    const excecao = excecaoPara(limiares, id, arquivo);
+    if (reprovada && excecao) excecoesAplicadas.push(`${id} (dívida conhecida: ${excecao.motivo})`);
+    else if (reprovada) falhas.push(`auditoria crítica reprovada: ${id}`);
+    else if (excecao) avisos.push(`exceção obsoleta: ${id} já passa aqui; remova de limiares.json`);
+  });
+
+  return { arquivo, ok: falhas.length === 0, categorias, falhas, avisos, excecoesAplicadas };
+}
+
+/**
+ * Resolve um caminho de URL para um arquivo dentro de `pasta`. Retorna null se o caminho sair da pasta
+ * (path traversal) ou se o arquivo não existir.
+ */
+function resolverArquivoDist(pasta, caminhoUrl) {
+  let relativo;
+  try {
+    relativo = decodeURIComponent(String(caminhoUrl || '/').split('?')[0]);
+  } catch (e) {
+    return null;
+  }
+  if (relativo.endsWith('/')) relativo += 'index.html';
+  const base = path.resolve(pasta);
+  // A normalização ancora o caminho na raiz (sem `..` acima dela). A checagem abaixo é defesa em
+  // profundidade: em outras plataformas, barras invertidas podem escapar da pasta.
+  let arquivo = path.resolve(base, `.${path.posix.normalize(`/${relativo}`)}`);
+  if (arquivo !== base && !arquivo.startsWith(base + path.sep)) return null;
+  if (!fs.existsSync(arquivo) && fs.existsSync(`${arquivo}.html`)) arquivo = `${arquivo}.html`;
+  if (!fs.existsSync(arquivo) || fs.statSync(arquivo).isDirectory()) return null;
+  return arquivo;
+}
+
+/** Servidor estático local para dist/. Porta livre, só em 127.0.0.1. */
+function iniciarServidor(pasta) {
+  const servidor = http.createServer((req, res) => {
+    const arquivo = resolverArquivoDist(pasta, req.url);
+    if (!arquivo) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Não encontrado');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': TIPOS_MIME[path.extname(arquivo)] || 'application/octet-stream' });
+    fs.createReadStream(arquivo).pipe(res);
+  });
+  return new Promise((resolve, reject) => {
+    servidor.once('error', reject);
+    servidor.listen(0, '127.0.0.1', () => resolve({ servidor, origem: `http://127.0.0.1:${servidor.address().port}` }));
+  });
+}
+
+function imprimirTabela(resultados) {
+  const linhas = ['Página'.padEnd(24) + 'Desempenho  Acessib.  Boas práticas  SEO  Situação'];
+  resultados.forEach((r) => {
+    const c = r.categorias;
+    const v = (x) => (x === null || x === undefined ? '  —  ' : x.toFixed(2).padStart(5));
+    linhas.push(`${r.arquivo.padEnd(24)}${v(c.performance).padEnd(12)}${v(c.accessibility).padEnd(10)}${v(c['best-practices']).padEnd(16)}${v(c.seo).padEnd(6)}${r.ok ? 'OK' : 'REPROVADA'}`);
+    r.falhas.forEach((f) => linhas.push(`    ✗ ${f}`));
+    r.excecoesAplicadas.forEach((e) => linhas.push(`    · ${e}`));
+    r.avisos.forEach((a) => linhas.push(`    ! ${a}`));
+  });
+  return linhas.join('\n');
+}
+
+/** Prepara a sessão do navegador para a página (apaga cookies anteriores antes). */
+async function prepararSessao(navegador, origem, pagina) {
+  const pag = await navegador.newPage();
+  try {
+    const cdp = await pag.createCDPSession();
+    await cdp.send('Network.clearBrowserCookies');
+    if (pagina.sessao === 'publica') return;
+    await pag.goto(`${origem}/index.html`, { waitUntil: 'load' });
+    if (pagina.sessao === 'sessao') {
+      await pag.evaluate((s) => window.NexusSessionCookies.gravarSessao(s), SESSAO_VERIFICACAO);
+    } else {
+      await pag.evaluate((s) => window.NexusSessionCookies.gravarPendencia(s), SESSAO_VERIFICACAO);
+    }
+  } finally {
+    await pag.close();
+  }
+}
+
+async function executar(opcoes) {
+  const o = opcoes || {};
+  const limiares = carregarLimiares(o.limiares || LIMIARES_PADRAO);
+  const paginas = limiares.paginas.filter((p) => !o.filtro || o.filtro.includes(p.arquivo));
+  if (paginas.length === 0) throw new Error('nenhuma página selecionada pelo filtro');
+
+  const { default: lighthouse, desktopConfig } = await import('lighthouse');
+  const chromeLauncher = await import('chrome-launcher');
+  const puppeteer = await import('puppeteer-core');
+
+  process.stdout.write('Gerando build de produção (dist/)...\n');
+  await build();
+  const { servidor, origem } = await iniciarServidor(path.join(RAIZ, 'dist'));
+
+  let chrome = null;
+  let navegador = null;
+  const resultados = [];
+  try {
+    try {
+      chrome = await chromeLauncher.launch({
+        chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
+      });
+    } catch (erro) {
+      throw new Error(`Chrome não encontrado ou não iniciou (${erro.message}). Instale o Google Chrome ou defina CHROME_PATH.`);
+    }
+    navegador = await puppeteer.default.connect({ browserURL: `http://127.0.0.1:${chrome.port}`, defaultViewport: null });
+
+    fs.mkdirSync(PASTA_RELATORIOS, { recursive: true });
+    for (const pagina of paginas) {
+      process.stdout.write(`Medindo ${pagina.arquivo}...\n`);
+      await prepararSessao(navegador, origem, pagina);
+      const resultado = await lighthouse(`${origem}/${pagina.arquivo}`, {
+        port: chrome.port,
+        output: 'json',
+        logLevel: 'error',
+        onlyCategories: CATEGORIAS_PERMITIDAS,
+        disableStorageReset: true,
+        blockedUrlPatterns: limiares.rede.bloquearHosts
+      }, desktopConfig);
+      const lhr = resultado.lhr;
+      fs.writeFileSync(path.join(PASTA_RELATORIOS, `${pagina.arquivo.replace(/\.html$/, '')}.json`), JSON.stringify(lhr, null, 2));
+      resultados.push(avaliarLhr(lhr, limiares, pagina.arquivo));
+    }
+  } finally {
+    if (navegador) await navegador.disconnect();
+    if (chrome) await chrome.kill();
+    servidor.close();
+  }
+
+  const reprovadas = resultados.filter((r) => !r.ok);
+  process.stdout.write(`\n${imprimirTabela(resultados)}\n\n`);
+  process.stdout.write(`Relatórios completos: ${path.relative(RAIZ, PASTA_RELATORIOS)}/\n`);
+  return { ok: reprovadas.length === 0, resultados };
+}
+
+module.exports = {
+  executar,
+  avaliarLhr,
+  carregarLimiares,
+  validarLimiares,
+  resolverArquivoDist,
+  iniciarServidor,
+  LIMIARES_PADRAO,
+  PASTA_RELATORIOS,
+  SESSAO_VERIFICACAO
+};
+
+if (require.main === module) {
+  const filtro = process.argv.slice(2).filter((a) => a.endsWith('.html'));
+  executar({ filtro: filtro.length ? filtro : null })
+    .then(({ ok }) => {
+      if (ok) process.stdout.write('✅ Gate Lighthouse aprovado.\n');
+      else {
+        process.stdout.write('❌ Gate Lighthouse reprovado: corrija as falhas acima.\n');
+        process.exit(1);
+      }
+    })
+    .catch((erro) => {
+      process.stderr.write(`❌ Erro no gate Lighthouse: ${erro.message}\n`);
+      process.exit(1);
+    });
+}
