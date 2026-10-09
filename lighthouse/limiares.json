@@ -1,5 +1,5 @@
 {
-  "descricao": "Gate Lighthouse para pull requests (Backlog 3, item H). Categorias: pontuação mínima de 0 a 1. Auditorias críticas precisam passar, exceto nas exceções por página, que são dívida conhecida e devem ser removidas ao serem corrigidas. Os mínimos são piso de regressão, calibrados com a primeira medição; recalibrar após as primeiras execuções no CI.",
+  "descricao": "Gate Lighthouse para pull requests (Backlog 3, item H). Categorias: pontuação mínima de 0 a 1. Auditorias críticas precisam passar, exceto nas exceções por página, que são dívida conhecida e devem ser removidas ao serem corrigidas. Calibrado com as páginas estilizadas (Tailwind carregado): sem os estilos, a auditoria de contraste não é medida. Os mínimos são piso de regressão; recalibrar após as primeiras execuções no CI.",
   "rede": {
     "bloquearHosts": [
       "*supabase.co*"
@@ -106,32 +106,29 @@
     },
     "label": {
       "paginas": [
-        "dashboard.html",
-        "cargas.html",
         "delegacao.html",
-        "embarcacoes.html",
-        "inspecao.html",
-        "manutencao.html",
-        "relatorios.html",
-        "scanner.html",
-        "tecnico_portos.html"
+        "manutencao.html"
       ],
       "motivo": "campos de formulário sem rótulo acessível. Corrigir e remover a exceção."
     },
     "select-name": {
       "paginas": [
-        "dashboard.html",
         "cargas.html",
-        "embarcacoes.html",
         "inspecao.html",
-        "manutencao.html",
-        "relatorios.html",
-        "tecnico_portos.html"
+        "relatorios.html"
       ],
       "motivo": "select sem nome acessível. Corrigir e remover a exceção."
     },
     "aria-dialog-name": {
       "paginas": [
+        "manutencao.html"
+      ],
+      "motivo": "diálogo sem nome acessível (aria-labelledby ou aria-label). Corrigir e remover a exceção."
+    },
+    "color-contrast": {
+      "paginas": [
+        "index.html",
+        "confirm-role.html",
         "dashboard.html",
         "cargas.html",
         "delegacao.html",
@@ -142,7 +139,7 @@
         "scanner.html",
         "tecnico_portos.html"
       ],
-      "motivo": "diálogo sem nome acessível (aria-labelledby ou aria-label). Corrigir e remover a exceção."
+      "motivo": "texto secundário (rótulos e textos em cinza/slate) abaixo de 4,5:1 sobre o fundo claro, medido com os estilos do Tailwind carregados. Dívida conhecida: revisar as cores de texto secundário e remover a exceção."
     }
   }
 }
