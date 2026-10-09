@@ -11,14 +11,15 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 - **Autenticação & Controle de Acesso Baseado em Modos (RLS):**
   - **Técnico em Portos:** Gestão de funcionários, visitantes, cadastros operacionais e liberação.
   - **Supervisor de Operações:** Visão tática, delegação de substitutos e trilha de decisões.
-  - **Gerente de Operações:** Visão estratégica global, aprovação de relatórios e trilha crítica.
+  - **Gerente de Operações / Direção:** Visão estratégica global, aprovação de relatórios e trilha crítica.
 - **Fluxo Core de Cargas & Pátio:** Agendamento, recebimento, checklist de avarias, armazenamento em baia, vinculação e trânsito.
 - **QR Code & Etiquetas:** Geração de QR Code com canvas em tempo real, download de etiqueta A4/PDF 10x10cm e scanner via câmera/simulação.
 - **Dashboards & Relatórios:** KPIs em tempo real, busca operacional com 5 filtros e emissão de relatório PDF A4 com logotipo.
-- **Gráficos por Camada de Visão (Chart.js):** painéis gráficos recortados por cargo — Visão Própria (operações do próprio funcionário), Visão Operacional (inspeções, fila de liberação, manutenções, berços e trail) e Visão Estratégica (aprovação/recusa, permanência, frota, produtividade por cargo, % de berços e valor declarado).
+- **Gráficos por Camada de Visão (Chart.js):** Painéis gráficos recortados por cargo (Visão Própria, Visão Operacional e Visão Estratégica).
 - **Auditoria, Trail & Delegação:** Trilha imutável de decisões críticas com anexação de retificações e gestão de substituto ativo.
-- **Localização & Tempos:** Posicionamento GPS dos navios, classificação automática de status e cálculo de ETA com velocidade fixa de 33 km/h (RN 9).
-- **🚨 Botão de Pânico Global (Tempo Real):** O botão de emergência dispara a Edge Function `panic-alert`, que transmite o alerta via WebSocket (Supabase Realtime) para **todos os clientes conectados** — exibindo aviso fixo no rodapé de cada tela — e dispara um **webhook opcional (desativado por padrão)**.
+- **Localização & Tempos:** Posicionamento GPS dos navios, classificação automática de status e cálculo de ETA.
+- **🚨 Botão de Pânico Global (Tempo Real):** Disparo de emergência via Supabase Realtime (WebSocket) com banner fixo em todas as telas conectadas, alerta tátil (vibração/áudio) e suporte a webhook.
+- **🤖 Agentes de IA (WebMCP):** Interface para agentes de IA do navegador com controle humano e permissões por cargo.
 
 ---
 
@@ -26,10 +27,10 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 
 - **Frontend:** HTML5, Tailwind CSS, JavaScript (ES6 Modules)
 - **Supabase Backend:** PostgreSQL com Row Level Security (RLS) e Auth Client (`@supabase/supabase-js`)
-- **Supabase Edge Functions (Deno):** `panic-alert` — evento de servidor do botão de pânico global
+- **Supabase Edge Functions (Deno):** `panic-alert` (evento de servidor do botão de pânico)
 - **Supabase Realtime (WebSocket):** Broadcast do alarme de emergência para todos os clientes conectados
 - **Bibliotecas:** `Chart.js`, `qrcode.js`, `html5-qrcode`, `jsPDF`
-- **Automação & Testes:** Python 3 (Scripts de verificação `verify_phase*.py`)
+- **Automação & Testes:** Node.js, `jsdom`, `Playwright`
 
 ---
 
@@ -63,110 +64,40 @@ Acesse `http://localhost:3000` no seu navegador.
 
 ### 4. Executar Testes Automatizados
 ```bash
-npm test              # suite Playwright (fluxos ponta a ponta)
-npm run test:graficos # gráficos por camada de visão (Node, sem dependências)
-npm run test:refresh  # botão "Atualizar" dos gráficos: dado novo vem do servidor (jsdom)
-npm run test:bercos   # vínculo navio × berço: constraints de public.bercos (jsdom)
-npm run test:net-debug # depuração de conexões no console (Node, sem dependências)
-npm run test:backlog3 # correções do backlog3: login, layout, scanner e travas operacionais (jsdom)
-npm run test:webmcp   # agentes de IA (WebMCP): núcleo, polyfill, painel e páginas reais (jsdom)
-npm run test:gravacao # gravações no Supabase: login por matrícula sem 406 e inspeção sem "concluída" falso (jsdom)
-npm run test:single-flight # leituras idênticas em voo viram uma requisição; relatórios a cada 30 s (jsdom)
+npm test              # Executa toda a suíte de testes (Node.js/jsdom)
+npm run audit:xss    # Análise estática e regressão Anti-XSS
+npm run test:panic   # Testes do módulo de pânico e resiliência de migração
+npm run test:webmcp  # Testes de integração com agentes de IA (WebMCP)
 ```
 
 ---
 
-## 📊 Gráficos por Cargo (js/charts.js)
+## 📊 Gráficos e Camadas de Visão (js/charts.js)
 
-Os gráficos são montados em tempo de execução pelo módulo `js/charts.js` (Chart.js via CDN),
-sempre recortados pela **camada de visão do cargo autenticado** (RF 1):
+Os gráficos são montados em tempo de execução recortados pela **camada de visão do cargo autenticado** (RF 1):
 
 | Camada | Cargos | Indicadores exibidos |
 |--------|--------|----------------------|
-| **Visão Própria** | Estivador, Conferente, Arrumador, Planejador, Técnico em Portos | Operações próprias por dia, cargas/contêineres da própria atribuição e, para o Técnico, visitantes/efetivo (RF 15) |
-| **Visão Operacional** | Inspetor, Supervisor | Inspeções técnicas, fluxo de cargas, manutenções, fila de liberação, ocupação de berços e trail de decisões |
-| **Visão Estratégica** | Diretor de Operações, Diretor-Presidente e Conselho | Aprovação/recusa, tempo médio de permanência, embarcações mais utilizadas, produtividade por cargo, % de berços operacionais e **valor declarado** |
+| **Visão Própria** | Estivador, Conferente, Arrumador, Planejador, Técnico em Portos | Operações próprias por dia, cargas/contêineres da própria atribuição e efetivo/visitantes (Técnico). |
+| **Visão Operacional** | Inspetor, Supervisor | Inspeções técnicas, fluxo de cargas, manutenções, fila de liberação, ocupação de berços e trail de decisões. |
+| **Visão Estratégica** | Diretor de Operações, Diretor-Presidente e Conselho | Aprovação/recusa, permanência média, embarcações utilizadas, produtividade, % de berços e valor declarado. |
 
-Regras de privacidade aplicadas no próprio módulo:
-
-- O **valor declarado** (indicador financeiro) só é carregado para a Direção/Conselho — funcionários e supervisão recebem o campo sanitizado.
-- Dados de pessoas (`visitantes` e documentação de funcionários) **nunca** são carregados para Inspetor/Supervisor (restrição obrigatória do RF 1), mesmo que existam no banco.
-- Cargos operacionais enxergam apenas os próprios registros de auditoria e as cargas ligadas à sua atribuição (Vision Layer).
-
-Os painéis são exibidos no Painel Geral (`dashboard.html`) e no módulo de Relatórios (`relatorios.html`),
-com atualização automática a cada 60 s, re-renderização ao alternar o tema claro/escuro e estado vazio
-explícito quando ainda não há dados (nunca dados fictícios).
-
-### Botão "Atualizar" do painel de gráficos
-
-O botão `#chartsRefreshBtn` (painel "Análise gráfica por camada de visão") faz uma **recarga manual
-de verdade**: descarta o cache em memória (TTL de 4 s), reabre tabelas marcadas como ausentes na
-sessão (auto-cura quando a migração é aplicada com a tela aberta) e reconsulta o Supabase antes de
-redesenhar. O resultado é informado ao operador:
-
-- ao lado do botão (`#chartsSyncStatus`) — "Dados do servidor recebidos às HH:MM:SS",
-  "Servidor indisponível — gráficos exibidos a partir do cache local" ou "atualizado parcialmente";
-- no rodapé (`#chartsRoleFooter`) — origem dos dados (*servidor* / *cache local* / misto) e horário
-  da última leitura, além das fontes consultadas.
-
-> Este comportamento depende de `js/supabase-client.js` carregar sem erro, pois é ele que define
-> `window.nexusSupabase`. Um erro de sintaxe nesse arquivo faz **todas** as telas caírem
-> silenciosamente no cache local — os gráficos redesenham, mas nunca com dado novo do servidor.
-> A regressão é coberta por `npm run test:refresh`.
-
-### 5. Verificações de Segurança (Anti-XSS)
-```bash
-npm install          # instala o jsdom (devDependency)
-npm run audit:xss    # roda o scanner estático + a suíte de regressão XSS
-```
-- `npm run scan:xss` — análise estática: percorre todos os módulos `js/*.js` e
-  falha (exit code 1) se encontrar interpolação `${...}` não codificada dentro
-  de templates que geram HTML.
-- `npm run test:xss` — suíte de regressão: executa as páginas reais em jsdom,
-  injeta payloads de ataque (quebra de tag, quebra de atributo, quebra de string
-  JavaScript, entidades HTML, backslash) via `localStorage`, sessão e QR Code, e
-  confirma que nada é executado e que tudo é renderizado como texto.
+- **Atualização:** Atualização automática a cada 60 s e suporte a recarga manual sem cache local (`#chartsRefreshBtn`).
+- **Privacidade:** Indicadores financeiros (valor declarado) são restritos à Visão Estratégica. Dados pessoais de funcionários/visitantes não são expostos a cargos táticos.
 
 ---
 
-## 🔎 Depuração de Conexões no Console (js/net-debug.js)
+## 🔒 Modelo de Segurança
 
-O módulo `js/net-debug.js` registra no console do navegador cada conexão entre o front-end e o Supabase.
-Ele apenas observa: requisições e respostas chegam ao código da aplicação exatamente como antes.
-
-- **HTTP** (REST, Auth, Edge Functions e Storage): método, URL com filtros decodificados, cabeçalhos e corpo
-  (segredos ocultos), quem disparou a chamada (`arquivo.js:linha`), tempos, status, corpo da resposta, número
-  de linhas (`content-range`) e dicas para erros comuns (PGRST205, PGRST116, 42501, 23505, 401/403/404 de funções
-  e falhas de rede).
-- **Realtime** (WebSocket): conexão, abertura, fechamento com o significado do código (ex.: `1006`), erros,
-  heartbeats com latência e os eventos `phx_join`, `broadcast` e `phx_reply`.
-- **Página**: eventos online/offline, troca de aba e descarregamento com requisições em andamento.
-
-Cada registro começa com `[NexusNet`, e os detalhes de cada requisição ficam em um grupo recolhível (clique para expandir).
-
-| Comando (console do DevTools) | Efeito |
-|---|---|
-| `NexusNetDebug.help()` | Lista os comandos |
-| `NexusNetDebug.disable()` / `NexusNetDebug.enable()` | Desliga/liga o log (chave `nexus_debug_net` no `localStorage`; persiste entre recargas) |
-| `NexusNetDebug.verbose(true)` | Também mostra os quadros WebSocket brutos e os logs internos do Auth (`false` desliga) |
-| `NexusNetDebug.summary()` | Contadores: requisições, erros, tempo médio e requisições em andamento |
-| `NexusNetDebug.pending()` | Requisições ainda em andamento, com idade e origem |
-| `NexusNetDebug.table()` / `history()` | Últimas 200 requisições concluídas, em tabela ou como array |
-
-**Privacidade e segurança**
-
-- Ligado por padrão em todas as páginas que usam o Supabase. Ele é carregado antes de `js/supabase-client.js`.
-- `apikey`, `Authorization`, tokens, senhas, `service_role` e o código individual de login (`codigo_individual`)
-  aparecem como `[redacted]`.
-- Os demais dados de negócio aparecem no console como estão. Em computadores compartilhados, use
-  `NexusNetDebug.disable()`.
-- O módulo avisa no console se uma chave `sb_secret_...` ou JWT `service_role` estiver no front-end, porque ela
-  contorna o RLS.
+1. **Autenticação e Sessão Client-Side:** Validação por código individual vinculada ao perfil/cargo do funcionário (`nexus_session`).
+2. **Proteção Anti-XSS (DOM-based):** Módulo `js/security.js` expõe sanitização contextual obrigatoriamente aplicada antes da renderização HTML (`nexusEsc`, `nexusJsArg`, `nexusSafeUrl`).
+3. **Row Level Security (RLS) no Supabase:** Políticas *Append-Only* para tabelas de auditoria (`logs_alteracoes`, `trail_decisoes`) e restrição de comandos destrutivos (`DELETE`) nas tabelas operacionais.
 
 ---
 
-## 🔒 Modelo de Segurança e Limitações da Arquitetura
+## 🚨 Botão de Pânico Global
 
+<<<<<<< HEAD
 ### 1. Modelo de Autenticação e Sessão Client-Side
 O NexusPort foi desenvolvido no contexto de um protótipo operacional portuário (TCC). A verificação de credenciais e permissões (RBAC) é validada no frontend (`js/tecnico_portos.js`, `js/vision-layer.js`), armazenando a sessão ativa em `sessionStorage`/`localStorage` (`nexus_session`).
 
@@ -396,49 +327,91 @@ feedback do pânico avisa na hora se a auditoria não gravou.
 | Regressão do `22P02` no front-end (jsdom: pânico com auditoria pendente → migração aplicada) | `npm run test:enum` |
 
 Diagnóstico completo: `SPECs/diagnostico/22P02-enum-emergencia.md`.
+=======
+- **Mecanismo:** O acionamento via `manutencao.html` ou módulo global dispara a Edge Function `panic-alert` e transmite o alerta via WebSocket para todos os navegadores abertos.
+- **Feedback Tátil & Sonoro (`js/haptics.js`):** Em dispositivos móveis e navegadores suportados, o alerta ativa vibração em padrão SOS e aviso sonoro.
+- **Resiliência:** Se o banco ou a Edge Function estiverem indisponíveis, o front-end utiliza broadcast direto Realtime como fallback.
+- **Implantação da Edge Function:**
+  ```bash
+  supabase functions deploy panic-alert --no-verify-jwt
+  ```
+- **Diagnóstico de Banco (404 / PGRST205):** Caso a tabela `emergencias` não esteja provisionada (erro PGRST205), aplique a migração `supabase/migrations/20261008000000_emergencias_fix_404.sql` e verifique:
+  ```bash
+  curl "<SUPABASE_URL>/rest/v1/emergencias?select=*&estado=eq.ATIVA&order=data_hora.desc&limit=1" \
+       -H "apikey: <ANON_KEY>"
+  ```
+  Detalhes de solução de problemas e migrações de banco estão documentados em `SPECs/diagnostico/`.
+>>>>>>> origin/main
 
 ---
 
 ## 🤖 Agentes de IA (WebMCP)
 
-O NexusPort expõe **ferramentas para agentes de IA do navegador** (WebMCP, `document.modelContext`). Um agente pode consultar cargas, navios, indicadores e pedir ações. **Toda ação que altera dados exige a confirmação do operador** em um diálogo da própria tela, e a camada inteira pode ser desligada pelo painel.
+O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão WebMCP (`document.modelContext`).
+- **Confirmação Humana:** Ações que alteram estado exigem confirmação explícita do operador na tela.
+- **Controle de Acesso:** Ferramentas respeitam estritamente as permissões do cargo autenticado.
+- **Documentação Detalhada:** Consulte `SPECs/webmcp.md` para a arquitetura completa e especificação de ferramentas.
 
-### Como usar
-- Em qualquer tela autenticada, clique em **Agentes IA** (canto inferior direito).
-- No painel: veja as ferramentas desta página (com o motivo de cada bloqueio), a atividade recente e a chave **"Permitir que agentes usem as ferramentas deste navegador"**. Desligar remove todas as ferramentas.
-- Quando um agente pede uma ação, o diálogo mostra o impacto. O botão **Confirmar** só fica ativo após 1,5 s, e **Cancelar**, a tecla Esc ou o prazo de 60 s recusam a ação.
+---
 
-### Modos de API
-| Situação | Modo |
-|---|---|
-| Navegador com `document.modelContext` | nativo |
-| Navegador com `navigator.modelContext` (versão preliminar) | legado (adaptador) |
-| HTTPS sem API nativa | polyfill do projeto (sem dependências) |
-| HTTP fora de `localhost` | indisponível (contexto inseguro) |
+## 🔄 Tempo Real das Tabelas
 
-### Garantias de segurança
-- **Mínimo privilégio:** cada ferramenta existe só para o cargo que pode executar a ação na tela (mesma regra de `js/auth-guard.js`) e é verificada de novo na execução.
-- **Confirmação humana:** ações que alteram dados pedem confirmação; sem o diálogo, a ação é negada.
-- **Entradas e saídas:** argumentos validados por esquema estrito; saídas higienizadas (sem código de acesso, token ou CPF) e limitadas em tamanho.
-- **Dados pessoais fora do agente:** CPF, documento de visitante e data de nascimento não são parâmetros; o operador completa esses campos e envia os formulários.
-- **Auditoria:** trilha de decisões e logs são somente leitura para agentes; ações feitas por agente recebem a marca `[Agente WebMCP: <ferramenta>]`.
-- **Controles operacionais:** limites de taxa, bloqueio das ações de pátio durante emergência (leituras continuam), tempo limite e nenhuma telemetria externa.
+- **Mecanismo:** as telas assinam o Supabase Realtime das tabelas operacionais listadas em `NexusRepository.REALTIME_TABLES` (`js/data-repository.js`) e se recarregam quando um registro muda. Há também uma sincronização de segurança a cada 60 s.
+- **Implantação:** aplique a migração `supabase/migrations/20261009000000_realtime_publication.sql` (`supabase db push`). Sem ela, o canal conecta mas não recebe eventos, e as telas atualizam só pela sincronização de 60 s.
+- **Testes:** `npm run test:tempo-real`.
 
-### Arquivos
-- `js/webmcp-core.js` (núcleo), `js/webmcp-ui.js` (diálogo e painel), `js/webmcp-dados.js` (leitores), `js/webmcp-global.js` (ferramentas globais), `js/webmcp-<página>.js` (adaptadores de cada tela).
+- **Usuários on-line:** o cabeçalho mostra quantos códigos de funcionário estão conectados (Supabase Realtime Presence, canal `nexus-online`), atualizado a cada 30 s. Sem Supabase, mostra "—". Teste: `npm run test:presenca`.
 
-### Testar
-- `npm run test:webmcp` (jsdom, sem rede).
-- No navegador, use `chrome://flags/#enable-webmcp-testing` e o *Model Context Tool Inspector*.
+---
 
-### Limitações
-- Não há transporte MCP ativo nem `sampling`.
-- A API nativa do Chrome depende de versão ou origin trial; o polyfill cobre os demais casos.
-- Um agente que executa JavaScript dentro da própria página não é contido por controles da página; a barreira definitiva é a confirmação do navegador/host. Detalhes em `SPECs/webmcp.md` (seções 5 e 11).
+## 📈 Medição de Uso (Google Analytics 4)
 
-Documentação completa (fontes, arquitetura, catálogo de ferramentas, matriz de conformidade e achados): **`SPECs/webmcp.md`**.
+- **Configuração:** `js/analytics.js` (comum a todas as páginas). O identificador do aparelho é o cookie `_ga` do próprio GA4; não há fingerprinting.
+- **Eventos:** `NexusAnalytics.track(evento, parametros)`. Nunca envie nome, código ou matrícula: esses campos são descartados.
+- **Pendência:** consentimento de cookies (LGPD) não implementado.
+- **Testes:** `npm run test:analytics`.
+
+---
+
+## 📦 Build de Produção (minificação)
+
+- **Comando:** `npm run build` gera `dist/` com JS (Terser) e CSS (clean-css) minificados. Os caminhos não mudam.
+- **Deploy:** o `vercel.json` executa o mesmo comando (`buildCommand`) e publica `dist/` (`outputDirectory`).
+- **Desenvolvimento:** `npm start` continua servindo o código-fonte.
+- **Testes:** `npm run test:build`.
+
+---
+
+## 🚦 Gate Lighthouse (Pull Requests)
+
+- **CI:** `.github/workflows/lighthouse.yml` roda em todo PR. Os relatórios vão como artefato.
+- **Local:** `npm run lighthouse` (precisa de Google Chrome ou Chromium; use `CHROME_PATH` se não estiver no PATH). Gera `lighthouse-report/`.
+- **Limiares e exceções:** `lighthouse/limiares.json`. Cada página é medida em 3 rodadas (mediana). Exceções são dívida conhecida por página e devem ser removidas quando corrigidas.
+- **Testes:** `npm run test:lighthouse`.
+
+---
+
+## 📄 Relatório PDF no Servidor
+
+- **Função:** `supabase/functions/relatorio-pdf` gera o PDF A4 (pdf-lib). O navegador envia só o identificador da carga e recebe o arquivo do servidor.
+- **Cache:** bucket privado `relatorios-pdf`. O nome do arquivo é o SHA-256 do conteúdo, então dados iguais reaproveitam o PDF.
+- **Implantação:** `supabase db push` (migrações `20261009010000` e `20261009020000`) e `supabase functions deploy relatorio-pdf --no-verify-jwt`.
+- **Testes:** `npm run test:relatorio-pdf`.
+
+---
+
+## 🧪 Dados de Demonstração (seed)
+
+- **Arquivo:** `supabase/seed.sql`. Só para demonstração e desenvolvimento local. **Não aplicar em produção.**
+- **Usuários de teste:** 2 por cargo, com nome `[CARGO]_mock123` e `[CARGO]_mock321`. Acesso pelo código individual `MOCK-[CARGO]-123` e `MOCK-[CARGO]-321`.
+- **Dados:** 4 navios, 6 contêineres, 12 cargas (os 9 status do fluxo), tipos de carga, rotas a partir de Santos e histórico de alterações. IMOs e distâncias são fictícios.
+- **Aplicar:** local com `supabase db reset`; projeto de demonstração com `psql "$DATABASE_URL" -f supabase/seed.sql`. Reexecutar não duplica nada.
+- **Testes:** `npm run test:seed` (estrutura) e `python tests/verify_seed_demo.py` (PostgreSQL local; requer `pip install pgserver psycopg2-binary`).
 
 ---
 
 ## 🔒 Banco de Dados e Schemas
-O script DDL com as tabelas, funções RLS e políticas de acesso está disponível em `SPECs/schema.sql`. As migrações incrementais aplicáveis via Supabase CLI estão em `supabase/migrations/`.
+
+- **DDL Completo:** `SPECs/schema.sql`
+- **Migrações Incrementais:** `supabase/migrations/`
+- **Diagnósticos de banco:** `SPECs/diagnostico/`

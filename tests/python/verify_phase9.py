@@ -42,8 +42,8 @@ def check_phase9():
     if "window.nexusSupabase = supabaseClient;" not in supa_content:
         errors.append("js/supabase-client.js não expõe window.nexusSupabase")
 
-    # 4. Verificar js/dashboard.js
-    with open("js/dashboard.js", "r", encoding="utf-8") as f:
+    # 4. Verificar js/pages/dashboard.js
+    with open("js/pages/dashboard.js", "r", encoding="utf-8") as f:
         dash_js = f.read()
 
     required_functions = [
@@ -61,7 +61,7 @@ def check_phase9():
 
     for fn in required_functions:
         if fn not in dash_js:
-            errors.append(f"Função obrigatória '{fn}' não encontrada em js/dashboard.js")
+            errors.append(f"Função obrigatória '{fn}' não encontrada em js/pages/dashboard.js")
 
     if errors:
         print("❌ Falha na verificação da Fase 9:")

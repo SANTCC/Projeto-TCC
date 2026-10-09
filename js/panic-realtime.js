@@ -945,12 +945,16 @@
 
     const motivo = typeof options.motivo === 'string' && options.motivo.trim() ? options.motivo.trim() : null;
     const identity = buildIdentity();
-    return await executePanicAction('activate', {
+    const resultadoAcionamento = await executePanicAction('activate', {
       action: 'activate',
       motivo,
       acionado_por: identity,
       terminal: TERMINAL
     }, identity, motivo);
+    if (resultadoAcionamento && resultadoAcionamento.ok && window.NexusAnalytics) {
+      window.NexusAnalytics.track('botao_panico_acionado');
+    }
+    return resultadoAcionamento;
   }
 
   /**

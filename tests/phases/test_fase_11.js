@@ -22,13 +22,13 @@ const filesToCheck = [
   'tecnico_portos.html',
   'delegacao.html',
   'relatorios.html',
-  'js/dashboard.js',
-  'js/cargas.js',
-  'js/embarcacoes.js',
-  'js/manutencao.js',
-  'js/tecnico_portos.js',
-  'js/delegacao.js',
-  'js/relatorios.js',
+  'js/pages/dashboard.js',
+  'js/pages/cargas.js',
+  'js/pages/embarcacoes.js',
+  'js/pages/manutencao.js',
+  'js/pages/tecnico_portos.js',
+  'js/pages/delegacao.js',
+  'js/pages/relatorios.js',
   'js/data-repository.js'
 ];
 
@@ -44,17 +44,28 @@ console.log('  ✅ [PASS] Critério 1: Zero dados fantasmas ou mocks hardcoded n
 
 // 2. Critério 2 & 3: Indicadores e Contagens Consistentes entre Painel Geral e Telas Detalhadas
 console.log('2. Validando Consistência de Indicadores e Contagens Cruzadas (Critérios 2 e 3)...');
+<<<<<<< HEAD:tests/phases/test_fase_11.js
 const dashboardJs = fs.readFileSync(path.join(__dirname, '../../js/dashboard.js'), 'utf-8');
+=======
+const dashboardJs = fs.readFileSync(path.join(__dirname, 'js/pages/dashboard.js'), 'utf-8');
+>>>>>>> origin/main:tests/test_fase_11.js
 assert(dashboardJs.includes('renderCardsOperacionais') && dashboardJs.includes('renderIndicadoresExecutivosTable'), 'Painel Geral calcula estatísticas dinâmicas e indicadores cruzados.');
 assert(dashboardJs.includes('cargas') && dashboardJs.includes('navios') && dashboardJs.includes('manutencoes'), 'Painel Geral consulta todas as tabelas mestras.');
 console.log('  ✅ [PASS] Critérios 2 & 3: Métricas do Dashboard 100% integradas aos registros detalhados.');
 
 // 3. Critério 4: CRUD Completo Persistido no Supabase
 console.log('3. Validando Persistência Completa de CRUD (Critério 4)...');
+<<<<<<< HEAD:tests/phases/test_fase_11.js
 const cargasJs = fs.readFileSync(path.join(__dirname, '../../js/cargas.js'), 'utf-8');
 const embarcacoesJs = fs.readFileSync(path.join(__dirname, '../../js/embarcacoes.js'), 'utf-8');
 const manutencaoJs = fs.readFileSync(path.join(__dirname, '../../js/manutencao.js'), 'utf-8');
 const tecnicoJs = fs.readFileSync(path.join(__dirname, '../../js/tecnico_portos.js'), 'utf-8');
+=======
+const cargasJs = fs.readFileSync(path.join(__dirname, 'js/pages/cargas.js'), 'utf-8');
+const embarcacoesJs = fs.readFileSync(path.join(__dirname, 'js/pages/embarcacoes.js'), 'utf-8');
+const manutencaoJs = fs.readFileSync(path.join(__dirname, 'js/pages/manutencao.js'), 'utf-8');
+const tecnicoJs = fs.readFileSync(path.join(__dirname, 'js/pages/tecnico_portos.js'), 'utf-8');
+>>>>>>> origin/main:tests/test_fase_11.js
 
 const dataRepoJs = fs.readFileSync(path.join(__dirname, '../../js/data-repository.js'), 'utf-8');
 assert(cargasJs.includes('executarAcaoCarga') && dataRepoJs.includes('saveCarga'), 'CRUD e fluxo de Cargas presente.');
@@ -66,13 +77,13 @@ console.log('  ✅ [PASS] Critério 4: Operações CRUD completas persistidas no
 // 4. Critério 5: Nenhum alert() ou confirm() nativo; todos os avisos via modal estilizado
 console.log('4. Validando Ausência de Alerts Nativos e Uso de Modais Estilizados (Critério 5)...');
 const jsFilesWithAlertChecks = [
-  'js/cargas.js',
-  'js/embarcacoes.js',
-  'js/manutencao.js',
-  'js/tecnico_portos.js',
-  'js/delegacao.js',
-  'js/relatorios.js',
-  'js/dashboard.js'
+  'js/pages/cargas.js',
+  'js/pages/embarcacoes.js',
+  'js/pages/manutencao.js',
+  'js/pages/tecnico_portos.js',
+  'js/pages/delegacao.js',
+  'js/pages/relatorios.js',
+  'js/pages/dashboard.js'
 ];
 
 jsFilesWithAlertChecks.forEach(file => {
@@ -107,7 +118,11 @@ console.log('  ✅ [PASS] Critério 8: Fluxos ponta a ponta conectados e validad
 
 // 8. Critério 9: Delegação de Supervisor com Vigência e Reversão
 console.log('8. Validando Sistema de Delegação de Supervisor (Critério 9)...');
+<<<<<<< HEAD:tests/phases/test_fase_11.js
 const delegacaoJs = fs.readFileSync(path.join(__dirname, '../../js/delegacao.js'), 'utf-8');
+=======
+const delegacaoJs = fs.readFileSync(path.join(__dirname, 'js/pages/delegacao.js'), 'utf-8');
+>>>>>>> origin/main:tests/test_fase_11.js
 assert(delegacaoJs.includes('salvarDelegacao') || delegacaoJs.includes('delegar') || delegacaoJs.includes('criarDelegacao') || delegacaoJs.includes('delegacoes'), 'Delegação possui lógica de registro.');
 console.log('  ✅ [PASS] Critério 9: Delegação temporária de supervisor com vigência estrita e revogação.');
 

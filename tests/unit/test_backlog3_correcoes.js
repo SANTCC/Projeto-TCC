@@ -43,7 +43,7 @@ function check(label, cond, extra) {
 
 /**
  * Carrega uma página real em jsdom e executa, no contexto dela, os módulos
- * informados (depois de js/security.js e js/auth-guard.js).
+ * informados (depois de js/security.js, js/session-cookies.js e js/auth-guard.js).
  */
 async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION } = {}) {
   const virtualConsole = new VirtualConsole();
@@ -73,8 +73,7 @@ async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION }
   }
 
   if (session) {
-    window.localStorage.setItem('nexus_session', JSON.stringify(session));
-    window.sessionStorage.setItem('nexus_session', JSON.stringify(session));
+    window.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify(session)) + '; path=/';
   }
   window.localStorage.setItem('nexus_ghost_clean_v1', 'true');
 
@@ -83,6 +82,7 @@ async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION }
   });
 
   window.eval(read('js/security.js'));
+  window.eval(read('js/session-cookies.js'));
   window.eval(read('js/auth-guard.js'));
   window.currentUserSession = window.NexusAuth.getSession();
   for (const file of scripts) {
@@ -100,7 +100,7 @@ async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION }
 async function testarLoginHifen() {
   console.log('\n1. Login — auto-complete do hífen (UX)');
 
-  const dom = await loadPage('index.html', { scripts: ['js/login.js'], session: null });
+  const dom = await loadPage('index.html', { scripts: ['js/pages/login.js'], session: null });
   const { window } = dom;
   const input = window.document.getElementById('operatorCode');
 
@@ -161,7 +161,7 @@ function testarScannerQuadrado() {
   check('CSS garante proporção 1:1 do preview', html.includes('aspect-ratio: 1 / 1'));
   check('vídeo da câmera sem distorção (object-fit: cover)', html.includes('object-fit: cover'));
 
-  const js = read('js/scanner.js');
+  const js = read('js/pages/scanner.js');
   check('área de leitura (qrbox) calculada quadrada', js.includes('ladoLeitura') && js.includes('qrbox: { width: ladoLeitura, height: ladoLeitura }'));
 }
 
@@ -187,7 +187,7 @@ async function testarCargaEmTransito() {
   };
 
   const dom = await loadPage('cargas.html', {
-    scripts: ['js/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/cargas.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/cargas.js'],
     seed: { nexus_cargas_fluxo: [carga], nexus_containers_list: [], nexus_navios_list: [] }
   });
   const { window } = dom;
@@ -233,7 +233,7 @@ async function testarAutorizarRetorno() {
   };
 
   const dom = await loadPage('embarcacoes.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/embarcacoes.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/embarcacoes.js'],
     seed: { nexus_navios_list: [navioForaDoPorto], nexus_bercos_list: [], nexus_cargas_fluxo: [] }
   });
   const { window } = dom;
@@ -275,7 +275,7 @@ async function testarManutencao() {
   console.log('\n6. Manutenção — status legível, datas e travas');
 
   const dom = await loadPage('manutencao.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/data-repository.js', 'js/manutencao.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/data-repository.js', 'js/pages/manutencao.js'],
     seed: {
       nexus_emergency_active: 'true',
       nexus_os_list: [{

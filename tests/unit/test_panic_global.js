@@ -88,7 +88,7 @@ function testPanicGlobal() {
 
   // 5. Botão existente delegado ao fluxo global
   console.log('\n5. Validando integração do botão existente (manutencao)...');
-  const man = read('js/manutencao.js');
+  const man = read('js/pages/manutencao.js');
   check('panicBtn delega para NexusPanic.triggerPanic', man.includes('window.NexusPanic.triggerPanic'));
   check('resetEmergencyBtn delega para NexusPanic.clearPanic', man.includes('window.NexusPanic.clearPanic'));
   check('Banner da página sincroniza via nexus_panic_changed', man.includes("window.addEventListener('nexus_panic_changed'"));

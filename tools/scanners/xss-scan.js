@@ -264,13 +264,27 @@ function scan(file) {
   return findings;
 }
 
+/**
+ * Lista todos os .js de um diretório, em profundidade (js/pages/, js/webmcp/ ...).
+ * Antes da reorganização do backlog 3 o scanner lia só o nível raiz de js/;
+ * sem recursão, os módulos movidos sairiam da verificação em silêncio.
+ */
+function listarArquivosJs(dir) {
+  const achados = [];
+  for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+    const caminho = path.join(dir, entrada.name);
+    if (entrada.isDirectory()) achados.push(...listarArquivosJs(caminho));
+    else if (entrada.name.endsWith('.js')) achados.push(caminho);
+  }
+  return achados.sort();
+}
+
 function run(argv) {
   const root = path.resolve(__dirname, '../..');
   let targets = argv.slice(2);
   if (targets.length === 0) {
-    targets = fs.readdirSync(path.join(root, 'js'))
-      .filter(f => f.endsWith('.js') && f !== 'security.js')
-      .map(f => path.join('js', f));
+    targets = listarArquivosJs(path.join(root, 'js'))
+      .filter(f => path.basename(f) !== 'security.js');
   }
 
   let total = 0;
@@ -291,6 +305,7 @@ function run(argv) {
 
 // Exportado para testes unitários das heurísticas (tests/xss.test.js)
 module.exports = {
+  listarArquivosJs,
   isSafeExpression,
   isStaticTernary,
   isStaticStringLiteral,

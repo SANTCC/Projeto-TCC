@@ -89,8 +89,7 @@ function criarJanela(opcoes) {
   // A limpeza one-shot de dados fantasmas (auth-guard.js) não deve apagar os dados de teste.
   w.localStorage.setItem('nexus_ghost_clean_v1', 'true');
   if (o.session) {
-    w.sessionStorage.setItem('nexus_session', JSON.stringify(o.session));
-    w.localStorage.setItem('nexus_session', JSON.stringify(o.session));
+    w.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify(o.session)) + '; path=/';
   }
   Object.keys(o.storage || {}).forEach((k) => {
     const v = o.storage[k];

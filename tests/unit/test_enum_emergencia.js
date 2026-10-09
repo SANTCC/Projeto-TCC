@@ -108,8 +108,8 @@ function testarFrontEndEstatico() {
   console.log('\n2. Validando a resiliência do front-end...');
   const cliente = read('js/supabase-client.js');
   const panic = read('js/panic-realtime.js');
-  const dashboard = read('js/dashboard.js');
-  const manutencao = read('js/manutencao.js');
+  const dashboard = read('js/pages/dashboard.js');
+  const manutencao = read('js/pages/manutencao.js');
 
   check('supabase-client.js sabe classificar o erro de enum (isEnumDesconhecidoError)',
     cliente.includes('isEnumDesconhecidoError: function')

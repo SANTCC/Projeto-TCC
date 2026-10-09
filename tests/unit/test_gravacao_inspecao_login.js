@@ -121,6 +121,15 @@ function respostaPostgrest(q, linhas) {
   return { data: encontradas[0] || null, error: null, status: 200 };
 }
 
+/** Lê um cookie do documento jsdom (a pendência de login vive só em cookie desde o item A). */
+function lerCookie(window, nome) {
+  const trecho = (window.document.cookie || '')
+    .split(';')
+    .map((parte) => parte.trim())
+    .find((parte) => parte.startsWith(nome + '='));
+  return trecho ? decodeURIComponent(trecho.substring(nome.length + 1)) : null;
+}
+
 /**
  * Carrega uma página real em jsdom. `setup(window)` roda depois de js/security.js
  * e js/auth-guard.js e antes dos scripts da página, então é o lugar de injetar
@@ -152,9 +161,9 @@ async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION, 
     });
   }
 
+  // Item A (backlog3): a sessão é lida somente do cookie nexus_session (sem storage).
   if (session) {
-    window.localStorage.setItem('nexus_session', JSON.stringify(session));
-    window.sessionStorage.setItem('nexus_session', JSON.stringify(session));
+    window.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify(session)) + '; path=/';
   }
   window.localStorage.setItem('nexus_ghost_clean_v1', 'true');
 
@@ -163,6 +172,8 @@ async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION, 
   });
 
   window.eval(read('js/security.js'));
+  // Item A: o guard exige js/session-cookies.js carregado antes (mesma ordem das páginas).
+  window.eval(read('js/session-cookies.js'));
   window.eval(read('js/auth-guard.js'));
   window.currentUserSession = window.NexusAuth.getSession();
   setup(window);
@@ -186,15 +197,15 @@ async function testarLoginPorMatricula() {
   console.log('\n1. Login — matrícula digitada no campo de código (sem 406)');
 
   // Ignora comentários: o texto explicativo no próprio código cita ".single()".
-  const codigoLogin = read('js/login.js').replace(/^\s*\/\/.*$/gm, '');
-  check('js/login.js não usa .single() nas consultas de funcionários', !codigoLogin.includes('.single()'));
+  const codigoLogin = read('js/pages/login.js').replace(/^\s*\/\/.*$/gm, '');
+  check('js/pages/login.js não usa .single() nas consultas de funcionários', !codigoLogin.includes('.single()'));
 
   const registro = [];
   const funcionarios = [
     { id: 'func-1', matricula: '777001', codigo_individual: 'NX-7770', nome: 'Operador de Teste', cargo: 'OPERADOR', ativo: true }
   ];
   const dom = await loadPage('index.html', {
-    scripts: ['js/login.js'],
+    scripts: ['js/pages/login.js'],
     session: null,
     setup(window) {
       window.nexusSupabase = criarSupabaseFalso((q) => respostaPostgrest(q, funcionarios), registro);
@@ -207,7 +218,7 @@ async function testarLoginPorMatricula() {
     .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
   await sleep(100);
 
-  const pendente = window.sessionStorage.getItem('nexus_pending_auth');
+  const pendente = lerCookie(window, 'nexus_pending_auth');
   check('matrícula 777001 é reconhecida no login', Boolean(pendente) && JSON.parse(pendente).matricula === '777001', pendente);
   check('nenhuma consulta de funcionário recebe 406 (PGRST116)', !registro.some((r) => r.status === 406), JSON.stringify(registro));
   check(
@@ -243,7 +254,7 @@ async function prepararInspecao({
   };
 
   const dom = await loadPage('inspecao.html', {
-    scripts: ['js/inspecao.js'],
+    scripts: ['js/pages/inspecao.js'],
     seed: { nexus_cargas_fluxo: [CARGA] },
     setup(window) {
       window.nexusSupabase = criarSupabaseFalso(tratar, registro);

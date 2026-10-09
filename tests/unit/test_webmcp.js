@@ -16,7 +16,7 @@
 const H = require('./webmcp-harness');
 const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, read, htmlDaPagina } = H;
 
-const SCRIPTS_NUCLEO = ['js/security.js', 'js/auth-guard.js', 'js/webmcp-core.js'];
+const SCRIPTS_NUCLEO = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/webmcp/webmcp-core.js'];
 const PAGINAS = [
   'cargas.html', 'dashboard.html', 'embarcacoes.html', 'inspecao.html', 'manutencao.html', 'delegacao.html',
   'tecnico_portos.html', 'relatorios.html', 'scanner.html', 'index.html', 'confirm-role.html', 'teste-vibracao.html'
@@ -80,8 +80,8 @@ function adaptadorDaPagina(pag) {
     'manutencao.html': 'manutencao', 'delegacao.html': 'delegacao', 'tecnico_portos.html': 'tecnico',
     'relatorios.html': 'relatorios', 'scanner.html': 'scanner'
   };
-  if (pag === 'teste-vibracao.html') return ['js/webmcp-vibracao.js'];
-  if (mapa[pag]) return ['js/webmcp-' + mapa[pag] + '.js'];
+  if (pag === 'teste-vibracao.html') return ['js/webmcp/webmcp-vibracao.js'];
+  if (mapa[pag]) return ['js/webmcp/webmcp-' + mapa[pag] + '.js'];
   return [];
 }
 
@@ -91,8 +91,8 @@ function adaptadorDaPagina(pag) {
 async function secaoEstatica() {
   log('\n[1] Catálogo e higiene estática');
   const fs = require('fs');
-  const arquivos = fs.readdirSync(H.ROOT + '/js').filter((f) => f.startsWith('webmcp-') && f.endsWith('.js')).map((f) => 'js/' + f);
-  check('há módulos WebMCP em js/ (núcleo, UI, dados, global e adaptadores)', arquivos.length >= 13, `encontrados: ${arquivos.length}`);
+  const arquivos = fs.readdirSync(H.ROOT + '/js/webmcp').filter((f) => f.startsWith('webmcp-') && f.endsWith('.js')).map((f) => 'js/webmcp/' + f);
+  check('há módulos WebMCP em js/webmcp/ (núcleo, UI, dados, global e adaptadores)', arquivos.length >= 13, `encontrados: ${arquivos.length}`);
 
   let semInner = true;
   let semEval = true;
@@ -106,7 +106,7 @@ async function secaoEstatica() {
     if (/localhost|127\.0\.0\.1/.test(src)) semLocal = false;
     if (/http:\/\//.test(src)) semHttp = false;
     // O identificador do código individual só pode aparecer na lista de ocultação do núcleo.
-    if (f !== 'js/webmcp-core.js' && /codigo_individual/.test(src)) semCodigoIndividual = false;
+    if (f !== 'js/webmcp/webmcp-core.js' && /codigo_individual/.test(src)) semCodigoIndividual = false;
   });
   check('módulos WebMCP não usam innerHTML/insertAdjacentHTML (DOM API e textContent)', semInner);
   check('módulos WebMCP não usam eval nem new Function', semEval);
@@ -114,7 +114,7 @@ async function secaoEstatica() {
   check('módulos WebMCP não usam http:// (apenas HTTPS)', semHttp);
   check('código individual só é citado no núcleo (lista de ocultação), nunca nos adaptadores', semCodigoIndividual);
 
-  const nucleo = read('js/webmcp-core.js');
+  const nucleo = read('js/webmcp/webmcp-core.js');
   check('núcleo não faz requisições de rede (sem fetch/XMLHttpRequest)', !/\bfetch\s*\(|XMLHttpRequest/.test(nucleo));
   check('polyfill sem dependências externas (sem require/import/CDN no núcleo)', !/\brequire\s*\(|^import\s/m.test(nucleo) && !/cdn\./i.test(nucleo));
 
@@ -125,7 +125,7 @@ async function secaoEstatica() {
       html: htmlDaPagina(pag),
       session: sessao('DIRETOR_PRESIDENTE_SUPERINTENDENTE'),
       storage: {},
-      scripts: SCRIPTS_NUCLEO.concat(['js/webmcp-ui.js', 'js/webmcp-dados.js', 'js/webmcp-global.js'], adaptadorDaPagina(pag))
+      scripts: SCRIPTS_NUCLEO.concat(['js/webmcp/webmcp-ui.js', 'js/webmcp/webmcp-dados.js', 'js/webmcp/webmcp-global.js'], adaptadorDaPagina(pag))
     });
     const w = janela.w;
     w.NexusWebMCP.iniciar({});
@@ -173,9 +173,11 @@ async function secaoNucleo() {
   // 2.1 Polyfill quando não há API nativa
   let { w, registro } = janelaNucleo();
   check('sem API nativa: modo "polyfill"', w.NexusWebMCP.modo() === 'polyfill', w.NexusWebMCP.modo());
-  check('polyfill expõe document.modelContext com registerTool/getTools/executeTool',
-    typeof w.document.modelContext.registerTool === 'function' && typeof w.document.modelContext.getTools === 'function'
-    && typeof w.document.modelContext.executeTool === 'function');
+  check('polyfill expõe document.modelContext, navigator.modelContext e window.modelContext',
+    typeof w.document.modelContext.registerTool === 'function' && typeof w.navigator.modelContext.registerTool === 'function'
+    && typeof w.modelContext.registerTool === 'function');
+  check('document.modelContext, navigator.modelContext e window.modelContext apontam para o mesmo motor',
+    w.document.modelContext === w.navigator.modelContext && w.navigator.modelContext === w.modelContext);
   w.close();
 
   // 2.2 API nativa tem precedência (não é sobrescrita)
@@ -234,8 +236,7 @@ async function secaoNucleo() {
   check('ferramenta pública aparece mesmo sem cargo', ativasEstivador.includes('ler_publica'));
 
   // 2.6 Troca de sessão + sincronização retira ferramentas sem permissão
-  w.sessionStorage.setItem('nexus_session', JSON.stringify(sessao('INSPETOR')));
-  w.localStorage.setItem('nexus_session', JSON.stringify(sessao('INSPETOR')));
+  w.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify(sessao('INSPETOR'))) + '; path=/';
   w.NexusWebMCP.sincronizar();
   await aguardar(20);
   check('após mudança de sessão: ferramenta do estivador é retirada', !w.NexusWebMCP.ativas().includes('so_estivador'));
@@ -516,7 +517,7 @@ async function secaoUI() {
     url: 'https://nexusport.test/cargas.html',
     session: sessao('SUPERVISOR_GERENTE_OPERACOES'),
     storage: {},
-    scripts: SCRIPTS_NUCLEO.concat(['js/webmcp-ui.js', 'js/webmcp-dados.js', 'js/webmcp-global.js'])
+    scripts: SCRIPTS_NUCLEO.concat(['js/webmcp/webmcp-ui.js', 'js/webmcp/webmcp-dados.js', 'js/webmcp/webmcp-global.js'])
   });
   const w = janela.w;
   await prontoDom(w);
@@ -601,7 +602,7 @@ async function secaoMCP() {
   log('\n[5] Camada MCP (JSON-RPC: ferramentas, recursos e prompts)');
   const { w } = janelaNucleo({
     session: sessao('SUPERVISOR_GERENTE_OPERACOES'),
-    extras: ['js/webmcp-dados.js', 'js/webmcp-global.js']
+    extras: ['js/webmcp/webmcp-dados.js', 'js/webmcp/webmcp-global.js']
   });
   pagina(w, 'mcp', [
     { nome: 'mcp_leitura', titulo: 'Leitura MCP', descricao: 'Leitura.', anotacoes: { readOnlyHint: true }, cargos: ['SUPERVISOR_GERENTE_OPERACOES'], esquema: ESQ_TEXTO, executar: () => ({ mensagem: 'lido', dados: { n: 1 } }) },

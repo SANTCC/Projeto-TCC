@@ -8,7 +8,7 @@
  *
  * Causa: uma linha "OCUPADO com navio_* nulos" (cache local legado, berço
  * ocupado por carga em versões antigas) ia para o upsert em lote de 15 berços
- * em js/embarcacoes.js e derrubava a instrução inteira — nenhum berço era
+ * em js/pages/embarcacoes.js e derrubava a instrução inteira — nenhum berço era
  * sincronizado.
  *
  * O teste executa os módulos reais em DOM (jsdom) com um cliente Supabase
@@ -31,7 +31,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf-8');
 
 const SECURITY_SRC = read('js/security.js');
 const SUPABASE_CLIENT_SRC = read('js/supabase-client.js');
-const EMBARCACOES_SRC = read('js/embarcacoes.js');
+const EMBARCACOES_SRC = read('js/pages/embarcacoes.js');
 
 let JSDOM = null;
 try {
@@ -148,7 +148,7 @@ function montarEmbarcacoes() {
 }
 
 (async function main() {
-  console.log('\n=== Berços: vínculo navio × berço (js/embarcacoes.js + js/supabase-client.js) ===\n');
+  console.log('\n=== Berços: vínculo navio × berço (js/pages/embarcacoes.js + js/supabase-client.js) ===\n');
 
   if (!JSDOM) {
     console.error('  ❌ [FAIL] jsdom indisponível — rode `npm install` antes deste teste.');

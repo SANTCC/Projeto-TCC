@@ -7,8 +7,14 @@ async function testFase4() {
   console.log('================================================================\n');
 
   let passed = true;
+<<<<<<< HEAD:tests/phases/test_fase_4.js
   const jsDir = path.join(__dirname, '../../js');
   const manutencaoCode = fs.readFileSync(path.join(jsDir, 'manutencao.js'), 'utf-8');
+=======
+  const jsDir = path.join(__dirname, '..', 'js');
+  // Após a reorganização (backlog 3): módulos de página ficam em js/pages/
+  const manutencaoCode = fs.readFileSync(path.join(jsDir, 'pages', 'manutencao.js'), 'utf-8');
+>>>>>>> origin/main:tests/test_fase_4.js
 
   // 1. Validar Ciclo de Vida de Ordens de Serviço (OS)
   console.log('1. Validando ciclo de vida das Ordens de Serviço (Item 4.1)...');

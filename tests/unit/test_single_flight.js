@@ -9,7 +9,7 @@
  *      a leitura seguinte não reaproveita resposta anterior à mudança.
  *   5. Erro de rede chega a todos os chamadores e não deixa entrada presa.
  *   6. Requisições com AbortSignal passam direto (não são agrupadas).
- *   7. Relatórios: atualização periódica a cada 30 s (antes 5 s).
+ *   7. Relatórios: sem intervalo próprio (antes 5 s; depois 30 s; hoje o evento nexus_data_changed).
  *
  * Executar: node tests/test_single_flight.js
  */
@@ -182,9 +182,11 @@ function testarFiacaoERelatorios() {
     'o cliente Supabase usa o single-flight por cima do fetch de depuração/nativo',
     client.includes('fetch: criarFetchSingleFlight(fetchBase).fetch')
   );
-  const relatorios = read('js/relatorios.js');
-  check('relatórios atualizam a cada 30 s', relatorios.includes('}, 30000);'));
-  check('relatórios não mantêm mais o intervalo de 5 s', !relatorios.includes('}, 5000);'));
+  const relatorios = read('js/pages/relatorios.js');
+  // Tempo real (Backlog 3, item J): Relatórios não tem mais intervalo próprio; a atualização
+  // vem do evento nexus_data_changed (Realtime) e da sincronização de 60 s do repositório.
+  check('relatórios não mantêm intervalo próprio (sem o de 5 s nem o de 30 s)',
+    !relatorios.includes('}, 5000);') && !relatorios.includes('}, 30000);') && !relatorios.includes('setInterval('));
 }
 
 /* ------------------------------------------------------------------ */
