@@ -26,7 +26,7 @@ const DIRETORIOS_EXCLUIDOS = new Set([
   'node_modules', '.git', '.github', '.vercel', 'dist', 'tests', 'tools', 'SPECs', 'supabase', 'THEME',
   'lighthouse', 'lighthouse-report'
 ]);
-// Arquivos da raiz que não são servidos. Documentação (.md) é excluída em qualquer pasta.
+// Arquivos da raiz que não são servidos. Documentação (.md) e Python (.py) são excluídos em qualquer pasta.
 const ARQUIVOS_EXCLUIDOS = new Set([
   'package.json', 'package-lock.json', 'vercel.json', '.gitignore', '.vercelignore'
 ]);
@@ -54,7 +54,8 @@ function listarArquivos(dir = RAIZ, base = '') {
     }
     if (!entrada.isFile()) return;
     if (!base && ARQUIVOS_EXCLUIDOS.has(entrada.name)) return;
-    if (path.extname(entrada.name).toLowerCase() === '.md') return;
+    // Documentação (.md) e ferramentas Python (CLI e testes da API) não vão para produção.
+    if (['.md', '.py'].includes(path.extname(entrada.name).toLowerCase())) return;
     resultado.push(rel);
   });
   return resultado.sort();
