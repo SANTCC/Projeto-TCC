@@ -6,6 +6,10 @@
 
 ## 📋 Lista de Tarefas Não Implementadas (TODOs)
 
+### PRINCIPAL - Renderizar PDFs do lado do servidor
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Atual o PDF é gerado TODA A VEZ pelo lado do cliente, ele deve ser gerado e armazenado no lado do servidor usando supabase storage.
+
 ### 1. Salvar o login com Cookies ao invés de SESSION_STORAGE / LOCAL_STORAGE
 - **Status:** 🔴 **NÃO IMPLEMENTADO**
 - **Detalhes:** O gerenciamento de sessão da aplicação é realizado no client-side armazenando as informações do funcionário logado em `sessionStorage` e `localStorage` (`js/auth-guard.js` e `js/login.js`). Não foi implementado o armazenamento seguro de autenticação via cookies HTTP-only / SameSite.
