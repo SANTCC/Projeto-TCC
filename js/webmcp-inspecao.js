@@ -203,7 +203,11 @@
         if (!botao || botao.disabled) {
           return { ok: false, codigo: 'CHECKLIST_INCOMPLETO', mensagem: 'A tela ainda não liberou a aprovação (itens críticos pendentes).' };
         }
-        await window.nexusInspecaoAprovar();
+        const gravada = await window.nexusInspecaoAprovar();
+        // false = a tela avisou que o banco não confirmou a gravação completa.
+        if (gravada === false) {
+          return { ok: false, codigo: 'GRAVACAO_INCOMPLETA', mensagem: `A carga ${args.id} foi atualizada na tela, mas o banco não confirmou a gravação da inspeção. Veja a mensagem exibida ao operador.` };
+        }
         const c = cargaLocal(args.id);
         if (c && c.status === 'ARMAZENAGEM') {
           return { mensagem: `Carga ${args.id} APROVADA na inspeção. Status: ARMAZENAGEM.`, dados: D.resumirCarga(c) };
@@ -211,7 +215,11 @@
         return { ok: false, codigo: 'NAO_CONCLUIDA', mensagem: 'A aprovação não foi registrada. Veja a mensagem exibida ao operador.' };
       }
 
-      await window.nexusInspecaoRecusar({ motivo: args.motivo });
+      const gravada = await window.nexusInspecaoRecusar({ motivo: args.motivo });
+      // false = a tela avisou que o banco não confirmou a gravação completa.
+      if (gravada === false) {
+        return { ok: false, codigo: 'GRAVACAO_INCOMPLETA', mensagem: `A recusa da carga ${args.id} foi aplicada na tela, mas o banco não confirmou a gravação. Veja a mensagem exibida ao operador.` };
+      }
       const c = cargaLocal(args.id);
       if (c && c.status === 'RECUSADA') {
         return { mensagem: `Carga ${args.id} RECUSADA na inspeção. Motivo registrado.`, dados: D.resumirCarga(c) };

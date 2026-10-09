@@ -461,8 +461,9 @@ document.addEventListener('DOMContentLoaded', () => {
     renderProdutividadeTable();
   });
 
-  // Atualização periódica a cada 5 segundos para garantir atualização viva do relatório
+  // Atualização periódica a cada 30 segundos (antes 5 s, reduzido para diminuir consultas ao banco).
+  // Alterações de dados já atualizam a tabela na hora pelo evento nexus_data_changed acima.
   setInterval(() => {
     renderProdutividadeTable();
-  }, 5000);
+  }, 30000);
 });

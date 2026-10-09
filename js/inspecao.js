@@ -220,12 +220,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
+  // Motivo (em português) da recusa do banco ao gravar a inspeção formal.
+  // 23505 = violação do índice uq_inspecoes_carga_ativa (só UMA inspeção ativa por carga).
+  // Com o histórico de inspeções, isso só ocorre se outra gravação da mesma carga
+  // aconteceu ao mesmo tempo, ou se a inspeção anterior não pôde ser desativada.
+  function motivoFalhaGravacao(erro) {
+    if (erro && erro.code === '23505') {
+      return 'esta carga já tem uma inspeção ativa no banco (outra gravação ocorreu ao mesmo tempo). Atualize a tela antes de tentar de novo.';
+    }
+    return `o banco recusou a gravação (${(erro && erro.message) || 'erro desconhecido'}).`;
+  }
+
   // Aprovar Carga (RN 14)
   async function aprovarCargaAtual() {
       if (!cargaAtual) return false;
 
       cargaAtual.status = 'ARMAZENAGEM';
       cargaAtual.resultadoInspecao = 'APROVADA';
+
+      // Falhas de gravação no Supabase. Se houver alguma, a tela não mostra "concluída".
+      const pendencias = [];
 
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
 
@@ -248,7 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             updateQuery = updateQuery.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
           }
-          await updateQuery;
+          const { error: cargaErr } = await updateQuery;
+          if (cargaErr) pendencias.push(`A situação da carga não foi atualizada no banco (${cargaErr.message}).`);
 
           // Busca carga id no Supabase para salvar na tabela inspecoes
           let selectQuery = window.nexusSupabase.from('cargas').select('id');
@@ -257,18 +272,34 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             selectQuery = selectQuery.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
           }
-          const { data: cargaDb } = await selectQuery.maybeSingle();
+          const { data: cargaDb, error: cargaSelErr } = await selectQuery.maybeSingle();
+          if (cargaSelErr) pendencias.push(`Não foi possível consultar a carga no banco (${cargaSelErr.message}).`);
+          else if (!cargaDb) pendencias.push('A carga não foi localizada no banco, então a inspeção não foi gravada.');
 
           if (cargaDb) {
             const payloadInspecao = {
               carga_id: cargaDb.id,
               data_inspecao: new Date().toISOString(),
               resultado: 'APROVADA',
+              ativa: true,
               observacoes: '100% dos itens críticos do checklist verificados em CONFORME'
             };
             if (inspetorId) payloadInspecao.inspetor_id = inspetorId;
 
-            const { data: inspDb } = await window.nexusSupabase.from('inspecoes').insert(payloadInspecao).select().maybeSingle();
+            // Histórico: a inspeção ativa anterior desta carga (se houver) deixa de ser ativa.
+            const { error: desativarErr } = await window.nexusSupabase.from('inspecoes')
+              .update({ ativa: false })
+              .eq('carga_id', cargaDb.id)
+              .eq('ativa', true);
+            if (desativarErr) {
+              pendencias.push(`A inspeção anterior desta carga não pôde ser marcada como histórico (${desativarErr.message}).`);
+            }
+
+            const { data: inspDb, error: inspErr } = await window.nexusSupabase.from('inspecoes').insert(payloadInspecao).select().maybeSingle();
+            if (inspErr) {
+              pendencias.push(`O registro formal desta inspeção não foi gravado: ${motivoFalhaGravacao(inspErr)}`);
+              console.warn('[NexusPort] Inspeção não gravada no Supabase:', inspErr);
+            }
 
             if (inspDb) {
               const { data: dbChecklistItens } = await window.nexusSupabase.from('checklist_itens').select('id, ordem');
@@ -291,11 +322,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
               }
               if (itemRows.length > 0) {
-                await window.nexusSupabase.from('inspecao_itens').insert(itemRows).catch(e => console.warn('Aviso inspecao_itens:', e));
+                const { error: itensErr } = await window.nexusSupabase.from('inspecao_itens').insert(itemRows);
+                if (itensErr) {
+                  pendencias.push(`Os itens do checklist não foram gravados (${itensErr.message || 'erro desconhecido'}).`);
+                  console.warn('[NexusPort] Itens do checklist não gravados:', itensErr);
+                }
               }
             }
           }
         } catch (err) {
+          pendencias.push(`Falha de comunicação com o banco (${(err && err.message) || 'erro desconhecido'}).`);
           console.warn('[NexusPort] Erro ao sincronizar aprovação no Supabase:', err);
         }
       }
@@ -307,6 +343,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('cargas');
+      }
+
+      if (pendencias.length > 0) {
+        // Sem redirecionamento: o aviso precisa ser lido antes de sair da tela.
+        // Retorna false: o banco não confirmou a gravação completa.
+        console.warn('[NexusPort] Aprovação com pendências de gravação:', pendencias);
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Gravação Incompleta', `Carga ${cargaAtual.id}: ${pendencias.join(' ')} Verifique com o supervisor antes de seguir.`);
+        }
+        return false;
       }
 
       if (window.mostrarFeedback) {
@@ -345,6 +391,9 @@ document.addEventListener('DOMContentLoaded', () => {
       cargaAtual.motivoRecusa = motivo;
       cargaAtual.motivo_recusa = motivo;
 
+      // Falhas de gravação no Supabase. Se houver alguma, a tela não mostra "registrada".
+      const pendencias = [];
+
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
 
       let inspetorId = isUUID(session.id) ? session.id : null;
@@ -366,7 +415,8 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             updateQuery = updateQuery.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
           }
-          await updateQuery;
+          const { error: cargaErr } = await updateQuery;
+          if (cargaErr) pendencias.push(`A situação da carga não foi atualizada no banco (${cargaErr.message}).`);
 
           let selectQuery = window.nexusSupabase.from('cargas').select('id');
           if (targetIsUuid) {
@@ -374,18 +424,34 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             selectQuery = selectQuery.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
           }
-          const { data: cargaDb } = await selectQuery.maybeSingle();
+          const { data: cargaDb, error: cargaSelErr } = await selectQuery.maybeSingle();
+          if (cargaSelErr) pendencias.push(`Não foi possível consultar a carga no banco (${cargaSelErr.message}).`);
+          else if (!cargaDb) pendencias.push('A carga não foi localizada no banco, então a recusa não foi gravada.');
 
           if (cargaDb) {
             const payloadInspecao = {
               carga_id: cargaDb.id,
               data_inspecao: new Date().toISOString(),
               resultado: 'RECUSADA',
+              ativa: true,
               observacoes: motivo
             };
             if (inspetorId) payloadInspecao.inspetor_id = inspetorId;
 
-            const { data: inspDb } = await window.nexusSupabase.from('inspecoes').insert(payloadInspecao).select().maybeSingle();
+            // Histórico: a inspeção ativa anterior desta carga (se houver) deixa de ser ativa.
+            const { error: desativarErr } = await window.nexusSupabase.from('inspecoes')
+              .update({ ativa: false })
+              .eq('carga_id', cargaDb.id)
+              .eq('ativa', true);
+            if (desativarErr) {
+              pendencias.push(`A inspeção anterior desta carga não pôde ser marcada como histórico (${desativarErr.message}).`);
+            }
+
+            const { data: inspDb, error: inspErr } = await window.nexusSupabase.from('inspecoes').insert(payloadInspecao).select().maybeSingle();
+            if (inspErr) {
+              pendencias.push(`O registro formal desta recusa não foi gravado: ${motivoFalhaGravacao(inspErr)}`);
+              console.warn('[NexusPort] Recusa não gravada no Supabase:', inspErr);
+            }
 
             if (inspDb) {
               const { data: dbChecklistItens } = await window.nexusSupabase.from('checklist_itens').select('id, ordem');
@@ -408,11 +474,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
               }
               if (itemRows.length > 0) {
-                await window.nexusSupabase.from('inspecao_itens').insert(itemRows).catch(e => console.warn('Aviso inspecao_itens:', e));
+                const { error: itensErr } = await window.nexusSupabase.from('inspecao_itens').insert(itemRows);
+                if (itensErr) {
+                  pendencias.push(`Os itens do checklist não foram gravados (${itensErr.message || 'erro desconhecido'}).`);
+                  console.warn('[NexusPort] Itens do checklist não gravados:', itensErr);
+                }
               }
             }
           }
         } catch (err) {
+          pendencias.push(`Falha de comunicação com o banco (${(err && err.message) || 'erro desconhecido'}).`);
           console.warn('[NexusPort] Erro ao sincronizar recusa no Supabase:', err);
         }
       }
@@ -424,6 +495,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('cargas');
+      }
+
+      if (pendencias.length > 0) {
+        // Sem redirecionamento: o aviso precisa ser lido antes de sair da tela.
+        // Retorna false: o banco não confirmou a gravação completa.
+        console.warn('[NexusPort] Recusa com pendências de gravação:', pendencias);
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Gravação Incompleta', `Carga ${cargaAtual.id}: ${pendencias.join(' ')} Verifique com o supervisor antes de seguir.`);
+        }
+        return false;
       }
 
       if (window.mostrarFeedback) {
