@@ -154,7 +154,7 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 - **CI:** `.github/workflows/lighthouse.yml` roda em todo PR. Os relatórios vão como artefato.
 - **Local:** `npm run lighthouse` (precisa de Google Chrome ou Chromium; use `CHROME_PATH` se não estiver no PATH). Gera `lighthouse-report/`.
-- **Limiares e exceções:** `lighthouse/limiares.json`. Exceções são dívida conhecida por página e devem ser removidas quando corrigidas.
+- **Limiares e exceções:** `lighthouse/limiares.json`. Cada página é medida em 3 rodadas (mediana). Exceções são dívida conhecida por página e devem ser removidas quando corrigidas.
 - **Testes:** `npm run test:lighthouse`.
 
 ---
