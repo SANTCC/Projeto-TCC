@@ -234,353 +234,47 @@ window.addEventListener('storage', e => {
 
 ### 3.1 Manutenção & OS — tabela de Ordens de Serviço
 
-* **Local:** `renderOsTable()` (`js/manutencao.js` ~391–421), colunas Status e Ação.
-* **Problemas:** status cru do banco (`EM_MANUTENCAO`, `PENDENTE_APROVACAO`); botões Aprovar/Reprovar com `mr-1` em vez de `gap`; "Concluir Manutenção" longo; prioridade `BAIXA` sem cor própria.
-* **Solução:**
-
-```js
-const STATUS_OS = {
-  PENDENTE_APROVACAO: { txt: 'Aguardando aprovação', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' },
-  EM_MANUTENCAO:      { txt: 'Em manutenção',        cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' },
-  CONCLUIDA:          { txt: 'Concluída',            cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' },
-  REPROVADA:          { txt: 'Reprovada',            cls: 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300' },
-};
-
-const PRIORIDADE_OS = {
-  ALTA:  'bg-red-100 text-red-800',
-  MEDIA: 'bg-amber-100 text-amber-800',
-  BAIXA: 'bg-emerald-100 text-emerald-800',
-};
-
-const badge = (cls, txt) =>
-  `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap ${cls}">${txt}</span>`;
-```
-
-* **Coluna Ação:** utilizar grupo com `gap` e largura mínima:
-
-```html
-<div class="flex items-center justify-end gap-1.5 flex-wrap min-w-[150px]">
-  <button class="px-2.5 py-1 rounded bg-emerald-600 text-white font-bold">Aprovar</button>
-  <button class="px-2.5 py-1 rounded bg-red-600 text-white font-bold">Reprovar</button>
-</div>
-```
-
-* Trocar **"Concluir Manutenção"** por **"Concluir"**, utilizando o ícone `task_alt` e `title="Concluir manutenção"`.
-
-> **Status:** ✅ Implementado em `js/manutencao.js` (`renderOsTable`): status traduzidos ("Aguardando aprovação", "Em manutenção", "Concluída", "Reprovada"), prioridade com cor própria (incluindo BAIXA), ações em `flex` com `gap`/`min-w` e botão "Concluir" com ícone. As datas da coluna passaram a `dd/mm/aaaa` (item 8.8). Teste: `node tests/test_backlog3_correcoes.js`.
-
-### 3.2 Manutenção & OS — "Alerta de Manutenção Preventiva Sugerida"
-
-* **Local:** `#alertaPreventivaList` (`js/manutencao.js` ~485).
-* **Problema:** cada item é uma linha corrida `1. [TIPO] ID: motivo`.
-* **Solução:**
-
-> **Status:** ✅ Implementado em `js/manutencao.js` (`carregarEquipamentosEAlertas`): cada equipamento aparece em bloco próprio, com etiqueta do tipo, identificação e motivo.
-
-```js
-alertaList.innerHTML = equipamentos.map(e => `
-  <div class="flex items-start gap-2 py-1.5 border-b last:border-0 border-amber-200/60">
-    <span class="shrink-0 px-1.5 py-0.5 rounded bg-amber-200/70 text-[10px] font-bold uppercase">${e.tipo}</span>
-    <div>
-      <strong class="block">${e.identificacao}</strong>
-      <span class="text-amber-800/80 dark:text-amber-300/80">${e.motivo}</span>
-    </div>
-  </div>`).join('');
-```
-
-### 3.3 Cargas — tabela e botões de ação
-
-> **Status:** ✅ Implementado em `js/cargas.js` (`renderTable`): ícones ampliados (`text-[18px]`), alvos de toque generosos (`min-w-[44px] min-h-[40px] justify-center`), rótulos ocultos no mobile (`hidden sm:inline`) com `title` + `aria-label` em todas as ações (Movimentar/Receber/Inspecionar/Pronta/Vincular/Liberar/Cancelar/QR), e a coluna Contêiner / Navio já separava os dois valores em duas linhas com *fallback* "não vinculado". Teste: `node tests/test_backlog3_restantes.js`.
-
-* **Local:** `renderTable()` (`js/cargas.js` ~162–236), coluna Ações (`min-w-[200px]`, até 5–6 botões).
-* **Problemas:** todos os botões têm o mesmo peso visual; a coluna "Contêiner / Navio" junta os dois valores com " / " e repete "Não vinculado".
-* **Solução:** ação principal do status em botão cheio, secundárias em ícones com tooltip; contêiner e navio em duas linhas.
-
-```js
-const btnSec = (icone, titulo, acao, cor = 'slate') =>
-  `<button type="button" title="${titulo}" aria-label="${titulo}"
-     onclick="window.executarAcaoCarga('${c.id}','${acao}')"
-     class="p-1.5 rounded-lg bg-${cor}-100 hover:bg-${cor}-200 text-${cor}-700">
-     <span class="material-symbols-outlined text-[16px]">${icone}</span>
-   </button>`;
-
-`<td class="p-3 text-xs">
-  <span class="block font-mono">${c.container || '<em class="text-slate-400">Contêiner: não vinculado</em>'}</span>
-  <span class="block text-[10px] text-slate-400">${c.navio || 'Navio: não vinculado'}</span>
-</td>`
-```
-
-### 3.4 Cargas — formulário "Agendamento de Nova Carga"
-
-> **Status:** ✅ Implementado. Concordância corrigida (**"Agendar Nova Carga"**), campos agrupados por assunto em `<fieldset>` ("Dados da carga" / "Destino e prazo"), botão de confirmação encurtado para **"Agendar e gerar QR"**, botão **Cancelar** adicionado (limpa e fecha o formulário, `js/cargas.js`) — e o formulário ganhou o campo **Funcionário Responsável** (`#agEstivadorResponsavel`): gestores escolhem um funcionário ativo em escala, operadores têm a carga auto-atribuída à própria sessão (campo travado), com vínculo persistido em `estivador_cargas` (RF de atribuição). Teste: `node tests/test_backlog3_restantes.js`.
-
-* **Local:** `cargas.html` ~77–139.
-* **Problemas:**
-
-  * Botão superior com erro de concordância: **"Agendar Nova Cargas"** → **"Agendar Nova Carga"**.
-  * Botão de confirmar longo: **"Confirmar Agendamento & Gerar QR Code"**.
-  * 8 campos soltos em 4 colunas, sem separação por assunto.
-  * Falta botão **Cancelar**.
-* **Solução:**
-
-```html
-<button id="toggleAgendamentoFormBtn" ...>
-  <span>Agendar Nova Carga</span>
-</button>
-
-<fieldset class="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-  <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">Dados da carga</legend>
-  <!-- Tipo, Peso, Volume, Valor, Natureza -->
-</fieldset>
-
-<fieldset class="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-  <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">Destino e prazo</legend>
-  <!-- Setor do pátio, Destino final, Data prevista -->
-</fieldset>
-
-<div class="sm:col-span-2 md:col-span-4 flex justify-end gap-2 pt-2">
-  <button type="button" id="cancelAgendamentoBtn"
-    class="px-4 py-2.5 rounded-xl border border-nexus-border text-slate-600 font-semibold text-xs">
-    Cancelar
-  </button>
-
-  <button type="submit"
-    class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-xs">
-    Agendar e gerar QR
-  </button>
-</div>
-```
-
-### 3.5 Embarcações — coluna Ações da tabela de navios
-
-* **Local:** `js/embarcacoes.js` ~311–329.
-* **Problema:** três botões coloridos lado a lado (Vincular, Liberar/Autorizar, Excluir), todos em `font-mono`.
-* **Solução:** manter **Vincular** e **Liberar Saída / Autorizar Retorno** com texto; **Excluir** vira botão somente de ícone, separado por um divisor.
-
-> **Status:** ✅ Implementado em `js/embarcacoes.js` (coluna Ações sem `font-mono`, divisor + botão **Excluir** só de ícone com `aria-label`, `title` e foco visível).
-
-```js
-acoesHtml += `<span class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1"></span>
-  <button type="button"
-    title="Excluir navio"
-    aria-label="Excluir navio ${n.nome}"
-    onclick="window.excluirNavio('${n.imo}')"
-    class="p-1.5 rounded bg-red-50 hover:bg-red-600 text-red-600 hover:text-white">
-    <span class="material-symbols-outlined text-[16px]">delete</span>
-  </button>`;
-```
-
-### 3.6 Embarcações — etiqueta de localização com nome técnico
-
-* **Local:** `js/embarcacoes.js` ~340–344.
-* **Problema:** mostra diretamente os estados técnicos `DENTRO_DO_PORTO`, `FORA_DO_PORTO`, `NO_PORTO_DE_DESTINO`.
-* **Solução:**
-
-```js
-const LOCAL = {
-  DENTRO_DO_PORTO:     { txt: 'No porto',          cls: 'bg-emerald-100 text-emerald-800' },
-  FORA_DO_PORTO:       { txt: 'Em trânsito',       cls: 'bg-blue-100 text-blue-800' },
-  NO_PORTO_DE_DESTINO: { txt: 'Chegou ao destino', cls: 'bg-purple-100 text-purple-800' },
-};
-```
-
-> **Status:** ✅ Implementado em `js/embarcacoes.js` (`LOCALIZACAO_NAVIO` / `localizacaoBadgeHtml`): a coluna mostra "No porto", "Em trânsito" ou "Chegou ao destino", mantendo o código técnico no `title` para rastreabilidade. Teste: `node tests/test_backlog3_correcoes.js`.
-
----
-
-## 4) Adição — Gráfico de rosca: navios dentro × fora do porto ✅ IMPLEMENTADO
-
-> **Status:** ✅ Implementado em **Relatórios & PDF** (`relatorios.html`), não no Painel Geral. **Decisão:** os gráficos ficam concentrados em Relatórios (item K de Remover gráficos duplicados). Gráfico `navios_localizacao` em `js/pages/charts.js`, com a contagem dentro × fora do porto. Teste: `node tests/test_graficos_por_cargo.js`.
-
-* **Página:** Painel Geral (`dashboard.html`)
-* **Local:** abaixo do bloco "Indicadores operacionais no terminal", ou ao lado do card "Navios fora do porto".
-* **Dados:** `dashboard.js` já carrega `navios` (~290–315) com o campo `localizacao`.
-* **Solução:** CSS puro, sem biblioteca.
-
-```html
-<div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm">
-  <h3 class="font-display font-bold text-sm mb-3">Navios dentro × fora do porto</h3>
-
-  <div class="flex items-center gap-6">
-    <div id="donutNavios" class="w-32 h-32 rounded-full relative"></div>
-    <ul id="donutLegenda" class="text-xs space-y-1"></ul>
-  </div>
-</div>
-```
-
-```js
-function renderDonutNavios(navios) {
-  const total = navios.length || 1;
-  const dentro = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
-  const destino = navios.filter(n => n.localizacao === 'NO_PORTO_DE_DESTINO').length;
-  const fora = navios.length - dentro - destino;
-
-  const pct = v => Math.round((v / total) * 100);
-  const a = pct(dentro);
-  const b = a + pct(destino);
-
-  const el = document.getElementById('donutNavios');
-
-  el.style.background =
-    `conic-gradient(#10b981 0 ${a}%, #8b5cf6 ${a}% ${b}%, #3b82f6 ${b}% 100%)`;
-
-  el.innerHTML = `
-    <div class="absolute inset-4 rounded-full bg-white dark:bg-slate-900
-      flex items-center justify-center font-bold">
-      ${pct(dentro)}%
-    </div>`;
-
-  document.getElementById('donutLegenda').innerHTML = `
-    <li>
-      <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
-      No porto: ${dentro} (${pct(dentro)}%)
-    </li>
-    <li>
-      <span class="inline-block w-2 h-2 rounded-full bg-violet-500 mr-2"></span>
-      No destino: ${destino} (${pct(destino)}%)
-    </li>
-    <li>
-      <span class="inline-block w-2 h-2 rounded-full bg-blue-500 mr-2"></span>
-      Em trânsito: ${fora} (${pct(fora)}%)
-    </li>`;
-}
-```
-
-* **Alternativa:** utilizar Chart.js (`https://cdn.jsdelivr.net/npm/chart.js`) caso a implementação com CSS puro seja substituída pela biblioteca de gráficos já utilizada pelo sistema.
-
----
-
-## 5) Adição — Gráfico de barras: navios mais utilizados ✅ IMPLEMENTADO
-
-> **Status:** ✅ Implementado em **Relatórios & PDF**, pela mesma decisão do item 4. Gráfico `embarcacoes_utilizadas` em `js/pages/charts.js`, com o volume de cargas vinculadas a cada navio. Teste: `node tests/test_graficos_por_cargo.js`.
-
-* **Página:** Painel Geral ou Relatórios.
-* **Local:** ao lado da rosca, utilizando grid de 2 colunas em telas grandes.
-* **Dados:** contagem de cargas por navio (`cargas.navio`, já utilizado em `embarcacoes.js` ~296).
-* **Solução:**
-
-```js
-function renderTopNavios(cargas) {
-  const cont = {};
-
-  cargas
-    .filter(c => c.navio)
-    .forEach(c => {
-      cont[c.navio] = (cont[c.navio] || 0) + 1;
-    });
-
-  const top = Object.entries(cont)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-
-  const max = top[0]?.[1] || 1;
-
-  document.getElementById('topNavios').innerHTML =
-    top.map(([nome, qtd]) => `
-      <div class="mb-2">
-        <div class="flex justify-between text-xs mb-0.5">
-          <span>${nome}</span>
-          <strong>${qtd}</strong>
-        </div>
-
-        <div class="h-2 rounded bg-slate-100 dark:bg-slate-800">
-          <div
-            class="h-2 rounded bg-nexus-500"
-            style="width:${(qtd / max) * 100}%">
-          </div>
-        </div>
-      </div>
-    `).join('') ||
-    '<p class="text-xs text-slate-400 italic">Sem cargas vinculadas ainda.</p>';
-}
-```
-
----
-
-## 6) Adição — Faixa de alarme global (continuação do item 2)
-
-* **Página:** todas, via `js/layout.js`.
-* **Local:** topo do `<main>`, abaixo do cabeçalho.
-* **Problema:** `nexus_emergency_active` só é lido na tela de Manutenção, embora a mensagem diga que as operações do pátio estão bloqueadas.
-* **Solução:**
-
-```js
-if (localStorage.getItem('nexus_emergency_active') === 'true') {
-  document.querySelector('main')?.insertAdjacentHTML(
-    'afterbegin',
-    `<div
-      role="alert"
-      class="mb-4 p-3 rounded-xl bg-red-600 text-white text-xs font-bold flex items-center gap-2">
-      <span class="material-symbols-outlined text-[18px]">warning</span>
-      EMERGÊNCIA ATIVA — operações do pátio bloqueadas temporariamente.
-    </div>`
-  );
-}
-```
-
-* **Complemento:** desabilitar **Liberar Saída**, **Autorizar Retorno** e **Movimentar** enquanto o alarme estiver ativo.
-
-> **Status:** ✅ Implementado (a faixa global já existia em `js/panic-realtime.js`, fixa no rodapé de todas as telas). O complemento foi aplicado: `window.nexusEmergenciaAtiva()` (`js/layout.js`) bloqueia **Movimentar**/**Liberar** (`js/cargas.js`) e **Liberar Saída**/**Autorizar Retorno** (`js/embarcacoes.js`), que aparecem desabilitados com o motivo no `title`. Teste: `node tests/test_backlog3_correcoes.js`.
-
----
-
-## 7) Adições simples
-
-| # | Página           | Local                  | O que adicionar                                                                                                            |
-| - | ---------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| a | Cargas           | Acima da tabela        | Chips de resumo por status (`Agendamento 4 · Armazenagem 3 · Prontas 2…`) que filtram a tabela. Já existe `#filterStatus`. ✅ IMPLEMENTADO (`#cargasStatusChips` em `cargas.html` + `sincronizarCargasChips()`/`atualizarCargasChips` em `js/cargas.js`) |
-| b | Todas as tabelas | Acima de cada tabela   | Campo de busca rápida (nome / IMO / ID) e contador **"Exibindo X de Y"**. ✅ IMPLEMENTADO (`#filterBusca`/`#cargasCounter` cargas, `#buscarNavioInput`/`#embarcacoesCounter` embarcações, `#buscarOsInput`/`#osCounter` OS, `#buscarAuditLogInput`/`#auditLogCounter` auditoria) |
-| c | Todas as tabelas | Quando vazia           | Estado vazio com ícone e frase útil, por exemplo: **"Nenhuma OS cadastrada. Use + Nova Ordem de Serviço"**. ✅ IMPLEMENTADO (estados vazios com ícone + frase útil em embarcações e OS, incluindo `search_off` quando a busca zera resultados) |
-| d | Embarcações      | Coluna ETA             | Barra de progresso da viagem (tempo decorrido ÷ previsto, já calculados em ~273–292). ✅ IMPLEMENTADO (`calcularProgressoViagem()` + barra com `role="progressbar"` na coluna ETA, `js/embarcacoes.js`) |
-| e | Painel Geral     | Cabeçalho              | Hora da última atualização, por exemplo **"Atualizado às 14:32"**. ✅ IMPLEMENTADO (`#cardsLastUpdate` em `dashboard.html` + `registrarUltimaAtualizacao()` em `js/dashboard.js`) |
-| f | Painel Geral     | Planilha de desempenho | Botão **Exportar CSV**. ✅ IMPLEMENTADO (`#exportIndicadoresCsvBtn` em `dashboard.html` + exportação `;`/BOM em `js/dashboard.js` com trilha `EXPORTACAO_CSV`) |
-| g | Relatórios       | Topo                   | Atalhos de período (**Hoje · 7 dias · 30 dias · Este mês**). ✅ IMPLEMENTADO (`#relatorioPeriodoChips` em `relatorios.html` + `aplicarPeriodo()`/`inicioDoPeriodo()` filtram a produtividade em `js/relatorios.js`) |
-| h | Manutenção       | Tabela de OS           | Filtro por status (**Todas · Pendentes · Em manutenção · Concluídas**). ✅ IMPLEMENTADO (`#osStatusChips` em `manutencao.html` + toggle `filtroStatusOsAtual` em `js/manutencao.js`, com re-clique limpando o filtro) |
-| i | Cargas / Scanner | Etiqueta QR            | Botão **Imprimir etiqueta** (`window.print()` + CSS `@media print`). ✅ IMPLEMENTADO (`#imprimirEtiquetaScanBtn` + `@media print` isolando `#qrResultCard` no scanner; `@media print` isolando `#qrModal` nas cargas; trilha `REIMPRESSAO_ETIQUETA`) |
-
----
-
-## 8) Ajustes visuais (sem mudar o que já existe)
-
-| # | Página           | Local                                     | Ajuste                                                                                                                                                                                   | Exemplo                                                                                                      |
-| - | ---------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 1 | Todas (menu)     | Menu lateral no celular                   | O menu abre por cima do conteúdo e esconde o título; adicionar fundo escurecido que fecha ao tocar fora.                                                                                 | `<div id="navOverlay" class="fixed inset-0 bg-black/40 z-30 hidden"></div>` + `overlay.onclick = fecharMenu` ✅ IMPLEMENTADO (drawer do menu com fundo escurecido que fecha ao tocar fora — ver nota da Seção 1 "Visão Geral da Tela") |
-| 2 | Todas as tabelas | Container das tabelas                     | No celular a tabela rola para o lado sem aviso; incluir dica de rolagem.                                                                                                                 | `<p class="sm:hidden text-[10px] text-slate-400">Deslize para ver mais →</p>` ✅ IMPLEMENTADO (`aplicarHintDeRolagemTabelas()` em `js/layout.js`: distintivo "Deslize" sobre `.overflow-x-auto` no mobile, some após o primeiro scroll, `MutationObserver` cobre renders tardios) |
-| 3 | Painel Geral     | Cards de indicadores                      | Os cards são `<div onclick>` e não funcionam com teclado nem leitor de tela; trocar por `<button>`.                                                                                      | `<button type="button" onclick="..." class="text-left ...">` ✅ IMPLEMENTADO (os 7 cartões viraram `<button type="button">` com `focus-visible:ring-2`, `title` descritivo e valor inicial `--` até a primeira consulta ao banco) |
-| 4 | Todas            | Botões só com ícone                       | Falta `aria-label` e foco visível.                                                                                                                                                       | `focus-visible:ring-2 focus-visible:ring-nexus-500 focus-visible:outline-none` ✅ IMPLEMENTADO (`aria-label` + `focus-visible:ring-2` nos componentes compartilhados — modais de feedback/confirm em `js/layout.js` e botões-ícone de ações nas tabelas, itens 3.3/3.5) |
-| 5 | Todas            | Textos de 10–11 px                        | Muito pequenos; subir rótulos de status e textos de apoio para 12 px.                                                                                                                    | `text-xs` no lugar de `text-[10px]` ✅ IMPLEMENTADO (badges de status/etiquetas dinâmicos subiram de `text-[10px]` para `text-xs` em cargas, embarcações, contêineres, guindastes, OS e auditoria) |
-| 6 | Manutenção       | Select "Equipamento / Ativo"              | O código faz `innerHTML += '<optgroup>'` e depois `+= '</optgroup>'`; o navegador fecha o grupo sozinho e as opções ficam fora dele (grupos aparecem vazios). Montar o grupo de uma vez. | —                                                                                                            |
-| 7 | Todas            | Mensagens de feedback (`mostrarFeedback`) | Padronizar tempo na tela (4–5 s), botão fechar e ícone por tipo.                                                                                                                         | — ✅ IMPLEMENTADO (feedbacks `sucesso`/`info` auto-fecham em 5 s via `__nexusFeedbackTimer` em `js/layout.js`; erros/alertas exigem reconhecimento; modal já tinha ícone por tipo e botão fechar) |
-| 8 | Todas            | Datas                                     | Padronizar `dd/mm/aaaa` (a tabela de OS mostra `2026-09-27` ou "N/A").                                                                                                                   | `new Date(os.data).toLocaleDateString('pt-BR')` ✅ IMPLEMENTADO (datas padronizadas `dd/mm/aaaa` na tabela de OS — ver item 3.1/8.8) |
-
-### Código do ajuste 6 — `carregarEquipamentosEAlertas` (`js/manutencao.js`)
-
-> **Status:** ✅ Implementado em `js/manutencao.js`: cada `<optgroup>` é montado de uma só vez (`optGroup()`), então as opções voltam a aparecer dentro dos grupos "Guindastes & Pórticos" e "Contêineres".
-
-```js
-const optGroup = (label, itens) =>
-  itens.length
-    ? `<optgroup label="${label}">
-        ${itens.map(i =>
-          `<option value="${i.valor}">${i.rotulo}</option>`
-        ).join('')}
-       </optgroup>`
-    : '';
-
-osSelect.innerHTML =
-  '<option value="">Selecione o Equipamento / Ativo...</option>' +
-  optGroup(
-    'Guindastes & Pórticos',
-    gnds.map(g => ({
-      valor: `Guindaste ${g.identificacao || g.id}`,
-      rotulo: `Guindaste ${g.identificacao || g.id}`
-    }))
-  ) +
-  optGroup(
-    'Contêineres',
-    conts.map(c => ({
-      valor: `Contêiner ${c.identificacao}`,
-      rotulo: `Contêiner ${c.identificacao}`
-    }))
-  );
-```
+### 1. Salvar o login com Cookies ao invés de SESSION_STORAGE / LOCAL_STORAGE
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** O gerenciamento de sessão da aplicação é realizado no client-side armazenando as informações do funcionário logado em `sessionStorage` e `localStorage` (`js/auth-guard.js` e `js/login.js`). Não foi implementado o armazenamento seguro de autenticação via cookies HTTP-only / SameSite.
+
+### 2. Renderizar PDF no lado do servidor com armazenamento no Supabase Storage
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** A geração de relatórios operacionais em PDF continua ocorrendo 100% no navegador do usuário utilizando a biblioteca `jspdf` em `js/relatorios.js`. Não há função server-side (Edge Function / Node) nem integração com buckets de armazenamento do Supabase Storage.
+
+### 3. Popular cargos com usuários mock estáticos
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** O sistema opera com os funcionários cadastrados diretamente na tabela `funcionarios` do Supabase. Não foi criado script de população automática com usuários de teste no padrão `[CARGO]_mock[123/321/456]`.
+
+### 4. Popular histórico de ações e movimentações anteriores
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** O histórico de auditoria (`logs_alteracoes`) e trail de decisões (`trail_decisoes`) reflete apenas as ações reais realizadas durante a utilização do sistema. Não há rotina de população de histórico prévio simulado de cargas e embarcações.
+
+### 5. Contador de usuários online em tempo real
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** O sistema não exibe indicador ou contador de usuários ativos no momento com atualização periódica (ex.: polling a cada 30s ou Supabase Presence).
+
+### 6. Cookie de rastreamento de dispositivo para Google Analytics
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Não foi implementada a configuração de cookie próprio/nativo para identificar e rastrear ações por dispositivo no Google Analytics.
+
+### 7. Comprimir / minificar arquivos JS e CSS antes do deploy
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Todos os arquivos em `js/` e arquivos de estilo CSS no repositório permanecem sem etapa de minificação/bundle (ex.: via Terser, UglifyJS ou CleanCSS) no fluxo de deploy.
+
+### 8. Workflow automatizado do Google Chrome Lighthouse para Pull Requests
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Não existe pipeline de CI/CD (GitHub Actions) ou script Node.js local que execute o Lighthouse CLI e bloqueie PRs em caso de falhas nas métricas de performance e acessibilidade.
+
+### 9. Reorganizar estrutura da pasta `js/`
+
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Todos os arquivos JavaScript do projeto estão localizados diretamente na raiz do diretório `js/`. Não foi criada a divisão em subpastas (`js/webmcp/`, `js/common/` e `js/pages/`).
