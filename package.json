@@ -5,7 +5,7 @@
   "main": "index.html",
   "scripts": {
     "start": "npx serve -l 3000 .",
-    "test": "python3 verify_phase4.py && python3 verify_phase5.py && python3 verify_phase6.py && python3 verify_phase7.py && python3 verify_phase8.py && python3 verify_phase9.py",
+    "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run audit:xss && npm run test:haptics",
     "test:graficos": "node tests/test_graficos_por_cargo.js",
     "test:refresh": "node tests/test_charts_refresh.js",
     "test:autorefresh": "node tests/test_charts_autorefresh.js",
