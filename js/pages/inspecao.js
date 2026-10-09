@@ -358,6 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Inspeção Concluída', `Sucesso! Carga ${cargaAtual.id} APROVADA na inspeção técnica. Status atualizado para ARMAZENAGEM no pátio.`);
       }
+      if (window.NexusAnalytics) window.NexusAnalytics.track('inspecao_aprovada');
       setTimeout(() => { window.location.href = 'cargas.html'; }, 1000);
       return true;
   }
@@ -510,6 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Inspeção Registrada', `Carga ${cargaAtual.id} RECUSADA na inspeção técnica. Motivo registrado: "${motivo}". Status mantido em RECUSADA.`);
       }
+      if (window.NexusAnalytics) window.NexusAnalytics.track('inspecao_recusada');
       setTimeout(() => { window.location.href = 'cargas.html'; }, 1000);
       return true;
   }

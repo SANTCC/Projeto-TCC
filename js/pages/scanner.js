@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function processarScan(qrCodeText) {
+    if (window.NexusAnalytics) window.NexusAnalytics.track('qr_lido');
     let rawCode = qrCodeText;
     if (rawCode.includes('?scan=') || rawCode.includes('?qr=')) {
       try {

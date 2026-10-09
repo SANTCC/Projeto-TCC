@@ -41,8 +41,10 @@ Número de usuários ativos naquele momento, atualizado a cada 30 segundos.
 
 > **Status:** ✅ Implementado. O indicador `#headerOnlineCount` fica no cabeçalho (criado por `js/layout.js`). O módulo `js/online-presence.js` entra no canal Supabase Realtime Presence `nexus-online` com a chave `codigo_individual`, então um mesmo código conta uma vez, mesmo com várias abas ou aparelhos. O número é lido na primeira sincronização e atualizado a cada **30 s**. Sem Supabase, sem sessão ou sem canal sincronizado, mostra **"—"** (nunca um número fictício). O payload leva só o instante de entrada (sem nome nem matrícula). Não exige tabela nem migração. Teste: `node tests/test_presenca_online.js` (também em `npm run test:presenca`).
 
-## Cookie para rastrear cada dispositivo no Google Analytics
+## Cookie para rastrear cada dispositivo no Google Analytics ✅ IMPLEMENTADO
 Cookie para rastrear ações de um mesmo dispositivo usando Cookies, de forma que cuja implementação seja funcional e prática, e que o próprio Google Analytics reconheca nativamente. (sem truques)
+
+> **Status:** ✅ Implementado. O identificador do aparelho é o cookie `_ga` do próprio GA4, gravado pelo gtag.js e reconhecido nativamente pelo Google. A configuração fica em `js/analytics.js` (comum às 12 páginas, que antes tinham snippet inline): `client_storage: 'cookie'`, `SameSite=Lax;Secure` em HTTPS, validade de 2 anos, sem Google Signals e sem personalização de anúncios. Não há fingerprinting (canvas, áudio, fontes, plugins, hardware). `NexusAnalytics.track(evento, parametros)` envia eventos de negócio: `login_confirmado`, `login_falha`, `logout`, `botao_panico_acionado`, `qr_lido`, `inspecao_aprovada` e `inspecao_recusada`. Parâmetros com nome, código, matrícula ou e-mail são descartados, e valores são limitados a 100 caracteres. Se o gtag.js estiver bloqueado, `track` retorna `false` sem erro. **Ressalva:** consentimento de cookies (LGPD) não está implementado; decidir antes da produção se é necessário um aviso. Teste: `node tests/test_analytics.js` (também em `npm run test:analytics`).
 
 ## Comprimir JS/CSS antes do deploy
 Minify.

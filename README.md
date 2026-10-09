@@ -132,6 +132,15 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 ---
 
+## 📈 Medição de Uso (Google Analytics 4)
+
+- **Configuração:** `js/analytics.js` (comum a todas as páginas). O identificador do aparelho é o cookie `_ga` do próprio GA4; não há fingerprinting.
+- **Eventos:** `NexusAnalytics.track(evento, parametros)`. Nunca envie nome, código ou matrícula: esses campos são descartados.
+- **Pendência:** consentimento de cookies (LGPD) não implementado.
+- **Testes:** `npm run test:analytics`.
+
+---
+
 ## 🔒 Banco de Dados e Schemas
 
 - **DDL Completo:** `SPECs/schema.sql`

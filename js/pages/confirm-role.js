@@ -199,6 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setSessionAndRedirectFallback(sessionData);
       }
 
+      if (window.NexusAnalytics) window.NexusAnalytics.track('login_confirmado', { cargo: sessionData.cargo });
+
       setTimeout(() => {
         // Redireciona para o portal principal ou dashboard do cargo
         window.location.href = 'dashboard.html';

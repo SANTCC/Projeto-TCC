@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 2. Exibição de Alertas de Feedback Inline
   function showAuthNotice(type, title, message) {
+    if (type === 'error' && window.NexusAnalytics) window.NexusAnalytics.track('login_falha');
     if (!authNotice) return;
     authNotice.classList.remove('hidden', 'bg-red-50', 'bg-emerald-50', 'bg-amber-50', 'border-red-200', 'border-emerald-200', 'border-amber-200', 'text-red-800', 'text-emerald-800', 'text-amber-800', 'dark:bg-red-950/40', 'dark:bg-emerald-950/40', 'dark:bg-amber-950/40', 'dark:border-red-900', 'dark:border-emerald-900', 'dark:border-amber-900', 'dark:text-red-300', 'dark:text-emerald-300', 'dark:text-amber-300');
 

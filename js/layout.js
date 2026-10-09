@@ -241,6 +241,7 @@
     if (logoutBtnElem) {
       logoutBtnElem.addEventListener('click', async () => {
         if (await window.nexusConfirm('Encerrar Sessão', 'Deseja encerrar sua sessão operacional no terminal STS-01?')) {
+          if (window.NexusAnalytics) window.NexusAnalytics.track('logout');
           if (window.NexusAuth) window.NexusAuth.logout();
           else window.location.href = 'index.html';
         }
