@@ -286,11 +286,24 @@ document.addEventListener('DOMContentLoaded', () => {
    * Mesma premissa do ETA: velocidade fixa de 33 km/h. Retorna null quando
    * não é possível estimar (data de saída ausente/inválida).
    */
+  function obterDistanciaDaRota(origem, destino) {
+    if (!origem || !destino) return null;
+    const norm = (s) => String(s).toLowerCase().trim();
+    const rota = (Array.isArray(rotasMaritimasList) ? rotasMaritimasList : []).find(r =>
+      norm(r.origem) === norm(origem) && norm(r.destino) === norm(destino)
+    );
+    if (rota && parseFloat(rota.distancia_km) > 0) {
+      return parseFloat(rota.distancia_km);
+    }
+    return null;
+  }
+
   function calcularProgressoViagem(dataSaida, distanciaKm) {
     if (!dataSaida) return null;
     const saidaTime = new Date(dataSaida).getTime();
     if (isNaN(saidaTime)) return null;
-    const dist = parseFloat(distanciaKm) || 10200;
+    const dist = parseFloat(distanciaKm);
+    if (!dist || dist <= 0) return null;
     const msPrevistos = (dist / 33) * 3600 * 1000;
     if (msPrevistos <= 0) return null;
     const decorridos = Math.max(0, Date.now() - saidaTime);
@@ -298,12 +311,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function calcularETA(distanciaKm) {
-    if (!distanciaKm || distanciaKm <= 0) return 'Atracado / Viagem Concluída';
+    const dist = parseFloat(distanciaKm);
+    if (!dist || dist <= 0) return 'ETA Indisponível (Sem rota/distância)';
     const velocidade = 33; // km/h (RN 9)
-    const horasTotais = distanciaKm / velocidade;
+    const horasTotais = dist / velocidade;
     const dias = Math.floor(horasTotais / 24);
     const horas = Math.round(horasTotais % 24);
-    return `${dias}d ${horas}h (Distância: ${distanciaKm} km @ 33 km/h)`;
+    return `${dias}d ${horas}h (Distância: ${dist.toLocaleString('pt-BR')} km @ 33 km/h)`;
   }
 
   // Carrega navios mantendo persistência rigorosa do Supabase / Local
@@ -315,17 +329,22 @@ document.addEventListener('DOMContentLoaded', () => {
           .select('*');
 
         if (!error && Array.isArray(data)) {
-          naviosList = data.map(n => ({
-            id: n.id,
-            nome: n.nome,
-            imo: n.numero_imo || n.imo,
-            gps: n.coordenadas_gps || '23.9608° S, 46.3022° W',
-            localizacao: n.localizacao || 'DENTRO_DO_PORTO',
-            origem: n.porto_origem || 'Porto de Santos',
-            destino: n.porto_destino || 'Porto de Roterdã',
-            distancia: 10200,
-            dataSaida: n.data_saida || (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null)
-          }));
+          naviosList = data.map(n => {
+            const orig = n.porto_origem || 'Porto de Santos';
+            const dest = n.porto_destino || '';
+            const distCalculada = obterDistanciaDaRota(orig, dest) || (parseFloat(n.distancia_km) > 0 ? parseFloat(n.distancia_km) : (parseFloat(n.distancia) > 0 ? parseFloat(n.distancia) : null));
+            return {
+              id: n.id,
+              nome: n.nome,
+              imo: n.numero_imo || n.imo,
+              gps: n.coordenadas_gps || '23.9608° S, 46.3022° W',
+              localizacao: n.localizacao || 'DENTRO_DO_PORTO',
+              origem: orig,
+              destino: dest,
+              distancia: distCalculada,
+              dataSaida: n.data_saida || (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null)
+            };
+          });
           localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
           renderGpsTable();
           return;
@@ -438,31 +457,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tempoForaText = `${diasDecorridos}d ${horasDecorridas}h ${minutosDecorridos}m ${segundosDecorridos}s fora`;
 
-        // Cálculo dinâmico do tempo total previsto
-        const horasTotaisPrevistas = (n.distancia || 10200) / 33; // 33 km/h
-        const msTotaisPrevistos = horasTotaisPrevistas * 3600 * 1000;
-        const msRestantes = Math.max(0, msTotaisPrevistos - diffMs);
+        // Cálculo dinâmico do tempo total previsto com a rota da viagem
+        const distEfetiva = n.distancia || obterDistanciaDaRota(n.origem, n.destino);
+        if (distEfetiva && distEfetiva > 0) {
+          const horasTotaisPrevistas = distEfetiva / 33; // 33 km/h
+          const msTotaisPrevistos = horasTotaisPrevistas * 3600 * 1000;
+          const msRestantes = Math.max(0, msTotaisPrevistos - diffMs);
 
-        const diasRestantes = Math.floor(msRestantes / (1000 * 60 * 60 * 24));
-        const horasRestantes = Math.floor((msRestantes % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minRestantes = Math.floor((msRestantes % (1000 * 60 * 60)) / (1000 * 60));
-        const segRestantes = Math.floor((msRestantes % (1000 * 60)) / 1000);
+          const diasRestantes = Math.floor(msRestantes / (1000 * 60 * 60 * 24));
+          const horasRestantes = Math.floor((msRestantes % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const minRestantes = Math.floor((msRestantes % (1000 * 60 * 60)) / (1000 * 60));
+          const segRestantes = Math.floor((msRestantes % (1000 * 60)) / 1000);
 
-        etaText = `ETA: ${diasRestantes}d ${horasRestantes}h ${minRestantes}m ${segRestantes}s (@33km/h)`;
+          etaText = `ETA: ${diasRestantes}d ${horasRestantes}h ${minRestantes}m ${segRestantes}s (${distEfetiva.toLocaleString('pt-BR')} km @33km/h)`;
 
-        // Backlog 3 (7d): barra de progresso visual da viagem (X% decorrido do tempo previsto)
-        const progressoPct = calcularProgressoViagem(n.dataSaida, n.distancia);
-        if (progressoPct !== null) {
-          etaExtraHtml = `
-            <div class="mt-1.5">
-              <div class="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase mb-0.5">
-                <span>Progresso da viagem</span>
-                <span class="text-indigo-600 dark:text-indigo-400">${esc(String(progressoPct))}%</span>
-              </div>
-              <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow="${esc(String(progressoPct))}" aria-valuemin="0" aria-valuemax="100" title="Progresso da viagem: ${esc(String(progressoPct))}% do tempo previsto decorrido">
-                <div class="h-1.5 rounded-full ${progressoPct >= 100 ? 'bg-emerald-500' : 'bg-nexus-500'}" style="width:${esc(String(progressoPct))}%"></div>
-              </div>
-            </div>`;
+          // Backlog 3 (7d): barra de progresso visual da viagem (X% decorrido do tempo previsto)
+          const progressoPct = calcularProgressoViagem(n.dataSaida, distEfetiva);
+          if (progressoPct !== null) {
+            etaExtraHtml = `
+              <div class="mt-1.5">
+                <div class="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase mb-0.5">
+                  <span>Progresso da viagem</span>
+                  <span class="text-indigo-600 dark:text-indigo-400">${esc(String(progressoPct))}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow="${esc(String(progressoPct))}" aria-valuemin="0" aria-valuemax="100" title="Progresso da viagem: ${esc(String(progressoPct))}% do tempo previsto decorrido">
+                  <div class="h-1.5 rounded-full ${progressoPct >= 100 ? 'bg-emerald-500' : 'bg-nexus-500'}" style="width:${esc(String(progressoPct))}%"></div>
+                </div>
+              </div>`;
+          }
+        } else {
+          etaText = 'ETA Indisponível (Sem rota/distância cadastrada)';
         }
       }
 
@@ -606,13 +630,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     rotasTableBody.innerHTML = rotasMaritimasList.map(r => {
-      const dist = parseFloat(r.distancia_km) || 10200;
+      const dist = parseFloat(r.distancia_km) || 0;
       const eta = calcularETA(dist);
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 font-mono text-xs">
           <td class="p-3 font-bold">${esc(r.origem)}</td>
           <td class="p-3 text-nexus-900 dark:text-white font-bold">${esc(r.destino)}</td>
-          <td class="p-3 text-emerald-600 font-bold">${esc(dist.toLocaleString('pt-BR'))} km</td>
+          <td class="p-3 text-emerald-600 font-bold">${dist > 0 ? `${esc(dist.toLocaleString('pt-BR'))} km` : 'Distância não informada'}</td>
           <td class="p-3 text-indigo-600 font-bold">${esc(eta)}</td>
         </tr>
       `;
@@ -630,7 +654,11 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       const origem = document.getElementById('rotaOrigem').value.trim();
       const destino = document.getElementById('rotaDestino').value.trim();
-      const distancia_km = parseFloat(document.getElementById('rotaDistancia').value) || 10200;
+      const distancia_km = parseFloat(document.getElementById('rotaDistancia').value) || 0;
+      if (distancia_km <= 0) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Distância Inválida', 'Informe uma distância maior que zero para cadastrar a rota marítima.');
+        return;
+      }
 
       const novaRota = { origem, destino, distancia_km };
       rotasMaritimasList.push(novaRota);
@@ -705,7 +733,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    navio.distancia = parseFloat(rotaCadastrada.distancia_km) || 10200;
+    navio.distancia = parseFloat(rotaCadastrada.distancia_km) || null;
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm 
       ? await window.nexusConfirm('Liberar Saída de Navio', `Confirmar liberação de saída do navio ${navio.nome} (${navio.imo}) pela rota cadastrada ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km)?`) 
@@ -1100,7 +1128,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const origem = (rota.origem || 'Porto de Santos').trim();
       const destino = (rota.destino || '').trim();
-      const distancia = parseFloat(rota.distancia_km) || 10200;
+      const distancia = parseFloat(rota.distancia_km) || null;
 
       // Item 11: Validação do padrão do Número IMO (3 letras + 7 números)
       const imoRegex = /^[A-Z]{3}\d{7}$/;

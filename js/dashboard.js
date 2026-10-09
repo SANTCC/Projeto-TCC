@@ -416,11 +416,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const naviosNoPorto = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
     const osAtivas = manutencoes.filter(m => m.status === 'SOLICITADA' || m.status === 'APROVADA' || m.status === 'EM_MANUTENCAO').length;
 
+    // Formula unificada e documentada para cálculo do atingimento (%) e status (BL-006)
+    function calcularLinhaIndicador(categoria, volume, meta, tempoPadrao) {
+      const volNum = Number(volume) || 0;
+      const metaNum = Number(meta) || 0;
+
+      // Formula direta: (volume processado / meta mensal) * 100
+      let atingimento = 0;
+      if (metaNum > 0) {
+        atingimento = Math.round((volNum / metaNum) * 100);
+      } else if (volNum > 0) {
+        atingimento = 100;
+      }
+
+      // Status operacional baseado nos limites de atingimento
+      let status = 'CRÍTICO';
+      let badgeClass = 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300';
+      let textClass = 'text-red-600 dark:text-red-400';
+
+      if (atingimento >= 100) {
+        status = 'IDEAL';
+        badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300';
+        textClass = 'text-emerald-600 dark:text-emerald-400';
+      } else if (atingimento >= 70) {
+        status = 'ATENÇÃO';
+        badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+        textClass = 'text-amber-600 dark:text-amber-400';
+      }
+
+      return {
+        categoria,
+        volume: volNum,
+        meta: metaNum,
+        atingimento,
+        tempo: tempoPadrao,
+        status,
+        badgeClass,
+        textClass
+      };
+    }
+
     const indicadores = [
-      { categoria: 'Contêineres Cadastrados e Alocados', volume: totalConts, meta: 20, atingimento: Math.min(100, Math.round((totalConts / 20) * 100)), tempo: 1.5, status: 'IDEAL' },
-      { categoria: 'Cargas Gerais no Fluxo Operacional', volume: totalCargas, meta: 30, atingimento: Math.min(100, Math.round((totalCargas / 30) * 100)), tempo: 2.1, status: 'IDEAL' },
-      { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto, meta: 5, atingimento: Math.min(100, Math.round((naviosNoPorto / 5) * 100)), tempo: 18.4, status: 'IDEAL' },
-      { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas, meta: 5, atingimento: osAtivas === 0 ? 100 : Math.max(10, 100 - (osAtivas * 10)), tempo: 4.8, status: 'IDEAL' }
+      calcularLinhaIndicador('Contêineres Cadastrados e Alocados', totalConts, 20, 1.5),
+      calcularLinhaIndicador('Cargas Gerais no Fluxo Operacional', totalCargas, 30, 2.1),
+      calcularLinhaIndicador('Embarcações em Operação no Terminal', naviosNoPorto, 5, 18.4),
+      calcularLinhaIndicador('Ordens de Serviço de Manutenção Ativas', osAtivas, 5, 4.8)
     ];
 
     // Backlog 3 (7f): mantém a cópia em memória para a exportação CSV
@@ -431,10 +471,10 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 text-left font-bold text-nexus-900 dark:text-white">${esc(i.categoria)}</td>
         <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">${esc(i.volume.toLocaleString('pt-BR'))}</td>
         <td class="p-3 text-right font-mono text-slate-500">${esc(i.meta.toLocaleString('pt-BR'))}</td>
-        <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${esc(i.atingimento)}%</td>
+        <td class="p-3 text-right font-mono font-bold ${i.textClass}">${esc(i.atingimento)}%</td>
         <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${esc(i.tempo)} h</td>
         <td class="p-3 text-center">
-          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">${esc(i.status)}</span>
+          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${i.badgeClass}">${esc(i.status)}</span>
         </td>
       </tr>
     `).join('');
@@ -524,8 +564,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tipo === 'NAVIOS_MANUTENCAO') {
       titulo = 'Navios e Equipamentos em Manutenção';
       icone = 'build';
-      const navs = indic.manutencao.navios.map(n => `• Navio: ${n.nome} (${n.estado_operacional || n.estado})`);
-      const ords = indic.manutencao.ordens.map(o => `• Ordem: ${o.descricao || 'Manutenção geral'} [${o.status}]`);
+      const navs = (indic.manutencao.navios || []).map(n => `• Navio: ${n.nome} (${n.estado_operacional || n.estado || 'EM_MANUTENCAO'})`);
+      const ordensAtivas = (indic.manutencao.ordens || []).filter(o => o.status !== 'CONCLUIDA' && o.status !== 'CANCELADA' && o.status !== 'ENCERRADA');
+      const ords = ordensAtivas.map(o => `• Ordem: ${o.descricao || 'Manutenção geral'} [${o.status}]`);
       detalhe = [...navs, ...ords].join('\n') || 'Nenhum equipamento ou navio em manutenção no momento.';
     } else if (tipo === 'NAVIOS_FORA') {
       titulo = 'Navios Fora do Porto (Em Trânsito / Destino)';
@@ -685,7 +726,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logsVisiveis.length === 0) {
       auditTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="p-4 text-center text-slate-400 italic">${totalAuditRegistros === 0 ? 'Nenhum log de alteração registrado no momento.' : 'Nenhum log corresponde à busca aplicada. Ajuste o termo para listar novamente.'}</td>
+          <td colspan="6" class="p-4 text-center text-slate-400 italic">${totalAuditRegistros === 0 ? 'Nenhum evento registrado no log de alterações até o momento.' : 'Nenhum log corresponde à busca aplicada. Ajuste o termo para listar novamente.'}</td>
         </tr>
       `;
       return;

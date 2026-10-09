@@ -131,13 +131,43 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function carregarChecklistParaCarga(idCarga) {
-    cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-    cargaAtual = cargas.find(c => c.id === idCarga);
+  window.carregarChecklistParaCarga = carregarChecklistParaCarga;
+  async function carregarChecklistParaCarga(idCarga) {
+    const listLocal = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    if (window.NexusRepository) {
+      try {
+        const repCargas = await window.NexusRepository.getCargas();
+        if (repCargas && repCargas.length > 0) cargas = repCargas;
+      } catch (e) {
+        cargas = listLocal;
+      }
+    } else {
+      cargas = listLocal;
+    }
+
+    cargaAtual = cargas.find(c => c.id === idCarga) || listLocal.find(c => c.id === idCarga);
 
     if (!cargaAtual) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Carga Não Localizada', `Carga "${idCarga}" não foi localizada.`);
       return;
+    }
+
+    // Validação de estado operacional (BL-002)
+    const statusFinais = ['CANCELADA', 'ENTREGUE', 'SAIDA'];
+    if (statusFinais.includes(String(cargaAtual.status).toUpperCase())) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Vistoria Bloqueada', `Cargas com status "${cargaAtual.status}" não podem ser inspecionadas.`);
+      }
+      if (formContainer) formContainer.classList.add('hidden');
+      return;
+    }
+
+    // Alerta de re-inspeção para manter histórico auditável (BL-002)
+    const resAnterior = cargaAtual.resultadoInspecao || cargaAtual.resultado_inspecao || (cargaAtual.status === 'RECUSADA' ? 'RECUSADA' : (cargaAtual.status === 'ARMAZENAGEM' ? 'APROVADA' : null));
+    if (resAnterior && resAnterior !== 'PENDENTE') {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Re-inspeção Registrada', `Atenção: A carga ${cargaAtual.id} possui histórico de vistoria (${resAnterior}). Esta nova inspeção gerará um novo registro sem sobrescrever o histórico.`);
+      }
     }
 
     if (cargaTag) cargaTag.textContent = `${cargaAtual.id} • ${cargaAtual.tipo} • Porto: ${cargaAtual.portoDescarga}`;
@@ -231,17 +261,19 @@ document.addEventListener('DOMContentLoaded', () => {
     return `o banco recusou a gravação (${(erro && erro.message) || 'erro desconhecido'}).`;
   }
 
-  // Aprovar Carga (RN 14)
+  // Aprovar Carga (RN 14 & BL-002)
   async function aprovarCargaAtual() {
       if (!cargaAtual) return false;
 
-      cargaAtual.status = 'ARMAZENAGEM';
-      cargaAtual.resultadoInspecao = 'APROVADA';
+      const statusAnterior = cargaAtual.status;
+      const resultadoAnterior = cargaAtual.resultadoInspecao || cargaAtual.resultado_inspecao;
+      const motivoAnterior = cargaAtual.motivoRecusa || cargaAtual.motivo_recusa;
 
-      // Falhas de gravação no Supabase. Se houver alguma, a tela não mostra "concluída".
+      const novoStatus = 'ARMAZENAGEM';
+      const novoResultado = 'APROVADA';
+
+      // Falhas de gravação no Supabase. Se houver alguma, a tela não altera o estado local.
       const pendencias = [];
-
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
 
       let inspetorId = isUUID(session.id) ? session.id : null;
       if (!inspetorId) {
@@ -346,14 +378,25 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (pendencias.length > 0) {
-        // Sem redirecionamento: o aviso precisa ser lido antes de sair da tela.
-        // Retorna false: o banco não confirmou a gravação completa.
-        console.warn('[NexusPort] Aprovação com pendências de gravação:', pendencias);
+        // Reverte alteração em memória para manter consistência atômica entre interface e Supabase (BL-002)
+        cargaAtual.status = statusAnterior;
+        cargaAtual.resultadoInspecao = resultadoAnterior;
+        cargaAtual.resultado_inspecao = resultadoAnterior;
+        cargaAtual.motivoRecusa = motivoAnterior;
+        cargaAtual.motivo_recusa = motivoAnterior;
+
+        console.warn('[NexusPort] Aprovação cancelada por falha no Supabase:', pendencias);
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Gravação Incompleta', `Carga ${cargaAtual.id}: ${pendencias.join(' ')} Verifique com o supervisor antes de seguir.`);
+          window.mostrarFeedback('erro', 'Falha na Gravação', `Operação cancelada para manter a consistência do banco: ${pendencias.join(' ')}`);
         }
         return false;
       }
+
+      // Aplica e persiste localmente somente após confirmação do Supabase
+      cargaAtual.status = novoStatus;
+      cargaAtual.resultadoInspecao = novoResultado;
+      cargaAtual.resultado_inspecao = novoResultado;
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
 
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Inspeção Concluída', `Sucesso! Carga ${cargaAtual.id} APROVADA na inspeção técnica. Status atualizado para ARMAZENAGEM no pátio.`);
@@ -367,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
     aprovarBtn.addEventListener('click', () => aprovarCargaAtual());
   }
 
-  // Recusar Carga (RN 14 & Item 10: campo obrigatório de motivo de recusa)
+  // Recusar Carga (RN 14 & BL-002 & Item 10: campo obrigatório de motivo de recusa)
   async function recusarCargaAtual(opcoes) {
       if (!cargaAtual) return false;
 
@@ -386,15 +429,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      cargaAtual.status = 'RECUSADA';
-      cargaAtual.resultadoInspecao = 'RECUSADA';
-      cargaAtual.motivoRecusa = motivo;
-      cargaAtual.motivo_recusa = motivo;
+      const statusAnterior = cargaAtual.status;
+      const resultadoAnterior = cargaAtual.resultadoInspecao || cargaAtual.resultado_inspecao;
+      const motivoAnterior = cargaAtual.motivoRecusa || cargaAtual.motivo_recusa;
 
-      // Falhas de gravação no Supabase. Se houver alguma, a tela não mostra "registrada".
+      const novoStatus = 'RECUSADA';
+      const novoResultado = 'RECUSADA';
+
+      // Falhas de gravação no Supabase. Se houver alguma, a tela não altera o estado local.
       const pendencias = [];
-
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
 
       let inspetorId = isUUID(session.id) ? session.id : null;
       if (!inspetorId) {
@@ -498,14 +541,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (pendencias.length > 0) {
-        // Sem redirecionamento: o aviso precisa ser lido antes de sair da tela.
-        // Retorna false: o banco não confirmou a gravação completa.
-        console.warn('[NexusPort] Recusa com pendências de gravação:', pendencias);
+        // Reverte alteração em memória para manter consistência atômica entre interface e Supabase (BL-002)
+        cargaAtual.status = statusAnterior;
+        cargaAtual.resultadoInspecao = resultadoAnterior;
+        cargaAtual.resultado_inspecao = resultadoAnterior;
+        cargaAtual.motivoRecusa = motivoAnterior;
+        cargaAtual.motivo_recusa = motivoAnterior;
+
+        console.warn('[NexusPort] Recusa cancelada por falha no Supabase:', pendencias);
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Gravação Incompleta', `Carga ${cargaAtual.id}: ${pendencias.join(' ')} Verifique com o supervisor antes de seguir.`);
+          window.mostrarFeedback('erro', 'Falha na Gravação', `Operação cancelada para manter a consistência do banco: ${pendencias.join(' ')}`);
         }
         return false;
       }
+
+      // Aplica e persiste localmente somente após confirmação do Supabase
+      cargaAtual.status = novoStatus;
+      cargaAtual.resultadoInspecao = novoResultado;
+      cargaAtual.resultado_inspecao = novoResultado;
+      cargaAtual.motivoRecusa = motivo;
+      cargaAtual.motivo_recusa = motivo;
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
 
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Inspeção Registrada', `Carga ${cargaAtual.id} RECUSADA na inspeção técnica. Motivo registrado: "${motivo}". Status mantido em RECUSADA.`);

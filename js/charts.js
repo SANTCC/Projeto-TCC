@@ -602,12 +602,30 @@
   // Normalização das entidades vindas do Supabase ou do cache local
   // ---------------------------------------------------------------------
 
+  function normalizarTipoCarga(str) {
+    if (!str) return 'Carga Geral';
+    const limpo = String(str).trim();
+    if (!limpo) return 'Carga Geral';
+
+    const semAcento = limpo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    if (semAcento.includes('PERECIVEL')) return 'Perecível';
+    if (semAcento.includes('AGRICOLA')) return 'Agrícola';
+    if (semAcento.includes('VIVA') || semAcento.includes('ANIMAL')) return 'Carga Viva';
+    if (semAcento.includes('GRANEL SOLIDO')) return 'Granel Sólido';
+    if (semAcento.includes('GRANEL LIQUIDO')) return 'Granel Líquido';
+    if (semAcento.includes('CONTAINER') || semAcento.includes('CONTENEUR')) return 'Containerizada';
+    if (semAcento.includes('GERAL')) return 'Carga Geral';
+
+    return limpo.charAt(0).toUpperCase() + limpo.slice(1).toLowerCase();
+  }
+
   function normalizarCarga(c) {
+    const tipoPadrao = normalizarTipoCarga(c.tipo || c.natureza);
     return {
       id: c.id || c.rawDbId || c.qr_code_url || '',
       status: String(c.status || c.status_fluxo || 'AGENDAMENTO').toUpperCase(),
-      tipo: c.tipo || c.natureza || 'Carga Geral',
-      natureza: c.natureza || c.tipo || 'Carga Geral',
+      tipo: tipoPadrao,
+      natureza: tipoPadrao,
       peso: paraNumero(c.peso),
       volume: paraNumero(c.volume),
       valor: paraNumero(c.valor_declarado !== undefined ? c.valor_declarado : c.valor),
@@ -963,11 +981,17 @@
   }
 
   function classificarInspecao(carga) {
-    const resultado = (carga.inspecao || '').toUpperCase();
+    if (!carga) return 'PENDENTE';
+    const statusUpper = String(carga.status || '').toUpperCase();
+    if (statusUpper === 'CANCELADA') return 'CANCELADA';
+    if (statusUpper === 'RECUSADA') return 'RECUSADA';
+
+    const resultado = String(carga.resultadoInspecao || carga.resultado_inspecao || carga.inspecao || '').toUpperCase();
     if (resultado.includes('RECUS')) return 'RECUSADA';
     if (resultado.includes('APROV')) return 'APROVADA';
-    if (carga.status === 'RECUSADA') return 'RECUSADA';
-    if (['ARMAZENAGEM', 'PRONTA_PARA_ENTREGA', 'EM_TRANSITO', 'ENTREGUE'].includes(carga.status)) return 'APROVADA';
+
+    if (['ARMAZENAGEM', 'PRONTA_PARA_ENTREGA', 'EM_TRANSITO', 'ENTREGUE'].includes(statusUpper)) return 'APROVADA';
+
     return 'PENDENTE';
   }
 
@@ -1136,10 +1160,10 @@
       };
     },
 
-    /** Resultado consolidado das inspeções técnicas. */
+    /** Resultado consolidado das inspeções técnicas (BL-004). */
     inspecoes_resultado: function (dados) {
       if (!dados.cargas.length) return null;
-      const porResultado = new Map([['APROVADA', 0], ['RECUSADA', 0], ['PENDENTE', 0]]);
+      const porResultado = new Map([['APROVADA', 0], ['RECUSADA', 0], ['PENDENTE', 0], ['CANCELADA', 0]]);
       dados.cargas.forEach(c => {
         const chave = classificarInspecao(c);
         porResultado.set(chave, (porResultado.get(chave) || 0) + 1);
@@ -1148,16 +1172,19 @@
       if (total === 0) return null;
       const aprovadas = porResultado.get('APROVADA') || 0;
       const recusadas = porResultado.get('RECUSADA') || 0;
+      const pendentes = porResultado.get('PENDENTE') || 0;
+      const canceladas = porResultado.get('CANCELADA') || 0;
+
       return {
         tipo: 'doughnut',
-        labels: ['Aprovadas', 'Recusadas', 'Pendentes'],
+        labels: ['Aprovadas', 'Recusadas', 'Pendentes', 'Canceladas'],
         datasets: [{
           label: 'Cargas',
-          data: [aprovadas, recusadas, porResultado.get('PENDENTE') || 0],
-          backgroundColor: ['#2E7D32', '#C62828', '#D97706'],
+          data: [aprovadas, recusadas, pendentes, canceladas],
+          backgroundColor: ['#2E7D32', '#C62828', '#D97706', '#64748B'],
           borderWidth: 0
         }],
-        resumo: `${total} carga(s) inspecionada(s) • taxa de aprovação de ${percentual(aprovadas, total)}% e recusa de ${percentual(recusadas, total)}%`
+        resumo: `Total: ${total} carga(s) • Aprovadas: ${aprovadas} (${percentual(aprovadas, total)}%), Recusadas: ${recusadas} (${percentual(recusadas, total)}%), Pendentes: ${pendentes} (${percentual(pendentes, total)}%), Canceladas: ${canceladas} (${percentual(canceladas, total)}%)`
       };
     },
 
@@ -1263,33 +1290,43 @@
       };
     },
 
-    /** Tempo médio de permanência no porto por tipo de carga (RF 4). */
+    /** Tempo médio de permanência no porto por tipo de carga (RF 4 & BL-005). */
     tempo_permanencia: function (dados) {
       if (!dados.cargas.length) return null;
       const acumulado = new Map();
+      let totalRegistros = 0;
+
       dados.cargas.forEach(c => {
+        const tipoPadrao = normalizarTipoCarga(c.tipo || c.natureza);
         // Prioriza cargas já concluídas; cargas em pátio usam a data corrente.
         const finalizado = c.dataSaida || ['EM_TRANSITO', 'ENTREGUE', 'CANCELADA'].includes(c.status);
         const inicio = c.dataEntrada;
         if (!inicio) return;
         const dias = diferencaEmDias(inicio, finalizado ? (c.dataSaida || null) : null);
         if (dias === null) return;
-        const atual = acumulado.get(c.tipo) || { dias: 0, quantidade: 0 };
+
+        const atual = acumulado.get(tipoPadrao) || { dias: 0, quantidade: 0 };
         atual.dias += dias;
         atual.quantidade += 1;
-        acumulado.set(c.tipo, atual);
+        acumulado.set(tipoPadrao, atual);
+        totalRegistros += 1;
       });
+
       if (!acumulado.size) return null;
+
       const medias = Array.from(acumulado.entries())
-        .map(([tipo, info]) => [tipo, Math.round((info.dias / info.quantidade) * 10) / 10])
+        .map(([tipo, info]) => [tipo, Math.round((info.dias / info.quantidade) * 10) / 10, info.quantidade])
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5);
-      const geral = medias.reduce((acc, [, m]) => acc + m, 0) / medias.length;
+
+      const somaMedias = medias.reduce((acc, [, m]) => acc + m, 0);
+      const geral = somaMedias / medias.length;
+
       return {
         tipo: 'bar',
         labels: medias.map(([tipo]) => tipo),
         datasets: [datasetBarras('Dias médios no porto', medias.map(([, m]) => m), CORES.primaria)],
-        resumo: `Média geral de ${geral.toFixed(1)} dia(s) por tipo de carga (entrada → saída/trânsito)`
+        resumo: `Média geral: ${geral.toFixed(1)} dia(s) por tipo • Amostra: ${totalRegistros} carga(s) analisada(s) (entrada → saída/atual)`
       };
     },
 

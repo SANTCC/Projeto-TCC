@@ -162,6 +162,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentEntityData = null;
 
+  // Carrega rotas marítimas cadastradas para o seletor de destino final (BL-008)
+  async function carregarDestinosCadastrados() {
+    const agDestinoSel = document.getElementById('agDestino');
+    if (!agDestinoSel) return;
+
+    let rotas = [];
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('rotas_maritimas').select('*');
+        if (!error && data && data.length > 0) rotas = data;
+      } catch (e) {
+        console.warn('[Cargas] Erro ao carregar rotas marítimas:', e);
+      }
+    }
+
+    if (!rotas || rotas.length === 0) {
+      rotas = [
+        { origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 },
+        { origem: 'Porto de Santos', destino: 'Porto de Xangai', distancia_km: 18500 },
+        { origem: 'Porto de Santos', destino: 'Porto de Hamburgo', distancia_km: 10100 },
+        { origem: 'Porto de Santos', destino: 'Porto de Paranaguá', distancia_km: 290 }
+      ];
+    }
+
+    const destinosUnicos = Array.from(new Set(rotas.map(r => r.destino).filter(Boolean)));
+    agDestinoSel.innerHTML = '<option value="">Selecione o Destino Final / Rota Marítima...</option>' +
+      destinosUnicos.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  }
+
+  carregarDestinosCadastrados();
+
   // Carrega lista de cargas
   let cargasFluxoList = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
 
@@ -170,6 +201,13 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const loadedCargas = await window.NexusRepository.getCargas();
         if (loadedCargas) {
+          const localCargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+          const supSet = new Set(loadedCargas.map(c => c.id));
+          localCargas.forEach(lc => {
+            if (lc && lc.id && !supSet.has(lc.id)) {
+              loadedCargas.push(lc);
+            }
+          });
           cargasFluxoList = loadedCargas;
           localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
         }
@@ -180,7 +218,34 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTable();
   }
 
-  // Renderização de cargas canceladas na Tabela de Cargas Canceladas
+  // Renderização de cargas recusadas na Tabela de Cargas Recusadas (BL-011)
+  function renderCargasRecusadasTable(cargasRecusadas = []) {
+    const recusadasTableBody = document.getElementById('cargasRecusadasTableBody');
+    if (!recusadasTableBody) return;
+
+    if (!cargasRecusadas || cargasRecusadas.length === 0) {
+      recusadasTableBody.innerHTML = `
+        <tr>
+          <td colspan="5" class="p-4 text-center text-slate-400 italic">Nenhuma carga recusada em vistoria técnica.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    recusadasTableBody.innerHTML = cargasRecusadas.map(c => `
+      <tr class="hover:bg-red-50/50 dark:hover:bg-red-950/20 transition-colors">
+        <td class="p-3 font-mono font-bold text-red-600 dark:text-red-400">${esc(c.id)}</td>
+        <td class="p-3 font-bold">${esc(c.tipo || c.natureza || 'Carga Geral')}</td>
+        <td class="p-3 font-mono text-xs">${esc(c.portoDescarga || 'Setor Pátio')}</td>
+        <td class="p-3 text-red-800 dark:text-red-300 font-medium">${esc(c.motivoRecusa || c.motivo_recusa || c.motivoCancelamento || 'Não conformidade técnica na inspeção')}</td>
+        <td class="p-3">
+          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300">RECUSADA</span>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // Renderização de cargas canceladas na Tabela de Cargas Canceladas (BL-011: tom neutro cinza)
   function renderCargasCanceladasTable(cargasCanceladas = []) {
     const canceladasTableBody = document.getElementById('cargasCanceladasTableBody');
     if (!canceladasTableBody) return;
@@ -195,18 +260,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     canceladasTableBody.innerHTML = cargasCanceladas.map(c => `
-      <tr class="hover:bg-red-50/50 dark:hover:bg-red-950/20 transition-colors">
-        <td class="p-3 font-mono font-bold text-red-600 dark:text-red-400">${esc(c.id)}</td>
-        <td class="p-3 font-bold">${esc(c.tipo || 'Carga Geral')}</td>
-        <td class="p-3 font-mono text-xs">${esc(c.portoDescarga || 'Setor Pátio')}</td>
-        <td class="p-3 text-slate-700 dark:text-slate-300">${esc(c.motivoCancelamento || c.motivo_recusa || c.motivo || 'Cancelado pelo Supervisor')}</td>
+      <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-800/40 transition-colors">
+        <td class="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">${esc(c.id)}</td>
+        <td class="p-3 font-bold text-slate-800 dark:text-slate-200">${esc(c.tipo || c.natureza || 'Carga Geral')}</td>
+        <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-400">${esc(c.portoDescarga || 'Setor Pátio')}</td>
+        <td class="p-3 text-slate-600 dark:text-slate-300">${esc(c.motivoCancelamento || c.motivo || 'Cancelado pelo Supervisor')}</td>
         <td class="p-3">
-          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300">CANCELADA</span>
+          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300">CANCELADA</span>
         </td>
       </tr>
     `).join('');
   }
 
+  window.renderTable = renderTable;
   function renderTable() {
     if (!cargasTableBody) return;
 
@@ -233,11 +299,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Exibe cargas ativas aplicando Visão Própria / Visão Operacional (RF 1.3)
-    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA');
+    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA');
     if (window.NexusVision && window.NexusVision.filterCargasForUser) {
       cargasAtivas = window.NexusVision.filterCargasForUser(cargasAtivas, session);
     }
     const cargasCanceladas = cargasFluxoList.filter(c => c.status === 'CANCELADA');
+    const cargasRecusadas = cargasFluxoList.filter(c => c.status === 'RECUSADA' || c.resultadoInspecao === 'RECUSADA');
 
     const userItems = cargasAtivas.filter(c => {
       if (filterNavioVal && !(c.navio || '').toLowerCase().includes(filterNavioVal)) return false;
@@ -267,6 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     renderCargasCanceladasTable(cargasCanceladas);
+    renderCargasRecusadasTable(cargasRecusadas);
 
     // Contador "Exibindo X de Y" (Backlog 3 - 7b)
     const cargasCounterEl = document.getElementById('cargasCounter');
@@ -350,7 +418,11 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td class="p-3 whitespace-nowrap">${esc(c.tipo)} <span class="block text-[10px] text-slate-400">${esc(c.natureza || '')}</span></td>
           <td class="p-3 font-mono whitespace-nowrap">${esc(c.peso)} / ${esc(c.volume)}</td>
-          <td class="p-3 font-bold whitespace-nowrap">${esc(c.portoDescarga)}</td>
+          <td class="p-3 font-bold whitespace-nowrap">
+            ${esc(c.portoDescarga)}
+            ${c.destino ? `<span class="block text-[10px] text-slate-500 dark:text-slate-400 font-normal">Destino: ${esc(c.destino)}</span>` : ''}
+            ${(c.data_prevista_entrega || c.dataPrevista) ? `<span class="block text-[10px] text-slate-400 font-mono font-normal" title="Prazo contratual de entrega ao porto">Prazo: ${esc(String(c.data_prevista_entrega || c.dataPrevista).split('T')[0].split('-').reverse().join('/'))}</span>` : ''}
+          </td>
           <td class="p-3 text-xs whitespace-nowrap">
             <span class="block font-mono ${c.container ? '' : 'text-slate-400 italic'}">${c.container ? esc(c.container) : 'Contêiner: não vinculado'}</span>
             <span class="block text-[10px] ${c.navio ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
@@ -536,6 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const newQrCode = `QR-${newId}`;
 
       const nowIso = new Date().toISOString();
+      const dataPrevistaSalvar = dataPrevista || new Date().toISOString().split('T')[0];
       const novaCarga = {
         id: newId,
         tipo,
@@ -578,6 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
             valor_declarado: valorVal,
             porto_descarga: portoDescarga,
             destino: destino,
+            data_prevista_entrega: dataPrevistaSalvar,
             status_fluxo: 'AGENDAMENTO',
             qr_code_url: newQrCode
           };
@@ -802,6 +876,19 @@ document.addEventListener('DOMContentLoaded', () => {
             window.mostrarFeedback('alerta', 'Vinculação Bloqueada', `BLOQUEIO DE REGRA DE NEGÓCIO: O contêiner ${contIdentificacao} está vinculado ao navio \"${navVal}\", que se encontra ${situacao}. Cargas só podem ser vinculadas a embarcações atracadas no Porto de Santos.`);
           }
           return;
+        }
+
+        // Validação de compatibilidade de rota marítima entre o navio e a carga (BL-008)
+        if (navioVinc && targetCargaParaVinculacao) {
+          const navioDestino = String(navioVinc.portoDestino || navioVinc.destino || navioVinc.porto_destino || '').trim().toLowerCase();
+          const cargaDestino = String(targetCargaParaVinculacao.destino || targetCargaParaVinculacao.portoDescarga || '').trim().toLowerCase();
+
+          if (navioDestino && cargaDestino && !navioDestino.includes(cargaDestino) && !cargaDestino.includes(navioDestino)) {
+            if (window.mostrarFeedback) {
+              window.mostrarFeedback('alerta', 'Compatibilidade de Rota Requerida', `BLOQUEIO DE REGRA DE NEGÓCIO (BL-008): O navio "${navioVinc.nome}" opera a rota com destino a "${navioVinc.portoDestino || navioVinc.destino}", incompatível com o destino selecionado para a carga ("${targetCargaParaVinculacao.destino || targetCargaParaVinculacao.portoDescarga}"). Selecione uma embarcação compatível com a rota.`);
+            }
+            return;
+          }
         }
       }
 

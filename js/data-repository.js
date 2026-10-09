@@ -127,27 +127,44 @@
           if (Array.isArray(data)) {
             const mapped = data.map((c) => {
               const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0 ? c.estivador_cargas[0] : null;
+              let statusCalc = c.status_fluxo || 'AGENDAMENTO';
+              let resInsp = c.resultado_inspecao || null;
+
+              if (resInsp === 'APROVADA' && (statusCalc === 'AGENDAMENTO' || statusCalc === 'RECEBIMENTO_INSPECAO')) {
+                statusCalc = 'ARMAZENAGEM';
+              } else if (!resInsp && statusCalc === 'ARMAZENAGEM') {
+                resInsp = 'APROVADA';
+              } else if (!resInsp && statusCalc === 'RECUSADA') {
+                resInsp = 'RECUSADA';
+              }
+
               return {
-              id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
-              tipo: c.natureza || 'Carga Geral',
-              peso: `${c.peso || 0} t`,
-              volume: `${c.volume || 0} m³`,
-              valor: `R$ ${(c.valor_declarado || 0).toLocaleString('pt-BR')}`,
-              natureza: c.natureza || 'Geral',
-              portoDescarga: c.porto_descarga || 'Terminal STS-01',
-              destino: c.destino || 'Destino Geral',
-              status: c.status_fluxo || 'AGENDAMENTO',
-              container: c.container_id || '',
-              navio: (c.navios && c.navios.nome) ? c.navios.nome : '',
-              navioId: c.navio_id || null,
-              qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
-              motivoCancelamento: c.motivo_recusa || null,
-              rawDbId: c.id,
-              data_cadastro: c.created_at || c.data_cadastro || null,
-              created_at: c.created_at || null,
-              estivador_id: vinculo ? vinculo.estivador_id : null,
-              estivadorMatricula: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.matricula : null,
-              estivador: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.nome : null
+                id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
+                tipo: c.natureza || 'Carga Geral',
+                peso: `${c.peso || 0} t`,
+                volume: `${c.volume || 0} m³`,
+                valor: `R$ ${(c.valor_declarado || 0).toLocaleString('pt-BR')}`,
+                natureza: c.natureza || 'Geral',
+                portoDescarga: c.porto_descarga || 'Terminal STS-01',
+                destino: c.destino || 'Destino Geral',
+                data_prevista_entrega: c.data_prevista_entrega || null,
+                dataPrevista: c.data_prevista_entrega || null,
+                status: statusCalc,
+                resultadoInspecao: resInsp,
+                resultado_inspecao: resInsp,
+                motivoRecusa: c.motivo_recusa || null,
+                motivo_recusa: c.motivo_recusa || null,
+                container: c.container_id || '',
+                navio: (c.navios && c.navios.nome) ? c.navios.nome : '',
+                navioId: c.navio_id || null,
+                qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
+                motivoCancelamento: c.motivo_recusa || null,
+                rawDbId: c.id,
+                data_cadastro: c.created_at || c.data_cadastro || null,
+                created_at: c.created_at || null,
+                estivador_id: vinculo ? vinculo.estivador_id : null,
+                estivadorMatricula: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.matricula : null,
+                estivador: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.nome : null
               };
             });
             localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
@@ -396,7 +413,7 @@
           const { data, error } = await client
             .from('cargas')
             .select('*')
-            .in('status_fluxo', ['RECUSADA', 'CANCELADA']);
+            .or('status_fluxo.eq.RECUSADA,status_fluxo.eq.CANCELADA,resultado_inspecao.eq.RECUSADA');
 
           if (!error && Array.isArray(data)) {
             data.forEach(c => {
@@ -410,8 +427,11 @@
                 motivo: c.motivo_recusa || 'Sem motivo registrado',
                 portoDescarga: c.porto_descarga || 'Terminal STS-01'
               };
-              if (c.status_fluxo === 'RECUSADA') cargasRecusadas.push(item);
-              else cargasCanceladas.push(item);
+              if (c.status_fluxo === 'RECUSADA' || c.resultado_inspecao === 'RECUSADA') {
+                if (!cargasRecusadas.some(x => x.id === item.id)) cargasRecusadas.push(item);
+              } else if (c.status_fluxo === 'CANCELADA') {
+                if (!cargasCanceladas.some(x => x.id === item.id)) cargasCanceladas.push(item);
+              }
             });
             return {
               recusadas: cargasRecusadas,
@@ -555,11 +575,23 @@
       const preventivaObj = await this.buscarEquipamentosPreventivaSugerida();
 
       const naviosFora = navios.filter(n => n.localizacao === 'FORA_DO_PORTO' || n.localizacao === 'NO_PORTO_DE_DESTINO');
-      const cargasArmazenagem = cargas.filter(c => c.status_fluxo === 'ARMAZENAGEM');
-      const cargasProntas = cargas.filter(c => c.status_fluxo === 'PRONTA_PARA_ENTREGA');
+      const cargasArmazenagem = cargas.filter(c => c.status_fluxo === 'ARMAZENAGEM' || c.status === 'ARMAZENAGEM');
+      const cargasProntas = cargas.filter(c => c.status_fluxo === 'PRONTA_PARA_ENTREGA' || c.status === 'PRONTA_PARA_ENTREGA');
 
-      const naviosManut = navios.filter(n => n.estado_operacional === 'EM_MANUTENCAO' || n.estado_operacional === 'AGENDADO_PARA_REFORMA');
-      const osEmManut = osList.filter(o => o.status === 'SOLICITADA' || o.status === 'APROVADA');
+      const osEmManut = osList.filter(o => o.status === 'SOLICITADA' || o.status === 'APROVADA' || o.status === 'EM_MANUTENCAO');
+
+      // Navios em reforma/manutenção que possuem Ordem de Serviço ativa associada (BL-007)
+      const naviosManut = navios.filter(n => {
+        const emManutState = ['EM_MANUTENCAO', 'AGENDADO_PARA_REFORMA', 'EM_REFORMA'].includes(String(n.estado_operacional || '').toUpperCase());
+        if (!emManutState) return false;
+        const nomeNavio = String(n.nome || '').toLowerCase().trim();
+        if (!nomeNavio) return false;
+        return osEmManut.some(o => {
+          const desc = String(o.descricao || '').toLowerCase();
+          const eq = String(o.equipamento || o.alvo || '').toLowerCase();
+          return desc.includes(nomeNavio) || eq.includes(nomeNavio);
+        });
+      });
 
       const CAPACIDADE_MAXIMA_PATIO = 100;
       const taxaOcupacao = Math.min(100, Math.round((cargasArmazenagem.length / CAPACIDADE_MAXIMA_PATIO) * 100));

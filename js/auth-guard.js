@@ -103,7 +103,7 @@
     'CADASTRAR_CONTAINER': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'CADASTRAR_GUINDASTE': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'INSPECIONAR_CARGA': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
-    'ACIONAR_EMERGENCIA': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    'ACIONAR_EMERGENCIA': ['INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
 
     // Supervisor / Gerente de Operações
     'LIBERAR_NAVIO': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
@@ -147,15 +147,25 @@
         const session = JSON.parse(raw);
         if (!session || !session.codigo_individual) return null;
 
-        // A8 & SPEC 14: Elevação temporária do cargo para Supervisor em caso de delegação ativa
+        // A8 & SPEC 14 & BL-003: Elevação temporária do cargo para Supervisor em caso de delegação ativa e válida
         const activeDelegRaw = localStorage.getItem('nexus_active_delegation');
         if (activeDelegRaw) {
           try {
             const activeDeleg = JSON.parse(activeDelegRaw);
-            if (activeDeleg && activeDeleg.substitutoMatricula) {
+            if (activeDeleg && activeDeleg.substitutoMatricula && activeDeleg.ativa !== false) {
               const subMat = String(activeDeleg.substitutoMatricula).toUpperCase();
               const userMat = String(session.matricula || '').toUpperCase();
-              if (subMat === userMat || subMat === `MAT-${userMat}`) {
+
+              // Valida prazo de validade da delegação se data_fim informada
+              let aindaValida = true;
+              if (activeDeleg.data_fim) {
+                const fim = new Date(activeDeleg.data_fim).getTime();
+                if (!isNaN(fim) && fim < Date.now()) {
+                  aindaValida = false;
+                }
+              }
+
+              if (aindaValida && (subMat === userMat || subMat === `MAT-${userMat}`)) {
                 session.cargo = 'SUPERVISOR_GERENTE_OPERACOES';
                 session.cargo_nome = 'Supervisor Substituto (Delegação Ativa)';
               }
@@ -238,7 +248,12 @@
         return false;
       }
 
-      return allowedRoles.includes(session.cargo);
+      const permitido = allowedRoles.includes(session.cargo);
+      if (!permitido && window.registrarLogAlteracao) {
+        window.registrarLogAlteracao('ACESSO_NEGADO', 'autorizacao', actionKey, `Tentativa de ação '${actionKey}' negada para o perfil '${session.cargo_nome || session.cargo}' (${session.nome || 'Usuário'})`).catch(() => {});
+      }
+
+      return permitido;
     },
 
     /**
