@@ -852,8 +852,8 @@ Relatório consolidado de execução e correções do sistema de automação por
 - **Problema:** o painel de gráficos (`dashboard.html` e `relatorios.html`) se recarregava sozinho a cada **10 segundos**, piscando a tela e reconsultando o Supabase sem nenhum dado novo.
 - **Causa raiz:** o heartbeat `periodic_sync` (10 s, item 10.1) e o evento de foco da janela (`window_focus`) disparam `nexus_data_changed`; o ouvinte de `js/charts.js` redesenhava TODO o painel a cada evento recebido.
 - **O que foi feito:** em `js/charts.js`, a renovação automática passou a usar a constante `INTERVALO_AUTO_REFRESH_MS = 60000` (**1 minuto**) e os eventos de sincronização de fundo (`periodic_sync` e `window_focus`) foram movidos para `ENTIDADES_SYNC_FUNDO`, que **não** redesenham os gráficos. Alterações reais de dados continuam refletindo na hora e o botão "Atualizar" (`NexusCharts.atualizar()`) continua forçando leitura do servidor.
-- **Regressão coberta por:** `tests/test_charts_autorefresh.js` (`npm run test:autorefresh`).
-- **Arquivos:** `js/charts.js`, `tests/test_charts_autorefresh.js`, `package.json`
+- **Regressão coberta por:** `tests/unit/test_charts_autorefresh.js` (`npm run test:autorefresh`).
+- **Arquivos:** `js/charts.js`, `tests/unit/test_charts_autorefresh.js`, `package.json`
 
 ### 10.2. Mesclagem entre Supabase e localStorage
 - **O que foi feito:** atualizadas as funções assíncronas de carregamento (`carregarGuindastesSupabase`, `carregarOsSupabase`, `carregarNaviosSupabase`, `carregarContainersSupabase` e `getCargas` no `data-repository.js`) para realizar mesclagem inteligente entre os dados do Supabase e o `localStorage`. Isso garante que conclusões de manutenção, alterações de status e criações locais não sejam sobrescritas ou perdidas ao recarregar ou navegar entre as páginas.

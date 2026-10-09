@@ -3,24 +3,24 @@
 ## Área de gráficos (UI) — ✅ IMPLEMENTADO
 Lugar simples aonde o Diretor de Operações pode observar comparações de dados do sistema, gráficos comparando informações como "% de berços operacionais".
 
-> **Entregue:** painéis Chart.js por camada de visão no Painel Geral (`dashboard.html`) e em Relatórios (`relatorios.html`), incluindo "% de berços operacionais", fila de liberação, tempo médio de permanência, produtividade por cargo, embarcações mais utilizadas e valor declarado (exclusivo da Direção/Conselho). Módulo: `js/charts.js` · Teste: `node tests/test_graficos_por_cargo.js`.
+> **Entregue:** painéis Chart.js por camada de visão no Painel Geral (`dashboard.html`) e em Relatórios (`relatorios.html`), incluindo "% de berços operacionais", fila de liberação, tempo médio de permanência, produtividade por cargo, embarcações mais utilizadas e valor declarado (exclusivo da Direção/Conselho). Módulo: `js/charts.js` · Teste: `node tests/unit/test_graficos_por_cargo.js`.
 
 ## Auto-complete de - no login (UX) ✅ IMPLEMENTADO
 Quando digitar um login, auotmaticamente insira um - quando o usuario pressionar um numero, de forma que se ele já digitou MAT e apertar 1, ele completa pra MAT-1.
 
-> **Status:** Implementado. Em `js/login.js`, ao digitar o primeiro número logo após o prefixo alfabético o separador entra automaticamente (`MAT` + `1` → `MAT-1`, `NX8821` → `NX-8821`), sem alterar códigos já hifenizados nem matrículas numéricas. Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** Implementado. Em `js/login.js`, ao digitar o primeiro número logo após o prefixo alfabético o separador entra automaticamente (`MAT` + `1` → `MAT-1`, `NX8821` → `NX-8821`), sem alterar códigos já hifenizados nem matrículas numéricas. Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 ## Botão de Pânico ser global ✅ IMPLEMENTADO
 Quando o botão de pânco ser ativado, exibir uma mensagem no rodapé da tela informando que está ocorrendo uma emergência.
 
 > **Status:** Implementado. O botão existente (`manutencao.html`) dispara a Edge Function `panic-alert` (`supabase/functions/panic-alert/index.ts`), que faz broadcast via WebSocket (Supabase Realtime, canal `nexus-emergency`) para todos os clientes conectados e dispara um webhook OPCIONAL (desativado por padrão, tabela `panic_webhook_config`). Todos os clientes exibem a mensagem de emergência fixa no rodapé da tela (`js/panic-realtime.js`). Deploy: `supabase db push` + `supabase functions deploy panic-alert --no-verify-jwt`.
 >
-> **Alerta no aparelho (vibração/som):** clientes compatíveis podem vibrar com o padrão SOS no acionamento e pulsos a cada 3s enquanto o alarme estiver ativo. A Vibration API exige contexto seguro, sticky user activation e documento visível; Safari/WebKit no iOS e Firefox 129+ não oferecem essa API. Não há workaround web confiável nesses navegadores, então o sistema usa alerta sonoro (quando o navegador permite) e banner visual. `js/haptics.js` valida e normaliza os padrões conforme a especificação, mostra o diagnóstico e oferece controles de preferência/teste em `manutencao.html`. Teste: `node tests/test_haptics.js`.
+> **Alerta no aparelho (vibração/som):** clientes compatíveis podem vibrar com o padrão SOS no acionamento e pulsos a cada 3s enquanto o alarme estiver ativo. A Vibration API exige contexto seguro, sticky user activation e documento visível; Safari/WebKit no iOS e Firefox 129+ não oferecem essa API. Não há workaround web confiável nesses navegadores, então o sistema usa alerta sonoro (quando o navegador permite) e banner visual. `js/haptics.js` valida e normaliza os padrões conforme a especificação, mostra o diagnóstico e oferece controles de preferência/teste em `manutencao.html`. Teste: `node tests/unit/test_haptics.js`.
 
 ## Barra de Menu lateral não fica grudada na tela quando scrolla ✅ IMPLEMENTADO
 Ela parece não ficar parada quando scroll, tanto no PC, quanto no celular.
 
-> **Status:** Implementado. O contêiner principal agora é limitado à viewport no desktop (`js/layout.js`: `md:h-[calc(100vh-4rem)] md:overflow-hidden`), então apenas o `<main>` rola e a sidebar permanece fixa; no celular o menu continua como drawer `fixed` (com fundo escurecido que fecha ao tocar fora). Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** Implementado. O contêiner principal agora é limitado à viewport no desktop (`js/layout.js`: `md:h-[calc(100vh-4rem)] md:overflow-hidden`), então apenas o `<main>` rola e a sidebar permanece fixa; no celular o menu continua como drawer `fixed` (com fundo escurecido que fecha ao tocar fora). Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 ## Salvar o login com Cookies ao invés de SESSION_STORAGE
 A não ser que haja problemas de segurança, usar Cookies parece mais prático para usuários.
@@ -71,7 +71,7 @@ Não deve ser possível registrar ou executar uma manutenção para um navio que
 
 > **Regra:** antes de permitir uma manutenção, verificar a localização/status operacional atual do navio. Caso ele esteja fora do porto, bloquear a operação e informar claramente ao usuário o motivo do bloqueio.
 
-> **Status:** Implementado em `js/manutencao.js`. A "Solicitação de Manutenção de Embarcações (Navios)" lista apenas navios com `localizacao = DENTRO_DO_PORTO` (os demais ficam de fora, com o motivo no `title` do select) e o `submit` do formulário bloqueia novamente a operação caso o navio saia do porto entre a abertura e o envio. Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** Implementado em `js/manutencao.js`. A "Solicitação de Manutenção de Embarcações (Navios)" lista apenas navios com `localizacao = DENTRO_DO_PORTO` (os demais ficam de fora, com o motivo no `title` do select) e o `submit` do formulário bloqueia novamente a operação caso o navio saia do porto entre a abertura e o envio. Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 ## Impedir vinculação de carga a navio fora do Porto de Santos
 Não deve ser possível vincular uma carga a um navio que esteja atualmente **fora do Porto de Santos**.
@@ -83,7 +83,7 @@ Uma carga que já esteja **em trânsito** não pode ser movimentada pelo sistema
 
 > **Regra:** quando a carga estiver em trânsito, as ações de movimentação devem ficar bloqueadas/desabilitadas. O sistema deve informar que a carga não pode ser movimentada enquanto estiver em trânsito.
 
-> **Status:** Implementado em `js/cargas.js`. A carga `EM_TRANSITO` renderiza o botão **Movimentar** desabilitado (com `title` explicando o bloqueio) e a função `executarAcaoCarga` também recusa a ação — nenhuma tarefa de guindaste é criada. Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** Implementado em `js/cargas.js`. A carga `EM_TRANSITO` renderiza o botão **Movimentar** desabilitado (com `title` explicando o bloqueio) e a função `executarAcaoCarga` também recusa a ação — nenhuma tarefa de guindaste é criada. Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 ## Corrigir momento em que a carga entra em trânsito
 Atualmente a carga passa a aparecer como **em trânsito** quando o botão **"Pronto para entrega"** é acionado, mas esse comportamento está incorreto.
@@ -108,7 +108,7 @@ Ao acessar o sistema pelo celular, o scanner de QR Code atualmente fica em um fo
 >
 > Garantir que o elemento de câmera/preview e a área visual de leitura preservem proporção `1:1` em dispositivos móveis, sem distorcer a imagem da câmera.
 
-> **Status:** Implementado. `scanner.html` usa `aspect-square` + CSS `aspect-ratio: 1 / 1` (com `object-fit: cover` no vídeo, sem distorção) e `js/scanner.js` calcula o `qrbox` quadrado proporcional ao preview. Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** Implementado. `scanner.html` usa `aspect-square` + CSS `aspect-ratio: 1 / 1` (com `object-fit: cover` no vídeo, sem distorção) e `js/scanner.js` calcula o `qrbox` quadrado proporcional ao preview. Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 # Anotações
 
@@ -145,7 +145,7 @@ window.autorizarRetornoNavio = async function (imo) {
 
 * **Extra:** aplicar a mesma checagem em **Liberar Saída** (`liberarNavioPeloDiretor`): `navio.localizacao === 'DENTRO_DO_PORTO'` dentro da função.
 
-> **Status:** ✅ Implementado em `js/embarcacoes.js`. O botão de navios `FORA_DO_PORTO` agora tem `disabled`/`aria-disabled` de verdade e **sem** `onclick`; `autorizarRetornoNavio` exige `NO_PORTO_DE_DESTINO` e `liberarNavioPeloDiretor` exige `DENTRO_DO_PORTO` (com mensagem clara do motivo). Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** ✅ Implementado em `js/embarcacoes.js`. O botão de navios `FORA_DO_PORTO` agora tem `disabled`/`aria-disabled` de verdade e **sem** `onclick`; `autorizarRetornoNavio` exige `NO_PORTO_DE_DESTINO` e `liberarNavioPeloDiretor` exige `DENTRO_DO_PORTO` (com mensagem clara do motivo). Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 ---
 
@@ -233,7 +233,7 @@ const badge = (cls, txt) =>
 
 * Trocar **"Concluir Manutenção"** por **"Concluir"**, utilizando o ícone `task_alt` e `title="Concluir manutenção"`.
 
-> **Status:** ✅ Implementado em `js/manutencao.js` (`renderOsTable`): status traduzidos ("Aguardando aprovação", "Em manutenção", "Concluída", "Reprovada"), prioridade com cor própria (incluindo BAIXA), ações em `flex` com `gap`/`min-w` e botão "Concluir" com ícone. As datas da coluna passaram a `dd/mm/aaaa` (item 8.8). Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** ✅ Implementado em `js/manutencao.js` (`renderOsTable`): status traduzidos ("Aguardando aprovação", "Em manutenção", "Concluída", "Reprovada"), prioridade com cor própria (incluindo BAIXA), ações em `flex` com `gap`/`min-w` e botão "Concluir" com ícone. As datas da coluna passaram a `dd/mm/aaaa` (item 8.8). Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 ### 3.2 Manutenção & OS — "Alerta de Manutenção Preventiva Sugerida"
 
@@ -256,7 +256,7 @@ alertaList.innerHTML = equipamentos.map(e => `
 
 ### 3.3 Cargas — tabela e botões de ação
 
-> **Status:** ✅ Implementado em `js/cargas.js` (`renderTable`): ícones ampliados (`text-[18px]`), alvos de toque generosos (`min-w-[44px] min-h-[40px] justify-center`), rótulos ocultos no mobile (`hidden sm:inline`) com `title` + `aria-label` em todas as ações (Movimentar/Receber/Inspecionar/Pronta/Vincular/Liberar/Cancelar/QR), e a coluna Contêiner / Navio já separava os dois valores em duas linhas com *fallback* "não vinculado". Teste: `node tests/test_backlog3_restantes.js`.
+> **Status:** ✅ Implementado em `js/cargas.js` (`renderTable`): ícones ampliados (`text-[18px]`), alvos de toque generosos (`min-w-[44px] min-h-[40px] justify-center`), rótulos ocultos no mobile (`hidden sm:inline`) com `title` + `aria-label` em todas as ações (Movimentar/Receber/Inspecionar/Pronta/Vincular/Liberar/Cancelar/QR), e a coluna Contêiner / Navio já separava os dois valores em duas linhas com *fallback* "não vinculado". Teste: `node tests/unit/test_backlog3_restantes.js`.
 
 * **Local:** `renderTable()` (`js/cargas.js` ~162–236), coluna Ações (`min-w-[200px]`, até 5–6 botões).
 * **Problemas:** todos os botões têm o mesmo peso visual; a coluna "Contêiner / Navio" junta os dois valores com " / " e repete "Não vinculado".
@@ -278,7 +278,7 @@ const btnSec = (icone, titulo, acao, cor = 'slate') =>
 
 ### 3.4 Cargas — formulário "Agendamento de Nova Carga"
 
-> **Status:** ✅ Implementado. Concordância corrigida (**"Agendar Nova Carga"**), campos agrupados por assunto em `<fieldset>` ("Dados da carga" / "Destino e prazo"), botão de confirmação encurtado para **"Agendar e gerar QR"**, botão **Cancelar** adicionado (limpa e fecha o formulário, `js/cargas.js`) — e o formulário ganhou o campo **Funcionário Responsável** (`#agEstivadorResponsavel`): gestores escolhem um funcionário ativo em escala, operadores têm a carga auto-atribuída à própria sessão (campo travado), com vínculo persistido em `estivador_cargas` (RF de atribuição). Teste: `node tests/test_backlog3_restantes.js`.
+> **Status:** ✅ Implementado. Concordância corrigida (**"Agendar Nova Carga"**), campos agrupados por assunto em `<fieldset>` ("Dados da carga" / "Destino e prazo"), botão de confirmação encurtado para **"Agendar e gerar QR"**, botão **Cancelar** adicionado (limpa e fecha o formulário, `js/cargas.js`) — e o formulário ganhou o campo **Funcionário Responsável** (`#agEstivadorResponsavel`): gestores escolhem um funcionário ativo em escala, operadores têm a carga auto-atribuída à própria sessão (campo travado), com vínculo persistido em `estivador_cargas` (RF de atribuição). Teste: `node tests/unit/test_backlog3_restantes.js`.
 
 * **Local:** `cargas.html` ~77–139.
 * **Problemas:**
@@ -350,7 +350,7 @@ const LOCAL = {
 };
 ```
 
-> **Status:** ✅ Implementado em `js/embarcacoes.js` (`LOCALIZACAO_NAVIO` / `localizacaoBadgeHtml`): a coluna mostra "No porto", "Em trânsito" ou "Chegou ao destino", mantendo o código técnico no `title` para rastreabilidade. Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** ✅ Implementado em `js/embarcacoes.js` (`LOCALIZACAO_NAVIO` / `localizacaoBadgeHtml`): a coluna mostra "No porto", "Em trânsito" ou "Chegou ao destino", mantendo o código técnico no `title` para rastreabilidade. Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 ---
 
@@ -482,7 +482,7 @@ if (localStorage.getItem('nexus_emergency_active') === 'true') {
 
 * **Complemento:** desabilitar **Liberar Saída**, **Autorizar Retorno** e **Movimentar** enquanto o alarme estiver ativo.
 
-> **Status:** ✅ Implementado (a faixa global já existia em `js/panic-realtime.js`, fixa no rodapé de todas as telas). O complemento foi aplicado: `window.nexusEmergenciaAtiva()` (`js/layout.js`) bloqueia **Movimentar**/**Liberar** (`js/cargas.js`) e **Liberar Saída**/**Autorizar Retorno** (`js/embarcacoes.js`), que aparecem desabilitados com o motivo no `title`. Teste: `node tests/test_backlog3_correcoes.js`.
+> **Status:** ✅ Implementado (a faixa global já existia em `js/panic-realtime.js`, fixa no rodapé de todas as telas). O complemento foi aplicado: `window.nexusEmergenciaAtiva()` (`js/layout.js`) bloqueia **Movimentar**/**Liberar** (`js/cargas.js`) e **Liberar Saída**/**Autorizar Retorno** (`js/embarcacoes.js`), que aparecem desabilitados com o motivo no `title`. Teste: `node tests/unit/test_backlog3_correcoes.js`.
 
 ---
 

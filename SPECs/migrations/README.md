@@ -59,10 +59,10 @@ script o `ADD VALUE` e um `INSERT`/`SELECT` que use o valor — a migração
 `20261008010000` deixa esse teste como passo separado, de propósito.
 
 **Diagnóstico completo:** `SPECs/diagnostico/22P02-enum-emergencia.md`.
-**Evidência:** `python3 tests/verify_enum_emergencia.py` (21 verificações em
+**Evidência:** `python3 tests/python/verify_enum_emergencia.py` (21 verificações em
 PostgreSQL real) e `npm run test:enum` (regressão do front-end).
 
-**Prova de execução:** `python3 tests/verify_migration_emergencias.py` aplica a
+**Prova de execução:** `python3 tests/python/verify_migration_emergencias.py` aplica a
 migração em um PostgreSQL real e cobre cinco cenários (banco virgem, migração
 antiga aplicada, estado parcial, tabela em outro schema, pré-requisito ausente)
 e o acesso pela role `anon` — 24 verificações, todas cobertas por asserção.
@@ -175,7 +175,7 @@ cada berço antes de gravar (`NexusSupabaseUtils.normalizarBerco`, em
 `js/supabase-client.js`), então um cache local legado — por exemplo berço
 marcado `OCUPADO` por carga em versões antigas, sem navio — não derruba mais o
 upsert em lote dos 15 berços. Regressão coberta por
-`node tests/test_bercos_vinculo.js`.
+`node tests/unit/test_bercos_vinculo.js`.
 
 ### Se a intenção for ocupar sem identificar o navio (opcional, não recomendado)
 

@@ -109,7 +109,7 @@ Se o `404`/`PGRST205` persistir alguns segundos após o `Run`, use
 
 | Verificação | Comando | Resultado |
 | --- | --- | --- |
-| Migração em PostgreSQL **real** (virgem, já migrado, parcial, outro schema, pré-requisito ausente + role `anon`) | `python3 tests/verify_migration_emergencias.py` | **24/24 ✅** |
+| Migração em PostgreSQL **real** (virgem, já migrado, parcial, outro schema, pré-requisito ausente + role `anon`) | `python3 tests/python/verify_migration_emergencias.py` | **24/24 ✅** |
 | Regressão do 404 no front-end (estático + jsdom com cliente falso: 404 → fallback → auto-cura) | `npm run test:migracao` | **✅** |
 | Suíte do pânico (Edge Function, WebSocket, webhook, haptics) | `npm run test:panic` | **✅** |
 

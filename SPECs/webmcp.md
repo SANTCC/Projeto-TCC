@@ -46,7 +46,7 @@ Este documento descreve a camada WebMCP do NexusPort: o que foi implementado, po
 | `js/webmcp-dados.js` | Leitores compartilhados: cada um devolve só o necessário para a tarefa; grupos de cargos |
 | `js/webmcp-global.js` | Ferramentas em todas as telas; recursos `nexus://…`; prompts `resumo_turno` e `pendencias_inspecao` |
 | `js/webmcp-<página>.js` | Dez adaptadores de página: cargas, inspecao, embarcacoes, manutencao, delegacao, tecnico, relatorios, scanner, dashboard, vibracao |
-| `tests/test_webmcp.js`, `tests/test_webmcp_paginas.js`, `tests/webmcp-harness.js` | Suítes de verificação (seção 10) |
+| `tests/unit/test_webmcp.js`, `tests/unit/test_webmcp_paginas.js`, `tests/unit/webmcp-harness.js` | Suítes de verificação (seção 10) |
 
 As páginas existentes receberam pequenas mudanças compatíveis (ver seção 9.2): parâmetros
 opcionais `opcoes` nas funções de ação, funções nomeadas para o que antes era um manipulador
@@ -282,14 +282,14 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
     devolve `true` em qualquer caso.
 11. **Arquivo `js/config.js` versionado** apesar de listado em `.gitignore` (já assinalado antes;
     não alterado).
-12. **`tests/test_suite_completa.js`** procura `test_fase_*.js` na raiz, mas os arquivos estão em
+12. **`tests/unit/test_suite_completa.js`** procura `test_fase_*.js` na raiz, mas os arquivos estão em
     `tests/`; a suíte falha antes de executar qualquer teste (pré-existente, não alterada).
 
 ## 10. Verificação
 
 | Comando | O que cobre | Resultado |
 |---|---|---|
-| `npm run test:webmcp` | `tests/test_webmcp.js` (223 verificações: catálogo e higiene, API nativa/legada/polyfill/inseguro, RBAC, desligamento, validação, confirmação, revalidação, emergência, saídas, taxa, painel, diálogo, MCP, declarativo) e `tests/test_webmcp_paginas.js` (102 verificações nas páginas reais, com os scripts de cada tela e o cache local, sem Supabase) | Aprovado |
+| `npm run test:webmcp` | `tests/unit/test_webmcp.js` (223 verificações: catálogo e higiene, API nativa/legada/polyfill/inseguro, RBAC, desligamento, validação, confirmação, revalidação, emergência, saídas, taxa, painel, diálogo, MCP, declarativo) e `tests/unit/test_webmcp_paginas.js` (102 verificações nas páginas reais, com os scripts de cada tela e o cache local, sem Supabase) | Aprovado |
 | `npm run scan:xss` e `npm run test:xss` | Interpolações não codificadas em todo `js/*.js` (inclui os módulos WebMCP) | Aprovado |
 | `npm run test:graficos`, `test:refresh`, `test:autorefresh`, `test:bercos`, `test:haptics`, `test:migracao`, `test:panic`, `test:enum`, `test:net-debug`, `test:backlog3` | Regressão das funcionalidades existentes | Aprovado |
 | `npm test` (Playwright, Python) | Fluxos ponta a ponta | **Não executado**: o ambiente de desenvolvimento não tem navegador/Playwright disponível |

@@ -258,7 +258,7 @@ A emergência também pode ser **sentida no próprio aparelho**, quando o navega
 
 Os padrões usam pulsos de **300 ms** e respeitam os limites de 10 entradas e 10.000 ms por entrada da especificação.
 
-- **Teste automatizado:** `node tests/test_haptics.js` (simula Android, iOS sem API, Firefox, falta de interação, HTTP, visibilidade e normalização dos padrões).
+- **Teste automatizado:** `node tests/unit/test_haptics.js` (simula Android, iOS sem API, Firefox, falta de interação, HTTP, visibilidade e normalização dos padrões).
 
 ### Implantação (backend)
 
@@ -336,7 +336,7 @@ para a aba ou reconectar) e passam a ler o estado global sem recarregar a págin
 
 | Verificação | Como rodar |
 | --- | --- |
-| Migração contra PostgreSQL real (5 cenários, RLS, idempotência) | `python3 tests/verify_migration_emergencias.py` (requer `pip install psycopg2-binary pgserver`) |
+| Migração contra PostgreSQL real (5 cenários, RLS, idempotência) | `python3 tests/python/verify_migration_emergencias.py` (requer `pip install psycopg2-binary pgserver`) |
 | Regressão do 404 no front-end (jsdom) | `npm run test:migracao` |
 | Suíte do pânico | `npm run test:panic` |
 
@@ -392,7 +392,7 @@ feedback do pânico avisa na hora se a auditoria não gravou.
 
 | Verificação | Como rodar |
 | --- | --- |
-| `22P02` reproduzido e corrigido em PostgreSQL real (enum, role `anon`, idempotência, armadilha `55P04`) | `python3 tests/verify_enum_emergencia.py` |
+| `22P02` reproduzido e corrigido em PostgreSQL real (enum, role `anon`, idempotência, armadilha `55P04`) | `python3 tests/python/verify_enum_emergencia.py` |
 | Regressão do `22P02` no front-end (jsdom: pânico com auditoria pendente → migração aplicada) | `npm run test:enum` |
 
 Diagnóstico completo: `SPECs/diagnostico/22P02-enum-emergencia.md`.

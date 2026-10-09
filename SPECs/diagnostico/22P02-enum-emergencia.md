@@ -160,7 +160,7 @@ Depois do `Run`, acione o botão de pânico: o feedback do operador não deve co
 
 | Verificação | Comando | Resultado |
 | --- | --- | --- |
-| 22P02 reproduzido e corrigido em PostgreSQL **real** (enum, role `anon`, idempotência, armadilha 55P04, banco sem o tipo) | `python3 tests/verify_enum_emergencia.py` | **21/21 ✅** |
+| 22P02 reproduzido e corrigido em PostgreSQL **real** (enum, role `anon`, idempotência, armadilha 55P04, banco sem o tipo) | `python3 tests/python/verify_enum_emergencia.py` | **21/21 ✅** |
 | Regressão do 22P02 no front-end (estático + jsdom com cliente falso: pânico com auditoria pendente → migração aplicada → auditoria grava) | `npm run test:enum` | **✅** |
 | Regressão do 404 (`PGRST205`) — continua válida | `npm run test:migracao` | **✅** |
 | Suíte do pânico (Edge Function, WebSocket, webhook, haptics) | `npm run test:panic` | **✅** |
