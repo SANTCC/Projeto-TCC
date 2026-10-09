@@ -16,7 +16,7 @@
 const H = require('./webmcp-harness');
 const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, read, htmlDaPagina } = H;
 
-const SCRIPTS_NUCLEO = ['js/security.js', 'js/auth-guard.js', 'js/webmcp/webmcp-core.js'];
+const SCRIPTS_NUCLEO = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/webmcp/webmcp-core.js'];
 const PAGINAS = [
   'cargas.html', 'dashboard.html', 'embarcacoes.html', 'inspecao.html', 'manutencao.html', 'delegacao.html',
   'tecnico_portos.html', 'relatorios.html', 'scanner.html', 'index.html', 'confirm-role.html', 'teste-vibracao.html'
@@ -234,8 +234,7 @@ async function secaoNucleo() {
   check('ferramenta pública aparece mesmo sem cargo', ativasEstivador.includes('ler_publica'));
 
   // 2.6 Troca de sessão + sincronização retira ferramentas sem permissão
-  w.sessionStorage.setItem('nexus_session', JSON.stringify(sessao('INSPETOR')));
-  w.localStorage.setItem('nexus_session', JSON.stringify(sessao('INSPETOR')));
+  w.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify(sessao('INSPETOR'))) + '; path=/';
   w.NexusWebMCP.sincronizar();
   await aguardar(20);
   check('após mudança de sessão: ferramenta do estivador é retirada', !w.NexusWebMCP.ativas().includes('so_estivador'));

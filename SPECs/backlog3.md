@@ -22,8 +22,10 @@ Ela parece não ficar parada quando scroll, tanto no PC, quanto no celular.
 
 > **Status:** Implementado. O contêiner principal agora é limitado à viewport no desktop (`js/layout.js`: `md:h-[calc(100vh-4rem)] md:overflow-hidden`), então apenas o `<main>` rola e a sidebar permanece fixa; no celular o menu continua como drawer `fixed` (com fundo escurecido que fecha ao tocar fora). Teste: `node tests/test_backlog3_correcoes.js`.
 
-## Salvar o login com Cookies ao invés de SESSION_STORAGE
+## Salvar o login com Cookies ao invés de SESSION_STORAGE ✅ IMPLEMENTADO
 A não ser que haja problemas de segurança, usar Cookies parece mais prático para usuários.
+
+> **Status:** ✅ Implementado. A sessão (`nexus_session`) e a identificação pendente da confirmação de cargo (`nexus_pending_auth`) ficam **somente em cookies**, geridos por `js/session-cookies.js` (carregado antes do `auth-guard.js` em todas as telas, inclusive `index.html` e `confirm-role.html`). Atributos: `path=/`, `SameSite=Lax`, `max-age` de **12 h** (turno) para a sessão e **10 min** para a pendência, e `Secure` quando servido por HTTPS. Não há mais leitura nem gravação da sessão em `sessionStorage`/`localStorage`; cópias antigas são apagadas ao entrar e ao sair. A pendência grava só os campos da confirmação (id, matrícula, código, nome, cargo). O vigia do `auth-guard.js` (a cada 60 s) encerra sessões com mais de 12 h. **Decisão:** quem tinha sessão nas versões anteriores precisa fazer login de novo uma vez. **Limitação declarada:** cookies gravados por JavaScript não podem ser `HttpOnly`; a proteção contra XSS continua sendo a codificação de saída (`js/security.js`). Teste: `node tests/test_sessao_cookies.js` (também em `npm run test:backlog3`).
 
 ## PDF renderizado no lado do servidor ao invés do lado do cliente + cache/armazenamento no supabase storage
 Atualmente, PDFs são renderizados pelo lado do cliente toda a vez que requisistados.

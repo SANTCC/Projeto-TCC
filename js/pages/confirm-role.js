@@ -6,20 +6,15 @@
  */
 
 /**
- * Fallback de persistência de sessão usado caso o auth-guard não esteja
- * carregado nesta página (mantém cookie + espelhos locais consistentes).
+ * Persistência da sessão usada quando o auth-guard não está carregado nesta página.
+ * Grava o mesmo cookie do guard (js/session-cookies.js) e apaga a pendência.
  */
 function setSessionAndRedirectFallback(sessionData) {
-  try {
-    const raw = JSON.stringify(sessionData);
-    const attrs = ['path=/', 'SameSite=Lax', 'max-age=43200'];
-    if (window.location && window.location.protocol === 'https:') attrs.push('Secure');
-    document.cookie = `nexus_session=${encodeURIComponent(raw)}; ${attrs.join('; ')}`;
-    localStorage.setItem('nexus_session', raw);
-    sessionStorage.removeItem('nexus_session');
-    sessionStorage.removeItem('nexus_pending_auth');
-  } catch (e) {
-    console.warn('[ConfirmRole] Falha ao persistir sessão de fallback:', e);
+  if (window.NexusSessionCookies) {
+    window.NexusSessionCookies.gravarSessao(sessionData);
+    window.NexusSessionCookies.limparPendencia();
+  } else {
+    console.warn('[ConfirmRole] js/session-cookies.js ausente: sessão não persistida.');
   }
 }
 
@@ -142,14 +137,13 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
 
   // 2. Leitura e Validação da Autenticação Pendente
-  const pendingAuthRaw = sessionStorage.getItem('nexus_pending_auth');
-  if (!pendingAuthRaw) {
-    // Se não houver login prévio, redireciona para a tela inicial de acesso
+  // A identificação chega por cookie de curta duração gravado no login (backlog 3).
+  const employee = window.NexusSessionCookies ? window.NexusSessionCookies.lerPendencia() : null;
+  if (!employee) {
+    // Se não houver login prévio (ou a pendência expirou), volta para a tela de acesso
     window.location.href = 'index.html';
     return;
   }
-
-  const employee = JSON.parse(pendingAuthRaw);
   const metadata = roleMetadata[employee.cargo] || {
     nome: employee.cargo,
     sigla: 'OP',
@@ -198,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         login_at: new Date().toISOString()
       };
 
-      // Persiste a sessão em cookie (principal) + localStorage (espelho legado) (T1.3 / Backlog 3)
+      // Persiste a sessão somente em cookie (T1.3 / Backlog 3)
       if (window.NexusAuth && window.NexusAuth.establishSession) {
         window.NexusAuth.establishSession(sessionData);
       } else {

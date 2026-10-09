@@ -13,7 +13,7 @@
 const H = require('./webmcp-harness');
 const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, read } = H;
 
-const BASE = ['js/security.js', 'js/auth-guard.js', 'js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js'];
+const BASE = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js'];
 
 /** Erros não capturados observados em cada página carregada (devem ser zero). */
 const ERROS_DE_PAGINA = [];

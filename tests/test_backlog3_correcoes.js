@@ -43,7 +43,7 @@ function check(label, cond, extra) {
 
 /**
  * Carrega uma página real em jsdom e executa, no contexto dela, os módulos
- * informados (depois de js/security.js e js/auth-guard.js).
+ * informados (depois de js/security.js, js/session-cookies.js e js/auth-guard.js).
  */
 async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION } = {}) {
   const virtualConsole = new VirtualConsole();
@@ -73,8 +73,7 @@ async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION }
   }
 
   if (session) {
-    window.localStorage.setItem('nexus_session', JSON.stringify(session));
-    window.sessionStorage.setItem('nexus_session', JSON.stringify(session));
+    window.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify(session)) + '; path=/';
   }
   window.localStorage.setItem('nexus_ghost_clean_v1', 'true');
 
@@ -83,6 +82,7 @@ async function loadPage(pageFile, { scripts = [], seed = {}, session = SESSION }
   });
 
   window.eval(read('js/security.js'));
+  window.eval(read('js/session-cookies.js'));
   window.eval(read('js/auth-guard.js'));
   window.currentUserSession = window.NexusAuth.getSession();
   for (const file of scripts) {

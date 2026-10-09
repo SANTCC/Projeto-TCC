@@ -175,7 +175,7 @@ async function testarAtualizacaoDoPainel() {
   // página dedicada de Relatórios (central única de gráficos do sistema).
   const htmlRelatorios = read('relatorios.html');
   // Mesma ordem de scripts de relatorios.html (basta o que o painel de gráficos usa).
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/pages/charts.js', 'js/pages/relatorios.js']
+  const fontes = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/pages/charts.js', 'js/pages/relatorios.js']
     .map((f) => ({ arquivo: f, codigo: read(f) }));
 
   const CARGAS_INICIAIS = [
@@ -235,9 +235,9 @@ async function testarAtualizacaoDoPainel() {
   win.localStorage.setItem('nexus_audit_logs', JSON.stringify([
     { data_hora: new Date(Date.now() - 86400000).toISOString(), cargo: 'ESTIVADOR', codigo_individual: 'COD-1', entidade: 'CARGA CRG-ANTIGA', tipo_alteracao: 'EDICAO' }
   ]));
-  win.localStorage.setItem('nexus_session', JSON.stringify({
+  win.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify({
     cargo: 'ESTIVADOR', nome: 'Operador Teste', codigo_individual: 'COD-1', matricula: 'MAT-1040'
-  }));
+  })) + '; path=/';
 
   fontes.forEach((f) => win.eval(f.codigo));
   win.document.dispatchEvent(new win.Event('DOMContentLoaded'));

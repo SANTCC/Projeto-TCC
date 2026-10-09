@@ -46,16 +46,55 @@ const manutHtml     = readFile('manutencao.html');
 const dashHtml      = readFile('dashboard.html');
 const scannerHtml   = readFile('scanner.html');
 
-// ─── 1.x Sessão via Cookies ───
-assertIncludes([
-  'SESSION_COOKIE_MAX_AGE_SECONDS', 'setSessionCookie', 'getSessionCookie',
-  'clearSessionCookie', 'establishSession', 'sessionExpired', 'SameSite=Lax',
-], 'Bug 1.1: auth-guard implementa cookie de sessão com expiração de turno (12h)', 'js/auth-guard.js', srcAuthGuard);
+// ─── 1.x Sessão somente em COOKIES (Backlog 3: "Salvar o login com Cookies ao invés de SESSION_STORAGE") ───
+const srcSessionCookies = readFile('js/session-cookies.js');
+const srcLogin          = readFile('js/pages/login.js');
+const srcConfirmRoleSrc = srcConfirmRole;
 
-assertIncludes(['establishSession'],
-  'Bug 1.3: confirm-role persiste a sessão via cookie (NexusAuth.establishSession)', 'js/pages/confirm-role.js', srcConfirmRole);
-assertNotIncludes("sessionStorage.setItem('nexus_session'",
-  'Bug 1.3: confirm-role NÃO grava mais a sessão no sessionStorage', 'js/pages/confirm-role.js', srcConfirmRole);
+assertIncludes([
+  'window.NexusSessionCookies', 'lerSessao', 'gravarSessao', 'limparSessao',
+  'gravarPendencia', 'lerPendencia', 'limparPendencia', 'limparLegado',
+  'SameSite=Lax', "'Secure'", 'TURNO_SEGUNDOS = 12 * 60 * 60', 'PENDENCIA_SEGUNDOS = 10 * 60',
+], 'Cookies: módulo comum grava sessão (12h) e pendência (10 min) em cookie', 'js/session-cookies.js', srcSessionCookies);
+
+assertIncludes([
+  'sessionCookies()', 'SESSION_COOKIE_MAX_AGE_SECONDS', 'establishSession', 'sessionExpired', 'logout',
+  'lerSessao', 'gravarSessao', 'limparSessao',
+], 'Cookies: auth-guard delega ao módulo de cookies (getSession/establishSession/logout)', 'js/auth-guard.js', srcAuthGuard);
+assertNotIncludes('sessionStorage.', 'Cookies: auth-guard não lê nem grava sessionStorage', 'js/auth-guard.js', srcAuthGuard.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''));
+assertNotIncludes("localStorage.getItem('nexus_session')", 'Cookies: auth-guard não lê a sessão do localStorage', 'js/auth-guard.js', srcAuthGuard);
+['setSessionCookie', 'getSessionCookie', 'clearSessionCookie'].forEach(fn => {
+  assertNotIncludes(`function ${fn}`, `Cookies: função interna ${fn} removida do guard (agora no módulo comum)`, 'js/auth-guard.js', srcAuthGuard);
+});
+
+assertIncludes(['gravarPendencia'],
+  'Cookies: login grava a identificação pendente em cookie (NexusSessionCookies.gravarPendencia)', 'js/pages/login.js', srcLogin);
+assertNotIncludes("sessionStorage.setItem('nexus_pending_auth'",
+  'Cookies: login NÃO grava a pendência no sessionStorage', 'js/pages/login.js', srcLogin);
+
+assertIncludes(['lerPendencia', 'limparPendencia', 'establishSession'],
+  'Cookies: confirm-role lê a pendência do cookie e persiste a sessão via NexusAuth.establishSession', 'js/pages/confirm-role.js', srcConfirmRoleSrc);
+assertNotIncludes('sessionStorage.', 'Cookies: confirm-role não usa sessionStorage', 'js/pages/confirm-role.js', srcConfirmRoleSrc);
+
+// Toda página que usa o guard precisa carregar o módulo de cookies ANTES dele.
+['cargas.html', 'dashboard.html', 'delegacao.html', 'embarcacoes.html', 'inspecao.html', 'manutencao.html',
+ 'relatorios.html', 'scanner.html', 'tecnico_portos.html', 'confirm-role.html', 'index.html'].forEach(pagina => {
+  const html = readFile(pagina);
+  const iCookies = html.indexOf('src="js/session-cookies.js"');
+  const iGuard = html.indexOf('src="js/auth-guard.js"');
+  const iLogin = html.indexOf('src="js/pages/login.js"');
+  const iConfirm = html.indexOf('src="js/pages/confirm-role.js"');
+  const precisa = iGuard >= 0 ? iGuard : (iLogin >= 0 ? iLogin : iConfirm);
+  if (precisa < 0) {
+    console.error(`\n❌ Cookies: ${pagina} não carrega o guard nem o login/confirmação`);
+    process.exit(1);
+  }
+  if (iCookies < 0 || iCookies > precisa) {
+    console.error(`\n❌ Cookies: ${pagina} deve carregar js/session-cookies.js antes do guard/login`);
+    process.exit(1);
+  }
+  console.log(`✅ Cookies: ${pagina} carrega js/session-cookies.js antes do guard/login`);
+});
 
 // ─── 2. Supabase Realtime ───
 assertIncludes([

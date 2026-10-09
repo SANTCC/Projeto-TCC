@@ -95,8 +95,7 @@ async function loadApp(pageFile, { scripts, seed, session = SESSION }) {
   const { window } = dom;
 
   // Sessão ativa (mesma estrutura gravada por js/pages/confirm-role.js)
-  window.localStorage.setItem('nexus_session', JSON.stringify(session));
-  window.sessionStorage.setItem('nexus_session', JSON.stringify(session));
+  window.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify(session)) + '; path=/';
   window.localStorage.setItem('nexus_ghost_clean_v1', 'true');
 
   // Semente de dados controlada pelo atacante
@@ -105,11 +104,12 @@ async function loadApp(pageFile, { scripts, seed, session = SESSION }) {
   });
 
   // Carrega os módulos locais como <script> dinâmico (executa no contexto da página)
-  const files = ['js/security.js', 'js/auth-guard.js', ...scripts];
+  const files = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', ...scripts];
   window.eval(readFile('js/security.js'));
+  window.eval(readFile('js/session-cookies.js'));
   window.eval(readFile('js/auth-guard.js'));
   window.currentUserSession = window.NexusAuth.getSession();
-  for (const file of files.slice(2)) {
+  for (const file of files.slice(3)) {
     window.eval(readFile(file));
   }
 

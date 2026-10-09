@@ -90,7 +90,7 @@ async function testarComportamentoNoPainel() {
   }
 
   const htmlDashboard = read('dashboard.html');
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/data-repository.js', 'js/pages/charts.js', 'js/pages/dashboard.js']
+  const fontes = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/data-repository.js', 'js/pages/charts.js', 'js/pages/dashboard.js']
     .map((f) => ({ arquivo: f, codigo: read(f) }));
 
   const tabelas = {
@@ -140,9 +140,9 @@ async function testarComportamentoNoPainel() {
   win.supabase = { createClient: () => cliente };
   win.localStorage.setItem('SUPABASE_URL', 'https://exemplo.supabase.co');
   win.localStorage.setItem('SUPABASE_ANON_KEY', 'chave-publica-de-teste');
-  win.localStorage.setItem('nexus_session', JSON.stringify({
+  win.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify({
     cargo: 'ESTIVADOR', nome: 'Operador Teste', codigo_individual: 'COD-1', matricula: 'MAT-1040'
-  }));
+  })) + '; path=/';
 
   fontes.forEach((f) => win.eval(f.codigo));
   win.document.dispatchEvent(new win.Event('DOMContentLoaded'));

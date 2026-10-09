@@ -164,8 +164,8 @@ async function verificarRenderizacaoPorCargo() {
   }
 
   const htmlRelatorios = fs.readFileSync(path.join(ROOT, 'relatorios.html'), 'utf-8');
-  // Ordem idêntica à das páginas reais: security.js → auth-guard.js → visão → gráficos → página
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/pages/charts.js', 'js/pages/relatorios.js']
+  // Ordem idêntica à das páginas reais: security.js → session-cookies.js → auth-guard.js → visão → gráficos → página
+  const fontes = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/pages/charts.js', 'js/pages/relatorios.js']
     .map(f => ({ arquivo: f, codigo: fs.readFileSync(path.join(ROOT, f), 'utf-8') }));
 
   for (const cenario of CENARIOS_DOM) {
@@ -180,9 +180,10 @@ async function verificarRenderizacaoPorCargo() {
     };
     win.Chart.defaults = { font: {}, color: '' };
 
-    // js/security.js (anti-XSS) e js/auth-guard.js (limpeza de cache legado)
+    // js/security.js (anti-XSS), js/session-cookies.js (cookies) e js/auth-guard.js (sessão + limpeza de cache legado)
     win.eval(fontes[0].codigo);
     win.eval(fontes[1].codigo);
+    win.eval(fontes[2].codigo);
     win.localStorage.setItem('nexus_cargas_fluxo', JSON.stringify([
       { id: 'CRG-1', status: 'ARMAZENAGEM', tipo: 'Grãos', peso: '25 t', valor: 'R$ 100.000,00', dataChegada: new Date(Date.now() - 5 * 86400000).toISOString(), estivadorMatricula: cenario.cargo === 'ESTIVADOR' ? 'MAT-1040' : null },
       { id: 'CRG-2', status: 'ENTREGUE', tipo: 'Grãos', peso: '10 t', valor: 'R$ 50.000,00', dataChegada: new Date(Date.now() - 20 * 86400000).toISOString(), data_saida: new Date(Date.now() - 3 * 86400000).toISOString() }
@@ -191,11 +192,11 @@ async function verificarRenderizacaoPorCargo() {
     win.localStorage.setItem('nexus_bercos_list', JSON.stringify([{ nome: 'B1', estado: 'OCUPADO' }, { nome: 'B2', estado: 'LIVRE' }]));
     win.localStorage.setItem('nexus_func_list', JSON.stringify([{ nome: 'Ana', cargo: 'ESTIVADOR', ativo: true }]));
     win.localStorage.setItem('nexus_audit_logs', JSON.stringify([{ data_hora: new Date(Date.now() - 86400000).toISOString(), cargo: cenario.cargo, codigo_individual: 'COD-1', entidade: 'CARGA CRG-1', tipo_alteracao: 'EDICAO' }]));
-    win.localStorage.setItem('nexus_session', JSON.stringify({ cargo: cenario.cargo, nome: 'Operador Teste', codigo_individual: 'COD-1', matricula: 'MAT-1040' }));
+    win.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify({ cargo: cenario.cargo, nome: 'Operador Teste', codigo_individual: 'COD-1', matricula: 'MAT-1040' })) + '; path=/';
 
-    win.eval(fontes[2].codigo);
     win.eval(fontes[3].codigo);
     win.eval(fontes[4].codigo);
+    win.eval(fontes[5].codigo);
     win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
     await new Promise(r => setTimeout(r, 150));
 
@@ -234,10 +235,11 @@ async function verificarRenderizacaoPorCargo() {
   winRel.Chart = class { constructor() {} destroy() {} };
   winRel.Chart.defaults = { font: {}, color: '' };
   winRel.eval(fs.readFileSync(path.join(ROOT, 'js/security.js'), 'utf-8'));
+  winRel.eval(fs.readFileSync(path.join(ROOT, 'js/session-cookies.js'), 'utf-8'));
   winRel.eval(fs.readFileSync(path.join(ROOT, 'js/auth-guard.js'), 'utf-8'));
   winRel.localStorage.setItem('nexus_cargas_fluxo', JSON.stringify([{ id: 'CRG-1', status: 'ARMAZENAGEM', tipo: 'Grãos', valor: 'R$ 10,00', dataChegada: new Date().toISOString() }]));
   winRel.localStorage.setItem('nexus_audit_logs', JSON.stringify([{ data_hora: new Date().toISOString(), cargo: 'INSPETOR', codigo_individual: 'NX-07', entidade: 'CARGA CRG-1', tipo_alteracao: 'EDICAO' }]));
-  winRel.localStorage.setItem('nexus_session', JSON.stringify({ cargo: 'INSPETOR', nome: 'Igor', codigo_individual: 'NX-07', matricula: 'MAT-07' }));
+  winRel.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify({ cargo: 'INSPETOR', nome: 'Igor', codigo_individual: 'NX-07', matricula: 'MAT-07' })) + '; path=/';
   winRel.eval(fs.readFileSync(path.join(ROOT, 'js/vision-layer.js'), 'utf-8'));
   winRel.eval(fs.readFileSync(path.join(ROOT, 'js/pages/charts.js'), 'utf-8'));
   winRel.eval(fs.readFileSync(path.join(ROOT, 'js/pages/relatorios.js'), 'utf-8'));

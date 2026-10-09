@@ -222,7 +222,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (employeeFound) {
         // Armazena temporariamente os dados da sessão identificada
-        sessionStorage.setItem('nexus_pending_auth', JSON.stringify(employeeFound));
+        // Identificação pendente em cookie de curta duração (backlog 3). Só os campos
+        // necessários à confirmação são gravados (sem e-mail/telefone).
+        if (window.NexusSessionCookies) {
+          window.NexusSessionCookies.gravarPendencia(employeeFound);
+        } else {
+          console.error('[NexusPort Login] js/session-cookies.js não carregado: a confirmação de cargo não terá a identificação.');
+        }
 
         showAuthNotice('success', 'Credencial Reconhecida', `Código vinculado à matrícula ${employeeFound.matricula}. Redirecionando para confirmação...`);
 
