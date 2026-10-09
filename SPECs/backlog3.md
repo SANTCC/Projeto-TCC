@@ -77,10 +77,12 @@ Não deve ser possível registrar ou executar uma manutenção para um navio que
 
 > **Status:** Implementado em `js/manutencao.js`. A "Solicitação de Manutenção de Embarcações (Navios)" lista apenas navios com `localizacao = DENTRO_DO_PORTO` (os demais ficam de fora, com o motivo no `title` do select) e o `submit` do formulário bloqueia novamente a operação caso o navio saia do porto entre a abertura e o envio. Teste: `node tests/test_backlog3_correcoes.js`.
 
-## Impedir vinculação de carga a navio fora do Porto de Santos
+## Impedir vinculação de carga a navio fora do Porto de Santos ✅ IMPLEMENTADO
 Não deve ser possível vincular uma carga a um navio que esteja atualmente **fora do Porto de Santos**.
 
 > **Regra:** a seleção de navios para vinculação de cargas deve considerar a localização/status atual da embarcação e disponibilizar somente navios que estejam no Porto de Santos e aptos para receber cargas.
+
+> **Status:** ✅ Implementado em `js/pages/cargas.js` e `cargas.html`. O modal de vinculação ganhou o seletor `#vincularNavioSelect`, que lista apenas navios `DENTRO_DO_PORTO` com estado `OPERANTE` (fora de reforma agendada ou em curso). Sem escolha, a carga herda o navio do contêiner. Contêineres de navio inapto, ou de outro navio que não o escolhido, ficam indisponíveis, com o motivo na opção. A confirmação revalida o navio com dados frescos e bloqueia com "Vinculação Bloqueada", inclusive quando o navio sai do porto com o modal aberto. Testes: `node tests/test_webmcp_paginas.js` (bloco L) e `node tests/test_backlog3_pendentes.js` (seção L).
 
 ## Impedir movimentação de carga em trânsito
 Uma carga que já esteja **em trânsito** não pode ser movimentada pelo sistema.

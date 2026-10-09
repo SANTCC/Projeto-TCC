@@ -2,6 +2,8 @@
 // Backlog 3 — itens que ainda estavam pendentes e foram implementados nesta rodada.
 // Cada seção cobre um item do SPECs/backlog3.md:
 //   K  Remover gráficos duplicados do Painel Geral
+//   M  Rotas marítimas no cadastro de navios (sem rotas estáticas)
+//   L  Impedir vinculação de carga a navio fora do porto
 //   (demais seções são acrescentadas à medida que os itens são entregues)
 //
 // Execução: node tests/test_backlog3_pendentes.js
@@ -136,12 +138,34 @@ function testarRotasMaritimas() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// L. Impedir vinculação de carga a navio fora do porto
+// ─────────────────────────────────────────────────────────────────────────────
+function testarVinculacaoNavioNoPorto() {
+  console.log('\nL. Impedir vinculação de carga a navio fora do porto');
+  const html = read('cargas.html');
+  const js = read('js/pages/cargas.js');
+  check('cargas.html tem o seletor de navio do modal de vinculação (#vincularNavioSelect)', /id="vincularNavioSelect"/.test(html));
+  check('cargas.html tem o aviso de ausência de navio apto (#vincularNavioAviso)', /id="vincularNavioAviso"/.test(html));
+  check('cargas.js filtra navios por DENTRO_DO_PORTO e estado OPERANTE (motivoNavioInaptoVinculo)',
+    /motivoNavioInaptoVinculo/.test(js) && /loc === 'DENTRO_DO_PORTO'|loc !== 'DENTRO_DO_PORTO'/.test(js) && /estado !== 'OPERANTE'/.test(js));
+  check('seletor de navio lista somente navios aptos (naviosAptosModal)',
+    /naviosAptosModal = naviosModal\.filter\(n => !motivoNavioInaptoVinculo\(n\)\)/.test(js));
+  check('confirmação recusa contêiner marcado como indisponível (selectedContOpt.disabled)',
+    /selectedContOpt && selectedContOpt\.disabled/.test(js));
+  check('confirmação revalida o navio com dados frescos (carregarNaviosParaVinculo na confirmação)',
+    /const naviosAtuais = await carregarNaviosParaVinculo\(\);/.test(js));
+  check('bloqueio informa "Vinculação Bloqueada" com a situação do navio',
+    /'Vinculação Bloqueada', `BLOQUEIO DE REGRA DE NEGÓCIO: O navio/.test(js));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Execução
 // ─────────────────────────────────────────────────────────────────────────────
 (async function main() {
   console.log('\n=== Backlog 3 — itens pendentes ===');
   testarRemocaoGraficosDashboard();
   await testarRotasMaritimas();
+  testarVinculacaoNavioNoPorto();
 
   console.log(`\nResultado: ${passou} aprovado(s), ${falhou} falha(s).`);
   if (falhou > 0) process.exit(1);

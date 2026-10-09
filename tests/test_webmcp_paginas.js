@@ -220,6 +220,114 @@ async function testesCargas() {
 }
 
 // ------------------------------------------------------------------
+/**
+ * Backlog 3 (L): a vinculação de carga só aceita navio atracado no Porto de Santos e operante.
+ * Seletor de navio com apenas navios aptos; contêineres de navio inapto ficam indisponíveis;
+ * a confirmação revalida o navio (inclusive quando ele sai do porto com o modal aberto).
+ */
+async function testesVinculacaoNavioNoPorto() {
+  log('\n[1b] Vinculação de carga a navio (somente atracado no porto e operante)');
+  const ontem = new Date(Date.now() - 86400000).toISOString();
+  const navios = () => [
+    { id: 'nA', nome: 'MV Apto', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9608, -46.3022', dataSaida: null },
+    { id: 'nD', nome: 'MV Outro', imo: 'JKL1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9700, -46.3100', dataSaida: null },
+    { id: 'nB', nome: 'MV Fora', imo: 'DEF7654321', localizacao: 'FORA_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.5000, -46.3000', dataSaida: ontem },
+    { id: 'nC', nome: 'MV Reforma', imo: 'GHI1234567', localizacao: 'DENTRO_DO_PORTO', estado_operacional: 'AGENDADO_PARA_REFORMA', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9800, -46.3200', dataSaida: null }
+  ];
+  const containers = () => [
+    { identificacao: 'MSCU1000001', tipo: 'Eletrônicos', estado: 'OPERANTE', navio: 'MV Apto', navio_id: 'nA' },
+    { identificacao: 'MSCU1000002', tipo: 'Têxteis', estado: 'OPERANTE', navio: 'MV Fora', navio_id: 'nB' },
+    { identificacao: 'MSCU1000003', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Reforma', navio_id: 'nC' },
+    { identificacao: 'MSCU1000004', tipo: 'Carga Geral', estado: 'OPERANTE', navio: '', navio_id: null },
+    { identificacao: 'MSCU1000005', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Outro', navio_id: 'nD' }
+  ];
+  const abrir = async (listaNavios) => {
+    const storage = { nexus_cargas_fluxo: cargasBase(), nexus_containers_list: containers(), nexus_navios_list: listaNavios || navios(), nexus_guindastes_list: [], nexus_guindaste_tarefas: [] };
+    const w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, adaptadores: PAGINA_CARGAS }));
+    w.mostrarFeedback = (tipo, titulo, texto) => { w.__avisos.push({ tipo, titulo, texto }); };
+    w.__avisos = [];
+    return w;
+  };
+  const sel = (w) => w.document.getElementById('vincularNavioSelect');
+  const cont = (w) => w.document.getElementById('vincularContainerSelect');
+  const opcaoCont = (w, ident) => Array.from(cont(w).options).find((o) => o.getAttribute('data-identificacao') === ident);
+  const cargaSalva = (w, id) => JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo')).find((c) => c.id === id);
+  const confirmar = (w) => { w.document.getElementById('confirmVincularModalBtn').click(); return aguardar(90); };
+
+  // 1) Seletor e contêineres
+  let w = await abrir();
+  await w.abrirModalVinculacao('CRG-A');
+  await aguardar(30);
+  const nomes = Array.from(sel(w).options).map((o) => o.textContent.trim());
+  check('L: seletor de navio lista somente os navios atracados e operantes (sem fora do porto nem em reforma)',
+    nomes.length === 3 && nomes.some((t) => /MV Apto/.test(t)) && nomes.some((t) => /MV Outro/.test(t))
+    && !nomes.some((t) => /MV Fora|MV Reforma/.test(t)), JSON.stringify(nomes));
+  check('L: contêiner de navio fora do porto fica indisponível, com o motivo',
+    opcaoCont(w, 'MSCU1000002') && opcaoCont(w, 'MSCU1000002').disabled && /em trânsito/.test(opcaoCont(w, 'MSCU1000002').textContent));
+  check('L: contêiner de navio em reforma fica indisponível, com o motivo',
+    opcaoCont(w, 'MSCU1000003') && opcaoCont(w, 'MSCU1000003').disabled && /não está operante/.test(opcaoCont(w, 'MSCU1000003').textContent));
+  check('L: contêiner de navio apto e contêiner livre permanecem disponíveis',
+    opcaoCont(w, 'MSCU1000001') && !opcaoCont(w, 'MSCU1000001').disabled && !opcaoCont(w, 'MSCU1000004').disabled);
+
+  // Escolher o navio "MV Apto" (valor = posição na lista de aptos): contêiner de outro navio fica indisponível
+  sel(w).value = '0';
+  sel(w).dispatchEvent(new w.Event('change', { bubbles: true }));
+  check('L: escolher um navio indisponibiliza contêiner de outro navio, com o motivo',
+    opcaoCont(w, 'MSCU1000005').disabled && /Vinculado ao navio MV Outro/.test(opcaoCont(w, 'MSCU1000005').textContent));
+
+  // Vinculação com navio escolhido e contêiner livre grava carga, contêiner e navio
+  cont(w).value = 'MSCU1000004';
+  await confirmar(w);
+  let c = cargaSalva(w, 'CRG-A');
+  check('L: vinculação com navio apto grava carga, contêiner e navio', c.container === 'MSCU1000004' && c.navio === 'MV Apto', JSON.stringify({ container: c.container, navio: c.navio }));
+  w.close();
+
+  // 2) Sem escolher navio: a carga herda o navio apto do contêiner
+  w = await abrir();
+  await w.abrirModalVinculacao('CRG-D');
+  await aguardar(30);
+  cont(w).value = 'MSCU1000001';
+  await confirmar(w);
+  c = cargaSalva(w, 'CRG-D');
+  check('L: sem escolher navio, a carga herda o navio apto do contêiner', c.container === 'MSCU1000001' && c.navio === 'MV Apto', JSON.stringify({ container: c.container, navio: c.navio }));
+  w.close();
+
+  // 3) Navio sai do porto depois de aberto o modal: a confirmação revalida e bloqueia
+  w = await abrir();
+  await w.abrirModalVinculacao('CRG-D');
+  await aguardar(30);
+  sel(w).value = '0';
+  sel(w).dispatchEvent(new w.Event('change', { bubbles: true }));
+  w.localStorage.setItem('nexus_navios_list', JSON.stringify(navios().map((n) => (n.id === 'nA' ? Object.assign({}, n, { localizacao: 'FORA_DO_PORTO', dataSaida: ontem }) : n))));
+  cont(w).value = 'MSCU1000004';
+  await confirmar(w);
+  c = cargaSalva(w, 'CRG-D');
+  check('L: navio que sai do porto com o modal aberto é bloqueado na confirmação',
+    w.__avisos.some((a) => a.titulo === 'Vinculação Bloqueada' && /em trânsito/.test(a.texto)) && c.container === '' && c.navio === '',
+    JSON.stringify(w.__avisos.map((a) => a.titulo)));
+  w.close();
+
+  // 4) Contêiner marcado como indisponível não pode ser forçado na confirmação
+  w = await abrir();
+  await w.abrirModalVinculacao('CRG-D');
+  await aguardar(30);
+  cont(w).value = 'MSCU1000002';
+  await confirmar(w);
+  c = cargaSalva(w, 'CRG-D');
+  check('L: contêiner de navio fora do porto não pode ser vinculado mesmo se forçado',
+    w.__avisos.some((a) => a.titulo === 'Contêiner Indisponível') && c.container === '');
+  w.close();
+
+  // 5) Nenhum navio apto: aviso visível e seletor só com a opção padrão
+  w = await abrir(navios().map((n) => Object.assign({}, n, { localizacao: 'FORA_DO_PORTO', dataSaida: ontem })));
+  await w.abrirModalVinculacao('CRG-D');
+  await aguardar(30);
+  const aviso = w.document.getElementById('vincularNavioAviso');
+  check('L: sem navio apto, o seletor fica só com a opção padrão e o aviso aparece',
+    sel(w).options.length === 1 && aviso && !aviso.classList.contains('hidden') && /Nenhum navio atracado no Porto de Santos/.test(aviso.textContent));
+  w.close();
+}
+
 async function testesInspecao() {
   log('\n[2] Inspeção & Checklist (inspecao.html)');
   const storage = {
@@ -610,7 +718,7 @@ async function testesGlobaisEAcesso() {
 // ------------------------------------------------------------------
 async function principal() {
   log('=== WebMCP — páginas reais (integração) ===');
-  const todos = [testesCargas, testesInspecao, testesEmbarcacoes, testesRotasMaritimas, testesManutencao, testesDelegacaoETecnico, testesRelatoriosScannerPainel, testesGlobaisEAcesso];
+  const todos = [testesCargas, testesVinculacaoNavioNoPorto, testesInspecao, testesEmbarcacoes, testesRotasMaritimas, testesManutencao, testesDelegacaoETecnico, testesRelatoriosScannerPainel, testesGlobaisEAcesso];
   for (const teste of todos) {
     try {
       await silenciarLog(teste);

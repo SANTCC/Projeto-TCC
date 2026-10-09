@@ -661,40 +661,82 @@ document.addEventListener('DOMContentLoaded', () => {
   const confirmVincularModalBtn = document.getElementById('confirmVincularModalBtn');
   const vincularContainerSelect = document.getElementById('vincularContainerSelect');
   const vincularNavioSelect = document.getElementById('vincularNavioSelect');
+  const vincularNavioAviso = document.getElementById('vincularNavioAviso');
   const vincularCargaIdLabel = document.getElementById('vincularCargaIdLabel');
   const vincularCargaVolumeLabel = document.getElementById('vincularCargaVolumeLabel');
 
   let targetCargaParaVinculacao = null;
+  // Estado do modal aberto: todos os navios, os navios aptos (listados no seletor) e os contêineres.
+  let naviosModal = [];
+  let naviosAptosModal = [];
+  let containersModal = [];
 
-  window.abrirModalVinculacao = async function(idCarga) {
-    targetCargaParaVinculacao = cargasFluxoList.find(c => c.id === idCarga);
-    if (!targetCargaParaVinculacao || !vincularModal) return;
-
-    if (vincularCargaIdLabel) vincularCargaIdLabel.textContent = targetCargaParaVinculacao.id;
-    if (vincularCargaVolumeLabel) vincularCargaVolumeLabel.textContent = targetCargaParaVinculacao.volume;
-
-    // Buscar Contêineres do Supabase / Local
-    let containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
-    if (window.nexusSupabase) {
+  // Backlog 3 (L): só navios atracados no Porto de Santos e operantes recebem carga.
+  // Fonte: NexusRepository.getNavios() (Supabase, com cache local); sem Supabase, o cache local.
+  async function carregarNaviosParaVinculo() {
+    if (window.NexusRepository && typeof window.NexusRepository.getNavios === 'function') {
       try {
-        const { data } = await window.nexusSupabase.from('containers').select('*');
-        if (data && data.length > 0) {
-          const mapConts = data.map(c => ({
-            id: c.id || `CONT-${c.numero_identificacao}`,
-            identificacao: c.numero_identificacao,
-            tipo: c.material_carregado || 'Carga Geral',
-            estado: c.estado || 'OPERANTE'
-          }));
-          const idSet = new Set(mapConts.map(x => x.identificacao));
-          containers.forEach(item => { if (!idSet.has(item.identificacao)) mapConts.push(item); });
-          containers = mapConts;
-        }
-      } catch (e) { console.warn('Erro ao carregar contêineres para modal:', e); }
+        const lista = await window.NexusRepository.getNavios();
+        if (Array.isArray(lista)) return lista;
+      } catch (e) {
+        console.warn('[Cargas] Falha ao carregar navios para vinculação:', e);
+      }
     }
+    return JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+  }
 
-    // Tarefa 5: Calcular volume atual ocupado em cada contêiner e garantir limite de 75m³
+  /**
+   * Motivo pelo qual o navio NÃO pode receber carga; null quando está apto.
+   * Apto = DENTRO_DO_PORTO e estado operacional OPERANTE (sem reforma agendada ou em curso).
+   * Navio sem estado conhecido no cache é tratado como OPERANTE (default do banco).
+   */
+  function motivoNavioInaptoVinculo(navio) {
+    if (!navio || navio._naoEncontrado) return 'não foi encontrado no cadastro de navios';
+    const loc = navio.localizacao || 'DENTRO_DO_PORTO';
+    if (loc === 'FORA_DO_PORTO') return 'está em trânsito (fora do porto)';
+    if (loc === 'NO_PORTO_DE_DESTINO') return 'está no porto de destino (já descarregado)';
+    if (loc !== 'DENTRO_DO_PORTO') return 'está com localização desconhecida';
+    const estadosOperacionais = ['OPERANTE', 'AGENDADO_PARA_REFORMA', 'EM_REFORMA', 'APROVADO_PARA_REFORMA'];
+    const estado = String(navio.estado_operacional || (estadosOperacionais.includes(navio.estado) ? navio.estado : '') || 'OPERANTE').toUpperCase();
+    if (estado !== 'OPERANTE') return `não está operante (${estado.replace(/_/g, ' ').toLowerCase()})`;
+    return null;
+  }
+
+  /** Navio ao qual o contêiner está vinculado (por id ou por nome); null quando não tem navio. */
+  function navioDoContainerVinculo(cont, navios) {
+    if (!cont || (!cont.navio_id && !cont.navio_nome)) return null;
+    if (cont.navio_id) {
+      const porId = navios.find(n => String(n.id || '') === String(cont.navio_id));
+      if (porId) return porId;
+    }
+    const nomeBusca = String(cont.navio_nome || '').trim().toUpperCase();
+    const porNome = nomeBusca ? navios.find(n => String(n.nome || '').trim().toUpperCase() === nomeBusca) : null;
+    return porNome || { nome: cont.navio_nome || '(navio sem nome)', _naoEncontrado: true };
+  }
+
+  function mesmoNavioVinculo(a, b) {
+    if (!a || !b) return false;
+    if (a.id && b.id) return String(a.id) === String(b.id);
+    return String(a.nome || '').trim().toUpperCase() === String(b.nome || '').trim().toUpperCase();
+  }
+
+  function obterNavioEscolhidoVinculo() {
+    if (!vincularNavioSelect || vincularNavioSelect.value === '') return null;
+    return naviosAptosModal[parseInt(vincularNavioSelect.value, 10)] || null;
+  }
+
+  function uuidContainerVinculo(cont) {
+    return cont.rawDbId || cont.id || cont.identificacao;
+  }
+
+  // Opções de contêiner conforme o navio escolhido: contêiner de navio inapto (ou de outro
+  // navio que não o escolhido) fica indisponível, com o motivo; a capacidade é recalculada.
+  function renderOpcoesContainerVinculo() {
+    if (!vincularContainerSelect) return;
+    const navioEscolhido = obterNavioEscolhidoVinculo();
     vincularContainerSelect.innerHTML = '<option value="">Selecione o Contêiner...</option>';
-    containers.forEach(cont => {
+    containersModal.forEach(cont => {
+      // Tarefa 5: volume já ocupado em cada contêiner, com limite de 75 m³
       const volCargasNoCont = cargasFluxoList
         .filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA' && (
           (c.container && (c.container === cont.identificacao || c.container === cont.id)) ||
@@ -706,15 +748,73 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 0);
 
       const dispVol = Math.max(0, 75 - volCargasNoCont);
-      const statusText = cont.estado !== 'OPERANTE' ? ` [INDISPONÍVEL: ${cont.estado}]` : '';
+      const navioDoCont = navioDoContainerVinculo(cont, naviosModal);
+      let statusText = '';
+      if (cont.estado !== 'OPERANTE') {
+        statusText = ` [INDISPONÍVEL: ${cont.estado}]`;
+      } else if (navioDoCont && motivoNavioInaptoVinculo(navioDoCont)) {
+        statusText = ` [Navio ${navioDoCont.nome || ''} ${motivoNavioInaptoVinculo(navioDoCont)}]`;
+      } else if (navioEscolhido && navioDoCont && !mesmoNavioVinculo(navioEscolhido, navioDoCont)) {
+        statusText = ` [Vinculado ao navio ${navioDoCont.nome || ''}]`;
+      }
+      const indisponivel = dispVol <= 0 || statusText !== '';
       // Contêineres só locais não têm id: a identificação serve de valor (a confirmação resolve o id no Supabase).
-      const containerUuid = cont.rawDbId || cont.id || cont.identificacao;
       vincularContainerSelect.innerHTML += `
-        <option value="${esc(containerUuid)}" data-identificacao="${esc(cont.identificacao)}" data-disp="${esc(dispVol)}" data-estado="${esc(cont.estado)}" ${dispVol <= 0 ? 'disabled' : ''}>
+        <option value="${esc(uuidContainerVinculo(cont))}" data-identificacao="${esc(cont.identificacao)}" data-disp="${esc(dispVol)}" data-estado="${esc(cont.estado)}" ${indisponivel ? 'disabled' : ''}>
           ${esc(cont.identificacao)} (${esc(cont.tipo)}) - Disp: ${esc(dispVol.toFixed(1))} m³ / 75.0 m³${esc(statusText)}
         </option>
       `;
     });
+  }
+
+  if (vincularNavioSelect) {
+    vincularNavioSelect.addEventListener('change', renderOpcoesContainerVinculo);
+  }
+
+  window.abrirModalVinculacao = async function(idCarga) {
+    targetCargaParaVinculacao = cargasFluxoList.find(c => c.id === idCarga);
+    if (!targetCargaParaVinculacao || !vincularModal) return;
+
+    if (vincularCargaIdLabel) vincularCargaIdLabel.textContent = targetCargaParaVinculacao.id;
+    if (vincularCargaVolumeLabel) vincularCargaVolumeLabel.textContent = targetCargaParaVinculacao.volume;
+
+    // Backlog 3 (L): o seletor lista somente navios atracados no Porto de Santos e operantes
+    naviosModal = await carregarNaviosParaVinculo();
+    naviosAptosModal = naviosModal.filter(n => !motivoNavioInaptoVinculo(n));
+    if (vincularNavioSelect) {
+      vincularNavioSelect.innerHTML = '<option value="">Herdar o navio do contêiner</option>' +
+        naviosAptosModal.map((n, idx) => `<option value="${idx}">${esc(n.nome || 'Sem nome')} (IMO ${esc(n.imo || n.numero_imo || '—')})</option>`).join('');
+    }
+    if (vincularNavioAviso) {
+      vincularNavioAviso.textContent = 'Nenhum navio atracado no Porto de Santos e operante está disponível. Cargas só podem ser vinculadas a navios nessa condição.';
+      vincularNavioAviso.classList.toggle('hidden', naviosAptosModal.length > 0);
+    }
+
+    // Buscar Contêineres do Supabase / Local
+    let containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+    if (window.nexusSupabase) {
+      try {
+        const { data } = await window.nexusSupabase.from('containers').select('*');
+        if (data && data.length > 0) {
+          const mapConts = data.map(c => ({
+            id: c.id || `CONT-${c.numero_identificacao}`,
+            identificacao: c.numero_identificacao,
+            tipo: c.material_carregado || 'Carga Geral',
+            estado: c.estado || 'OPERANTE',
+            navio_id: c.navio_id || null
+          }));
+          const idSet = new Set(mapConts.map(x => x.identificacao));
+          containers.forEach(item => { if (!idSet.has(item.identificacao)) mapConts.push(item); });
+          containers = mapConts;
+        }
+      } catch (e) { console.warn('Erro ao carregar contêineres para modal:', e); }
+    }
+
+    containersModal = containers.map(cont => Object.assign({}, cont, {
+      navio_id: cont.navio_id || cont.navioId || null,
+      navio_nome: cont.navio_nome || cont.navio || null
+    }));
+    renderOpcoesContainerVinculo();
 
     vincularModal.classList.remove('hidden');
   };
@@ -753,57 +853,43 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Herda navio vinculado ao contêiner se houver (data-uuid="${nav.id || ''}")
-      let navVal = '';
-      let navUuid = null;
-    let naviosList = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
-    if (vincularNavioSelect) {
-      const selectedNavOpt = vincularNavioSelect.options[vincularNavioSelect.selectedIndex];
-      if (selectedNavOpt && selectedNavOpt.value) {
-        navUuid = selectedNavOpt.getAttribute('data-uuid') || selectedNavOpt.value;
-        navVal = selectedNavOpt.text;
-      }
-    }
-      let containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
-      const contObj = containers.find(c => c.identificacao === contIdentificacao || c.id === contUuid || c.rawDbId === contUuid);
-    if (contObj && !navUuid) {
-        navVal = contObj.navio || contObj.navio_nome || '';
-        navUuid = contObj.navio_id || contObj.navioId || null;
-      }
-
-      // Backlog3: vínculo de carga permitido apenas a navios ATRACADOS no
-      // Porto de Santos (DENTRO_DO_PORTO). Contêiner de navio em trânsito ou
-      // no porto de destino não pode receber nova carga.
-      if (navVal || navUuid) {
-        const navioVinc = naviosList.find(n =>
-          (navUuid && (n.id === navUuid || n.rawDbId === navUuid)) ||
-          (navVal && String(n.nome || '').toUpperCase() === String(navVal).toUpperCase())
-        );
-        let locNavio = navioVinc ? (navioVinc.localizacao || 'DENTRO_DO_PORTO') : null;
-
-        // Fonte de verdade: confirma a localização no Supabase quando o
-        // cache local não sabe onde a embarcação está.
-        if (!locNavio && window.nexusSupabase && (navVal || navUuid)) {
-          try {
-            const isUuidR = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-            const q = window.nexusSupabase.from('navios').select('localizacao');
-            const { data: navioDb } = isUuidR.test(String(navUuid || ''))
-              ? await q.eq('id', navUuid).maybeSingle()
-              : await q.ilike('nome', String(navVal || '')).maybeSingle();
-            if (navioDb && navioDb.localizacao) locNavio = navioDb.localizacao;
-          } catch (e) {
-            console.warn('[Cargas] Falha ao confirmar localização do navio no Supabase:', e);
-          }
+      // Contêiner marcado como indisponível no seletor (navio inapto, outro navio ou capacidade)
+      if (selectedContOpt && selectedContOpt.disabled) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Contêiner Indisponível', `O contêiner ${contIdentificacao} não pode ser vinculado a esta carga no momento. Veja o motivo indicado na lista de contêineres.`);
         }
+        return;
+      }
 
-        if (locNavio && locNavio !== 'DENTRO_DO_PORTO') {
-          const situacao = locNavio === 'FORA_DO_PORTO' ? 'em trânsito (fora do porto)' : 'no porto de destino (já descarregado)';
+      // Backlog 3 (L): o navio da carga é o escolhido no seletor (somente aptos) ou, na falta de
+      // escolha, o navio do contêiner. Ambos são conferidos de novo, com dados frescos do cadastro.
+      const naviosAtuais = await carregarNaviosParaVinculo();
+      const navioEscolhido = obterNavioEscolhidoVinculo();
+      const navioEscolhidoAtual = navioEscolhido
+        ? (naviosAtuais.find(n => mesmoNavioVinculo(n, navioEscolhido)) || { nome: navioEscolhido.nome, _naoEncontrado: true })
+        : null;
+      const contModal = containersModal.find(c => uuidContainerVinculo(c) === contUuid) || null;
+      const navioDoContAtual = contModal ? navioDoContainerVinculo(contModal, naviosAtuais) : null;
+
+      if (navioEscolhidoAtual && navioDoContAtual && !mesmoNavioVinculo(navioEscolhidoAtual, navioDoContAtual)) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Vinculação Bloqueada', `O contêiner ${contIdentificacao} já está vinculado ao navio ${navioDoContAtual.nome}. Escolha esse navio ou um contêiner sem navio.`);
+        }
+        return;
+      }
+
+      const navioFinal = navioEscolhidoAtual || navioDoContAtual;
+      if (navioFinal) {
+        const motivoBloqueio = motivoNavioInaptoVinculo(navioFinal);
+        if (motivoBloqueio) {
           if (window.mostrarFeedback) {
-            window.mostrarFeedback('alerta', 'Vinculação Bloqueada', `BLOQUEIO DE REGRA DE NEGÓCIO: O contêiner ${contIdentificacao} está vinculado ao navio \"${navVal}\", que se encontra ${situacao}. Cargas só podem ser vinculadas a embarcações atracadas no Porto de Santos.`);
+            window.mostrarFeedback('alerta', 'Vinculação Bloqueada', `BLOQUEIO DE REGRA DE NEGÓCIO: O navio ${navioFinal.nome || ''} ${motivoBloqueio}. Cargas só podem ser vinculadas a embarcações atracadas no Porto de Santos e operantes.`);
           }
           return;
         }
       }
+      const navVal = navioFinal ? (navioFinal.nome || '') : '';
+      const navUuid = navioFinal && !navioFinal._naoEncontrado ? (navioFinal.id || null) : null;
 
       const cargaVol = parseFloat(targetCargaParaVinculacao.volume) || 0;
       const dispVol = parseFloat(selectedContOpt.getAttribute('data-disp')) || 0;
