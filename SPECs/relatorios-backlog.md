@@ -8,9 +8,9 @@
 
 ---
 
-# SESSÃO 1 — RELATÓRIO BACKLOG 001
+## Sessão 1 — Relatório Backlog 001
 
-# Relatório de Execução Completa — Backlogs 001 e 002 (NexusPort)
+### Relatório de Execução Completa — Backlogs 001 e 002 (NexusPort)
 
 **Data de Conclusão:** 26 de Setembro de 2026  
 **Sistema:** NexusPort — Sistema de Automação Portuária (Terminal STS-01)  
@@ -37,6 +37,7 @@
 ## 🛠️ 2. Detalhamento Técnico das Ações Realizadas por Fase
 
 ### 🧹 Fase 0: Saneamento, Banco & Eliminação de Mocks
+
 1. **Varredura Completa de Dados Fantasmas**:
    - Eliminados arrays estáticos em memória (`initialCargas`, listas locais de navios, contêineres hardcoded `CONT-991`, funcionário fantasma `MAT-8821`, contagens arbitrárias `12480`).
    - Implementada rotina `nexus_ghost_clean_v1` em `js/auth-guard.js` para limpar chaves legadas e corrompidas do `localStorage` ao carregar a aplicação.
@@ -49,6 +50,7 @@
 ---
 
 ### 📈 Fase 1: Painel Geral & Sincronização Total
+
 1. **Unificação dos Cards e Modais de Detalhe**:
    - O card "Cargas Recusadas" e seu modal de detalhamento consom exatamente a mesma consulta do Supabase, eliminando discrepâncias.
    - Sincronização em tempo real dos 7 cartões operacionais com o banco de dados.
@@ -67,6 +69,7 @@
 ---
 
 ### 📦 Fase 2: Fluxo de Cargas, Inspeção e Scanner QR
+
 1. **Transições de Status de Carga**:
    - Ciclo operacional completo sincronizado no Supabase: `AGENDAMENTO` ➔ `RECEBIMENTO_INSPECAO` ➔ `ARMAZENAGEM` ➔ `PRONTA_PARA_ENTREGA` ➔ `EM_TRANSITO` ➔ `ENTREGUE` (ou `CANCELADA`/`RECUSADA`).
    - Disparo do evento `nexus_data_changed` para reatividade entre abas e telas.
@@ -82,6 +85,7 @@
 ---
 
 ### 🚢 Fase 3: Embarcações, Rotas e Contêineres
+
 1. **Gestão e Validação de Rotas Marítimas (RN 9)**:
    - Bloqueio estrito de saída de embarcações que não possuam rota marítima cadastrada na tabela `rotas_maritimas`.
 2. **Despacho e Retorno de Embarcações**:
@@ -96,6 +100,7 @@
 ---
 
 ### 🔧 Fase 4: Manutenção, Emergência e Ordens de Serviço
+
 1. **Ciclo de Vida de Ordens de Serviço (OS)**:
    - Transição formal de OS: `SOLICITADA` ➔ `APROVADA` (ou `RECUSADA`) ➔ `CONCLUIDA`.
    - Identificação do tipo de ativo (`NAVIO`, `GUINDASTE`, `CONTAINER`) e atualização do estado operacional correspondente (`EM_REFORMA`, `EM_MANUTENCAO`, `OPERANTE`).
@@ -109,6 +114,7 @@
 ---
 
 ### 👥 Fase 5: Delegação e Controle de Acessos
+
 1. **Delegação de Supervisor Titular (RF 14)**:
    - Limite estrito de apenas 1 substituto ativo por vez, consultando e persistindo em `delegacoes_supervisor`.
    - Resolução de IDs de supervisor e substituto como chaves estrangeiras (`UUID`).
@@ -124,6 +130,7 @@
 ---
 
 ### 📄 Fase 6: Relatórios, Vision Layer e Conclusão
+
 1. **Relatório Operacional PDF A4 (RF 11 / RF 16)**:
    - Geração de documento PDF em 4 seções sequenciais:
      1. *Dados da Carga* (código, tipo, peso, volume, valor, natureza).
@@ -137,6 +144,7 @@
 ---
 
 ### 🛡️ Fase 7: Logs, Trail Imutável, Delegação e Gestão de Pessoas
+
 1. **Log de Alterações Automático e Consistência de Funcionários**:
    - `logs_alteracoes` integrado com captura de carimbo de data/hora, cargo, código individual, entidade modificada e tipo de alteração (`CRIACAO`, `EDICAO`, `EXCLUSAO`, `EXPORTACAO`, `REIMPRESSAO_ETIQUETA`).
    - Tabela do painel consulta `funcionarios` via chave estrangeira / código real sem dados estáticos.
@@ -159,7 +167,8 @@
 node test_suite_completa.js
 ```
 
-### Saída da Execução:
+### Saída da Execução
+
 ```
 ================================================================
 🚀 EXECUTANDO SUITE COMPLETA DE TESTES DEFINITIVOS (NEXUSPORT)
@@ -228,10 +237,9 @@ node test_suite_completa.js
 
 ```
 
-
 ---
 
-# SESSÃO 2 — RELATÓRIO BACKLOG 002
+## Sessão 2 — Relatório Backlog 002
 
 ## 📊 1. Resumo Executivo das Fases
 
@@ -245,6 +253,7 @@ node test_suite_completa.js
 ---
 
 ### 🌐 Fase 8: Relatórios, Navbar Global, Resiliência e Homologação
+
 1. **Substituição Integral de Pop-ups Nativos por Modais Customizados (Item 0.3)**:
    - Eliminados todos os `alert()`, `confirm()` e `prompt()` nativos em favor de `window.mostrarFeedback()`, `window.nexusConfirm()` e `window.nexusPrompt()`.
    - Modais responsivos estilizados com ícones contextuais e suporte a testes headless.
@@ -258,6 +267,7 @@ node test_suite_completa.js
 ---
 
 ### 📱 Fase 9: Navbar, Componentes Compartilhados & Responsividade Global
+
 1. **Padronização da Topbar Fixa**:
    - Configuração de `position: fixed`, `top: 0`, `left: 0`, `right: 0`, `z-index: 40` em `js/layout.js`.
    - Inclusão do padding-top de 64px (`pt-16`) em todas as páginas HTML para garantir que o cabeçalho fixo nunca sobreponha o conteúdo das telas ao rolar.
@@ -268,6 +278,7 @@ node test_suite_completa.js
 ---
 
 ### 🛡️ Fase 10: Resiliência, Edge Cases, Integridade, Concorrência e CPF
+
 1. **Padronização Temporal UTC/ISO (10.1)**:
    - Datas salvas em formato ISO 8601 e renderizadas na interface no fuso horário brasileiro `pt-BR`.
 2. **Validação de Concorrência e Capacidade de Pátio (10.2)**:
@@ -290,6 +301,7 @@ node test_suite_completa.js
 ---
 
 ### 🏆 Fase 11: Critérios de Aceite Finais (Checklist 11.4) & Certificação End-to-End
+
 1. **Validação Completa dos 10 Critérios de Aceite**:
    - Zero resíduos de dados fantasmas em todas as 9 páginas.
    - 100% de consistência entre indicadores gerais e listagens detalhadas.
@@ -302,7 +314,8 @@ node test_suite_completa.js
 
 ## 🧪 3. Execução da Suíte Completa de Testes Automatizados
 
-### Saída da Execução:
+### Saída da Execução
+
 ```
 ▶️ Executando: Fase 8 - Relatórios, Navbar Global, Resiliência e Homologação Final (test_fase_8.js)...
   ✅ [PASS] Relatório PDF A4 consome dados reais via Supabase, estrutura 4 seções e audita exportação.
@@ -352,7 +365,7 @@ node test_suite_completa.js
 ## 📋 4. Matriz de Aceite Final (Seção 11.4 do Backlog Consolidado)
 
 | # | Critério de Aceite | Status | Verificação Técnica |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **1** | **Zero dados fantasmas** | ✅ Concluído | `ENABLE_MOCKS = false` no repositório; 0 mocks hardcoded em todas as 9 páginas e módulos JS. |
 | **2** | **Indicadores consistentes com Supabase** | ✅ Concluído | Todos os 7 cards operacionais e tabelas executivas alimentados via queries reais com contagem exata. |
 | **3** | **Contagens cruzadas perfeitas** | ✅ Concluído | Contagens do Painel Geral batem perfeitamente com os módulos de Cargas, Navios, Contêineres e OS. |
@@ -374,30 +387,31 @@ node test_suite_completa.js
 **Ambiente:** Repositório Local `Projeto-TCC` (Branch: main) e Banco de Dados Supabase (`loedodixvmadxqgykehh`)  
 
 ### 5.1 — Resumo Executivo e Balanço Geral de Conformidade
-* **Percentual de Conformidade com a SPEC:** 100%
-* **Requisitos Completamente Corretos (✅):** 52 (Requisitos e Regras de Negócio)
-* **Requisitos Parcialmente Corretos (🟡):** 0
-* **Requisitos Completamente Errados (🔴):** 0
-* **Requisitos Não Implementados (❌):** 0
-* **Requisitos Implementados com Bug (⚠️):** 0
-* **Requisitos Não Testáveis (🔵):** 0
-* **Requisitos Não Aplicáveis (⚪):** 0
+- **Percentual de Conformidade com a SPEC:** 100%
+- **Requisitos Completamente Corretos (✅):** 52 (Requisitos e Regras de Negócio)
+- **Requisitos Parcialmente Corretos (🟡):** 0
+- **Requisitos Completamente Errados (🔴):** 0
+- **Requisitos Não Implementados (❌):** 0
+- **Requisitos Implementados com Bug (⚠️):** 0
+- **Requisitos Não Testáveis (🔵):** 0
+- **Requisitos Não Aplicáveis (⚪):** 0
 
-#### Principais Evidências Comprovadas:
+#### Principais Evidências Comprovadas
+
 1. **Banco de Dados Real no Supabase:** A aplicação opera 100% conectada às 22 tabelas PostgreSQL reais do Supabase, com fallbacks de dados fictícios desativados (`ENABLE_MOCKS = false`).
 2. **Segurança RLS Granular (60 Políticas Ativas):** Todas as 22 tabelas públicas possuem políticas RLS operacionais por comando (`SELECT`, `INSERT`, `UPDATE`), com tabelas de audit log configuradas como Append-Only e bloqueio total de deleções físicas (`DELETE`) em entidades operacionais.
 3. **Controle de Acesso (RBAC) e Visão em 3 Camadas:** Suporte completo aos 8 cargos da SPEC e validação de login por código individual único vinculado à matrícula.
 4. **Fluxo Core de Cargas (8 Etapas):** Do agendamento até a entrega/cancelamento, com checklists por tipo de carga, aprovação por itens críticos e emissão de QR Code com impressão 10×10 cm e leitor via câmera.
 
 ### 5.2 — Metodologia da Auditoria
-* **Arquivos Inspecionados:** `SPECs/Spec.md`, `SPECs/tasks.md`, `SPECs/schema.sql`, `js/*.js` (12 arquivos), `README.md`, `*.html` (11 arquivos).
-* **Validação Sintática:** Execução do verificador estático `node -c` em todos os módulos `js/*.js`.
-* **Inspeção de Banco de Dados:** Leitura de schemas, constraints, tabelas e das 60 políticas RLS registradas em `pg_policies` via consultas DDL leitoras no Supabase.
+- **Arquivos Inspecionados:** `SPECs/Spec.md`, `SPECs/tasks.md`, `SPECs/schema.sql`, `js/*.js` (12 arquivos), `README.md`, `*.html` (11 arquivos).
+- **Validação Sintática:** Execução do verificador estático `node -c` em todos os módulos `js/*.js`.
+- **Inspeção de Banco de Dados:** Leitura de schemas, constraints, tabelas e das 60 políticas RLS registradas em `pg_policies` via consultas DDL leitoras no Supabase.
 
 ### 5.3 — Matriz Completa da SPEC
 
 | ID | Requisito da SPEC | Implementação Encontrada | Evidência Comprovada | Teste Realizado | Resultado | Situação | Problema | Solução Proposta |
-|:---|:---|:---|:---|:---|:---|:---:|:---|:---|
+| :--- | :--- | :--- | :--- | :--- | :--- | :---: | :--- | :--- |
 | **RF-01.1** | Login por Código Individual e Matrícula | `js/login.js`, `js/tecnico_portos.js` | `funcionarios.codigo_individual` | Consulta Supabase e sobreposição | Código validado e autenticado | ✅ **CORRETO** | Nenhum | Manter implementação |
 | **RF-01.2** | Visão Própria (Cargos Operacionais) | `js/vision-layer.js`, `js/cargas.js` | `filterCargasForUser()` | Filtro por operador/matrícula | Cargos enxergam apenas atribuições | ✅ **CORRETO** | Nenhum | Manter implementação |
 | **RF-01.3** | Visão Operacional (Inspetor/Supervisor) | `js/vision-layer.js` | Checagem de módulo visitantes/docs | Acesso a páginas restritas | Acesso bloqueado a dados sensíveis | ✅ **CORRETO** | Nenhum | Manter implementação |
@@ -442,19 +456,22 @@ node test_suite_completa.js
 | **RN-18** | Reimpressão grava log mantendo QR | `js/cargas.js` | Mantém QR e grava audit log | Reimprimir etiqueta | Grava no log de alterações | ✅ **CORRETO** | Nenhum | Manter implementação |
 
 ### 5.4 — Problemas Encontrados (Por Gravidade)
-* 🔴 **CRÍTICOS:** 0 (Nenhum)
-* 🟠 **ALTOS:** 0 (Nenhum)
-* 🟡 **MÉDIOS:** 0 (Nenhum)
-* 🟢 **BAIXOS:** 0 (Nenhum)
+- 🔴 **CRÍTICOS:** 0 (Nenhum)
+- 🟠 **ALTOS:** 0 (Nenhum)
+- 🟡 **MÉDIOS:** 0 (Nenhum)
+- 🟢 **BAIXOS:** 0 (Nenhum)
 
 ### 5.5 — Auditoria do Banco de Dados e RLS (Supabase)
+
 Foi efetuada a checagem das 60 políticas RLS cadastradas na tabela `pg_policies` do PostgreSQL:
+
 1. **Tabelas Mestre (4):** `cargo_niveis`, `tipos_carga`, `checklist_modelos`, `checklist_itens` possuem política estrita `SELECT` pública.
 2. **Tabelas de Audit Log (3):** `logs_alteracoes`, `trail_decisoes`, `retificacoes_trail` possuem políticas `SELECT` e `INSERT` (Append-Only), sem suporte a `UPDATE` ou `DELETE`.
 3. **Tabelas Operacionais (13):** `cargas`, `navios`, `containers`, `manutencoes`, etc. possuem políticas `SELECT`, `INSERT` e `UPDATE`, sendo o comando `DELETE` bloqueado no banco.
 4. **Tabelas de Gestão (2):** `funcionarios` e `visitantes` possuem políticas `SELECT`, `INSERT`, `UPDATE` e `DELETE` para administração.
 
 ### 5.6 — Checklist Final de Segurança e Conformidade
+
 - [x] 0 erros de sintaxe em todos os arquivos de código JavaScript
 - [x] `data-repository.js` incluído em 100% das páginas HTML
 - [x] Supabase integrado a 22 tabelas PostgreSQL reais
@@ -473,12 +490,10 @@ Foi efetuada a checagem das 60 políticas RLS cadastradas na tabela `pg_policies
 **RESPOSTA:** **SIM.**  
 **Justificativa Técnica:** O sistema **NexusPort** foi validado e homologado de ponta a ponta com sucesso absoluto em todas as 12 etapas (Fase 0 a Fase 11). Todas as regras de negócio, exigências de segurança RBAC, auditoria imutável e integridade relacional no Supabase PostgreSQL estão ativas e plenamente funcionais.
 
-
 ---
 
-# SESSÃO 3 — RELATÓRIO BACKLOG 003
+## Sessão 3 — Relatório Backlog 003
 
-# Relatório Backlog 003
 
 Relatório consolidado de execução e correções do sistema de automação portuária NexusPort (STS-01), organizado por página. Todas as tarefas foram executadas, testadas e validadas, incluindo os problemas de persistência de estado e sincronização entre o banco Supabase e o armazenamento local (`localStorage`).
 
@@ -500,52 +515,61 @@ Relatório consolidado de execução e correções do sistema de automação por
 
 ---
 
-## 1. Painel Geral (`dashboard.html` / `js/dashboard.js`)
+### 1. Painel Geral (`dashboard.html` / `js/dashboard.js`)
 
-### 1.1. Planilha de Desempenho Operacional
+#### 1.1. Planilha de Desempenho Operacional
+
 - **O que foi feito:** o status da tabela de desempenho operacional foi ajustado para exibir a situação ideal/normalizada (`IDEAL`).
 - **Arquivos:** `js/dashboard.js`
 
-### 1.2. Atualização de Nomenclatura no Painel
+#### 1.2. Atualização de Nomenclatura no Painel
+
 - **O que foi feito:** o cartão do indicador foi renomeado de "Navios em Manutenção" para "Máquinas em manutenção".
 - **Arquivos:** `dashboard.html`
 
-### 1.3. Tabela de Log Geral de Alterações
+#### 1.3. Tabela de Log Geral de Alterações
+
 - **Problema:** as alterações realizadas no sistema não eram exibidas nem registradas de forma ordenada no Painel Geral, e a tabela não reagia em tempo real.
 - **O que foi feito:**
-    - `renderAuditLogTable()` foi atualizada para unificar os registros do Supabase com os do `localStorage`, exibindo as alterações em ordem cronológica decrescente, com o nome real e o cargo do responsável.
-    - `window.registrarLogAlteracao` passou a disparar notificação de mudança (`NexusRepository.notifyChange('logs_alteracoes')`), e a tabela é re-renderizada automaticamente ao receber o evento de dados modificados.
+  - `renderAuditLogTable()` foi atualizada para unificar os registros do Supabase com os do `localStorage`, exibindo as alterações em ordem cronológica decrescente, com o nome real e o cargo do responsável.
+  - `window.registrarLogAlteracao` passou a disparar notificação de mudança (`NexusRepository.notifyChange('logs_alteracoes')`), e a tabela é re-renderizada automaticamente ao receber o evento de dados modificados.
 - **Arquivos:** `js/dashboard.js`
 
-### 1.4. Trail de Decisões Críticas Imutável — Registro Manual
+#### 1.4. Trail de Decisões Críticas Imutável — Registro Manual
+
 - **Problema:** não havia interface para inclusão manual de decisões críticas no Trail Imutável.
 - **O que foi feito:** criados o botão "+ Registrar Decisão / Trail" e o modal interativo, permitindo o registro de decisões de alto impacto com justificativa e preservação no Trail Imutável.
 - **Arquivos:** `dashboard.html`, `js/dashboard.js`
 
-### 1.5. Gravação de Logs, Trail e Produtividade por Cargo
+#### 1.5. Gravação de Logs, Trail e Produtividade por Cargo
+
 - **Problema:** erro de Foreign Key ao salvar logs/trail (`funcionario_id` nulo ou inválido em sessões ativas sem UUID nativo) e sobrescrita do Trail de Decisões pelo `localStorage` quando o Supabase demorava a responder.
 - **O que foi feito:**
-    - Verificação estrita de UUID (`isUUID`) em `registrarLogAlteracao` e `registrarTrailDecisao`, com busca por matrícula/código do funcionário e retentativa limpa caso ocorra rejeição de chave estrangeira no Supabase.
-    - `renderTrailDecisoesTable()` passou a mesclar (merge) os registros remotos do Supabase com os locais do `localStorage`, mantendo a ordem cronológica e evitando perda de retificações.
-    - Mapeamento do gráfico de produtividade por cargo (`chartProdutividade`) corrigido para considerar `codigo_individual`, `funcionario_id`, `codigo_usuario` e `matricula`, filtrando apenas operadores ativos.
+  - Verificação estrita de UUID (`isUUID`) em `registrarLogAlteracao` e `registrarTrailDecisao`, com busca por matrícula/código do funcionário e retentativa limpa caso ocorra rejeição de chave estrangeira no Supabase.
+  - `renderTrailDecisoesTable()` passou a mesclar (merge) os registros remotos do Supabase com os locais do `localStorage`, mantendo a ordem cronológica e evitando perda de retificações.
+  - Mapeamento do gráfico de produtividade por cargo (`chartProdutividade`) corrigido para considerar `codigo_individual`, `funcionario_id`, `codigo_usuario` e `matricula`, filtrando apenas operadores ativos.
 - **Arquivos:** `js/dashboard.js`
 
-### 1.6. Gráficos do Painel Geral
+#### 1.6. Gráficos do Painel Geral
+
 - **Problema:** os gráficos não eram exibidos ou apresentavam erro de cálculo (`NaN`) ao renderizar conjuntos de dados zerados.
 - **O que foi feito:** exibido o painel `#estrategicoPanel` em `dashboard.html` e ajustado `renderEstrategicoCharts()` em `js/dashboard.js` com tratamento de valores de referência seguros, garantindo a renderização do gráfico de pizza/doughnut de embarcações e do gráfico de barras de produtividade via Chart.js.
 - **Arquivos:** `dashboard.html`, `js/dashboard.js`
 
-### 1.7. Gráfico de Pizza — Navios Mais Utilizados desatualizado
+#### 1.7. Gráfico de Pizza — Navios Mais Utilizados desatualizado
+
 - **Problema:** o gráfico de pizza exibia navios mais utilizados que já haviam sido excluídos do sistema.
 - **Causa raiz:** o método do gráfico mantinha contagens legadas em memória sem cruzar com a lista viva de embarcações ativas.
 - **O que foi feito:** em `renderEstrategicoCharts()`, criado um filtro estrito baseado no conjunto de navios ativos cadastrados (`activeShipNames`), com uma etapa de expurgo que remove do mapa do gráfico qualquer navio que não conste mais entre os ativos.
 - **Arquivos:** `js/dashboard.js`
 
-### 1.8. Filtro dos Navios Mais Utilizados no Gráfico
+#### 1.8. Filtro dos Navios Mais Utilizados no Gráfico
+
 - **O que foi feito:** o gráfico de embarcações mais utilizadas foi configurado para exibir exclusivamente o Top 3 navios mais utilizados.
 - **Arquivos:** `js/dashboard.js`
 
-### 1.9. Remoção de Gráficos
+#### 1.9. Remoção de Gráficos
+
 - **Produtividade operacional por cargo:** removidos o container HTML e o canvas do gráfico `chartProdutividade` em `dashboard.html`, além da função de agregação de operações e da inicialização Chart.js correspondente em `js/dashboard.js`.
 - **Embarcações mais utilizadas:** removidos o container HTML e o canvas do gráfico `chartNavios` em `dashboard.html`, além da lógica de agrupamento e renderização Chart.js de navios mais utilizados em `js/dashboard.js`.
 - Estas remoções prevalecem sobre os ajustes anteriores desses mesmos gráficos.
@@ -554,314 +578,366 @@ Relatório consolidado de execução e correções do sistema de automação por
 
 ---
 
-## 2. Cargas & Pátio (`cargas.html` / `js/cargas.js`)
+### 2. Cargas & Pátio (`cargas.html` / `js/cargas.js`)
 
-### 2.1. Agendamento de Nova Carga sem Exigência de Checklist
+#### 2.1. Agendamento de Nova Carga sem Exigência de Checklist
+
 - **Problema:** o sistema exigia ou bloqueava o agendamento informando necessidade de checklist prévio, o que impedia o agendamento de uma carga ainda não cadastrada.
 - **O que foi feito:** removida toda exigência de checklist prévio no formulário de agendamento. O agendamento é registrado instantaneamente com status `AGENDAMENTO` e gera o respectivo QR Code, para que a etapa de checklist técnico ocorra posteriormente, na fase de Inspeção.
 - **Arquivos:** `cargas.html`, `js/cargas.js`
 
-### 2.2. Desvinculação de Berço no Agendamento de Cargas
+#### 2.2. Desvinculação de Berço no Agendamento de Cargas
+
 - **O que foi feito:** o formulário de agendamento deixou de exigir ou atribuir berços de navio. O destino de descarga foi direcionado exclusivamente para os setores do pátio STS-01.
 - **Arquivos:** `cargas.html`, `js/cargas.js`
 
-### 2.3. Bloqueio de Data Prevista de Entrega no Passado
+#### 2.3. Bloqueio de Data Prevista de Entrega no Passado
+
 - **O que foi feito:** configurado o atributo `min` com a data atual (YYYY-MM-DD) no elemento `<input type="date" id="agDataPrevista">`. Adicionada validação no formulário de agendamento que rejeita submissões com datas passadas, com feedback visual.
 - **Status:** concluído e validado.
 - **Arquivos:** `cargas.html`, `js/cargas.js`
 
-### 2.4. Movimentação para Sala de Contêiner e Tarefas de Guindastes
+#### 2.4. Movimentação para Sala de Contêiner e Tarefas de Guindastes
+
 - **Problema:** o botão "Movimentar" na Tabela de Cargas apontava incorretamente para berços de atracação de navios.
 - **O que foi feito:** o botão "Movimentar" passou a direcionar a carga para a Sala de Contêiner. Antes de definir a movimentação, o operador seleciona o guindaste operante disponível. Uma nova tarefa é criada dinamicamente na lista de tarefas de guindaste em "Embarcações & GPS". Ao clicar em "Receber" na tabela de cargas, a tarefa do guindaste é finalizada e limpa automaticamente.
 
-### 2.5. Tarefa do Guindaste não some ao Receber a Carga
+#### 2.5. Tarefa do Guindaste não some ao Receber a Carga
+
 - **Problema:** ao solicitar a movimentação da carga, a tarefa criada para o guindaste continuava listada e pendente após clicar em "Receber".
 - **Causa raiz:** o manipulador da ação `RECEBER` atualizava o status da carga, mas não filtrava nem limpava o array `nexus_guindaste_tarefas` do LocalStorage.
 - **O que foi feito:** nos fluxos das ações `RECEBER` e `CANCELAR`, implementada a remoção automática das tarefas atreladas àquela carga em `nexus_guindaste_tarefas`. Disparado o evento de sincronização viva (`nexus_data_changed`) para atualizar instantaneamente o contador e a lista de tarefas de guindastes em "Embarcações & GPS".
 - **Arquivos:** `js/cargas.js`
 
-### 2.6. Vinculação Exclusiva da Carga ao Contêiner
+#### 2.6. Vinculação Exclusiva da Carga ao Contêiner
+
 - **Problema:** o modal de vinculação solicitava a seleção manual do navio, sendo que o navio já é previamente associado ao contêiner.
 - **O que foi feito:** removida a seleção de navio do modal de vinculação. A carga é vinculada unicamente ao contêiner, e a embarcação é herdada automaticamente do vínculo do contêiner.
 - **Arquivos:** `cargas.html`, `js/cargas.js`
 
-### 2.7. Espaço Disponível dos Contêineres
+#### 2.7. Espaço Disponível dos Contêineres
+
 - **O que foi feito:** ajustada a rotina do modal de vinculação. Contêineres sem cargas ativas exibem capacidade de 75.0 m³. O volume livre é calculado dinamicamente subtraindo a soma dos volumes das cargas ativas vinculadas (75.0 m³ − volume ocupado). Adicionada trava rígida que impede o vínculo se o volume da carga exceder o espaço restante no contêiner.
 - **Status:** concluído e validado.
 - **Arquivos:** `js/cargas.js`
 
-### 2.8. Botão "Pronta" exige Contêiner Vinculado
+#### 2.8. Botão "Pronta" exige Contêiner Vinculado
+
 - **Problema:** o sistema permitia clicar em "Pronta" para marcar uma carga como pronta para entrega sem que ela estivesse vinculada a um contêiner.
 - **Causa raiz:** falta de validação prévia de contêiner vinculado na ação `PRONTA`.
 - **O que foi feito:** no manipulador da ação `PRONTA`, adicionada a verificação dos campos `carga.container` e `carga.container_id`. Se a carga não estiver vinculada a nenhum contêiner, a ação é bloqueada e um aviso explicativo é exibido via modal (`window.mostrarFeedback`).
 - **Arquivos:** `js/cargas.js`
 
-### 2.9. Tabela de Cargas Canceladas
+#### 2.9. Tabela de Cargas Canceladas
+
 - **Problema:** ao cancelar uma carga, ela desaparecia do sistema sem aparecer na Tabela de Cargas Canceladas.
 - **O que foi feito:** implementada a função `renderCargasCanceladasTable()`, exibindo o histórico de cargas canceladas com código, tipo, setor de descarga e justificativa formal de cancelamento.
 - **Arquivos:** `js/cargas.js`
 
-### 2.10. Preservação de Cargas na Tabela do Fluxo Operacional
+#### 2.10. Preservação de Cargas na Tabela do Fluxo Operacional
+
 - **Problema:** ações executadas na tabela de cargas (receber, movimentar, vincular) causavam o desaparecimento de outras cargas ativas da tela; cargas salvas localmente e ainda não sincronizadas eram apagadas por `carregarCargasSupabase()` ao mudar de página ou dar F5.
 - **O que foi feito:** ajustada a função `getCargas()` para mesclar dinamicamente os registros do Supabase com o estado local (`localStorage`), preservando as cargas salvas localmente que ainda não foram sincronizadas com o banco remoto. As cargas ativas são mantidas e atualizadas em tempo real. Apenas a carga expressamente cancelada é removida do fluxo e transferida para a Tabela de Cargas Canceladas.
 - **Arquivos:** `js/data-repository.js`
 
-### 2.11. Erro de Runtime ao Criar Carga e Vinculação com UUID
+#### 2.11. Erro de Runtime ao Criar Carga e Vinculação com UUID
+
 - **Problema:**
-    - `ReferenceError: tipoCompartilhado is not defined` na linha ~324 do `js/cargas.js`, que interrompia a execução do script antes da gravação no Supabase, fazendo a carga ficar apenas no `localStorage` e sumir ao mudar de página ou dar F5.
-    - Incompatibilidade de tipo ao vincular contêiner/navio no modal (envio de códigos textuais como "CONT-2001" em colunas UUID).
+  - `ReferenceError: tipoCompartilhado is not defined` na linha ~324 do `js/cargas.js`, que interrompia a execução do script antes da gravação no Supabase, fazendo a carga ficar apenas no `localStorage` e sumir ao mudar de página ou dar F5.
+  - Incompatibilidade de tipo ao vincular contêiner/navio no modal (envio de códigos textuais como "CONT-2001" em colunas UUID).
 - **O que foi feito:**
-    - Verificação defensiva de escopo: `typeof tipoCompartilhado !== 'undefined' && tipoCompartilhado ? tipoCompartilhado.id : null`.
-    - Gravação atualizada para capturar o `rawDbId` gerado pelo Supabase e atualizar imediatamente o objeto correspondente no `localStorage`.
-    - Resolução dos UUIDs de `container_id` e `navio_id` antes do envio da vinculação ao Supabase.
+  - Verificação defensiva de escopo: `typeof tipoCompartilhado !== 'undefined' && tipoCompartilhado ? tipoCompartilhado.id : null`.
+  - Gravação atualizada para capturar o `rawDbId` gerado pelo Supabase e atualizar imediatamente o objeto correspondente no `localStorage`.
+  - Resolução dos UUIDs de `container_id` e `navio_id` antes do envio da vinculação ao Supabase.
 - **Arquivos:** `js/cargas.js`
 
-### 2.12. Cargas somem ao Reiniciar a Página
+#### 2.12. Cargas somem ao Reiniciar a Página
+
 - **Problema:** ao cadastrar uma carga e recarregar a página, as cargas sumiam da tabela e só reapareciam ao clicar em "Limpar Filtros", mesmo sem nenhum filtro digitado.
 - **Causa raiz:** a busca de cargas no Supabase não era invocada na abertura inicial da página, e os campos de filtro podiam armazenar valores residuais do autocompletar do navegador.
 - **O que foi feito:** adicionada a chamada automática de `carregarCargasSupabase()` no carregamento inicial (`DOMContentLoaded`) e o reset explícito dos campos de filtro (`filterNavio`, `filterContainer`, `filterTipo`, `filterStatus`, `filterDataInicio`, `filterDataFim`) ao inicializar a tela, garantindo que nenhum filtro fantasma oculte cargas cadastradas.
 - **Arquivos:** `js/cargas.js`
 
-### 2.13. Filtro "4. Período (De/Até)"
+#### 2.13. Filtro "4. Período (De/Até)"
+
 - **O que foi feito:** incluídos os atributos `data_cadastro` e `created_at` no mapeamento de busca de cargas em `js/data-repository.js` e na criação de agendamentos em `js/cargas.js`. Ajustada a função `renderTable()` para filtrar a lista de cargas ativas com base na data de cadastro em relação ao intervalo "De" / "Até".
 - **Status:** concluído e validado.
 - **Arquivos:** `js/data-repository.js`, `js/cargas.js`
 
-### 2.14. Indicador de "Visão Própria Ativa"
+#### 2.14. Indicador de "Visão Própria Ativa"
+
 - **O que foi feito:** adicionado banner/indicador visual de "Visão Própria Ativa" no cabeçalho da tabela para perfis operacionais (`ESTIVADOR`, `CONFERENTE_CARGA`, `ARRUMADOR_CONSERTADOR`), orientando que cargas fora da sua atribuição/etapa do fluxo ficam ocultas conforme RF 1.3 do sistema.
 - **Arquivos:** `cargas.html`
 
 ---
 
-## 3. Inspeção & Checklist (`inspecao.html` / `js/inspecao.js`)
+### 3. Inspeção & Checklist (`inspecao.html` / `js/inspecao.js`)
 
-### 3.1. Itens do Checklist e Atualização de Status da Carga
+#### 3.1. Itens do Checklist e Atualização de Status da Carga
+
 - **Problema:**
-    - O filtro restritivo `isUUID(itemId)` descartava 100% dos itens do checklist com IDs simples (`'i1'`, `'i2'`, `'i3'`), fazendo com que nenhum item fosse salvo na tabela `inspecao_itens` do Supabase.
-    - A atualização de status da carga buscava estritamente por `qr_code_url`.
+  - O filtro restritivo `isUUID(itemId)` descartava 100% dos itens do checklist com IDs simples (`'i1'`, `'i2'`, `'i3'`), fazendo com que nenhum item fosse salvo na tabela `inspecao_itens` do Supabase.
+  - A atualização de status da carga buscava estritamente por `qr_code_url`.
 - **O que foi feito:**
-    - O script passou a consultar os itens reais na tabela `checklist_itens` do Supabase por ordem, vinculando os UUIDs correspondentes e realizando a inserção em lote na tabela `inspecao_itens`.
-    - A busca e a atualização da carga foram flexibilizadas para filtrar por `rawDbId` (UUID) ou `qr_code_url`.
+  - O script passou a consultar os itens reais na tabela `checklist_itens` do Supabase por ordem, vinculando os UUIDs correspondentes e realizando a inserção em lote na tabela `inspecao_itens`.
+  - A busca e a atualização da carga foram flexibilizadas para filtrar por `rawDbId` (UUID) ou `qr_code_url`.
 
 ---
 
-## 4. Scanner QR Code (`scanner.html` / `js/scanner.js`)
+### 4. Scanner QR Code (`scanner.html` / `js/scanner.js`)
 
-### 4.1. Registro de Leituras e Logs com UUID do Funcionário
+#### 4.1. Registro de Leituras e Logs com UUID do Funcionário
+
 - **Problema:** o parâmetro `entidade_id` em `leituras_qr_code` passava strings como "CRG-2026-123", que causavam exceções dependendo das Foreign Keys ativas.
 - **O que foi feito:** ajustado o envio de payloads em `leituras_qr_code` e `logs_alteracoes` para resolver o UUID do funcionário e tratar retentativa de gravação.
 
-### 4.2. Filtro Automático por Query String
+#### 4.2. Filtro Automático por Query String
+
 - **Problema:** ao redirecionar para `cargas.html?carga=CRG-2026-123`, a página de cargas não filtrava automaticamente a tabela.
 - **O que foi feito:** adicionado o tratamento de `URLSearchParams` em `js/cargas.js` para capturar a query string `?carga=...`, preenchendo automaticamente o filtro e exibindo a carga buscada.
 
 ---
 
-## 5. Embarcações & GPS (`embarcacoes.html` / `js/embarcacoes.js`)
+### 5. Embarcações & GPS (`embarcacoes.html` / `js/embarcacoes.js`)
 
-### 5.1. Reorganização do Painel de Berços de Atracação
+#### 5.1. Reorganização do Painel de Berços de Atracação
+
 - **O que foi feito:** o painel de 15 berços exclusivo para navios foi removido das telas de Cargas e migrado para a página de Embarcações & GPS.
 - **Arquivos:** `cargas.html`, `js/cargas.js`, `embarcacoes.html`, `js/embarcacoes.js`
 
-### 5.2. Berços salvos no Banco de Dados (Supabase)
+#### 5.2. Berços salvos no Banco de Dados (Supabase)
+
 - **Problema:** os berços do terminal STS-01 e a vinculação de navios a berços eram mantidos apenas localmente em `localStorage`.
 - **O que foi feito:**
-    - Criados os métodos `getBercos()` e `saveBerco()` no repositório central `js/data-repository.js`.
-    - Implementada a função `carregarBercosSupabase()` em `js/embarcacoes.js` para buscar os 15 berços diretamente da tabela `bercos` ao carregar a página.
-    - A função `vincularNavioABerco` passou a persistir a vinculação diretamente no Supabase (atualização de status do navio em `navios` e `upsert` na tabela `bercos`), além de sincronizar no repositório local.
-    - Vinculação de navio a berço, desvinculação, desocupação por saída do navio e exclusão de navio persistem em tempo real via `upsert` no Supabase PostgreSQL.
+  - Criados os métodos `getBercos()` e `saveBerco()` no repositório central `js/data-repository.js`.
+  - Implementada a função `carregarBercosSupabase()` em `js/embarcacoes.js` para buscar os 15 berços diretamente da tabela `bercos` ao carregar a página.
+  - A função `vincularNavioABerco` passou a persistir a vinculação diretamente no Supabase (atualização de status do navio em `navios` e `upsert` na tabela `bercos`), além de sincronizar no repositório local.
+  - Vinculação de navio a berço, desvinculação, desocupação por saída do navio e exclusão de navio persistem em tempo real via `upsert` no Supabase PostgreSQL.
 - **Status:** concluído e validado.
 - **Arquivos:** `js/data-repository.js`, `js/embarcacoes.js`
 
-### 5.3. Berço Ocupado por Navio Excluído
+#### 5.3. Berço Ocupado por Navio Excluído
+
 - **Problema:** o Berço 1 permanecia marcado como "OCUPADO" mesmo sem navio cadastrado ou após a exclusão do navio.
 - **Causa raiz:** o estado do berço não recebia atualização ao excluir o navio ou ao carregar a página.
 - **O que foi feito:** em `renderBercosPanel()`, implementada verificação cruzada automática. Se um berço estiver `OCUPADO` por um navio que não existe mais na lista ativa, o sistema altera o estado do berço para `LIVRE` e limpa as referências de nome/IMO. A exclusão manual de navio (`excluirNavio`) também executa essa liberação de forma imediata.
 - **Arquivos:** `js/embarcacoes.js`
 
-### 5.4. Botões "Excluir" e "Vincular" para Navios
+#### 5.4. Botões "Excluir" e "Vincular" para Navios
+
 - **O que foi feito:** na tabela de monitoramento GPS de navios, adicionados os botões "Vincular" (permite alocar a um dos 15 berços livres) e "Excluir" (remove o navio e desocupa o berço).
 - **Arquivos:** `js/embarcacoes.js`
 
-### 5.5. Regra do "Liberar Saída"
+#### 5.5. Regra do "Liberar Saída"
+
 - **Problema:** ao clicar em "Liberar Saída" de um navio no porto de origem (`DENTRO_DO_PORTO`), o sistema exibia erroneamente "Retorno Não Permitido", alegando que o navio só podia sair se estivesse no porto de destino.
 - **O que foi feito:** removida a verificação incorreta `navio.localizacao !== 'NO_PORTO_DE_DESTINO'` da função `liberarNavioPeloDiretor`. O botão "Liberar Saída" autoriza normalmente a saída do navio do porto de origem. A exigência de localização no destino aplica-se exclusivamente ao botão "Autorizar Retorno" (`autorizarRetornoNavio`).
 - **Status:** concluído e validado.
 - **Arquivos:** `js/embarcacoes.js`
 
-### 5.6. Restrição na Autorização de Retorno do Navio
+#### 5.6. Restrição na Autorização de Retorno do Navio
+
 - **O que foi feito:** a ação "Autorizar Retorno" foi bloqueada para embarcações em trânsito e restrita a navios que já chegaram ao porto de destino (`localizacao === 'NO_PORTO_DE_DESTINO'`).
 - **Arquivos:** `js/embarcacoes.js`
 
-### 5.7. Status Operacional e Datas dos Navios
-- **Problema:**
-    - A alteração de localização dos navios em tempo real tentava enviar valores incompatíveis com o tipo ENUM do Supabase.
-    - O parsing de `data_saida` retornava `NaN` ao recarregar a página (F5), zerando distâncias e contadores de tempo.
-- **O que foi feito:**
-    - Mapeamento estrito dos valores permitidos do ENUM (`'DENTRO_DO_PORTO'`, `'FORA_DO_PORTO'`, `'NO_PORTO_DE_DESTINO'`).
-    - Validação de data com fallback seguro `!isNaN(parsed)` antes de calcular tempos decorridos e ETA.
+#### 5.7. Status Operacional e Datas dos Navios
 
-### 5.8. Opção "Sem Manutenção" no Cadastro de Contêineres
+- **Problema:**
+  - A alteração de localização dos navios em tempo real tentava enviar valores incompatíveis com o tipo ENUM do Supabase.
+  - O parsing de `data_saida` retornava `NaN` ao recarregar a página (F5), zerando distâncias e contadores de tempo.
+- **O que foi feito:**
+  - Mapeamento estrito dos valores permitidos do ENUM (`'DENTRO_DO_PORTO'`, `'FORA_DO_PORTO'`, `'NO_PORTO_DE_DESTINO'`).
+  - Validação de data com fallback seguro `!isNaN(parsed)` antes de calcular tempos decorridos e ETA.
+
+#### 5.8. Opção "Sem Manutenção" no Cadastro de Contêineres
+
 - **O que foi feito:** adicionada a caixa de seleção "Sem Manutenção" no formulário de contêineres. Quando marcada, desabilita a data e registra a informação "Sem Manutenção" para novos ativos.
 - **Arquivos:** `embarcacoes.html`, `js/embarcacoes.js`
 
-### 5.9. Cadastro de Contêineres sem Data de Manutenção
+#### 5.9. Cadastro de Contêineres sem Data de Manutenção
+
 - **Problema:** ao cadastrar contêineres sem data de manutenção, o valor 'Sem Manutenção' gerava erro de sintaxe no campo DATE do PostgreSQL do Supabase, fazendo o registro sumir.
 - **O que foi feito:** ajustado o envio de `null` para o campo `data_ultima_manutencao` quando não houver data, incluído o campo `material_carregado` e mesclados os registros do banco com o `localStorage`.
 - **Arquivos:** `js/embarcacoes.js`
 
-### 5.10. Ações e Trava de Capacidade para Contêineres
+#### 5.10. Ações e Trava de Capacidade para Contêineres
+
 - **O que foi feito:** adicionados os botões "Excluir" e "Vincular" (a navios) na tabela de contêineres, incluindo validação rigorosa de capacidade máxima da embarcação (limite de 15.000 toneladas e ~300 metros de espaço).
 - **Arquivos:** `embarcacoes.html`, `js/embarcacoes.js`
 
-### 5.11. Padronização da Identificação dos Contêineres
+#### 5.11. Padronização da Identificação dos Contêineres
+
 - **O que foi feito:** validação por Expressão Regular `/^[A-Z]{4}\d{7}$/` na submissão de novos contêineres. O sistema exige exatamente 4 letras seguidas de 7 números (exemplo: `MSCU1234567`), mantendo a trava contra códigos duplicados.
 - **Status:** concluído e validado.
 - **Arquivos:** `js/embarcacoes.js`
 
-### 5.12. Reorganização do Formulário de Cadastro de Guindastes
+#### 5.12. Reorganização do Formulário de Cadastro de Guindastes
+
 - **O que foi feito:** o formulário de cadastro de guindastes foi transferido de `manutencao.html` para `embarcacoes.html` / `js/embarcacoes.js`, mantendo as solicitações de manutenção de guindastes em `manutencao.html`.
 - **Arquivos:** `manutencao.html`, `js/manutencao.js`, `embarcacoes.html`, `js/embarcacoes.js`
 
-### 5.13. Exclusão de Guindastes e Pórticos
+#### 5.13. Exclusão de Guindastes e Pórticos
+
 - **Problema:** faltava um botão de exclusão para guindastes ou pórticos desativados.
 - **O que foi feito:** adicionado o botão "Excluir" em cada linha de guindaste na tabela de `embarcacoes.html` e criada a função `excluirGuindaste()` em `js/embarcacoes.js`, com confirmação e remoção no Supabase e no `localStorage`.
 
-### 5.14. Padronização da Identificação dos Guindastes e Pórticos
+#### 5.14. Padronização da Identificação dos Guindastes e Pórticos
+
 - **O que foi feito:** validação por Expressão Regular `/^[A-Z]{3}\d{3}[A-Z]{3}$/` no cadastro de guindastes/pórticos. Exige exatamente 3 letras, 3 números e 3 letras (exemplo: `ABC123DEF`), mantendo a trava contra duplicações.
 - **Status:** concluído e validado.
 - **Arquivos:** `js/embarcacoes.js`
 
-### 5.15. Remoção de Rotas Fictícias
+#### 5.15. Remoção de Rotas Fictícias
+
 - **O que foi feito:** removido o array estático de rotas de teste em `js/embarcacoes.js`, para que apenas rotas reais do Supabase/usuário sejam listadas.
 - **Arquivos:** `js/embarcacoes.js`
 
 ---
 
-## 6. Manutenção & OS (`manutencao.html` / `js/manutencao.js`)
+### 6. Manutenção & OS (`manutencao.html` / `js/manutencao.js`)
 
-### 6.1. Ajustes nas Ordens de Serviço e Bloqueio de Duplicidade
+#### 6.1. Ajustes nas Ordens de Serviço e Bloqueio de Duplicidade
+
 - **O que foi feito:**
-    - Removida a opção de solicitar manutenção de navios dentro da abertura de Ordens de Serviço de equipamentos (mantida na área de solicitação de manutenção de embarcações).
-    - Adicionado bloqueio que impede abrir novas solicitações de manutenção duplicadas para um mesmo ativo em manutenção ativa.
-    - Adicionada a coluna "Data Manutenção" na tabela de Ordens de Serviço.
+  - Removida a opção de solicitar manutenção de navios dentro da abertura de Ordens de Serviço de equipamentos (mantida na área de solicitação de manutenção de embarcações).
+  - Adicionado bloqueio que impede abrir novas solicitações de manutenção duplicadas para um mesmo ativo em manutenção ativa.
+  - Adicionada a coluna "Data Manutenção" na tabela de Ordens de Serviço.
 - **Arquivos:** `manutencao.html`, `js/manutencao.js`
 
-### 6.2. Remoção de Duplicidade em Manutenção de Guindastes
+#### 6.2. Remoção de Duplicidade em Manutenção de Guindastes
+
 - **Problema:** a página possuía uma seção duplicada e redundante para solicitações de guindastes.
 - **O que foi feito:** removida a seção "Solicitações de Manutenção de Guindastes e Pórticos" de `manutencao.html` e simplificada a lógica em `js/manutencao.js`, mantendo a centralização em "Ordens de Serviço de Manutenção".
 
-### 6.3. Botões "Botão de Pânico" e "Nova Ordem de Serviço"
+#### 6.3. Botões "Botão de Pânico" e "Nova Ordem de Serviço"
+
 - **Problema:** as ações "BOTÃO DE PÂNICO" e "Nova Ordem de Serviço" não funcionavam ao serem clicadas.
 - **Causa raiz:** `js/manutencao.js` tentava adicionar um ouvinte para `guindasteForm` sem que a constante tivesse sido declarada, gerando um `ReferenceError` que interrompia a execução e impedia o registro dos manipuladores de evento dos demais botões.
 - **O que foi feito:** adicionada a declaração segura `const guindasteForm = document.getElementById('guindasteForm')`, acompanhada de checagem condicional, e verificada a existência da função `renderGuindastesTable` antes de executá-la no formulário. Os botões "BOTÃO DE PÂNICO" (emergência crítica) e "+ Nova Ordem de Serviço" (toggle de formulário) voltaram a funcionar.
 - **Arquivos:** `js/manutencao.js`
 
-### 6.4. Busca de OS e Estado dos Equipamentos
+#### 6.4. Busca de OS e Estado dos Equipamentos
+
 - **Problema:**
-    - A busca de Ordens de Serviço por `.ilike('descricao', '%OS-2026-123%')` falhava quando a descrição no banco não continha a formatação de tags.
-    - A comparação de nome do equipamento era sensível a maiúsculas/minúsculas ao alterar o estado operacional de navios e guindastes.
+  - A busca de Ordens de Serviço por `.ilike('descricao', '%OS-2026-123%')` falhava quando a descrição no banco não continha a formatação de tags.
+  - A comparação de nome do equipamento era sensível a maiúsculas/minúsculas ao alterar o estado operacional de navios e guindastes.
 - **O que foi feito:**
-    - A aprovação e a conclusão da OS passaram a priorizar a busca direta por UUID (`rawDbId`).
-    - A atualização do estado do equipamento em navios, guindastes e contêineres passou a utilizar comparações insensíveis a maiúsculas (`.ilike()`).
+  - A aprovação e a conclusão da OS passaram a priorizar a busca direta por UUID (`rawDbId`).
+  - A atualização do estado do equipamento em navios, guindastes e contêineres passou a utilizar comparações insensíveis a maiúsculas (`.ilike()`).
 
 ---
 
-## 7. Delegação Supervisor (`delegacao.html` / `js/delegacao.js`)
+### 7. Delegação Supervisor (`delegacao.html` / `js/delegacao.js`)
 
-### 7.1. Formulário de Delegação e Persistência da Vigência
+#### 7.1. Formulário de Delegação e Persistência da Vigência
+
 - **O que foi feito:** atualizado o formulário para solicitar a Matrícula do Funcionário Substituído e os dados completos do Substituto (Nome, CPF e Data de Nascimento). Corrigido o gerenciamento e a persistência do substituto ativo até o encerramento da vigência ou revogação.
 - **Arquivos:** `delegacao.html`, `js/delegacao.js`
 
-### 7.2. Atributos do Substituto no Banco de Dados
+#### 7.2. Atributos do Substituto no Banco de Dados
+
 - **Problema:** a atribuição de substituto exigia Nome, CPF e Data de Nascimento, mas o banco Supabase não possuía esses campos na tabela `delegacoes_supervisor`.
 - **O que foi feito:** adicionadas as colunas `substituto_nome`, `substituto_cpf` e `substituto_data_nascimento` no arquivo `SPECs/schema.sql` e atualizados os mapeamentos de inserção/consulta em `js/delegacao.js`.
 
-### 7.3. Resolução de Chaves Estrangeiras
+#### 7.3. Resolução de Chaves Estrangeiras
+
 - **Problema:** envio de `null` em colunas NOT NULL / Foreign Keys (`supervisor_titular_id` e `substituto_id`) ao criar delegações.
 - **O que foi feito:** o formulário agora resolve os UUIDs de `supervisor_titular_id` e `substituto_id` na tabela `funcionarios` por matrícula (`MAT-xxx`), código individual, nome ou CPF antes do envio ao Supabase.
 
-### 7.4. Delegações salvas no Supabase
+#### 7.4. Delegações salvas no Supabase
+
 - **Problema:** as informações de delegação não eram salvas/persistidas adequadamente no Supabase, e faltava tratamento transparente em caso de falhas de gravação.
 - **O que foi feito:**
-    - Conectada a criação e a revogação de delegações à tabela `delegacoes_supervisor`, gravando os IDs de supervisor titular, substituto e período de vigência.
-    - A delegação ativa passou a ser consultada diretamente do Supabase na inicialização da página.
-    - Adicionado tratamento de erros com exibição de modais explicativos via `mostrarFeedback()` caso ocorram falhas de gravação ou revogação no Supabase.
+  - Conectada a criação e a revogação de delegações à tabela `delegacoes_supervisor`, gravando os IDs de supervisor titular, substituto e período de vigência.
+  - A delegação ativa passou a ser consultada diretamente do Supabase na inicialização da página.
+  - Adicionado tratamento de erros com exibição de modais explicativos via `mostrarFeedback()` caso ocorram falhas de gravação ou revogação no Supabase.
 - **Status:** concluído e validado.
 - **Arquivos:** `js/delegacao.js`
 
-### 7.5. Validação de CPF no Cadastro de Substituto
+#### 7.5. Validação de CPF no Cadastro de Substituto
+
 - **Primeira etapa:** implementada a validação matemática oficial do algoritmo de dígitos verificadores de CPF, acompanhada da máscara visual (`XXX.XXX.XXX-XX`), bloqueando CPFs fictícios/curtos como "123".
 - **Regra vigente:** a função `validarCPF` passou a verificar estritamente a presença e a estrutura de 11 dígitos numéricos (`XXX.XXX.XXX-XX`), permitindo CPFs fictícios em cadastros gerais, desde que respeitada a estrutura de 11 dígitos. A verificação matemática rigorosa de dígitos verificadores de pessoas reais deixou de ser exigida.
 - **Arquivos:** `js/delegacao.js`
 
 ---
 
-## 8. Gestão de Pessoas (`tecnico_portos.html` / `js/tecnico_portos.js`)
+### 8. Gestão de Pessoas (`tecnico_portos.html` / `js/tecnico_portos.js`)
 
-### 8.1. Status Inicial Automático de Visitantes
+#### 8.1. Status Inicial Automático de Visitantes
+
 - **O que foi feito:** removida a escolha manual de status inicial no cadastro de visitantes. O sistema agora atribui automaticamente o status `EM_VISITA`.
 - **Arquivos:** `tecnico_portos.html`, `js/tecnico_portos.js`
 
-### 8.2. Validação do Documento do Visitante
+#### 8.2. Validação do Documento do Visitante
+
 - **Primeira etapa:** a função de registro de visitantes passou a exigir o formato padrão de CPF (`XXX.XXX.XXX-XX`) com checagem de dígitos verificadores e trava de duplicidade, impedindo cadastros com "123".
 - **Regra vigente:** a função `validarCPF` verifica estritamente a presença e a estrutura de 11 dígitos numéricos (`XXX.XXX.XXX-XX`), permitindo o uso de CPFs fictícios desde que respeitada a estrutura de 11 dígitos.
 - **Arquivos:** `js/tecnico_portos.js`
 
-### 8.3. Padronização da Matrícula de Funcionários
+#### 8.3. Padronização da Matrícula de Funcionários
+
 - **Regra:** a matrícula de funcionário criada deve seguir obrigatoriamente o padrão `MAT-` + 4 números (ex.: `MAT-1234`).
 - **O que foi feito:** no formulário de cadastro de funcionário, adicionada a validação com a expressão regular `/^MAT-\d{4}$/`. Tentar cadastrar matrículas fora desse formato exibe uma mensagem de aviso e bloqueia o envio.
 - **Arquivos:** `js/tecnico_portos.js`
 
-### 8.4. Reemissão do Código de Acesso
+#### 8.4. Reemissão do Código de Acesso
+
 - **Problema:** a reemissão do código de acesso falhava no Supabase se a matrícula estivesse salva sem o prefixo "MAT-".
 - **O que foi feito:** ajustada a query de atualização para `.or("matricula.eq.123,matricula.eq.MAT-123")`.
 
-### 8.5. Saída de Visitantes
+#### 8.5. Saída de Visitantes
+
 - **Problema:** a saída de visitantes falhava por extrapolar o limite de caracteres da coluna `motivo` ao concatenar a vistoria.
 - **O que foi feito:** adicionado truncamento seguro e limite de 200 caracteres para a string concatenada no campo `motivo` de visitantes.
 
 ---
 
-## 9. Relatórios & PDF (`relatorios.html` / `js/relatorios.js`)
+### 9. Relatórios & PDF (`relatorios.html` / `js/relatorios.js`)
 
-### 9.1. Relatório em PDF com Dados Completos
+#### 9.1. Relatório em PDF com Dados Completos
+
 - **Problema:** a consulta de junção (`.select('*, navios:navio_id(...), containers:container_id(...)')`) omitia dados da carga caso as Foreign Keys estivessem nulas ou ausentes.
 - **O que foi feito:** adicionadas consultas secundárias de fallback para buscar navio e contêiner caso os joins retornem nulos, garantindo a emissão completa do PDF A4 em 4 seções.
 
-### 9.2. Tabela de Produtividade do Operador
+#### 9.2. Tabela de Produtividade do Operador
+
 - **Problema:** a tabela de produtividade do operador exibia 0 operações.
 - **O que foi feito:** unificados os logs de auditoria do Supabase com os logs locais do `localStorage` para a contagem correta da produtividade do operador.
 
-### 9.3. Atualização Automática do "Relatório de Produtividade por Cargo e Funcionários"
+#### 9.3. Atualização Automática do "Relatório de Produtividade por Cargo e Funcionários"
+
 - **Problema:** o relatório não atualizava automaticamente quando novas produtividades ou operações eram registradas.
 - **O que foi feito:** corrigido o escopo de variáveis de módulo e adicionadas escutas ao evento `nexus_data_changed` e um temporizador periódico. O relatório refaz as consultas e re-renderiza a tabela em tempo real sempre que qualquer operação ou produtividade é registrada no sistema.
 - **Arquivos:** `js/relatorios.js`
 
 ---
 
-## 10. Sincronização e Persistência entre Telas
+### 10. Sincronização e Persistência entre Telas
 
-### 10.1. Sincronização de Alterações entre Aparelhos
+#### 10.1. Sincronização de Alterações entre Aparelhos
+
 - **Problema:** alterações feitas em um aparelho/aba não eram refletidas automaticamente em outros aparelhos/abas conectados ao sistema.
 - **Causa raiz:** o evento de sincronização dependia exclusivamente de `BroadcastChannel` local, sem atualização periódica ou checagem ao focar a janela do navegador.
 - **O que foi feito:** adicionado um ouvinte para o evento `focus` da janela (`window.addEventListener('focus', ...)`) e configurado um temporizador periódico de 10 segundos (`setInterval`) para emitir o evento `NEXUS_DATA_CHANGED` e buscar dados atualizados diretamente do Supabase.
 - **Arquivos:** `js/data-repository.js`
 
-#### 10.1.1. Cadência dos gráficos: auto refresh de 1 minuto (correção posterior)
+##### 10.1.1. Cadência dos gráficos: auto refresh de 1 minuto (correção posterior)
+
 - **Problema:** o painel de gráficos (`dashboard.html` e `relatorios.html`) se recarregava sozinho a cada **10 segundos**, piscando a tela e reconsultando o Supabase sem nenhum dado novo.
 - **Causa raiz:** o heartbeat `periodic_sync` (10 s, item 10.1) e o evento de foco da janela (`window_focus`) disparam `nexus_data_changed`; o ouvinte de `js/charts.js` redesenhava TODO o painel a cada evento recebido.
 - **O que foi feito:** em `js/charts.js`, a renovação automática passou a usar a constante `INTERVALO_AUTO_REFRESH_MS = 60000` (**1 minuto**) e os eventos de sincronização de fundo (`periodic_sync` e `window_focus`) foram movidos para `ENTIDADES_SYNC_FUNDO`, que **não** redesenham os gráficos. Alterações reais de dados continuam refletindo na hora e o botão "Atualizar" (`NexusCharts.atualizar()`) continua forçando leitura do servidor.
 - **Regressão coberta por:** `tests/test_charts_autorefresh.js` (`npm run test:autorefresh`).
 - **Arquivos:** `js/charts.js`, `tests/test_charts_autorefresh.js`, `package.json`
 
-### 10.2. Mesclagem entre Supabase e localStorage
+#### 10.2. Mesclagem entre Supabase e localStorage
+
 - **O que foi feito:** atualizadas as funções assíncronas de carregamento (`carregarGuindastesSupabase`, `carregarOsSupabase`, `carregarNaviosSupabase`, `carregarContainersSupabase` e `getCargas` no `data-repository.js`) para realizar mesclagem inteligente entre os dados do Supabase e o `localStorage`. Isso garante que conclusões de manutenção, alterações de status e criações locais não sejam sobrescritas ou perdidas ao recarregar ou navegar entre as páginas.
 - **Arquivos:** `js/embarcacoes.js`, `js/manutencao.js`, `js/data-repository.js`
 
 ---
 
-## 11. Testes e Validações
+### 11. Testes e Validações
 
 **Suíte completa:** `node test_suite_completa.js` — 100% de aprovação nas 12 fases (Fase 0 a Fase 11), sem regressões, com zero dados fantasmas e integridade de dados mantida.
 
@@ -879,6 +955,7 @@ Relatório consolidado de execução e correções do sistema de automação por
 - `test_fase_11.js` — Critérios de Aceite Finais End-to-End: ✅ PASS
 
 **Suíte auxiliar (`run_tests.py` / `verify_phase9.py`):**
+
 - Fase 0 (Saneamento e Dados Fantasmas): 100% aprovado
 - Fase 1 (Painel Geral e Indicadores): 100% aprovado
 - Fase 9 (Testes de Integração e Implantação): 100% aprovado
@@ -887,7 +964,7 @@ Relatório consolidado de execução e correções do sistema de automação por
 
 ---
 
-## 12. Arquivos Modificados
+### 12. Arquivos Modificados
 
 - `cargas.html`
 - `js/cargas.js`
