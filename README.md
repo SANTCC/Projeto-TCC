@@ -70,6 +70,8 @@ npm run test:bercos   # vínculo navio × berço: constraints de public.bercos (
 npm run test:net-debug # depuração de conexões no console (Node, sem dependências)
 npm run test:backlog3 # correções do backlog3: login, layout, scanner e travas operacionais (jsdom)
 npm run test:webmcp   # agentes de IA (WebMCP): núcleo, polyfill, painel e páginas reais (jsdom)
+npm run test:gravacao # gravações no Supabase: login por matrícula sem 406 e inspeção sem "concluída" falso (jsdom)
+npm run test:single-flight # leituras idênticas em voo viram uma requisição; relatórios a cada 30 s (jsdom)
 ```
 
 ---

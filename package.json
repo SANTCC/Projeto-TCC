@@ -22,7 +22,9 @@
     "test:backlog3:restantes": "node tests/test_backlog3_restantes.js",
     "test:sessao": "node tests/test_sessao_cookies.js",
     "test:pendentes": "node tests/test_backlog3_pendentes.js",
-    "test:webmcp": "node tests/test_webmcp.js && node tests/test_webmcp_paginas.js"
+    "test:webmcp": "node tests/test_webmcp.js && node tests/test_webmcp_paginas.js",
+    "test:gravacao": "node tests/test_gravacao_inspecao_login.js",
+    "test:single-flight": "node tests/test_single_flight.js"
   },
   "keywords": [
     "nexusport",

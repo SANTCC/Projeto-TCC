@@ -52,6 +52,12 @@ function clienteSupabaseFalso(funcionarios) {
           const linhas = tabela === 'funcionarios' ? funcionarios : [];
           const achado = linhas.find((l) => filtros.every(([c, v]) => String(l[c]) === String(v)));
           return Promise.resolve(achado ? { data: achado, error: null } : { data: null, error: { message: 'não encontrado' } });
+        },
+        // Login usa maybeSingle() (PGRST116 não é erro): 0 linhas = data null, sem erro.
+        maybeSingle() {
+          const linhas = tabela === 'funcionarios' ? funcionarios : [];
+          const achado = linhas.find((l) => filtros.every(([c, v]) => String(l[c]) === String(v)));
+          return Promise.resolve({ data: achado || null, error: null });
         }
       };
       return consulta;

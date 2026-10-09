@@ -249,12 +249,13 @@
 | Name | Type | Constraints |
 |------|------|-------------|
 | `id` | `uuid` | Primary |
-| `carga_id` | `uuid` |  Unique |
+| `carga_id` | `uuid` |  (não único: uma carga pode ter várias inspeções; ver `ativa`) |
 | `checklist_modelo_id` | `uuid` |  Nullable |
 | `inspetor_id` | `uuid` |  Nullable |
 | `data_inspecao` | `timestamptz` |  |
 | `resultado` | `resultado_inspecao_enum` |  |
 | `observacoes` | `text` |  Nullable |
+| `ativa` | `boolean` |  Default `true`; no máximo uma ativa por `carga_id` (índice parcial `uq_inspecoes_carga_ativa`). As anteriores ficam como histórico (`false`). |
 | `created_at` | `timestamptz` |  |
 
 ## Table `inspecao_itens`

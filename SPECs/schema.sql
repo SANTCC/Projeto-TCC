@@ -323,14 +323,19 @@ create table historico_manutencoes (
 
 create table inspecoes (
   id uuid primary key default gen_random_uuid(),
-  carga_id uuid not null unique references cargas(id) on delete cascade,
+  carga_id uuid not null references cargas(id) on delete cascade,
   checklist_modelo_id uuid references checklist_modelos(id) on delete restrict,
   inspetor_id uuid references funcionarios(id) on delete restrict,
   data_inspecao timestamptz not null default now(),
   resultado resultado_inspecao_enum not null default 'PENDENTE',
   observacoes text,
+  -- Histórico: uma carga pode ter várias inspeções, mas só uma ativa (ver índice abaixo).
+  ativa boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- No máximo uma inspeção ativa por carga (migração 20261008020000_inspecoes_historico.sql).
+create unique index uq_inspecoes_carga_ativa on inspecoes (carga_id) where ativa;
 
 create table inspecao_itens (
   id uuid primary key default gen_random_uuid(),

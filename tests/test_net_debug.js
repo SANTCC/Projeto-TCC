@@ -693,9 +693,14 @@ async function testSupabaseClientWiring() {
 
   const legacy = loadClient(false);
   const legacyOpts = legacy.created[0].options;
-  check('without net-debug: options are exactly the legacy object',
-    JSON.stringify(legacyOpts) === JSON.stringify({ auth: { persistSession: true, autoRefreshToken: true } }));
-  check('without net-debug: no global or realtime override is added', legacyOpts.global === undefined && legacyOpts.realtime === undefined);
+  // Desde o single-flight (tests/test_single_flight.js), o cliente sempre recebe um fetch
+  // próprio em `global`. Sem net-debug, esse é o ÚNICO acréscimo: nada de depuração e
+  // nenhum override de realtime, e as opções de auth continuam as originais.
+  check('without net-debug: auth options are exactly the legacy ones',
+    JSON.stringify(legacyOpts.auth) === JSON.stringify({ persistSession: true, autoRefreshToken: true }));
+  check('without net-debug: no realtime override is added', legacyOpts.realtime === undefined);
+  check('without net-debug: the only global option is the single-flight fetch (no debug fetch)',
+    legacyOpts.global === undefined || (Object.keys(legacyOpts.global).join() === 'fetch' && legacyOpts.global.fetch.name === 'fetchSingleFlight'));
   check('without net-debug: legacy success message is kept', legacy.env.logs.some((l) => /inicializado com sucesso/.test(l.text)));
 
   const noCreds = loadClient(true, {});

@@ -145,13 +145,16 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const client = window.nexusSupabase;
         if (client) {
-          // Busca no Supabase pela tabela de funcionários
+          // Busca no Supabase pela tabela de funcionários.
+          // maybeSingle(): "não encontrado" (0 linhas) é um resultado normal aqui,
+          // pois o campo aceita também a matrícula. Com .single() o PostgREST responde
+          // 406 (PGRST116) e o navegador registra um erro vermelho a cada login por matrícula.
           const { data, error } = await client
             .from('funcionarios')
             .select('*')
             .eq('codigo_individual', codeValue)
             .eq('ativo', true)
-            .single();
+            .maybeSingle();
 
           if (!error && data) {
             employeeFound = data;
@@ -162,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
               .select('*')
               .eq('matricula', codeValue)
               .eq('ativo', true)
-              .single();
+              .maybeSingle();
             if (!matErr && matData) {
               employeeFound = matData;
             }

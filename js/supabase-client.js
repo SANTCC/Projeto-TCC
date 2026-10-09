@@ -53,6 +53,82 @@
     return 'Supabase anon key missing (js/config.js missing or empty). No server connection will be made.';
   }
 
+  // ------------------------------------------------------------------
+  // Single-flight para leituras (GET) idênticas em voo.
+  //
+  // Um mesmo evento `nexus_data_changed` aciona vários ouvintes, e cada um refaz as
+  // consultas da sua tela (com frequência as mesmas tabelas). Aqui, GETs com a mesma
+  // URL e os mesmos cabeçalhos que estão em voo ao mesmo tempo compartilham UMA
+  // requisição; cada chamador recebe o próprio clone da resposta.
+  //
+  // Dados sempre atuais: o compartilhamento só vale dentro da mesma "geração".
+  // A geração avança a cada escrita (POST/PATCH/PUT/DELETE) e a cada evento
+  // `nexus_data_changed` (inclusive os vindos de outras abas e do Realtime). Assim,
+  // nenhuma leitura reaproveita resposta anterior a uma mudança.
+  // Não são agrupados: métodos que não são GET/HEAD, requisições com AbortSignal e
+  // entradas que não são texto (URL).
+  // ------------------------------------------------------------------
+  function assinaturaCabecalhos(headers) {
+    if (!headers) return '';
+    const pares = [];
+    if (Array.isArray(headers)) {
+      headers.forEach((par) => pares.push([String(par[0]).toLowerCase(), String(par[1])]));
+    } else if (typeof headers.forEach === 'function') {
+      headers.forEach((valor, nome) => pares.push([String(nome).toLowerCase(), String(valor)]));
+    } else {
+      Object.keys(headers).forEach((nome) => pares.push([nome.toLowerCase(), String(headers[nome])]));
+    }
+    return pares
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+      .map((par) => par[0] + ':' + par[1])
+      .join('|');
+  }
+
+  function criarFetchSingleFlight(fetchBase) {
+    const emVoo = new Map();
+    let geracao = 0;
+    const avancarGeracao = () => { geracao += 1; };
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      // Captura: avança antes dos ouvintes das páginas, que consultam na mesma despachada.
+      window.addEventListener('nexus_data_changed', avancarGeracao, true);
+    }
+
+    const fetchSingleFlight = function (input, init) {
+      const metodo = String((init && init.method) || 'GET').toUpperCase();
+
+      if (metodo !== 'GET' && metodo !== 'HEAD') {
+        // Escrita: nova geração antes e depois, para nenhuma leitura cruzar a mudança.
+        avancarGeracao();
+        return new Promise((resolve) => resolve(fetchBase(input, init))).finally(avancarGeracao);
+      }
+
+      const textual = typeof input === 'string' || (typeof URL !== 'undefined' && input instanceof URL);
+      if (!textual || (init && init.signal)) {
+        return fetchBase(input, init);
+      }
+
+      const chave = geracao + ' ' + metodo + ' ' + String(input) + ' ' + assinaturaCabecalhos(init && init.headers);
+      const emAndamento = emVoo.get(chave);
+      if (emAndamento) {
+        return emAndamento.then((resposta) => resposta.clone());
+      }
+
+      const requisicao = new Promise((resolve) => resolve(fetchBase(input, init)));
+      emVoo.set(chave, requisicao);
+      const encerrar = () => {
+        if (emVoo.get(chave) === requisicao) emVoo.delete(chave);
+      };
+      requisicao.then(encerrar, encerrar);
+      return requisicao.then((resposta) => resposta.clone());
+    };
+
+    return { fetch: fetchSingleFlight, avancarGeracao: avancarGeracao, emVoo: emVoo };
+  }
+
+  // Exposto para diagnóstico e para o teste de regressão (tests/test_single_flight.js).
+  window.NexusSingleFlight = { criar: criarFetchSingleFlight };
+
   if (typeof supabase !== 'undefined' && url && key) {
     try {
       const clientOptions = {
@@ -67,6 +143,15 @@
         clientOptions.auth = Object.assign({}, clientOptions.auth, debugOptions.auth);
         clientOptions.global = debugOptions.global;
         clientOptions.realtime = debugOptions.realtime;
+      }
+      // Single-flight por cima do fetch de depuração (ou do fetch nativo): cada GET idêntico
+      // em voo vira uma só requisição, e o net-debug continua registrando as reais.
+      const fetchBase = (clientOptions.global && clientOptions.global.fetch) ||
+        (typeof window.fetch === 'function' ? window.fetch.bind(window) : null);
+      if (fetchBase) {
+        clientOptions.global = Object.assign({}, clientOptions.global || {}, {
+          fetch: criarFetchSingleFlight(fetchBase).fetch
+        });
       }
       supabaseClient = supabase.createClient(url, key, clientOptions);
       console.log("[NexusPort] Cliente Supabase inicializado com sucesso.");
