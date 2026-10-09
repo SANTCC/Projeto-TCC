@@ -51,7 +51,7 @@ Falha se for encontrado falhas críticas, roda em todo PR aberto, requisito mín
 ## Reorganizar arquivos `.JS`
 WebMCP vai ter sua própria subpasta, arquivos comuns (usados em todas as páginas) ficam no root da pasta, e específicos de subpastas ficam em pages/. (ainda sim dentro do js/)
 
-## Atualização em tempo real das tabelas e indicadores
+## Atualização em tempo real das tabelas e indicadores ✅ IMPLEMENTADO
 Corrigir os dados exibidos pelas tabelas e indicadores do sistema quando ocorre uma alteração no Supabase, garantindo que todos os painéis sejam atualizados em tempo real e não apresentem dados antigos ou incorretos.
 
 Atualmente existem inconsistências como:
@@ -60,6 +60,16 @@ Atualmente existem inconsistências como:
 - Verificar se os listeners do Supabase Realtime estão corretamente configurados e se os dados são recarregados após `INSERT`, `UPDATE` e `DELETE`.
 - Garantir que os filtros, contadores, tabelas e cards derivados dos dados do Supabase sejam recalculados após cada atualização.
 - Evitar inconsistências causadas por cache, estado local desatualizado ou consultas que não sejam refeitas após alterações.
+
+> **Status:** ✅ Implementado.
+> - **Equipamentos em manutenção:** o card conta cada equipamento uma única vez e só com ordem de serviço ativa (`SOLICITADA` ou `APROVADA`). Estado de reforma sem OS não conta (era resíduo de fluxo anterior). Regra em `NexusRepository.derivarEquipamentosEmManutencao` (`js/data-repository.js`). A OS de navio passa a gravar `navio_id`, e a manutenção de contêiner grava `EM_REFORMA`, valor válido de `estado_container_enum` (`EM_MANUTENCAO` não existe nesse enum).
+> - **Log de alterações:** lido por completo, em páginas. O responsável vem do cadastro (pelo `funcionario_id` ou pelo `codigo_individual` gravado no log). Sem cadastro aparece `Sem cadastro (código)`; sem identificação, `Não identificado`. O nome da sessão deixou de ser usado como fallback.
+> - **Produtividade (Relatórios):** funcionários e logs são lidos com paginação (`NexusSupabaseUtils.lerTodasAsLinhas`). O PostgREST corta cada resposta em 1000 linhas; antes disso, os demais usuários apareciam com 0.
+> - **Realtime:** `REALTIME_TABLES` cobre as 23 tabelas operacionais, e a migração `supabase/migrations/20261009000000_realtime_publication.sql` as adiciona à publicação `supabase_realtime` (idempotente). Rajadas de mudanças viram uma única notificação `nexus_data_changed` (debounce de 400 ms). Manutenção e Embarcações recarregam do Supabase ao receber o evento.
+> - **Atualização de segurança:** polling de **60 s** (`POLLING_SEGURANCA_MS`), com Realtime como mecanismo principal. A documentação antiga citava 10 s; o código já usava 60 s e foi mantido.
+> - **Decisão:** o intervalo de 30 s de Relatórios (introduzido no PR #70) foi removido, para não haver dois mecanismos de atualização. A tela é atualizada pelo evento e pela sincronização de 60 s.
+> - **Ressalva de implantação:** aplicar a migração no projeto Supabase (`supabase db push`). O Realtime entrega a mudança somente se a role do cliente puder ler a linha (RLS); tabela sem leitura liberada continua coberta pelo polling de 60 s.
+> - **Teste:** `node tests/test_tempo_real.js` (também `npm run test:tempo-real`): derivação, leitura paginada com 1158 logs de quatro origens, assinaturas e debounce do Realtime, Painel Geral, Relatórios, Manutenção e Embarcações em páginas reais (inclusive o recarregamento pelo evento `nexus_data_changed`), e conferência da migração contra `REALTIME_TABLES`. Teste de mutação: reintroduzir cada defeito corrigido faz o teste falhar. A migração foi validada à parte em PostgreSQL local (aplicação, aviso para tabela ausente, reaplicação idempotente).
 
 ## Remover gráficos duplicados do Painel Geral ✅ IMPLEMENTADO
 Os gráficos atualmente aparecem tanto no **Painel Geral** quanto na página **Relatórios & PDF**, gerando duplicação de informações.

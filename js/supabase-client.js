@@ -615,6 +615,26 @@
     /** Aviso textual padronizado sobre uma tabela ausente (UI/diagnóstico) */
     avisoTabela: function (tabela) {
       return descricaoTabela(tabela);
+    },
+
+    /**
+     * Lê TODAS as linhas de uma consulta PostgREST, página a página (Backlog 3 — tempo real).
+     * O servidor devolve no máximo 1000 linhas por resposta: sem paginação, relatórios e
+     * contadores ignoram em silêncio o restante (ex.: produtividade com 0 para outros usuários).
+     * `montar` deve devolver uma consulta NOVA a cada chamada, com ordenação estável
+     * (ex.: () => sb.from('logs_alteracoes').select('*').order('id')). Erros são propagados.
+     */
+    lerTodasAsLinhas: async function (montar, tamanhoPagina) {
+      const passo = tamanhoPagina || 1000;
+      const linhas = [];
+      for (let inicio = 0; inicio < 10000000; inicio += passo) {
+        const res = await montar().range(inicio, inicio + passo - 1);
+        if (res && res.error) throw res.error;
+        const pagina = res && Array.isArray(res.data) ? res.data : [];
+        for (let i = 0; i < pagina.length; i++) linhas.push(pagina[i]);
+        if (pagina.length < passo) break;
+      }
+      return linhas;
     }
   };
 

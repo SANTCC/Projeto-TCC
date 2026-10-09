@@ -1818,5 +1818,6 @@ document.addEventListener('DOMContentLoaded', () => {
     carregarNaviosSupabase();
     carregarContainersSupabase();
     carregarGuindastesSupabase();
+    carregarRotasMaritimas();   // Backlog 3 (tempo real): rotas cadastradas em outra tela/usuário
   });
 });

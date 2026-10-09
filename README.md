@@ -27,7 +27,7 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 - **Frontend:** HTML5, Tailwind CSS, JavaScript (ES6 Modules)
 - **Supabase Backend:** PostgreSQL com Row Level Security (RLS) e Auth Client (`@supabase/supabase-js`)
 - **Supabase Edge Functions (Deno):** `panic-alert` — evento de servidor do botão de pânico global
-- **Supabase Realtime (WebSocket):** Broadcast do alarme de emergência para todos os clientes conectados
+- **Supabase Realtime (WebSocket):** Broadcast do alarme de emergência para todos os clientes conectados, e recarga das telas quando as tabelas operacionais mudam (polling de segurança de 60 s)
 - **Bibliotecas:** `Chart.js`, `qrcode.js`, `html5-qrcode`, `jsPDF`
 - **Automação & Testes:** Python 3 (Scripts de verificação `verify_phase*.py`)
 
@@ -71,7 +71,8 @@ npm run test:net-debug # depuração de conexões no console (Node, sem dependê
 npm run test:backlog3 # correções do backlog3: login, layout, scanner e travas operacionais (jsdom)
 npm run test:webmcp   # agentes de IA (WebMCP): núcleo, polyfill, painel e páginas reais (jsdom)
 npm run test:gravacao # gravações no Supabase: login por matrícula sem 406 e inspeção sem "concluída" falso (jsdom)
-npm run test:single-flight # leituras idênticas em voo viram uma requisição; relatórios a cada 30 s (jsdom)
+npm run test:single-flight # leituras idênticas em voo viram uma requisição; relatórios sem intervalo próprio (jsdom)
+npm run test:tempo-real   # tempo real: derivação de manutenção, leitura paginada, Realtime, auditoria e produtividade (jsdom)
 ```
 
 ---
@@ -274,7 +275,21 @@ supabase db push
 #    --no-verify-jwt: o app usa sessão própria (codigo_individual), não Supabase Auth;
 #    a identidade/RBAC é validada DENTRO da função contra a tabela funcionarios.
 supabase functions deploy panic-alert --no-verify-jwt
+
+# 3. Tempo real das tabelas (idempotente)
+supabase db push   # inclui supabase/migrations/20261009000000_realtime_publication.sql
 ```
+
+#### Tempo real das tabelas (Backlog 3, item J)
+
+As telas assinam, pelo Supabase Realtime, as mudanças das tabelas operacionais listadas em
+`NexusRepository.REALTIME_TABLES` (`js/data-repository.js`) e se recarregam quando alguém altera um
+registro. Uma tabela só envia eventos se estiver na publicação `supabase_realtime`, o que a migração
+`20261009000000_realtime_publication.sql` faz. A lista da migração deve coincidir com `REALTIME_TABLES`;
+`npm run test:tempo-real` confere essa igualdade.
+
+Sem a migração, o canal conecta mas não recebe eventos, e as telas continuam atualizando pelo polling de
+segurança de **60 s**. O Realtime só entrega a mudança quando a role do cliente pode ler a linha (RLS).
 
 #### ❗ HTTP 404 / PGRST205 em `/rest/v1/emergencias` (e em `panic_webhook_config`)
 

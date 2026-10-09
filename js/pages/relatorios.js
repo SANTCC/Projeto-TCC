@@ -316,22 +316,30 @@ document.addEventListener('DOMContentLoaded', () => {
   async function renderProdutividadeTable() {
     if (!prodTableBody) return;
 
+    // Backlog 3 (tempo real): leitura COMPLETA e paginada. O PostgREST corta cada resposta em
+    // 1000 linhas; sem paginar, os demais usuários apareciam com 0 operações.
     let funcsLoaded = false;
-    if (window.nexusSupabase) {
+    let logsDoBanco = false;
+    logsList = [];   // nunca reaproveitar leitura anterior: falha no banco cai no cache local
+    if (window.nexusSupabase && window.NexusRepository) {
       try {
-        const { data: funcs, error: fErr } = await window.nexusSupabase.from('funcionarios').select('*').eq('ativo', true);
-        if (!fErr && Array.isArray(funcs)) {
-          funcionariosList = funcs;
-          funcsLoaded = true;
-        }
-
-        const { data: logs } = await window.nexusSupabase.from('logs_alteracoes').select('*');
-        if (logs) logsList = logs;
+        const funcs = await window.NexusRepository.lerTodasAsLinhas(() => window.nexusSupabase
+          .from('funcionarios').select('*').eq('ativo', true).order('id'));
+        funcionariosList = funcs;
+        funcsLoaded = true;
       } catch (e) {
-        console.warn('Erro ao carregar dados de produtividade do Supabase:', e);
+        console.warn('Erro ao carregar funcionários para produtividade:', e);
+      }
+      try {
+        logsList = await window.NexusRepository.lerTodasAsLinhas(() => window.nexusSupabase
+          .from('logs_alteracoes').select('*').order('id'));
+        logsDoBanco = true;
+      } catch (e) {
+        console.warn('Erro ao carregar logs de produtividade do Supabase:', e);
       }
     }
 
+    if (!funcsLoaded) funcionariosList = [];
     if (!funcsLoaded && funcionariosList.length === 0) {
       funcionariosList = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
     }
@@ -347,9 +355,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // Com o banco disponível, a contagem vem SOMENTE dele: cada alteração também fica no cache
+    // local e somá-la duas vezes inflava a produtividade. O cache local só é usado sem banco.
     const localLogs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
     const inicioPeriodo = inicioDoPeriodo(periodoRelatorioAtual);
-    const todosLogs = [...logsList, ...localLogs].filter(l => logDentroDoPeriodo(l, inicioPeriodo));
+    const todosLogs = (logsDoBanco ? logsList : [...logsList, ...localLogs]).filter(l => logDentroDoPeriodo(l, inicioPeriodo));
 
     const prodData = targetFuncs.map(func => {
       const userLogs = todosLogs.filter(l => l.codigo_individual === func.codigo_individual || l.funcionario_id === func.id || l.codigo_usuario === func.codigo_individual || l.codigo_usuario === func.matricula);
@@ -461,9 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderProdutividadeTable();
   });
 
-  // Atualização periódica a cada 30 segundos (antes 5 s, reduzido para diminuir consultas ao banco).
-  // Alterações de dados já atualizam a tabela na hora pelo evento nexus_data_changed acima.
-  setInterval(() => {
-    renderProdutividadeTable();
-  }, 30000);
+  // Sem intervalo próprio nesta tela: a atualização chega pelo evento nexus_data_changed
+  // (Supabase Realtime) e pela sincronização de segurança de 60 s do repositório. Um polling
+  // de página em paralelo duplicaria as leituras paginadas de logs_alteracoes.
 });

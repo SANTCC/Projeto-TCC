@@ -515,23 +515,30 @@ document.addEventListener('DOMContentLoaded', () => {
     // funcionario_id) e o cache local não contém o funcionário (dispositivo
     // novo), o nome aparece como ID/"Operador do Sistema". Esta rotina busca
     // os códigos faltantes diretamente na tabela `funcionarios` do Supabase.
-    async function buscarFuncionariosPorCodigos(codigos) {
+    /**
+     * Resolve funcionários por uma coluna (id ou codigo_individual), em lotes de 100 valores
+     * (limite de tamanho da URL). Retorna { valor: { nome, cargo } }. Falha = mapa vazio.
+     */
+    async function buscarFuncionariosPorChaves(coluna, valores) {
       const mapa = {};
-      if (!window.nexusSupabase || !codigos || codigos.length === 0) return mapa;
-      try {
-        const { data, error } = await window.nexusSupabase
-          .from('funcionarios')
-          .select('nome, cargo, codigo_individual, matricula')
-          .in('codigo_individual', codigos);
-        if (!error && Array.isArray(data)) {
-          data.forEach(f => {
-            if (!mapa[f.codigo_individual]) {
-              mapa[f.codigo_individual] = { nome: f.nome, cargo: f.cargo };
-            }
-          });
+      const lista = (valores || []).filter(Boolean);
+      if (!window.nexusSupabase || lista.length === 0) return mapa;
+      for (let i = 0; i < lista.length; i += 100) {
+        const lote = lista.slice(i, i + 100);
+        try {
+          const { data, error } = await window.nexusSupabase
+            .from('funcionarios')
+            .select('id, nome, cargo, codigo_individual, matricula')
+            .in(coluna, lote);
+          if (!error && Array.isArray(data)) {
+            data.forEach(f => {
+              const chave = f[coluna];
+              if (chave && !mapa[chave]) mapa[chave] = { nome: f.nome, cargo: f.cargo };
+            });
+          }
+        } catch (err) {
+          console.warn('[NexusPort] Falha ao resolver nomes de funcionários no Supabase:', err);
         }
-      } catch (err) {
-        console.warn('[NexusPort] Falha ao resolver nomes de funcionários no Supabase:', err);
       }
       return mapa;
     }
@@ -544,16 +551,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (window.nexusSupabase) {
       try {
-        const { data: dbLogs, error } = await window.nexusSupabase
+        // Backlog 3 (tempo real): leitura COMPLETA e paginada — o PostgREST corta em 1000 linhas,
+        // e a tabela mostrava só as alterações do próprio usuário.
+        const dbLogs = await window.NexusRepository.lerTodasAsLinhas(() => window.nexusSupabase
           .from('logs_alteracoes')
-          .select('*, funcionarios(nome, cargo)')
-          .order('data_hora', { ascending: false });
+          .select('*')
+          .order('data_hora', { ascending: false })
+          .order('id'));
 
-        if (!error && Array.isArray(dbLogs) && dbLogs.length > 0) {
+        if (Array.isArray(dbLogs) && dbLogs.length > 0) {
           const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+          // Responsável de cada linha: pelo funcionario_id e, se faltar, pelo codigo_individual gravado no log.
+          const idsFunc = [...new Set(dbLogs.map(l => l.funcionario_id).filter(Boolean))];
+          const codigosFunc = [...new Set(dbLogs.map(l => l.codigo_individual).filter(c => c && c !== '--'))];
+          const [mapaPorId, mapaPorCodigo] = await Promise.all([
+            buscarFuncionariosPorChaves('id', idsFunc),
+            buscarFuncionariosPorChaves('codigo_individual', codigosFunc)
+          ]);
           const mappedDbLogs = dbLogs.map(l => {
-            let nomeFunc = l.funcionarios ? l.funcionarios.nome : null;
-            let cargoFunc = l.funcionarios && l.funcionarios.cargo ? l.funcionarios.cargo : l.cargo;
+            const cadastro = (l.funcionario_id && mapaPorId[l.funcionario_id])
+              || (l.codigo_individual && mapaPorCodigo[l.codigo_individual])
+              || null;
+            let nomeFunc = cadastro ? cadastro.nome : null;
+            let cargoFunc = (cadastro && cadastro.cargo) || l.cargo;
             if (!nomeFunc && l.codigo_individual) {
               const match = localFuncs.find(f => f.codigo_individual === l.codigo_individual || f.matricula === l.codigo_individual);
               if (match) {
@@ -562,10 +582,8 @@ document.addEventListener('DOMContentLoaded', () => {
               }
             }
             return {
-              _semNome: !nomeFunc,
-              _codigoPendente: l.codigo_individual || null,
               data_hora: l.data_hora,
-              nome_funcionario: nomeFunc || 'Operador do Sistema',
+              nome_funcionario: nomeFunc || null,
               cargo: cargoFunc || 'OPERACIONAL',
               codigo_usuario: l.codigo_individual || '--',
               entidade: `${l.entidade_tipo || ''} ${l.entidade_id || ''}`.trim(),
@@ -573,24 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
           });
 
-          // Segunda tentativa de resolver nomes: consultar funcionarios no
-          // Supabase pelos códigos ainda pendentes (backlog3 audit-funcionarios)
-          const pendentes = [...new Set(mappedDbLogs.filter(x => x._semNome && x._codigoPendente && x._codigoPendente !== '--').map(x => x._codigoPendente))];
-          if (pendentes.length > 0) {
-            const mapaDb = await buscarFuncionariosPorCodigos(pendentes);
-            mappedDbLogs.forEach(x => {
-              if (x._semNome && mapaDb[x._codigoPendente]) {
-                x.nome_funcionario = mapaDb[x._codigoPendente].nome || x.nome_funcionario;
-                if (mapaDb[x._codigoPendente].cargo) x.cargo = mapaDb[x._codigoPendente].cargo;
-              }
-              delete x._semNome;
-              delete x._codigoPendente;
-            });
-          } else {
-            mappedDbLogs.forEach(x => { delete x._semNome; delete x._codigoPendente; });
-          }
-
-          // Combinar logs do Supabase e do LocalStorage para garantir exibição das alterações
+          // Logs locais só entram se ainda não estiverem no banco (mesma data e mesmo código)
           const keys = new Set(mappedDbLogs.map(x => `${x.data_hora}-${x.codigo_usuario}`));
           localLogs.forEach(ll => {
             const key = `${ll.data_hora}-${ll.codigo_usuario}`;
@@ -636,7 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
     auditTableBody.innerHTML = logsVisiveis.map(l => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <td class="p-2.5 text-slate-500 whitespace-nowrap">${l.data_hora ? esc(new Date(l.data_hora).toLocaleString('pt-BR')) : 'N/A'}</td>
-        <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${esc(l.nome_funcionario || l.nome || session.nome || 'Operador')}</td>
+        <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${esc(l.nome_funcionario || l.nome || (l.codigo_usuario && l.codigo_usuario !== '--' ? `Sem cadastro (${l.codigo_usuario})` : 'Não identificado'))}</td>
         <td class="p-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">${esc(l.cargo || 'OPERACIONAL')}</td>
         <td class="p-2.5 text-nexus-500 font-bold whitespace-nowrap">${esc(l.codigo_usuario || l.codigo_individual || '--')}</td>
         <td class="p-2.5 font-bold whitespace-nowrap">${esc(l.entidade || 'Sistema')}</td>
@@ -736,7 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // Resolve nomes pendentes diretamente no Supabase (backlog3 audit-funcionarios)
           const codigosPendentes = [...new Set(mappedDbTrail.filter(x => x._codigoPendente).map(x => x._codigoPendente))];
           if (codigosPendentes.length > 0) {
-            const mapaDb = await buscarFuncionariosPorCodigos(codigosPendentes);
+            const mapaDb = await buscarFuncionariosPorChaves('codigo_individual', codigosPendentes);
             mappedDbTrail.forEach(x => {
               const info = mapaDb[x._codigoPendente];
               if (info) {

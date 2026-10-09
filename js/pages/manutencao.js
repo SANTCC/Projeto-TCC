@@ -143,8 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
+          // Backlog 3 (tempo real): a OS guarda o navio (navio_id). Sem esse vínculo, o painel
+          // não consegue contar o mesmo navio uma única vez.
+          const navioUuid = navio && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(navio.id || '')) ? navio.id : null;
           const { data: insOs } = await window.nexusSupabase.from('manutencoes').insert({
             entidade_tipo: 'NAVIO',
+            navio_id: navioUuid,
             descricao: `[${newOsId}][${tipoManut}] Navio: ${navioNome} - ${descricao}`,
             status: 'SOLICITADA'
           }).select('id').single();
@@ -761,7 +765,8 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } else if (os.equipamento.startsWith('Contêiner')) {
           if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', limpaNome);
+            // estado_container_enum não tem EM_MANUTENCAO: o valor válido é EM_REFORMA
+            await window.nexusSupabase.from('containers').update({ estado: 'EM_REFORMA' }).ilike('numero_identificacao', limpaNome);
           } else if (acao === 'CONCLUIR') {
             await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
           } else if (acao === 'REPROVAR') {
@@ -904,7 +909,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {
+    // Backlog 3 (tempo real): recarrega do Supabase antes de redesenhar (OS e navios)
     carregarNaviosParaManutencao();
-    renderOsTable();
+    carregarOsSupabase();
   });
 });
