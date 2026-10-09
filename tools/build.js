@@ -23,7 +23,8 @@ const SAIDA_PADRAO = path.join(RAIZ, 'dist');
 
 // Diretórios que nunca vão para produção (em qualquer nível).
 const DIRETORIOS_EXCLUIDOS = new Set([
-  'node_modules', '.git', '.github', '.vercel', 'dist', 'tests', 'tools', 'SPECs', 'supabase', 'THEME'
+  'node_modules', '.git', '.github', '.vercel', 'dist', 'tests', 'tools', 'SPECs', 'supabase', 'THEME',
+  'lighthouse', 'lighthouse-report'
 ]);
 // Arquivos da raiz que não são servidos. Documentação (.md) é excluída em qualquer pasta.
 const ARQUIVOS_EXCLUIDOS = new Set([
