@@ -1058,25 +1058,28 @@ document.addEventListener('DOMContentLoaded', () => {
       carga.portoDescarga = 'Sala de Contêiner';
       carga.guindasteDesignado = gndSelecionado.identificacao;
 
-      // Adiciona tarefa para o guindaste na página Embarcações & GPS
-      const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-      // Evita duplicidade de tarefas ativas para a mesma carga
-      const tarefasFiltradas = tarefasGnd.filter(t => t.cargaId !== idCarga);
-      tarefasFiltradas.push({
-        id: `TRF-${idCarga}`,
-        guindasteId: gndSelecionado.identificacao,
-        cargaId: idCarga,
-        tipoCarga: carga.tipo || 'Carga Geral',
-        destino: 'Sala de Contêiner',
-        dataCriacao: new Date().toLocaleString('pt-BR')
-      });
-      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasFiltradas));
+      // Registra/atualiza a tarefa do guindaste diretamente no Supabase
+      if (window.nexusSupabase) {
+        try {
+          await window.nexusSupabase.from('nexus_guindaste_tarefas').delete().eq('carga_id', idCarga);
+          await window.nexusSupabase.from('nexus_guindaste_tarefas').insert({
+            id: `TRF-${idCarga}`,
+            guindaste_id: gndSelecionado.identificacao,
+            carga_id: idCarga,
+            tipo_carga: carga.tipo || 'Carga Geral',
+            destino: 'Sala de Contêiner',
+            data_criacao: new Date().toISOString()
+          });
+        } catch (errTask) {
+          console.warn('[NexusPort] Erro ao sincronizar tarefa do guindaste no Supabase:', errTask);
+        }
+      }
 
       if (window.registrarLogAlteracao) {
         await window.registrarLogAlteracao(idCarga, 'EDICAO', `Carga direcionada para Sala de Contêiner via Guindaste ${gndSelecionado.identificacao}`);
       }
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Movimentação Solicitada', `Carga ${idCarga} associada ao Guindaste ${gndSelecionado.identificacao} com destino à Sala de Contêiner. Tarefa criada em Embarcações & GPS.`);
+        window.mostrarFeedback('sucesso', 'Movimentação Solicitada', `Carga ${idCarga} associada ao Guindaste ${gndSelecionado.identificacao} com destino à Sala de Contêiner. Tarefa registrada no Supabase.`);
       }
     } else if (acao === 'RECEBER') {
       if (!isConferenteRole) {
@@ -1087,10 +1090,14 @@ document.addEventListener('DOMContentLoaded', () => {
       carga.dataChegada = new Date().toLocaleString('pt-BR');
       carga.conferenteMatricula = session.matricula;
 
-      // Item 3: Remove tarefa do guindaste ao receber a carga
-      let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-      tarefasGnd = tarefasGnd.filter(t => t.cargaId !== idCarga && t.id !== `TRF-${idCarga}`);
-      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
+      // Item 3: Remove tarefa do guindaste do Supabase ao receber a carga
+      if (window.nexusSupabase) {
+        try {
+          await window.nexusSupabase.from('nexus_guindaste_tarefas').delete().eq('carga_id', idCarga);
+        } catch (errRem) {
+          console.warn('[NexusPort] Erro ao remover tarefa do guindaste no Supabase:', errRem);
+        }
+      }
 
       if (window.registrarLogAlteracao) {
         await window.registrarLogAlteracao(idCarga, 'EDICAO', 'Recebimento físico registrado pelo Conferente de Carga');
@@ -1168,10 +1175,14 @@ document.addEventListener('DOMContentLoaded', () => {
         carga.navio = '';
         carga.navio_id = null;
 
-        // Item 3: Remove tarefas de guindaste atreladas à carga cancelada
-        let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-        tarefasGnd = tarefasGnd.filter(t => t.cargaId !== idCarga && t.id !== `TRF-${idCarga}`);
-        localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
+        // Item 3: Remove tarefas de guindaste do Supabase atreladas à carga cancelada
+        if (window.nexusSupabase) {
+          try {
+            await window.nexusSupabase.from('nexus_guindaste_tarefas').delete().eq('carga_id', idCarga);
+          } catch (errRemCanc) {
+            console.warn('[NexusPort] Erro ao remover tarefa do guindaste no Supabase ao cancelar:', errRemCanc);
+          }
+        }
 
 
         if (window.registrarTrailDecisao) {

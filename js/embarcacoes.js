@@ -1568,6 +1568,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const guindastesTableBody = document.getElementById('guindastesTableBody');
 
   let guindastesList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+  let tarefasGndAll = [];
 
   async function carregarGuindastesSupabase() {
     if (window.nexusSupabase) {
@@ -1581,9 +1582,21 @@ document.addEventListener('DOMContentLoaded', () => {
             dataManut: g.data_ultima_manutencao || ''
           }));
           localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
-          renderGuindastesTable();
-          return;
         }
+
+        const { data: dataTarefas } = await window.nexusSupabase.from('nexus_guindaste_tarefas').select('*');
+        if (Array.isArray(dataTarefas)) {
+          tarefasGndAll = dataTarefas.map(t => ({
+            id: t.id,
+            guindasteId: t.guindaste_id,
+            cargaId: t.carga_id,
+            tipoCarga: t.tipo_carga,
+            destino: t.destino,
+            dataCriacao: t.data_criacao
+          }));
+        }
+        renderGuindastesTable();
+        return;
       } catch (err) {
         console.warn('[NexusPort] Erro ao carregar guindastes do Supabase:', err);
       }
@@ -1602,8 +1615,6 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       return;
     }
-
-    const tarefasGndAll = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
 
     guindastesTableBody.innerHTML = guindastesList.map(g => {
       const tarefasAtivas = tarefasGndAll.filter(t => t.guindasteId === g.identificacao);
@@ -1646,16 +1657,12 @@ document.addEventListener('DOMContentLoaded', () => {
       guindastesList = guindastesList.filter(g => (g.identificacao || '').toUpperCase() !== gndIdentificacao.toUpperCase());
       localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
 
-      // Remove tarefas associadas
-      let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-      tarefasGnd = tarefasGnd.filter(t => t.guindasteId !== gndIdentificacao);
-      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
-
       if (window.nexusSupabase) {
         try {
+          await window.nexusSupabase.from('nexus_guindaste_tarefas').delete().eq('guindaste_id', gndIdentificacao);
           await window.nexusSupabase.from('guindastes').delete().eq('numero_identificacao', gndIdentificacao);
         } catch (e) {
-          console.warn('Erro ao excluir guindaste no Supabase:', e);
+          console.warn('Erro ao excluir guindaste e tarefas no Supabase:', e);
         }
       }
 
@@ -1675,8 +1682,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.exibirTarefasGuindaste = async function(gndIdentificacao) {
-    const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-    const tarefasAtivas = tarefasGnd.filter(t => t.guindasteId === gndIdentificacao);
+    let tarefasAtivas = tarefasGndAll.filter(t => t.guindasteId === gndIdentificacao);
+    if (window.nexusSupabase) {
+      try {
+        const { data } = await window.nexusSupabase.from('nexus_guindaste_tarefas').select('*').eq('guindaste_id', gndIdentificacao);
+        if (Array.isArray(data)) {
+          tarefasAtivas = data.map(t => ({
+            id: t.id,
+            guindasteId: t.guindaste_id,
+            cargaId: t.carga_id,
+            tipoCarga: t.tipo_carga,
+            destino: t.destino,
+            dataCriacao: t.data_criacao
+          }));
+        }
+      } catch (err) {
+        console.warn('Erro ao consultar tarefas do guindaste no Supabase:', err);
+      }
+    }
 
     if (tarefasAtivas.length === 0) {
       if (window.mostrarFeedback) {
