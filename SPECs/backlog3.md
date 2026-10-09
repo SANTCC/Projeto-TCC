@@ -48,8 +48,10 @@ Minify.
 ## Usar o `GoogleChrome/lighthouse` como workflow pra PRs (localmente, com NodeJS)
 Falha se for encontrado falhas críticas, roda em todo PR aberto, requisito mínimo de PR.
 
-## Reorganizar arquivos `.JS`
+## Reorganizar arquivos `.JS` ✅ IMPLEMENTADO
 WebMCP vai ter sua própria subpasta, arquivos comuns (usados em todas as páginas) ficam no root da pasta, e específicos de subpastas ficam em pages/. (ainda sim dentro do js/)
+
+> **Status:** ✅ Implementado. Os 14 módulos WebMCP estão em `js/webmcp/`; os 13 módulos de página, em `js/pages/`; a raiz de `js/` mantém só os comuns (segurança, guard, sessão em cookies, repositório, cliente Supabase, layout, haptics, vision-layer, net-debug, panic-realtime). Todas as referências `<script src>` dos HTML foram atualizadas e conferidas. Teste: `node tests/test_backlog3_pendentes.js` (seção I).
 
 ## Atualização em tempo real das tabelas e indicadores ✅ IMPLEMENTADO
 Corrigir os dados exibidos pelas tabelas e indicadores do sistema quando ocorre uma alteração no Supabase, garantindo que todos os painéis sejam atualizados em tempo real e não apresentem dados antigos ou incorretos.
@@ -372,7 +374,9 @@ const LOCAL = {
 
 ---
 
-## 4) Adição — Gráfico de rosca: navios dentro × fora do porto
+## 4) Adição — Gráfico de rosca: navios dentro × fora do porto ✅ IMPLEMENTADO
+
+> **Status:** ✅ Implementado em **Relatórios & PDF** (`relatorios.html`), não no Painel Geral. **Decisão:** os gráficos ficam concentrados em Relatórios (item K de Remover gráficos duplicados). Gráfico `navios_localizacao` em `js/pages/charts.js`, com a contagem dentro × fora do porto. Teste: `node tests/test_graficos_por_cargo.js`.
 
 * **Página:** Painel Geral (`dashboard.html`)
 * **Local:** abaixo do bloco "Indicadores operacionais no terminal", ou ao lado do card "Navios fora do porto".
@@ -432,7 +436,9 @@ function renderDonutNavios(navios) {
 
 ---
 
-## 5) Adição — Gráfico de barras: navios mais utilizados
+## 5) Adição — Gráfico de barras: navios mais utilizados ✅ IMPLEMENTADO
+
+> **Status:** ✅ Implementado em **Relatórios & PDF**, pela mesma decisão do item 4. Gráfico `embarcacoes_utilizadas` em `js/pages/charts.js`, com o volume de cargas vinculadas a cada navio. Teste: `node tests/test_graficos_por_cargo.js`.
 
 * **Página:** Painel Geral ou Relatórios.
 * **Local:** ao lado da rosca, utilizando grid de 2 colunas em telas grandes.

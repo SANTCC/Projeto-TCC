@@ -4,6 +4,7 @@
 //   K  Remover gráficos duplicados do Painel Geral
 //   M  Rotas marítimas no cadastro de navios (sem rotas estáticas)
 //   L  Impedir vinculação de carga a navio fora do porto
+//   I  Reorganizar arquivos .JS (js/, js/pages/, js/webmcp/)
 //   (demais seções são acrescentadas à medida que os itens são entregues)
 //
 // Execução: node tests/test_backlog3_pendentes.js
@@ -159,6 +160,34 @@ function testarVinculacaoNavioNoPorto() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// I. Reorganizar arquivos .JS (js/ raiz, js/pages/ e js/webmcp/)
+// ─────────────────────────────────────────────────────────────────────────────
+function testarReorganizacaoJs() {
+  const fs = require('fs');
+  const referencias = [];
+  fs.readdirSync(ROOT).filter((f) => f.endsWith('.html')).forEach((arq) => {
+    for (const m of read(arq).matchAll(/<script[^>]+src="([^"]+)"/g)) {
+      if (!/^(https?:)?\/\//.test(m[1])) referencias.push({ arq, src: m[1] });
+    }
+  });
+  const faltando = referencias.filter((r) => !fs.existsSync(path.join(ROOT, r.src)));
+  check(`toda referência local <script src> aponta para um arquivo existente (${referencias.length} referências)`,
+    referencias.length > 0 && faltando.length === 0,
+    faltando.slice(0, 3).map((r) => `${r.arq} → ${r.src}`).join(', '));
+
+  const modulosDePagina = ['charts', 'cargas', 'confirm-role', 'dashboard', 'delegacao', 'embarcacoes', 'inspecao',
+    'login', 'manutencao', 'relatorios', 'scanner', 'tecnico_portos', 'tipos-carga'];
+  const raiz = fs.readdirSync(path.join(ROOT, 'js')).filter((f) => f.endsWith('.js'));
+  const naRaiz = raiz.filter((f) => /^webmcp-/.test(f) || modulosDePagina.includes(f.replace(/\.js$/, '')));
+  check('js/ raiz não tem mais módulos de página nem webmcp-*.js', naRaiz.length === 0, naRaiz.join(', '));
+
+  const webmcp = fs.readdirSync(path.join(ROOT, 'js', 'webmcp')).filter((f) => /^webmcp-.*\.js$/.test(f));
+  check(`js/webmcp/ contém os 14 módulos WebMCP (encontrados: ${webmcp.length})`, webmcp.length === 14);
+  const paginas = fs.readdirSync(path.join(ROOT, 'js', 'pages')).filter((f) => f.endsWith('.js'));
+  check(`js/pages/ contém os 13 módulos de página (encontrados: ${paginas.length})`, paginas.length === 13);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Execução
 // ─────────────────────────────────────────────────────────────────────────────
 (async function main() {
@@ -166,6 +195,7 @@ function testarVinculacaoNavioNoPorto() {
   testarRemocaoGraficosDashboard();
   await testarRotasMaritimas();
   testarVinculacaoNavioNoPorto();
+  testarReorganizacaoJs();
 
   console.log(`\nResultado: ${passou} aprovado(s), ${falhou} falha(s).`);
   if (falhou > 0) process.exit(1);
