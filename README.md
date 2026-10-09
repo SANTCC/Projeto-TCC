@@ -168,6 +168,16 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 ---
 
+## 🧪 Dados de Demonstração (seed)
+
+- **Arquivo:** `supabase/seed.sql`. Só para demonstração e desenvolvimento local. **Não aplicar em produção.**
+- **Usuários de teste:** 2 por cargo, com nome `[CARGO]_mock123` e `[CARGO]_mock321`. Acesso pelo código individual `MOCK-[CARGO]-123` e `MOCK-[CARGO]-321`.
+- **Dados:** 4 navios, 6 contêineres, 12 cargas (os 9 status do fluxo), tipos de carga, rotas a partir de Santos e histórico de alterações. IMOs e distâncias são fictícios.
+- **Aplicar:** local com `supabase db reset`; projeto de demonstração com `psql "$DATABASE_URL" -f supabase/seed.sql`. Reexecutar não duplica nada.
+- **Testes:** `npm run test:seed` (estrutura) e `python tests/verify_seed_demo.py` (PostgreSQL local; requer `pip install pgserver psycopg2-binary`).
+
+---
+
 ## 🔒 Banco de Dados e Schemas
 
 - **DDL Completo:** `SPECs/schema.sql`

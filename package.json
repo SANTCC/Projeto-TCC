@@ -32,7 +32,8 @@
     "test:build": "node tests/test_build.js",
     "lighthouse": "node tools/lighthouse-check.js",
     "test:lighthouse": "node tests/test_lighthouse.js",
-    "test:relatorio-pdf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_relatorio_pdf.js"
+    "test:relatorio-pdf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_relatorio_pdf.js",
+    "test:seed": "node tests/test_seed_demo.js"
   },
   "keywords": [
     "nexusport",

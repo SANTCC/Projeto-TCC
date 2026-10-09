@@ -19,3 +19,9 @@ verify_jwt = false
 # (codigo_individual, funcionário ativo e cargo permitido) é validada dentro da função.
 [functions.relatorio-pdf]
 verify_jwt = false
+
+# Seed de demonstração (Backlog 3, itens C e D): usuários mock por cargo e dados fictícios de navios,
+# contêineres, cargas e histórico. `supabase db reset` roda este arquivo localmente. Não aplicar em produção.
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
