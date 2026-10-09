@@ -46,8 +46,10 @@ Cookie para rastrear ações de um mesmo dispositivo usando Cookies, de forma qu
 
 > **Status:** ✅ Implementado. O identificador do aparelho é o cookie `_ga` do próprio GA4, gravado pelo gtag.js e reconhecido nativamente pelo Google. A configuração fica em `js/analytics.js` (comum às 12 páginas, que antes tinham snippet inline): `client_storage: 'cookie'`, `SameSite=Lax;Secure` em HTTPS, validade de 2 anos, sem Google Signals e sem personalização de anúncios. Não há fingerprinting (canvas, áudio, fontes, plugins, hardware). `NexusAnalytics.track(evento, parametros)` envia eventos de negócio: `login_confirmado`, `login_falha`, `logout`, `botao_panico_acionado`, `qr_lido`, `inspecao_aprovada` e `inspecao_recusada`. Parâmetros com nome, código, matrícula ou e-mail são descartados, e valores são limitados a 100 caracteres. Se o gtag.js estiver bloqueado, `track` retorna `false` sem erro. **Ressalva:** consentimento de cookies (LGPD) não está implementado; decidir antes da produção se é necessário um aviso. Teste: `node tests/test_analytics.js` (também em `npm run test:analytics`).
 
-## Comprimir JS/CSS antes do deploy
+## Comprimir JS/CSS antes do deploy ✅ IMPLEMENTADO
 Minify.
+
+> **Status:** ✅ Implementado. `npm run build` (`tools/build.js`) gera `dist/`. Os arquivos de `js/` e os blocos `<script>` inline das páginas passam pelo Terser; o CSS (`<style>` inline e arquivos `.css`) passa pelo clean-css. Os caminhos não mudam, então o HTML continua apontando para `js/xxx.js`. Resultado atual: JS 959 KB → 558 KB (−42%), CSS −25%, HTML −3%. `vercel.json` executa o build (`buildCommand`) e publica `dist/` (`outputDirectory`). Testes, ferramentas, SPECs, supabase, THEME (protótipos) e documentação ficam fora da saída. **Decisão:** o deploy passa a depender do build (`buildCommand`), e não do repositório cru. **Ressalvas:** o Tailwind continua carregado do CDN (sem compilação própria); o deploy no Vercel não foi testado (sem acesso ao projeto); e o `.name` de funções anônimas atribuídas a variáveis pode mudar na saída minificada, sem afetar a execução. Teste: `node tests/test_build.js` (também em `npm run test:build`).
 
 ## Usar o `GoogleChrome/lighthouse` como workflow pra PRs (localmente, com NodeJS)
 Falha se for encontrado falhas críticas, roda em todo PR aberto, requisito mínimo de PR.

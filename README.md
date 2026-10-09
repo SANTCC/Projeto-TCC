@@ -141,6 +141,15 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 ---
 
+## 📦 Build de Produção (minificação)
+
+- **Comando:** `npm run build` gera `dist/` com JS (Terser) e CSS (clean-css) minificados. Os caminhos não mudam.
+- **Deploy:** o `vercel.json` executa o mesmo comando (`buildCommand`) e publica `dist/` (`outputDirectory`).
+- **Desenvolvimento:** `npm start` continua servindo o código-fonte.
+- **Testes:** `npm run test:build`.
+
+---
+
 ## 🔒 Banco de Dados e Schemas
 
 - **DDL Completo:** `SPECs/schema.sql`
