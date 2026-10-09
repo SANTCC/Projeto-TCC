@@ -173,9 +173,11 @@ async function secaoNucleo() {
   // 2.1 Polyfill quando não há API nativa
   let { w, registro } = janelaNucleo();
   check('sem API nativa: modo "polyfill"', w.NexusWebMCP.modo() === 'polyfill', w.NexusWebMCP.modo());
-  check('polyfill expõe document.modelContext com registerTool/getTools/executeTool',
-    typeof w.document.modelContext.registerTool === 'function' && typeof w.document.modelContext.getTools === 'function'
-    && typeof w.document.modelContext.executeTool === 'function');
+  check('polyfill expõe document.modelContext, navigator.modelContext e window.modelContext',
+    typeof w.document.modelContext.registerTool === 'function' && typeof w.navigator.modelContext.registerTool === 'function'
+    && typeof w.modelContext.registerTool === 'function');
+  check('document.modelContext, navigator.modelContext e window.modelContext apontam para o mesmo motor',
+    w.document.modelContext === w.navigator.modelContext && w.navigator.modelContext === w.modelContext);
   w.close();
 
   // 2.2 API nativa tem precedência (não é sobrescrita)
