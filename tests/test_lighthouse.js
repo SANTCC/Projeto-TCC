@@ -33,6 +33,31 @@ function lhrSintetico(pontos, auditorias) {
   return { categories: categorias, audits };
 }
 
+// ---------------------------------------------------------------------------
+// 2b. Rodadas: mediana por categoria e maioria para auditorias críticas
+// ---------------------------------------------------------------------------
+function testarRodadas() {
+  log('\n[2b] Três rodadas por página: mediana e maioria');
+  check('mediana de três valores é o do meio', gate.mediana([0.9, 0.7, 0.8]) === 0.8);
+  check('mediana de dois valores é a média', gate.mediana([0.5, 0.6]) === 0.55);
+  check('mediana sem valores é null', gate.mediana([]) === null);
+  const lhrs = [
+    { categories: { performance: { score: 0.7 } }, audits: { x: { score: 0 }, y: { score: 1 } } },
+    { categories: { performance: { score: 0.9 } }, audits: { x: { score: 1 }, y: { score: 1 } } },
+    { categories: { performance: { score: 0.8 } }, audits: { x: { score: 0 }, y: { score: 0 } } }
+  ];
+  const cons = gate.consolidarRodadas(lhrs, ['x', 'y', 'z']);
+  check('categoria consolidada pela mediana (0,8)', cons.categories.performance.score === 0.8);
+  check('auditoria que falha em 2 de 3 rodadas conta como reprovada', cons.audits.x.score === 0);
+  check('auditoria que falha em 1 de 3 rodadas não reprova', cons.audits.y.score === 1);
+  check('auditoria ausente em todas as rodadas não entra na consolidação', !('z' in cons.audits));
+  const comRodadas = (r) => JSON.parse(JSON.stringify({ ...ESTRUTURA, rodadas: r }));
+  check('rodadas = 3 é válido', gate.validarLimiares(comRodadas(3)).length === 0);
+  check('rodadas = 0 é inválido', gate.validarLimiares(comRodadas(0)).some((p) => /rodadas/.test(p)));
+  check('rodadas = 6 é inválido', gate.validarLimiares(comRodadas(6)).some((p) => /rodadas/.test(p)));
+  check('configuração real mede 3 rodadas', gate.carregarLimiares().rodadas === 3);
+}
+
 const BOM = { performance: 0.9, accessibility: 0.95, 'best-practices': 0.96, seo: 0.92 };
 const ESTRUTURA = {
   categorias: { performance: 0.6, accessibility: 0.75, 'best-practices': 0.9, seo: 0.9 },
@@ -206,7 +231,7 @@ async function testarPontaAPonta() {
   const { ok, resultados } = await gate.executar({ filtro: ['index.html'] });
   check('login medido pelo Lighthouse passa no gate', ok === true,
     resultados.map((r) => r.falhas.join('; ')).join(' | '));
-  check('relatório JSON salvo em lighthouse-report/', fs.existsSync(path.join(gate.PASTA_RELATORIOS, 'index.json')));
+  check('relatório JSON de cada rodada salvo em lighthouse-report/', fs.existsSync(path.join(gate.PASTA_RELATORIOS, 'index-rodada-1.json')));
 }
 
 (async function main() {
@@ -214,6 +239,7 @@ async function testarPontaAPonta() {
   try {
     testarConfiguracao();
     testarAvaliacao();
+    testarRodadas();
     await testarServidor();
     testarWorkflow();
     testarPacote();

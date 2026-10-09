@@ -77,6 +77,9 @@ function validarLimiares(limiares) {
     if (p && !TIPOS_SESSAO.includes(p.sessao)) problemas.push(`${p.arquivo}: sessao deve ser ${TIPOS_SESSAO.join(', ')}`);
     if (p) arquivos.add(p.arquivo);
   });
+  if (limiares && limiares.rodadas !== undefined && !(Number.isInteger(limiares.rodadas) && limiares.rodadas >= 1 && limiares.rodadas <= 5)) {
+    problemas.push('rodadas deve ser um inteiro entre 1 e 5');
+  }
   const criticas = (limiares && limiares.auditoriasCriticas) || [];
   if (!Array.isArray(criticas) || criticas.some((id) => typeof id !== 'string')) problemas.push('auditoriasCriticas deve ser uma lista de textos');
   const excecoes = (limiares && limiares.excecoes) || {};
@@ -87,6 +90,36 @@ function validarLimiares(limiares) {
     else e.paginas.forEach((p) => { if (!arquivos.has(p)) problemas.push(`exceção de ${id} aponta para página fora da lista: ${p}`); });
   });
   return problemas;
+}
+
+/** Mediana de números (ignora valores ausentes). Lista vazia → null. */
+function mediana(valores) {
+  const v = valores.filter((n) => typeof n === 'number').sort((a, b) => a - b);
+  if (v.length === 0) return null;
+  const meio = Math.floor(v.length / 2);
+  return v.length % 2 ? v[meio] : (v[meio - 1] + v[meio]) / 2;
+}
+
+/**
+ * Consolida as rodadas de uma página (o CI compartilhado é ruidoso): pontuação de cada categoria
+ * pela mediana; uma auditoria crítica só conta como reprovada se falhar na maioria das rodadas.
+ */
+function consolidarRodadas(lhrs, auditoriasCriticas) {
+  const categorias = {};
+  Object.keys((lhrs[0] && lhrs[0].categories) || {}).forEach((id) => {
+    categorias[id] = {
+      id,
+      score: mediana(lhrs.map((l) => (l.categories && l.categories[id] ? l.categories[id].score : null)))
+    };
+  });
+  const audits = {};
+  auditoriasCriticas.forEach((id) => {
+    const scores = lhrs.map((l) => (l.audits && l.audits[id] ? l.audits[id].score : undefined));
+    if (scores.every((x) => x === undefined)) return;
+    const reprovadas = scores.filter((x) => typeof x === 'number' && x < 1).length;
+    audits[id] = { id, score: reprovadas > lhrs.length / 2 ? 0 : 1 };
+  });
+  return { categories: categorias, audits };
 }
 
 function excecaoPara(limiares, auditoria, arquivo) {
@@ -231,17 +264,22 @@ async function executar(opcoes) {
     for (const pagina of paginas) {
       process.stdout.write(`Medindo ${pagina.arquivo}...\n`);
       await prepararSessao(navegador, origem, pagina);
-      const resultado = await lighthouse(`${origem}/${pagina.arquivo}`, {
-        port: chrome.port,
-        output: 'json',
-        logLevel: 'error',
-        onlyCategories: CATEGORIAS_PERMITIDAS,
-        disableStorageReset: true,
-        blockedUrlPatterns: limiares.rede.bloquearHosts
-      }, desktopConfig);
-      const lhr = resultado.lhr;
-      fs.writeFileSync(path.join(PASTA_RELATORIOS, `${pagina.arquivo.replace(/\.html$/, '')}.json`), JSON.stringify(lhr, null, 2));
-      resultados.push(avaliarLhr(lhr, limiares, pagina.arquivo));
+      const rodadas = limiares.rodadas || 3;
+      const lhrs = [];
+      for (let i = 1; i <= rodadas; i += 1) {
+        const resultado = await lighthouse(`${origem}/${pagina.arquivo}`, {
+          port: chrome.port,
+          output: 'json',
+          logLevel: 'error',
+          onlyCategories: CATEGORIAS_PERMITIDAS,
+          disableStorageReset: true,
+          blockedUrlPatterns: limiares.rede.bloquearHosts
+        }, desktopConfig);
+        lhrs.push(resultado.lhr);
+        const base = pagina.arquivo.replace(/\.html$/, '');
+        fs.writeFileSync(path.join(PASTA_RELATORIOS, `${base}-rodada-${i}.json`), JSON.stringify(resultado.lhr, null, 2));
+      }
+      resultados.push(avaliarLhr(consolidarRodadas(lhrs, limiares.auditoriasCriticas), limiares, pagina.arquivo));
     }
   } finally {
     if (navegador) await navegador.disconnect();
@@ -258,6 +296,8 @@ async function executar(opcoes) {
 module.exports = {
   executar,
   avaliarLhr,
+  consolidarRodadas,
+  mediana,
   carregarLimiares,
   validarLimiares,
   resolverArquivoDist,
