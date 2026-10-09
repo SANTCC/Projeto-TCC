@@ -1,56 +1,111 @@
-## 🔴 Problemas confirmados
+# Backlog 002 — Arquitetura de Banco de Dados, Segurança e Integridade (Supabase)
 
-1. **RLS aberta para o mundo.** `for all using (true)` sem `to ...` vale para `public`, então qualquer pessoa com a anon key lê e altera `funcionarios` (incluindo `codigo_individual`, que é a credencial de login), `cargas`, `navios` etc.
-2. **12 tabelas com RLS ligada e sem nenhuma policy** (`inspecoes`, `manutencoes`, `trail_decisoes`, `logs_alteracoes`, `agendamentos`, `checklist_*`, `delegacoes_supervisor`, `leituras_qr_code`, `retificacoes_trail`, `historico_manutencoes`, `inspecao_itens`). Via anon/authenticated, elas ficam totalmente bloqueadas. Ou o front usa a service key (pior) ou essas telas não funcionam.
-3. **`updated_at` nunca é atualizado.** Só tem `default now()`. Falta um trigger genérico `set_updated_at()` em todas as tabelas.
-4. **Trigger `trg_propagar_status_navio`** dispara em qualquer `UPDATE` que cite `localizacao`, mesmo sem mudança de valor. Adicione `when (old.localizacao is distinct from new.localizacao)`. Cargas sem `container_id` nunca propagam.
-5. **`pgcrypto` ativada mas não usada** (`gen_random_uuid()` já é nativo no PG13+). Ou use `crypt()` para hash do `codigo_individual`, ou remova.
+> Este backlog documenta melhorias de arquitetura, integridade relacional, segurança RLS e triggers do PostgreSQL no Supabase.
 
-## 🟠 Integridade (alto valor, baixo esforço)
+---
 
-```sql
--- navio não pode ocupar 2 berços
-create unique index uq_bercos_navio on bercos(navio_id) where navio_id is not null;
+## 🔴 Problemas de RLS, Triggers e Criptografia
 
--- manutenção aponta para exatamente 1 entidade
-alter table manutencoes add check (num_nonnulls(navio_id, container_id, guindaste_id) = 1);
-alter table historico_manutencoes add check (num_nonnulls(navio_id, container_id, guindaste_id) = 1);
+### 1. RLS aberta para o mundo (`for all using (true)`)
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** As políticas RLS atuais em `SPECs/schema.sql` utilizam `for all using (true)` permitindo leitura e escrita pela role pública `anon` com a chave anônima do Supabase, sem restringir acessos por JWT ou perfil autenticado do usuário.
 
--- recusa exige motivo
-alter table cargas add check (status_fluxo <> 'RECUSADA' or motivo_recusa is not null);
+### 2. 12 tabelas com RLS ativada mas sem nenhuma política
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** `SPECs/schema.sql` executa `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` em tabelas como `inspecoes`, `manutencoes`, `trail_decisoes`, `logs_alteracoes`, `agendamentos`, `checklist_modelos`, `checklist_itens`, `delegacoes_supervisor`, `leituras_qr_code`, `retificacoes_trail`, `historico_manutencoes` e `inspecao_itens`, mas não possui instruções `CREATE POLICY` específicas para liberação ou restrição das mesmas.
 
--- uma delegação ativa por titular
-create unique index uq_delegacao_ativa on delegacoes_supervisor(supervisor_titular_id) where ativo and data_revogacao is null;
-```
+### 3. Trigger genérico `set_updated_at()` em todas as tabelas
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** As tabelas possuem a coluna `updated_at timestamptz DEFAULT now()`, porém não existe a função de trigger `set_updated_at()` nem os triggers `BEFORE UPDATE` para atualizar o timestamp automaticamente quando uma linha for editada.
 
-- Checks de datas: `data_saida >= data_chegada` (navios), `data_fim >= data_inicio` (estivador_cargas), `data_fim_previsto > data_inicio` (delegações), saída ≥ entrada (visitantes, cargas).
-- Formato: IMO `^[0-9]{7}$`; contêiner ISO 6346 `^[A-Z]{4}[0-9]{7}$`.
-- `manutencoes.entidade_tipo` aceita `FUNCIONARIO`, `VISITANTE`, etc. Troque por checagem coerente com a FK preenchida, ou remova a coluna.
-- **Índices em FKs** (Postgres não cria sozinho): `cargas(container_id, status_fluxo)`, `containers(navio_id)`, `manutencoes(status, navio_id/container_id/guindaste_id)`, `logs_alteracoes(entidade_tipo, entidade_id, data_hora)`, `trail_decisoes(entidade_tipo, entidade_id)`.
+### 4. Otimização do trigger `trg_propagar_status_navio`
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** O trigger em `SPECs/schema.sql` é executado em qualquer `UPDATE` na coluna `localizacao` sem a condição `WHEN (old.localizacao IS DISTINCT FROM new.localizacao)`. Além disso, a função `fn_propagar_status_navio()` propaga o status apenas para cargas vinculadas via `container_id`.
 
-## 🟡 Modelagem
+### 5. Uso da extensão `pgcrypto` para hash de credenciais
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** A extensão `pgcrypto` é habilitada no início de `SPECs/schema.sql`, mas não é utilizada para criptografar ou gerar hash de `codigo_individual` (usado no login) ou outros dados sensíveis.
 
-- **Redundância que pode divergir:** `cargas.resultado_inspecao`/`checklist_modelo_id` duplicam `inspecoes`; `delegacoes_supervisor.substituto_nome/cpf/data_nascimento` duplicam `funcionarios`; `cargas.destino` vs `porto_descarga`; `cargas.material` vs `containers.material_carregado`.
-- **`rotas_maritimas` está órfã** (ninguém referencia). Crie `portos` (UN/LOCODE) e use FK em `navios.porto_origem/destino`, `cargas.porto_descarga` e rotas.
-- **Falta `viagens`** (navio × rota × saída/chegada). Hoje `navios` guarda só o estado atual, sem histórico.
-- **Falta tabela de operação** (carga × guindaste × berço × estivador × início/fim). Guindaste hoje não se liga a nada.
-- **Tipos fracos:** `coordenadas_gps text` → `numeric lat/lng` ou PostGIS `geography`; `tempo_fora_do_porto text` → calcular de `data_saida`; `quantidade_cargas_realizadas` → derivar/trigger.
-- Unidades e moeda: renomeie para `peso_kg`, `volume_m3` e adicione `moeda` em `valor_declarado`.
-- `estado_navio_enum` e `estado_container_enum` são idênticos; uma coisa só, ou diferencie de fato.
-- Capacidade do contêiner (tara, carga máx.) para validar `sum(cargas.peso)`. *(Especulativo, depende da regra de negócio.)*
+---
 
-## 🟡 Auditoria e segurança
+## 🟠 Integridade e Restrições SQL (Constraints & Índices)
 
-- **Auditoria por trigger** (função genérica `fn_audit()`), não pelo app. Hoje o app pode esquecer de gravar em `logs_alteracoes`.
-- **Tabelas append-only:** `logs_alteracoes`, `trail_decisoes`, `retificacoes_trail` devem bloquear `UPDATE/DELETE` (trigger com `raise exception` ou `revoke`).
-- **Login:** use uma Edge Function que valida o código e emite JWT com claim `cargo`. Aí a RLS usa `auth.jwt()->>'cargo'` + `cargo_niveis`, e o hardening de `bercos` deixa de ser só comentário.
-- **LGPD:** CPF e documento de visitante em texto puro. Considere criptografar ou restringir colunas via view.
-- `delegacoes_supervisor` com `on delete cascade` apaga histórico de delegação ao remover funcionário. Prefira `restrict`.
-- **Máquina de estados** de `status_fluxo`: trigger que só permite transições válidas (ex.: `ENTREGUE` não volta para `ARMAZENAGEM`).
+### 6. Unicidade de navio por berço (`uq_bercos_navio`)
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Não foi criado o índice único parcial `CREATE UNIQUE INDEX uq_bercos_navio ON bercos(navio_id) WHERE navio_id IS NOT NULL;` no DDL de `schema.sql`.
 
-## 🟢 Operacional
+### 7. Restrição de entidade única em manutenções (`num_nonnulls = 1`)
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** As tabelas `manutencoes` e `historico_manutencoes` não possuem a trava `CHECK (num_nonnulls(navio_id, container_id, guindaste_id) = 1)` no banco.
 
-- Use **migrations versionadas** (Supabase CLI). `create type` sem `if not exists` quebra ao reexecutar.
-- **Supabase Realtime** em `bercos`/`navios` para painel ao vivo.
-- **Views** para dashboard (`v_cargas_em_andamento`, `v_berços_ocupacao`) e `security_invoker = true` para respeitar RLS.
-- Função do trigger de propagação como `security definer` se você endurecer a RLS, senão ela pode falhar.
+### 8. Obrigatoriedade de motivo em cargas recusadas
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** A validação do motivo de recusa ocorre no front-end JS, mas a restrição `CHECK (status_fluxo <> 'RECUSADA' OR motivo_recusa IS NOT NULL)` não foi adicionada no nível do PostgreSQL.
+
+### 9. Apenas uma delegação ativa por supervisor titular (`uq_delegacao_ativa`)
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** O limite de uma delegação ativa é validado via código no front-end/JS, porém o índice único condicional `CREATE UNIQUE INDEX uq_delegacao_ativa ON delegacoes_supervisor(supervisor_titular_id) WHERE ativo AND data_revogacao IS NULL;` não existe no banco de dados.
+
+### 10. Validações de intervalo de datas e expressões regulares de formato no banco
+- **Status:** 🟡 **IMPLEMENTADO PARCIALMENTE**
+- **Detalhes:** Formatos (IMO, contêiner, matrícula) e intervalos de datas são validados no código JavaScript antes dos envios, mas faltam constraints `CHECK` no PostgreSQL para garantir integridade caso ocorram inserções diretas via API.
+
+### 11. Índices em chaves estrangeiras (FKs)
+- **Status:** 🟡 **IMPLEMENTADO PARCIALMENTE**
+- **Detalhes:** Foram criados índices básicos em tabelas como `bercos(estado)`, `bercos(navio_id)` e `emergencias(estado, data_hora)`, mas faltam índices secundários em `cargas(container_id, status_fluxo)`, `containers(navio_id)`, `manutencoes(status, ...)` e `logs_alteracoes(entidade_tipo, entidade_id)`.
+
+---
+
+## 🟡 Modelagem e Estruturação de Dados
+
+### 12. Normalização e eliminação de dados redundantes
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Atributos como `cargas.resultado_inspecao` duplicam dados da tabela `inspecoes`, e `delegacoes_supervisor.substituto_nome/cpf/data_nascimento` duplicam dados da tabela `funcionarios`.
+
+### 13. Tabela de `portos` e vínculo relacional em `rotas_maritimas`
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** `rotas_maritimas` utiliza campos de texto livre (`origem`, `destino`) sem chaves estrangeiras apontando para uma tabela centralizada de portos (ex.: UN/LOCODE).
+
+### 14. Histórico de `viagens` de embarcações
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** A tabela `navios` armazena apenas o estado e localização atual do navio, sem uma tabela relacional de histórico de viagens (`navio_id`, `rota_id`, `data_saida`, `data_chegada_real`).
+
+### 15. Tabela relacional de operações do pátio (Carga × Guindaste × Berço × Estivador)
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Não existe tabela unificada de registro de operação integrada conectando o histórico de movimentação do guindaste com berço, estivador e carga.
+
+### 16. Fortalecimento de tipos de dados (`coordenadas_gps`, moeda, etc.)
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** `coordenadas_gps` é armazenado como `TEXT` em vez de colunas numéricas de `latitude`/`longitude` ou tipo geográfico PostGIS. `valor_declarado` não possui especificação de moeda.
+
+---
+
+## 🟡 Auditoria, Segurança e RLS Avançada
+
+### 17. Registro de auditoria nativo via triggers no PostgreSQL (`fn_audit`)
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Os registros da tabela `logs_alteracoes` são gravados via código da aplicação (`window.registrarLogAlteracao`), e não por um trigger de auditoria genérico no banco de dados.
+
+### 18. Tabelas append-only para auditoria e trail de decisões
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Não há triggers ou revogação de privilégios no banco impedindo comandos `UPDATE` e `DELETE` nas tabelas `logs_alteracoes`, `trail_decisoes` e `retificacoes_trail`.
+
+### 19. Autenticação JWT com claims de perfil para RLS
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** A aplicação gerencia a autenticação client-side via código individual de funcionário, sem emitir JWT com claims customizadas (`auth.jwt() -> 'cargo'`) para validação de RLS nativa no PostgreSQL.
+
+### 20. Proteção de dados pessoais (LGPD)
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Campos sensíveis como CPF de visitantes e funcionários são armazenados em texto puro no banco de dados sem criptografia.
+
+---
+
+## 🟢 Operacional e DevOps
+
+### 21. Migrações automatizadas e versionadas via Supabase CLI
+- **Status:** 🟡 **IMPLEMENTADO PARCIALMENTE**
+- **Detalhes:** Existem arquivos SQL em `supabase/migrations/` e `SPECs/migrations/`, porém as alterações no banco nem sempre são executadas por pipeline automatizado de migração do Supabase CLI.
+
+### 22. Views para dashboards com `security_invoker = true`
+- **Status:** 🔴 **NÃO IMPLEMENTADO**
+- **Detalhes:** Não foram criadas views materializadas ou views SQL como `v_cargas_em_andamento` ou `v_bercos_ocupacao` para otimização das consultas dos painéis.
