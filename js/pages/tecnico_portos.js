@@ -410,17 +410,50 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleFuncBtn.addEventListener('click', () => funcForm.classList.toggle('hidden'));
   }
 
-  // Máscara automática de CPF (000.000.000-00) durante a digitação
+  // Máscara automática de CPF (000.000.000-00) durante a digitação.
+  // O cursor precisa ser preservado: reescrever o valor sem reposicionar a
+  // seleção joga o cursor para o fim do campo, e qualquer correção no meio do
+  // CPF passa a inserir os dígitos no final — embaralhando um CPF que o
+  // operador digitou certo e recusando o cadastro com "CPF Inválido".
+  function formatarCpfMascara(digitos) {
+    const d = String(digitos || '').slice(0, 11);
+    if (d.length > 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+    if (d.length > 6) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+    if (d.length > 3) return `${d.slice(0, 3)}.${d.slice(3)}`;
+    return d;
+  }
+
+  function aplicarMascaraCpf(input) {
+    const anterior = input.value;
+    const cursor = (input.selectionStart == null) ? anterior.length : input.selectionStart;
+    const digitosAntes = fatiarCpfSomenteDigitos(anterior.slice(0, cursor)).length;
+    const mascarado = formatarCpfMascara(fatiarCpfSomenteDigitos(anterior));
+
+    if (mascarado === anterior) return; // nada mudou: não mexe na seleção
+
+    input.value = mascarado;
+
+    // Reposiciona o cursor logo após o mesmo número de dígitos que havia antes.
+    let novaPos = mascarado.length;
+    if (digitosAntes === 0) {
+      novaPos = 0;
+    } else {
+      let vistos = 0;
+      for (let i = 0; i < mascarado.length; i++) {
+        if (/\d/.test(mascarado[i])) {
+          vistos += 1;
+          if (vistos === digitosAntes) { novaPos = i + 1; break; }
+        }
+      }
+    }
+    try {
+      input.setSelectionRange(novaPos, novaPos);
+    } catch (err) { /* tipo de campo sem suporte a seleção */ }
+  }
+
   const funcCpfInput = document.getElementById('funcCpf');
   if (funcCpfInput) {
-    funcCpfInput.addEventListener('input', () => {
-      const d = fatiarCpfSomenteDigitos(funcCpfInput.value).slice(0, 11);
-      let masked = d;
-      if (d.length > 9) masked = `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-      else if (d.length > 6) masked = `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-      else if (d.length > 3) masked = `${d.slice(0, 3)}.${d.slice(3)}`;
-      funcCpfInput.value = masked;
-    });
+    funcCpfInput.addEventListener('input', () => aplicarMascaraCpf(funcCpfInput));
   }
 
   if (funcForm) {

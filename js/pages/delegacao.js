@@ -32,10 +32,39 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
   }
 
+  // Aplicação da máscara preservando o cursor: reescrever o valor sem
+  // reposicionar a seleção joga o cursor para o fim do campo e faz a correção
+  // de um dígito no meio do CPF inserir os números no lugar errado.
+  function aplicarMascaraCPFPreservandoCursor(input) {
+    const anterior = input.value;
+    const cursor = (input.selectionStart == null) ? anterior.length : input.selectionStart;
+    const digitosAntes = anterior.slice(0, cursor).replace(/\D/g, '').length;
+    const mascarado = aplicarMascaraCPF(anterior);
+    if (mascarado === anterior) return; // nada mudou: não mexe na seleção
+
+    input.value = mascarado;
+
+    let novaPos = mascarado.length;
+    if (digitosAntes === 0) {
+      novaPos = 0;
+    } else {
+      let vistos = 0;
+      for (let i = 0; i < mascarado.length; i++) {
+        if (/\d/.test(mascarado[i])) {
+          vistos += 1;
+          if (vistos === digitosAntes) { novaPos = i + 1; break; }
+        }
+      }
+    }
+    try {
+      input.setSelectionRange(novaPos, novaPos);
+    } catch (err) { /* tipo de campo sem suporte a seleção */ }
+  }
+
   const delegCpfInput = document.getElementById('delegSubstitutoCpf');
   if (delegCpfInput) {
     delegCpfInput.addEventListener('input', (e) => {
-      e.target.value = aplicarMascaraCPF(e.target.value);
+      aplicarMascaraCPFPreservandoCursor(e.target);
     });
   }
 

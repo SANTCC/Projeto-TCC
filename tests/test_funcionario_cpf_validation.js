@@ -15,7 +15,11 @@
  *   4. CPFs de dígitos repetidos ou incompletos também são recusados;
  *   5. a mensagem de erro explica a regra, sem repetir exemplo enganoso;
  *   6. um CPF válido é aceito: gravado só com dígitos e exibido formatado;
- *   7. a máscara automática formata os 11 dígitos e o valor mascarado é aceito.
+ *   7. a máscara automática formata os 11 dígitos e o valor mascarado é aceito;
+ *   8. corrigir um dígito no meio do CPF preserva o cursor, sem embaralhar os
+ *      números (regressão: a máscara jogava o cursor para o fim e o CPF que o
+ *      operador digitou certo era recusado como inválido);
+ *   9. o CPF corrigido no meio do campo é realmente aceito no envio.
  *
  * Uso: node tests/test_funcionario_cpf_validation.js
  */
@@ -80,6 +84,23 @@ async function carregarPagina() {
   await prontoDom(w);
   await aguardar(60);
   return { janela, w, estado };
+}
+
+/** Digita um caractere na posição do cursor (mesmo comportamento do navegador). */
+function digitar(w, input, caractere) {
+  const pos = input.selectionStart == null ? input.value.length : input.selectionStart;
+  input.value = input.value.slice(0, pos) + caractere + input.value.slice(pos);
+  input.setSelectionRange(pos + 1, pos + 1);
+  input.dispatchEvent(new w.Event('input', { bubbles: true }));
+}
+
+/** Backspace na posição do cursor (mesmo comportamento do navegador). */
+function apagar(w, input) {
+  const pos = input.selectionStart == null ? input.value.length : input.selectionStart;
+  if (pos === 0) return;
+  input.value = input.value.slice(0, pos - 1) + input.value.slice(pos);
+  input.setSelectionRange(pos - 1, pos - 1);
+  input.dispatchEvent(new w.Event('input', { bubbles: true }));
 }
 
 function preencherFormulario(w, cpf) {
@@ -178,6 +199,34 @@ const titulos = (estado, titulo) => estado.feedbacks.filter((f) => f.titulo === 
       payloadMascarado.cpf === CPF_VALIDO_DIGITOS &&
       titulos(paginaA.estado, 'Funcionário Cadastrado').length === 1,
       `mascarado="${mascarado}", cpf="${payloadMascarado.cpf}", inserções=${paginaA.estado.insercoes.length}`);
+
+    // ------------------------------------------------------------------
+    log('\n5. Regressão: corrigir um dígito no meio do CPF não embaralha os números');
+    const paginaC = await carregarPagina();
+    janelas.push(paginaC.janela);
+    const campoC = paginaC.w.document.getElementById('funcCpf');
+    for (const caractere of CPF_VALIDO_DIGITOS) digitar(paginaC.w, campoC, caractere);
+    const digitado = campoC.value;
+    campoC.setSelectionRange(6, 6); // cursor entre o 4º e o 5º dígito ("529.98|2")
+    apagar(paginaC.w, campoC); // apaga o 4º dígito (8)
+    const cursorAposApagar = campoC.selectionStart;
+    digitar(paginaC.w, campoC, '8'); // redigita o mesmo dígito corrigido
+    const cursorAposCorrigir = campoC.selectionStart;
+    check('corrigir um dígito no meio preserva o cursor e mantém a ordem dos números',
+      digitado === CPF_VALIDO && campoC.value === CPF_VALIDO &&
+      cursorAposApagar === 5 && cursorAposCorrigir === 6,
+      `digitado="${digitado}", após corrigir="${campoC.value}", ` +
+      `cursor=${cursorAposApagar}->${cursorAposCorrigir}`);
+
+    enviarFormulario(paginaC.w); // envia o valor que ficou no campo
+    await esperar(() => paginaC.estado.insercoes.length > 0);
+    const payloadCorrigido = (paginaC.estado.insercoes[0] || {}).payload || {};
+    check('o CPF corrigido no meio do campo é aceito no envio',
+      paginaC.estado.insercoes.length === 1 && payloadCorrigido.cpf === CPF_VALIDO_DIGITOS &&
+      titulos(paginaC.estado, 'CPF Inválido').length === 0 &&
+      titulos(paginaC.estado, 'Funcionário Cadastrado').length === 1,
+      `cpf="${payloadCorrigido.cpf}", inserções=${paginaC.estado.insercoes.length}, ` +
+      `recusas=${titulos(paginaC.estado, 'CPF Inválido').length}`);
   } catch (erro) {
     log(`\n❌ Erro inesperado: ${erro && erro.stack ? erro.stack : erro}`);
     process.exitCode = 1;
