@@ -1,5 +1,5 @@
 {
-  "descricao": "Gate Lighthouse para pull requests (Backlog 3, item H). Categorias: pontuação mínima de 0 a 1. Auditorias críticas precisam passar, exceto nas exceções por página, que são dívida conhecida e devem ser removidas ao serem corrigidas. Calibrado com as páginas estilizadas (Tailwind carregado): sem os estilos, a auditoria de contraste não é medida. Cada página é medida em 3 rodadas: a pontuação de categoria é a mediana, e uma auditoria crítica só reprova se falhar na maioria das rodadas (o CI compartilhado é ruidoso). Os mínimos são piso de regressão.",
+  "descricao": "Gate Lighthouse para pull requests (Backlog 3, item H). Categorias: pontuação mínima de 0 a 1. Auditorias críticas precisam passar, exceto nas exceções por página, que são dívida conhecida e devem ser removidas ao serem corrigidas. Calibrado com as páginas estilizadas (Tailwind carregado): sem os estilos, a auditoria de contraste não é medida. Cada página é medida em 3 rodadas: a pontuação de categoria é a mediana, e uma auditoria crítica só reprova se falhar na maioria das rodadas (o CI compartilhado é ruidoso). Os mínimos são piso de regressão. about.html (documentação ilustrada) é pública e autocontida: mede a página como ela é publicada.",
   "rede": {
     "bloquearHosts": [
       "*supabase.co*"
@@ -57,6 +57,10 @@
     {
       "arquivo": "tecnico_portos.html",
       "sessao": "sessao"
+    },
+    {
+      "arquivo": "about.html",
+      "sessao": "publica"
     }
   ],
   "auditoriasCriticas": [
