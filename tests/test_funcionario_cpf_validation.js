@@ -2,24 +2,26 @@
 /**
  * TESTE — VALIDAÇÃO DE CPF NO CADASTRO DE FUNCIONÁRIOS (tecnico_portos.html)
  * ----------------------------------------------------------------------------
- * O campo de CPF do cadastro de funcionários sugeria o placeholder
- * "Ex: 123.456.789-00", um CPF cujos dígitos verificadores são inválidos: quem
- * copiava o exemplo tinha o cadastro recusado sem entender o motivo.
+ * Regra do produto: o CPF pode ser fictício. A única restrição é que ele não se
+ * repita dentro do sistema. Por isso o cadastro de funcionário NÃO confere os
+ * dígitos verificadores (módulo 11), assim como os cadastros de visitante e de
+ * substituto da delegação. Ele recusa apenas CPF incompleto ou com todos os
+ * dígitos iguais, e bloqueia CPF já cadastrado.
  *
- * A correção troca o exemplo por uma orientação neutra (a máscara é automática e
- * os dígitos verificadores precisam conferir) e este teste garante, com a página
- * real montada em jsdom e o módulo js/pages/tecnico_portos.js executando:
- *   1. o placeholder não sugere mais um CPF de exemplo;
- *   2. a página orienta sobre os dígitos verificadores (texto de ajuda + aria);
- *   3. o envio com o exemplo antigo é recusado (dígito verificador inválido);
- *   4. CPFs de dígitos repetidos ou incompletos também são recusados;
- *   5. a mensagem de erro explica a regra, sem repetir exemplo enganoso;
- *   6. um CPF válido é aceito: gravado só com dígitos e exibido formatado;
- *   7. a máscara automática formata os 11 dígitos e o valor mascarado é aceito;
- *   8. corrigir um dígito no meio do CPF preserva o cursor, sem embaralhar os
+ * Este teste garante, com a página real montada em jsdom e o módulo
+ * js/pages/tecnico_portos.js executando:
+ *   1. o placeholder não sugere um CPF de exemplo;
+ *   2. a página explica que o CPF pode ser fictício, mas não pode se repetir;
+ *   3. um CPF fictício com dígitos verificadores inválidos é aceito quando não está duplicado;
+ *   4. CPF repetido (mesmo número, outra matrícula) continua bloqueado;
+ *   5. CPF incompleto ou com todos os dígitos iguais é recusado;
+ *   6. a mensagem de erro descreve a regra atual, sem exemplo enganoso;
+ *   7. um CPF válido é aceito: gravado só com dígitos e exibido formatado;
+ *   8. a máscara automática formata os 11 dígitos e o valor mascarado é aceito;
+ *   9. corrigir um dígito no meio do CPF preserva o cursor, sem embaralhar os
  *      números (regressão: a máscara jogava o cursor para o fim e o CPF que o
  *      operador digitou certo era recusado como inválido);
- *   9. o CPF corrigido no meio do campo é realmente aceito no envio.
+ *  10. o CPF corrigido no meio do campo é realmente aceito no envio.
  *
  * Uso: node tests/test_funcionario_cpf_validation.js
  */
@@ -27,7 +29,8 @@ const H = require('./webmcp-harness');
 const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, htmlDaPagina } = H;
 
 const PAGINA = 'tecnico_portos.html';
-const CPF_EXEMPLO_ANTIGO = '123.456.789-00'; // dígitos verificadores inválidos
+const CPF_FICTICIO = '123.456.789-00'; // dígitos verificadores inválidos: aceito (CPF fictício)
+const MATRICULA_2 = 'MAT-4322';
 const CPF_VALIDO = '529.982.247-25';
 const CPF_VALIDO_DIGITOS = '52998224725';
 const MATRICULA = 'MAT-4321';
@@ -133,7 +136,7 @@ const titulos = (estado, titulo) => estado.feedbacks.filter((f) => f.titulo === 
   const janelas = [];
   try {
     // ------------------------------------------------------------------
-    log('\n1. Interface: placeholder neutro e orientação sobre os dígitos verificadores');
+    log('\n1. Interface: placeholder neutro e orientação sobre CPF fictício e unicidade');
     const paginaA = await carregarPagina();
     janelas.push(paginaA.janela);
     const campoCpf = paginaA.w.document.getElementById('funcCpf');
@@ -144,33 +147,56 @@ const titulos = (estado, titulo) => estado.feedbacks.filter((f) => f.titulo === 
 
     const ajuda = paginaA.w.document.getElementById('funcCpfAjuda');
     const textoAjuda = ajuda ? String(ajuda.textContent || '').replace(/\s+/g, ' ').trim() : '';
-    check('a página explica que os dígitos verificadores precisam ser válidos',
+    check('a página diz que o CPF pode ser fictício, mas precisa ser único',
       Boolean(ajuda) && campoCpf.getAttribute('aria-describedby') === 'funcCpfAjuda' &&
-      /d[íi]gitos? verificador/i.test(textoAjuda) && /v[áa]lid/i.test(textoAjuda),
+      /fict[íi]cio/i.test(textoAjuda) && /[úu]nic/i.test(textoAjuda) && !/d[íi]gitos? verificador/i.test(textoAjuda),
       `ajuda="${textoAjuda}"`);
 
     // ------------------------------------------------------------------
-    log('\n2. Formulário real: CPF inválido não cadastra e explica o motivo');
-    enviarFormulario(paginaA.w, CPF_EXEMPLO_ANTIGO);
-    await esperar(() => titulos(paginaA.estado, 'CPF Inválido').length > 0);
-    check('o envio com o exemplo antigo (dígito verificador inválido) é recusado',
-      titulos(paginaA.estado, 'CPF Inválido').length === 1 && paginaA.estado.insercoes.length === 0,
-      `recusas=${titulos(paginaA.estado, 'CPF Inválido').length}, inserções=${paginaA.estado.insercoes.length}`);
+    log('\n2. Formulário real: CPF fictício é aceito quando não está duplicado');
+    const paginaF = await carregarPagina();
+    janelas.push(paginaF.janela);
+    enviarFormulario(paginaF.w, CPF_FICTICIO);
+    await esperar(() => paginaF.estado.insercoes.length > 0);
+    const payloadFicticio = (paginaF.estado.insercoes[0] || {}).payload || {};
+    check('CPF fictício com dígitos verificadores inválidos é aceito quando não está duplicado',
+      paginaF.estado.insercoes.length === 1 && payloadFicticio.cpf === '12345678900' &&
+      titulos(paginaF.estado, 'Funcionário Cadastrado').length === 1 &&
+      titulos(paginaF.estado, 'CPF Inválido').length === 0,
+      `inserções=${paginaF.estado.insercoes.length}, cpf=\"${payloadFicticio.cpf}\", ` +
+      `recusas=${titulos(paginaF.estado, 'CPF Inválido').length}`);
 
-    enviarFormulario(paginaA.w, '111.111.111-11'); // dígitos repetidos
-    enviarFormulario(paginaA.w, '12345'); // incompleto
-    await esperar(() => titulos(paginaA.estado, 'CPF Inválido').length >= 3);
-    check('CPFs de dígitos repetidos ou incompletos também são recusados',
-      titulos(paginaA.estado, 'CPF Inválido').length === 3 && paginaA.estado.insercoes.length === 0,
-      `recusas=${titulos(paginaA.estado, 'CPF Inválido').length}, inserções=${paginaA.estado.insercoes.length}`);
-
-    const mensagem = String((paginaA.estado.feedbacks[0] || {}).mensagem || '');
-    check('a mensagem de erro explica a regra dos dígitos verificadores, sem exemplo enganoso',
-      /d[íi]gitos? verificador/i.test(mensagem) && !/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(mensagem),
-      `mensagem="${mensagem}"`);
+    // Mesmo CPF com outra matrícula: a unicidade do CPF precisa bloquear.
+    paginaF.w.document.getElementById('funcMatricula').value = MATRICULA_2;
+    paginaF.w.document.getElementById('funcNome').value = 'Outro Funcionário';
+    paginaF.w.document.getElementById('funcCpf').value = CPF_FICTICIO;
+    paginaF.w.document.getElementById('funcDataNasc').value = NASCIMENTO;
+    paginaF.w.document.getElementById('funcCrudForm')
+      .dispatchEvent(new paginaF.w.Event('submit', { bubbles: true, cancelable: true }));
+    await esperar(() => titulos(paginaF.estado, 'CPF Já Cadastrado').length > 0);
+    check('CPF repetido (outra matrícula) continua bloqueado',
+      titulos(paginaF.estado, 'CPF Já Cadastrado').length === 1 && paginaF.estado.insercoes.length === 1,
+      `bloqueios=${titulos(paginaF.estado, 'CPF Já Cadastrado').length}, inserções=${paginaF.estado.insercoes.length}`);
 
     // ------------------------------------------------------------------
-    log('\n3. CPF válido: aceito, gravado somente com dígitos e exibido formatado');
+    log('\n3. Formulário real: CPF incompleto ou com todos os dígitos iguais é recusado');
+    const paginaR = await carregarPagina();
+    janelas.push(paginaR.janela);
+    enviarFormulario(paginaR.w, '111.111.111-11'); // dígitos repetidos
+    enviarFormulario(paginaR.w, '12345'); // incompleto
+    await esperar(() => titulos(paginaR.estado, 'CPF Inválido').length >= 2);
+    check('CPF com dígitos repetidos ou incompleto é recusado e não é gravado',
+      titulos(paginaR.estado, 'CPF Inválido').length === 2 && paginaR.estado.insercoes.length === 0,
+      `recusas=${titulos(paginaR.estado, 'CPF Inválido').length}, inserções=${paginaR.estado.insercoes.length}`);
+
+    const mensagem = String((paginaR.estado.feedbacks[0] || {}).mensagem || '');
+    check('a mensagem de erro descreve a regra atual (fictício pode, repetido não), sem exemplo enganoso',
+      /fict[íi]cio/i.test(mensagem) && /repet/i.test(mensagem) && !/d[íi]gitos? verificador/i.test(mensagem) &&
+      !/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(mensagem),
+      `mensagem=\"${mensagem}\"`);
+
+    // ------------------------------------------------------------------
+    log('\n4. CPF válido: aceito, gravado somente com dígitos e exibido formatado');
     const paginaB = await carregarPagina();
     janelas.push(paginaB.janela);
     enviarFormulario(paginaB.w, CPF_VALIDO);
@@ -186,7 +212,7 @@ const titulos = (estado, titulo) => estado.feedbacks.filter((f) => f.titulo === 
       `sucessos=${titulos(paginaB.estado, 'Funcionário Cadastrado').length}, cpf="${payload.cpf}", tabela="${tabela.slice(0, 120)}"`);
 
     // ------------------------------------------------------------------
-    log('\n4. Máscara automática: formata a digitação preservando o CPF');
+    log('\n5. Máscara automática: formata a digitação preservando o CPF');
     const campoDigitado = paginaA.w.document.getElementById('funcCpf');
     campoDigitado.value = CPF_VALIDO_DIGITOS;
     campoDigitado.dispatchEvent(new paginaA.w.Event('input', { bubbles: true }));
@@ -201,7 +227,7 @@ const titulos = (estado, titulo) => estado.feedbacks.filter((f) => f.titulo === 
       `mascarado="${mascarado}", cpf="${payloadMascarado.cpf}", inserções=${paginaA.estado.insercoes.length}`);
 
     // ------------------------------------------------------------------
-    log('\n5. Regressão: corrigir um dígito no meio do CPF não embaralha os números');
+    log('\n6. Regressão: corrigir um dígito no meio do CPF não embaralha os números');
     const paginaC = await carregarPagina();
     janelas.push(paginaC.janela);
     const campoC = paginaC.w.document.getElementById('funcCpf');

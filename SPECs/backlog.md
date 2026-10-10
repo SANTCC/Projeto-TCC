@@ -164,7 +164,7 @@ Ao fim de cada sessão, gerar/atualizar o relatório (`relatorio-backlog.md`) co
 - **10.7 Cache vs Supabase:** Supabase como fonte única; limpar cache legado.
 - **10.8 Performance:** `count: exact` e renderização otimizada.
 - **10.9 Erros silenciosos:** tratar `error` de toda operação e exibir via `mostrarFeedback`.
-- **10.10 CPF:** mascarar (`XXX.XXX.XXX-XX`) e validar dígitos.
+- **10.10 CPF:** mascarar (`XXX.XXX.XXX-XX`) e validar dígitos. *(Revisado: a regra vigente aceita CPF fictício; a restrição é só não repetir dentro do sistema. Os dígitos verificadores não são mais exigidos no cadastro de funcionário. CPF com todos os dígitos iguais é recusado.)*
 
 ## 12. Relatório Técnico de Auditoria (STS-01 Santos)
 

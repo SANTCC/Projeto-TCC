@@ -192,7 +192,7 @@ node test_suite_completa.js
 6. **Cache (10.7)**: chaves residuais expurgadas.
 7. **Contagem exata (10.8)**: `{ count: 'exact' }` nas consultas.
 8. **Feedback (10.9)**: erros tratados via `mostrarFeedback`.
-9. **CPF (10.10)**: 2 dígitos verificadores e máscara `XXX.XXX.XXX-XX`.
+9. **CPF (10.10)**: 2 dígitos verificadores e máscara `XXX.XXX.XXX-XX`. *Revisado:* a regra vigente aceita CPF fictício (só não pode repetir); o cadastro de funcionário não confere mais os dígitos verificadores.
 
 ---
 
