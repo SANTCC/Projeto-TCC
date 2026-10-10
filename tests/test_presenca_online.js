@@ -210,7 +210,9 @@ async function testarPaginaReal() {
 function testarConfiguracao() {
   log('\n[7] Configuração: módulo carregado após supabase-client.js em toda página com layout');
   const paginas = fs.readdirSync(ROOT).filter((f) => f.endsWith('.html'));
-  const comLayout = paginas.filter((f) => read(f).includes('js/layout.js'));
+  // Só conta como página com layout quem realmente carrega o script (about.html apenas cita o
+  // caminho na documentação e não tem a interface do app).
+  const comLayout = paginas.filter((f) => /<script[^>]+src="js\/layout\.js"/.test(read(f)));
   check('há páginas com layout para verificar', comLayout.length >= 9, `${comLayout.length}`);
   comLayout.forEach((arquivo) => {
     const html = read(arquivo);
