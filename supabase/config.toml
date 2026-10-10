@@ -32,6 +32,11 @@ verify_jwt = false
 [functions.scanner-qr]
 verify_jwt = false
 
+# log-acesso: registra IP e user agent de usuários autenticados (codigo_individual ativo em funcionarios).
+# Sem Supabase Auth: a identidade é validada dentro da função.
+[functions.log-acesso]
+verify_jwt = false
+
 # Seed de demonstração (Backlog 3, itens C e D): usuários mock por cargo e dados fictícios de navios,
 # contêineres, cargas e histórico. `supabase db reset` roda este arquivo localmente. Não aplicar em produção.
 [db.seed]
