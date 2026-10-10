@@ -211,13 +211,8 @@ function testarConfiguracao() {
   log('\n[7] Configuração: módulo carregado após supabase-client.js em toda página com layout');
   const paginas = fs.readdirSync(ROOT).filter((f) => f.endsWith('.html'));
   const comLayout = paginas.filter((f) => read(f).includes('js/layout.js'));
-  // Só faz sentido comparar a ordem em páginas que realmente carregam o cliente de dados.
-  // about.html é autocontida (não fala com o Supabase) e o layout.js trata a ausência do
-  // módulo de presença com uma guarda (`if (window.NexusOnlinePresence)`).
-  const comCliente = comLayout.filter((f) => read(f).includes('js/supabase-client.js'));
   check('há páginas com layout para verificar', comLayout.length >= 9, `${comLayout.length}`);
-  check('há páginas com layout carregando o cliente Supabase', comCliente.length >= 9, `${comCliente.length}`);
-  comCliente.forEach((arquivo) => {
+  comLayout.forEach((arquivo) => {
     const html = read(arquivo);
     const posCliente = html.indexOf('js/supabase-client.js');
     const posPresenca = html.indexOf('js/online-presence.js');

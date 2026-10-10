@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-
-# O site é documentação interna de um projeto acadêmico; não há conteúdo privado aqui.
-Sitemap: /sitemap.xml

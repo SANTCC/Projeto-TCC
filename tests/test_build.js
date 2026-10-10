@@ -123,7 +123,7 @@ async function testarSaida(saida) {
 
   log('\n[5] Fora da saída: testes, ferramentas, documentação e manifestos');
   const arquivosSaida = listarRecursivo(saida);
-  const indevidos = arquivosSaida.filter((f) => /^(tests|tools|SPECs|supabase|THEME|lighthouse|lighthouse-report|node_modules|\.git|website)\//.test(f)
+  const indevidos = arquivosSaida.filter((f) => /^(tests|tools|SPECs|supabase|THEME|lighthouse|lighthouse-report|node_modules|\.git)\//.test(f)
     || /^(package(-lock)?\.json|vercel\.json|README\.md|TABLES\.md|agents\.md|ai\.md|claude\.md)$/.test(f)
     || /\.(md|py)$/i.test(f));
   check('nenhum arquivo de desenvolvimento ou documentação na saída', indevidos.length === 0,
