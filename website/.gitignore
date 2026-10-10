@@ -1,0 +1,17 @@
+# Dependências do site de documentação (npm install dentro de website/).
+node_modules/
+
+# Cache interno do Docusaurus (build incremental, registro de rotas).
+.docusaurus/
+
+# Saída alternativa: o build oficial escreve em ../docs (fora desta pasta).
+build/
+
+# Capturas de tela espelhadas de about/screenshots/ por scripts/copiar-capturas.js.
+# As cópias versionadas são as da saída publicada (docs/img/capturas/).
+static/img/capturas/
+
+# Logs e artefatos locais
+*.log
+.env
+.env.local

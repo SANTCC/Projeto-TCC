@@ -6,7 +6,8 @@
  *   - JS (js/**\/*.js e <script> inline das páginas): Terser, sem alterar nomes globais.
  *   - CSS (*.css e <style> inline das páginas): clean-css, nível 1 (sem reescrever regras).
  *   - HTML, imagens e demais estáticos: copiados. Os caminhos não mudam (js/xxx.js continua válido).
- *   - Fora da saída: testes, ferramentas, SPECs, supabase, THEME (protótipos), documentação e manifestos.
+ *   - Fora da saída: testes, ferramentas, SPECs, supabase, THEME (protótipos), documentação, o
+ *     site Docusaurus (`website/`, cuja saída é `docs/`) e manifestos.
  *
  * O Tailwind é carregado do CDN em tempo de execução (sem etapa de build) e os CDNs externos não são
  * alterados. `dist/` é gerado a cada build e está no .gitignore.
@@ -22,9 +23,11 @@ const RAIZ = path.join(__dirname, '..');
 const SAIDA_PADRAO = path.join(RAIZ, 'dist');
 
 // Diretórios que nunca vão para produção (em qualquer nível).
+// `docs` é a saída do site Docusaurus (website/) e `website` é a fonte desse site: nenhum dos
+// dois faz parte do app publicado em dist/.
 const DIRETORIOS_EXCLUIDOS = new Set([
   'node_modules', '.git', '.github', '.vercel', 'dist', 'tests', 'tools', 'SPECs', 'supabase', 'THEME',
-  'lighthouse', 'lighthouse-report'
+  'lighthouse', 'lighthouse-report', 'docs', 'website'
 ]);
 // Arquivos da raiz que não são servidos. Documentação (.md) e Python (.py) são excluídos em qualquer pasta.
 const ARQUIVOS_EXCLUIDOS = new Set([
