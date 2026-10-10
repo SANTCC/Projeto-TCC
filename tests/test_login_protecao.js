@@ -6,6 +6,8 @@
  *  - envio normal → chama login_funcionario uma vez
  *  - resposta "bloqueado" do servidor → mensagem de bloqueio, sem seguir adiante
  *  - migration 20261010020000 existe e cria a função e a tabela com RLS
+ *  - detector BotDetectorLib: veredito enviado ao servidor, fallback 'desconhecido'
+ *  - migration 20261010030000: limites por nível e regra do User-Agent
  *
  * Uso: node tests/test_login_protecao.js
  */
@@ -35,13 +37,14 @@ function check(nome, condicao, detalhe) {
   }
 }
 
-function criarTela({ resposta }) {
+function criarTela({ resposta, detector }) {
   const html = read('index.html');
   const dom = new JSDOM(html, { url: 'https://nexus.test/index.html', runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
   const chamadas = [];
   // JSDOM não implementa matchMedia (usado pelo tema do login)
   w.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+  if (detector) w.BotDetectorLib = detector;
   w.nexusSupabase = {
     rpc(funcao, args) {
       chamadas.push({ funcao, args });
@@ -121,6 +124,41 @@ async function enviar(w, codigo, honeypot) {
     check('tabela tentativas_login tem RLS ativa', /alter table public\.tentativas_login enable row level security/i.test(sql));
     check('concede execução somente a anon/authenticated', /grant execute on function public\.login_funcionario\(text\) to anon, authenticated/i.test(sql));
     check('login.js não usa .from(funcionarios) no login', !/from\('funcionarios'\)/.test(read('js/pages/login.js')));
+  }
+
+  // 6. Detector de navegador (BotDetectorLib) integrado ao login
+  {
+    console.log('\n6. Detector de navegador');
+    check('biblioteca vendorizada existe em js/vendor', fs.existsSync(path.join(ROOT, 'js/vendor/bot-detector.iife.min.js')));
+    check('licença/origem documentadas em js/vendor/README.md', /MIT/.test(read('js/vendor/README.md')) && /niksbanna\/js-bot-detector/.test(read('js/vendor/README.md')));
+    const html = read('index.html');
+    check('index.html carrega o detector antes de login.js', html.indexOf('js/vendor/bot-detector.iife.min.js') > 0 && html.indexOf('js/vendor/bot-detector.iife.min.js') < html.indexOf('js/pages/login.js'));
+
+    const cenarios = [
+      ['veredito suspicious vira "suspeito"', { detectInstant: async () => ({ verdict: 'suspicious' }) }, 'suspeito'],
+      ['veredito bot vira "bot"', { detectInstant: async () => ({ verdict: 'bot' }) }, 'bot'],
+      ['veredito human vira "humano"', { detectInstant: async () => ({ verdict: 'human' }) }, 'humano'],
+      ['detector que falha vira "desconhecido"', { detectInstant: async () => { throw new Error('x'); } }, 'desconhecido'],
+      ['detector ausente vira "desconhecido"', undefined, 'desconhecido']
+    ];
+    for (const [nome, detector, esperado] of cenarios) {
+      const { w, chamadas } = criarTela({ resposta: { ok: false, error: 'invalido' }, detector });
+      await sleep(1100);
+      await enviar(w, 'NX-1', '');
+      check(`login envia p_veredito: ${nome}`, chamadas.length === 1 && chamadas[0].args.p_veredito === esperado, JSON.stringify(chamadas));
+      w.close();
+    }
+  }
+
+  // 7. Migration de limites por veredito
+  {
+    console.log('\n7. Migration de limites por veredito');
+    const sql = read('supabase/migrations/20261010030000_login_limites_por_veredito.sql');
+    check('recria login_funcionario(p_codigo, p_veredito)', /login_funcionario\(p_codigo text, p_veredito text/.test(sql));
+    check('remove a assinatura anterior (sem sobrecarga ambígua)', /drop function if exists public\.login_funcionario\(text\)/i.test(sql));
+    check('limites: humano 5, suspeito 3, bot 2', /'humano'\s+then 5/.test(sql) && /'suspeito'\s+then 3/.test(sql) && /'bot'\s+then 2/.test(sql));
+    check('User-Agent de automação força nível bot', /headless\|phantomjs\|puppeteer/.test(sql) && /v_nivel := 'bot'/.test(sql));
+    check('concede execução com a nova assinatura', /grant execute on function public\.login_funcionario\(text, text\) to anon, authenticated/i.test(sql));
   }
 
   console.log(`\nResultado: ${passou} aprovado(s), ${falhou} falha(s).`);

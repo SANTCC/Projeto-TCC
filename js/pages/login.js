@@ -21,6 +21,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const TEMPO_MINIMO_ENVIO_MS = 1000;
   const telaCarregadaEm = Date.now();
 
+  // Detecção de navegador automatizado (js/vendor/bot-detector.iife.min.js, global BotDetectorLib).
+  // Começa ao abrir a tela e é aguardada no envio. Veredito: 'humano' | 'suspeito' | 'bot' | 'desconhecido'.
+  // O servidor usa esse nível para escolher o limite de tentativas (migration 20261010030000).
+  const TEMPO_MAX_DETECCAO_MS = 3000;
+  function detectarNivel() {
+    const detector = window.BotDetectorLib;
+    if (!detector || typeof detector.detectInstant !== 'function') return Promise.resolve('desconhecido');
+    const niveis = { human: 'humano', suspicious: 'suspeito', bot: 'bot' };
+    const deteccao = Promise.resolve()
+      .then(() => detector.detectInstant())
+      .then((r) => (r && niveis[r.verdict]) || 'desconhecido')
+      .catch(() => 'desconhecido');
+    const limite = new Promise((resolve) => setTimeout(() => resolve('desconhecido'), TEMPO_MAX_DETECCAO_MS));
+    return Promise.race([deteccao, limite]);
+  }
+  const nivelPromise = detectarNivel();
+
   // Modal Elements
   const recoveryModal = document.getElementById('recoveryModal');
   const openRecoveryModal = document.getElementById('openRecoveryModal');
@@ -158,7 +175,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (client) {
           // Validação no servidor (função login_funcionario, migration 20261010020000):
           // aceita código individual ou matrícula e bloqueia após 5 falhas em 15 min.
-          const { data, error } = await client.rpc('login_funcionario', { p_codigo: codeValue });
+          const nivel = await nivelPromise;
+          const { data, error } = await client.rpc('login_funcionario', { p_codigo: codeValue, p_veredito: nivel });
           if (error) throw error;
           if (data && data.error === 'bloqueado') {
             bloqueado = true;
