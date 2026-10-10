@@ -234,6 +234,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // Uso do agente WebMCP: mesma geração de PDF do botão da página (retorna true/false).
   window.nexusRelatorioGerarPdf = gerarRelatorioPdfA4;
 
+  // Função para calcular KPIs consolidados via Edge Function "kpis-calculo"
+  window.nexusCalcularKpisEdgeFunction = async function(codigoIndividual) {
+    if (!window.nexusSupabase || !window.nexusSupabase.functions) return null;
+    try {
+      const { data, error } = await window.nexusSupabase.functions.invoke('kpis-calculo', {
+        body: { codigo_individual: codigoIndividual || (session && session.codigo_individual) }
+      });
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.warn('kpis-calculo Edge Function:', e);
+      return null;
+    }
+  };
+
   // Tabela de Produtividade Real (T6.9, T6.10, Tarefa 4.1)
   // Uso do agente WebMCP: mesma geração de PDF do botão da página.
   window.nexusRelatorioGerarPdf = gerarRelatorioPdfA4;
