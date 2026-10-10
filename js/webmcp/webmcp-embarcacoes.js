@@ -218,7 +218,7 @@
   const cadastrarNavio = {
     nome: 'cadastrar_navio',
     titulo: 'Cadastrar navio',
-    descricao: 'Cadastra um navio pelo IMO único, com localização e GPS. Origem, destino e distância vêm da rota marítima cadastrada escolhida (não há distância manual). Só Inspetor ou Direção. Exige confirmação.',
+    descricao: 'Cadastra um navio pelo IMO único, com localização e GPS. Origem, destino e distância vêm da rota marítima cadastrada escolhida (não há distância manual). Navio DENTRO_DO_PORTO exige berço livre imediato (usa o primeiro livre se não informado). Só Inspetor ou Direção. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: G.inspecao,
     permissao: 'CADASTRAR_NAVIO',
@@ -230,7 +230,8 @@
         origem: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Origem', description: 'Porto de origem.' },
         destino: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Destino', description: 'Porto de destino.' },
         localizacao: { type: 'string', enum: LOCALIZACOES, rotulo: 'Localização', description: 'Situação inicial em relação ao porto.' },
-        gps: { type: 'string', minLength: 5, maxLength: 60, rotulo: 'GPS', description: 'Coordenadas, por exemplo -23.9608, -46.3022.' }
+        gps: { type: 'string', minLength: 5, maxLength: 60, rotulo: 'GPS', description: 'Coordenadas, por exemplo -23.9608, -46.3022.' },
+        berco: { type: 'string', minLength: 2, maxLength: 40, rotulo: 'Berço', description: 'Berço de atracação imediata (obrigatório para DENTRO_DO_PORTO; omita para usar o primeiro berço livre).' }
       },
       required: ['nome', 'imo', 'origem', 'destino', 'localizacao', 'gps'],
       additionalProperties: false
@@ -242,11 +243,22 @@
       if (args.gps !== undefined && naviosLocais().some((n) => (n.gps || '').trim() === args.gps.trim())) {
         return { codigo: 'LOCALIZACAO_OCUPADA', mensagem: 'Outro navio já está nesta coordenada GPS.' };
       }
+      if (args.localizacao === 'DENTRO_DO_PORTO') {
+        const bercos = D.bercos();
+        if (args.berco !== undefined) {
+          const alvo = bercos.find((b) => (b.nome || '') === args.berco);
+          if (!alvo) return { codigo: 'BERCO_NAO_ENCONTRADO', mensagem: `Berço "${args.berco}" não existe no Terminal STS-01.` };
+          if (alvo.estado === 'OCUPADO') return { codigo: 'BERCO_OCUPADO', mensagem: `O ${args.berco} já está ocupado pelo navio ${alvo.navio_nome || 'registrado'}.` };
+        } else if (!bercos.some((b) => b.estado !== 'OCUPADO')) {
+          return { codigo: 'BERCO_INDISPONIVEL', mensagem: 'Não há berço livre no Terminal STS-01 para um navio DENTRO_DO_PORTO.' };
+        }
+      }
       return null;
     },
     resumo: (args) => [
       `Cadastrar o navio ${args.nome} (IMO ${imoNormalizado(args.imo)}).`,
-      `Rota ${args.origem} → ${args.destino} (distância da rota cadastrada) · situação ${args.localizacao}.`
+      `Rota ${args.origem} → ${args.destino} (distância da rota cadastrada) · situação ${args.localizacao}.`,
+      args.localizacao === 'DENTRO_DO_PORTO' ? `Berço de atracação imediata: ${args.berco || 'primeiro livre'}.` : 'Sem berço (navio fora do porto).'
     ],
     executar: async (args) => {
       const f = formularioOuErro('navioForm');
@@ -281,6 +293,36 @@
       }
       rotaSel.value = opcaoRota.value;
       rotaSel.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Berço OBRIGATÓRIO e imediato para DENTRO_DO_PORTO: a página exige o
+      // select preenchido; o agente lista os berços livres (mesma fonte da
+      // tela) e usa o pedido ou o primeiro livre.
+      if (args.localizacao === 'DENTRO_DO_PORTO') {
+        const bercoSel = f.form.querySelector('#navioBercoSelect');
+        if (!bercoSel) {
+          return { ok: false, codigo: 'FORMULARIO_INCOMPLETO', mensagem: 'O formulário da página não expõe o select de berço (#navioBercoSelect).' };
+        }
+        const livres = D.bercos().filter((b) => b.estado !== 'OCUPADO' && b.nome);
+        if (livres.length === 0) {
+          return { ok: false, codigo: 'BERCO_INDISPONIVEL', mensagem: 'Não há berço livre no Terminal STS-01 para um navio DENTRO_DO_PORTO.' };
+        }
+        while (bercoSel.firstChild) bercoSel.removeChild(bercoSel.firstChild);
+        const vazio = document.createElement('option');
+        vazio.value = '';
+        vazio.textContent = 'Selecione o berço...';
+        bercoSel.appendChild(vazio);
+        livres.forEach((b) => {
+          const opt = document.createElement('option');
+          opt.value = b.nome;
+          opt.textContent = b.nome;
+          bercoSel.appendChild(opt);
+        });
+        const pedido = String(args.berco || '').trim();
+        const escolhido = (pedido && livres.some((b) => b.nome === pedido)) ? pedido : livres[0].nome;
+        bercoSel.disabled = false;
+        bercoSel.value = escolhido;
+        bercoSel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       const invalido = camposInvalidos(f.form);
       if (invalido) return invalido;
       const imo = imoNormalizado(args.imo);

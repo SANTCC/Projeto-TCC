@@ -8,6 +8,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  // Utilitário Anti-XSS (js/security.js) — codifica dados não confiáveis
+  // antes de qualquer inserção em HTML.
+  const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
+
   // Validador de estrutura de CPF (permite CPFs fictícios de 11 dígitos - Tarefa 5)
   function validarCPF(cpfStr) {
     if (!cpfStr) return false;
@@ -33,6 +37,118 @@ document.addEventListener('DOMContentLoaded', () => {
     delegCpfInput.addEventListener('input', (e) => {
       e.target.value = aplicarMascaraCPF(e.target.value);
     });
+  }
+
+  // Autopreenchimento do substituto pelo NOME COMPLETO: ao digitar o nome, o
+  // sistema sugere funcionários cadastrados (Supabase + cache local) e, ao
+  // escolher um, preenche CPF e data de nascimento automaticamente.
+  const delegNomeInput = document.getElementById('delegSubstitutoNome');
+  const delegDataNascInput = document.getElementById('delegSubstitutoDataNasc');
+  let delegNomesCache = null;
+  let delegSugestTimer = null;
+
+  function normalizarNomeBusca(s) {
+    return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+
+  async function carregarFuncionariosParaAutofill() {
+    if (Array.isArray(delegNomesCache)) return delegNomesCache;
+    const lista = [];
+    const vistos = new Set();
+    const push = (f) => {
+      const nome = String(f.nome || '').trim();
+      if (!nome) return;
+      const chave = normalizarNomeBusca(nome) + '|' + String(f.matricula || f.cpf || '');
+      if (vistos.has(chave)) return;
+      vistos.add(chave);
+      lista.push({
+        nome,
+        matricula: f.matricula || '',
+        cargo: f.cargo_nome || f.cargo || '',
+        cpf: String(f.cpf || f.documento || '').replace(/\D/g, ''),
+        data_nascimento: f.data_nascimento || f.dataNascimento || ''
+      });
+    };
+    try {
+      const locais = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+      locais.forEach(push);
+    } catch (e) {}
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('funcionarios').select('*').eq('ativo', true).order('nome', { ascending: true }).limit(200);
+        if (!error && Array.isArray(data)) data.forEach(push);
+      } catch (e) {
+        console.warn('[NexusPort] Autofill de delegação: Supabase indisponível, usando cache local.', e);
+      }
+    }
+    delegNomesCache = lista;
+    return lista;
+  }
+
+  function formatarCpfDeleg(digitos) {
+    const d = String(digitos || '').replace(/\D/g, '').slice(0, 11);
+    if (d.length !== 11) return digitos || '';
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+
+  if (delegNomeInput) {
+    const wrapper = delegNomeInput.parentElement;
+    if (wrapper) wrapper.classList.add('relative');
+    const sugBox = document.createElement('div');
+    sugBox.id = 'delegNomeSuggest';
+    sugBox.className = 'hidden absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white dark:bg-slate-900 border border-nexus-border dark:border-slate-700 rounded-xl shadow-xl text-xs';
+    if (wrapper) wrapper.appendChild(sugBox);
+    const esconder = () => sugBox.classList.add('hidden');
+
+    async function montarSugestoesDeleg() {
+      const termo = normalizarNomeBusca(delegNomeInput.value);
+      if (termo.length < 2) { esconder(); return; }
+      const lista = await carregarFuncionariosParaAutofill();
+      const matches = lista
+        .map(f => {
+          const nomeN = normalizarNomeBusca(f.nome);
+          let pontos = 0;
+          if (nomeN === termo) pontos = 100;
+          else if (nomeN.startsWith(termo)) pontos = 80;
+          else if (nomeN.includes(termo)) pontos = 60;
+          else if (termo.split(/\s+/).filter(Boolean).every(p => nomeN.includes(p))) pontos = 40;
+          return { f, pontos };
+        })
+        .filter(m => m.pontos > 0)
+        .sort((a, b) => b.pontos - a.pontos)
+        .slice(0, 8);
+      if (matches.length === 0) { esconder(); return; }
+      sugBox.innerHTML = matches.map(({ f }, idx) => {
+        const detalhe = [f.matricula, f.cargo].filter(Boolean).join(' • ') || 'Funcionário cadastrado';
+        return `<button type="button" data-idx="${idx}" class="w-full text-left px-3 py-2 hover:bg-nexus-bg dark:hover:bg-slate-800 flex flex-col gap-0.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+          <span class="font-bold text-nexus-900 dark:text-white">${esc(f.nome)}</span>
+          <span class="font-mono text-slate-500 dark:text-slate-400">${esc(detalhe)}</span>
+        </button>`;
+      }).join('');
+      sugBox.classList.remove('hidden');
+      sugBox.querySelectorAll('[data-idx]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const escolhido = matches[parseInt(btn.getAttribute('data-idx'), 10)].f;
+          delegNomeInput.value = escolhido.nome;
+          if (delegCpfInput && escolhido.cpf) delegCpfInput.value = formatarCpfDeleg(escolhido.cpf);
+          if (delegDataNascInput && escolhido.data_nascimento) {
+            const iso = String(escolhido.data_nascimento).slice(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) delegDataNascInput.value = iso;
+          }
+          esconder();
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('sucesso', 'Substituto Identificado', `CPF e data de nascimento preenchidos a partir do cadastro de ${escolhido.nome}. Confira a vigência e confirme a designação.`);
+          }
+        });
+      });
+    }
+
+    delegNomeInput.addEventListener('input', () => {
+      clearTimeout(delegSugestTimer);
+      delegSugestTimer = setTimeout(montarSugestoesDeleg, 150);
+    });
+    delegNomeInput.addEventListener('blur', () => setTimeout(esconder, 150));
+    delegNomeInput.addEventListener('focus', () => { if (delegNomeInput.value.trim().length >= 2) montarSugestoesDeleg(); });
   }
 
   const substitutoNome = document.getElementById('substitutoNome');

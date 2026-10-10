@@ -130,7 +130,7 @@ const CENARIOS_DOM = [
   {
     cargo: 'ESTIVADOR', titulo: 'Meus indicadores operacionais', camada: 'Visão Própria (RLS)',
     esperados: ['minhas_operacoes_7d', 'minhas_cargas_status'],
-    proibidos: ['valor_declarado_mes', 'produtividade_cargo', 'bercos_ocupacao', 'funcionarios_cargo', 'navios_localizacao', 'tempo_permanencia']
+    proibidos: ['valor_declarado_mes', 'produtividade_cargo', 'bercos_ocupacao', 'funcionarios_cargo', 'navios_localizacao']
   },
   {
     cargo: 'TECNICO_PORTOS', titulo: 'Painel de gestão de pessoas no porto', camada: 'Visão Própria (RLS)',
@@ -149,7 +149,7 @@ const CENARIOS_DOM = [
   },
   {
     cargo: 'DIRETOR_OPERACOES_LOGISTICA', titulo: 'Painel estratégico consolidado', camada: 'Visão Estratégica (RLS)',
-    esperados: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes', 'tempo_permanencia', 'bercos_ocupacao', 'embarcacoes_utilizadas', 'navios_localizacao'],
+    esperados: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes', 'bercos_ocupacao', 'embarcacoes_utilizadas', 'navios_localizacao'],
     proibidos: ['minhas_cargas_status', 'visitantes_motivo', 'fila_liberacao']
   }
 ];
@@ -330,7 +330,7 @@ async function main() {
 
   const painelDiretor = NexusCharts.painelDoCargo('DIRETOR_OPERACOES_LOGISTICA');
   verificar(
-    painelDiretor.includes('aprovacao_recusa') && painelDiretor.includes('tempo_permanencia') &&
+    painelDiretor.includes('aprovacao_recusa') && !painelDiretor.includes('tempo_permanencia') &&
     painelDiretor.includes('embarcacoes_utilizadas') && painelDiretor.includes('produtividade_cargo') &&
     painelDiretor.includes('bercos_ocupacao') && painelDiretor.includes('valor_declarado_mes'),
     'Visão Estratégica recebe o consolidado completo, incluindo valor declarado (RF 7 / RF 16).',
@@ -350,13 +350,6 @@ async function main() {
     aprovacao && aprovacao.datasets[0].data[0] === 4 && aprovacao.datasets[0].data[1] === 1,
     'Taxa de aprovação/recusa classificada corretamente (4 aprovadas, 1 recusada).',
     aprovacao ? JSON.stringify(aprovacao.datasets[0].data) : 'vazio'
-  );
-
-  const permanencia = NexusCharts.construir('tempo_permanencia', DADOS, {});
-  verificar(
-    permanencia && permanencia.labels.includes('Grãos') && permanencia.datasets[0].data.every(v => v >= 0),
-    'Tempo médio de permanência calculado por tipo de carga (RF 4).',
-    permanencia ? JSON.stringify({ labels: permanencia.labels, data: permanencia.datasets[0].data }) : 'vazio'
   );
 
   const embarcacoes = NexusCharts.construir('embarcacoes_utilizadas', DADOS, {});

@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTable();
   }
 
-  // Renderização de cargas canceladas na Tabela de Cargas Canceladas
+  // Renderização de cargas canceladas na Tabela de Cargas Canceladas (cinza)
   function renderCargasCanceladasTable(cargasCanceladas = []) {
     const canceladasTableBody = document.getElementById('cargasCanceladasTableBody');
     if (!canceladasTableBody) return;
@@ -195,16 +195,151 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     canceladasTableBody.innerHTML = cargasCanceladas.map(c => `
-      <tr class="hover:bg-red-50/50 dark:hover:bg-red-950/20 transition-colors">
-        <td class="p-3 font-mono font-bold text-red-600 dark:text-red-400">${esc(c.id)}</td>
+      <tr class="hover:bg-slate-200/60 dark:hover:bg-slate-700/40 transition-colors">
+        <td class="p-3 font-mono font-bold text-slate-600 dark:text-slate-300">${esc(c.id)}</td>
         <td class="p-3 font-bold">${esc(c.tipo || 'Carga Geral')}</td>
         <td class="p-3 font-mono text-xs">${esc(c.portoDescarga || 'Setor Pátio')}</td>
         <td class="p-3 text-slate-700 dark:text-slate-300">${esc(c.motivoCancelamento || c.motivo_recusa || c.motivo || 'Cancelado pelo Supervisor')}</td>
         <td class="p-3">
-          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300">CANCELADA</span>
+          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-200">CANCELADA</span>
         </td>
       </tr>
     `).join('');
+  }
+
+  // Renderização de cargas recusadas na Tabela de Cargas Recusadas (vermelha)
+  function renderCargasRecusadasTable(cargasRecusadas = []) {
+    const recusadasTableBody = document.getElementById('cargasRecusadasTableBody');
+    if (!recusadasTableBody) return;
+
+    if (!cargasRecusadas || cargasRecusadas.length === 0) {
+      recusadasTableBody.innerHTML = `
+        <tr>
+          <td colspan="5" class="p-4 text-center text-slate-400 italic">Nenhuma carga recusada no sistema.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    recusadasTableBody.innerHTML = cargasRecusadas.map(c => `
+      <tr class="hover:bg-red-100/60 dark:hover:bg-red-950/40 transition-colors">
+        <td class="p-3 font-mono font-bold text-red-700 dark:text-red-300">${esc(c.id)}</td>
+        <td class="p-3 font-bold">${esc(c.tipo || 'Carga Geral')}</td>
+        <td class="p-3 font-mono text-xs">${esc(c.portoDescarga || 'Setor Pátio')}</td>
+        <td class="p-3 text-slate-700 dark:text-slate-300">${esc(c.motivoRecusa || c.motivo_recusa || c.motivo || 'Recusada na inspeção formal')}</td>
+        <td class="p-3">
+          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-red-600 text-white dark:bg-red-800 dark:text-red-100">RECUSADA</span>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // Herança do navio do contêiner (pós-vinculação): cargas vinculadas com a
+  // opção "Herdar o navio do contêiner" — cujo contêiner ainda não tinha navio
+  // na época — passam a exibir o navio automaticamente assim que o contêiner
+  // for vinculado a alguma embarcação (Embarcações & GPS).
+  function contemineresPorIdentificacao() {
+    const mapa = new Map();
+    try {
+      (JSON.parse(localStorage.getItem('nexus_containers_list') || '[]') || []).forEach(cont => {
+        const chave = String(cont.identificacao || cont.id || '').trim().toLowerCase();
+        if (chave) mapa.set(chave, cont);
+      });
+    } catch (e) { /* cache indisponível */ }
+    return mapa;
+  }
+
+  function sincronizarNaviosHerdados() {
+    const mapaConts = contemineresPorIdentificacao();
+    if (mapaConts.size === 0) return false;
+    const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    let alterado = false;
+    cargasFluxoList.forEach(c => {
+      if (!c || c.status === 'CANCELADA' || c.status === 'RECUSADA') return;
+      // Herdam: cargas marcadas com a opção de herança OU (legado) cargas com
+      // contêiner e sem navio vinculado.
+      const deveHerdar = c.herdarNavioDoContainer === true || (c.container && !c.navio);
+      if (!deveHerdar || !c.container) return;
+      const cont = mapaConts.get(String(c.container).trim().toLowerCase());
+      if (!cont) return;
+      const nomeNavioCont = cont.navio && String(cont.navio).trim() !== '' && cont.navio !== 'Não Vinculado' && cont.navio !== 'Vinculado'
+        ? cont.navio
+        : null;
+      let navioResolvido = nomeNavioCont;
+      let navioIdResolvido = cont.navio_id || cont.navioId || c.navioId || c.navio_id || null;
+      if (!navioResolvido && navioIdResolvido) {
+        const porId = naviosLocais.find(n => String(n.id || '') === String(navioIdResolvido));
+        if (porId) navioResolvido = porId.nome;
+      }
+      if (navioResolvido && (!c.navio || c.navio !== navioResolvido)) {
+        c.navio = navioResolvido;
+        if (navioIdResolvido) {
+          c.navioId = navioIdResolvido;
+          c.navio_id = navioIdResolvido;
+        }
+        alterado = true;
+      }
+    });
+    if (alterado) {
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
+    }
+    return alterado;
+  }
+
+  // ETA da carga = ETA do navio vinculado (@ 33 km/h, RN 9). Sem navio ou sem
+  // rota cadastrada, não há estimativa — nunca um valor inventado.
+  let rotasCacheCargas = null;
+  async function carregarRotasCacheCargas() {
+    if (Array.isArray(rotasCacheCargas)) return rotasCacheCargas;
+    rotasCacheCargas = [];
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('rotas_maritimas').select('*');
+        if (!error && Array.isArray(data)) rotasCacheCargas = data;
+      } catch (e) { /* mantém vazio */ }
+    }
+    return rotasCacheCargas;
+  }
+
+  function distanciaRotaCargas(origem, destino) {
+    const o = String(origem || '').trim().toLowerCase();
+    const d = String(destino || '').trim().toLowerCase();
+    if (!o || !d || !Array.isArray(rotasCacheCargas)) return null;
+    // A rota vale nos dois sentidos: o caminho de volta tem a mesma distância.
+    const rota = rotasCacheCargas.find(r => {
+      const ro = String(r.origem || '').trim().toLowerCase();
+      const rd = String(r.destino || '').trim().toLowerCase();
+      return (ro === o && rd === d) || (ro === d && rd === o);
+    });
+    const km = rota ? parseFloat(rota.distancia_km) : NaN;
+    return km > 0 ? km : null;
+  }
+
+  function etaCargaTexto(carga, naviosLocais) {
+    if (!carga || !carga.navio) return null;
+    const navio = (naviosLocais || []).find(n => String(n.nome || '').toLowerCase() === String(carga.navio).toLowerCase());
+    if (!navio) return null;
+    if (navio.localizacao === 'NO_PORTO_DE_DESTINO') return 'Entregue no destino';
+    if (navio.localizacao === 'DENTRO_DO_PORTO') {
+      const km = parseFloat(navio.distancia) || distanciaRotaCargas(navio.origem, navio.destino);
+      if (!(km > 0)) return 'ETA após liberação do navio';
+      const horas = km / 33;
+      const d = Math.floor(horas / 24);
+      const h = Math.round(horas % 24);
+      return `ETA previsto: ${d}d ${h}h após liberação`;
+    }
+    const km = parseFloat(navio.distancia) || distanciaRotaCargas(navio.origem, navio.destino);
+    if (!(km > 0)) return 'ETA indisponível: rota sem distância';
+    let saida = Date.now();
+    if (navio.dataSaida) {
+      const parsed = new Date(navio.dataSaida).getTime();
+      if (!isNaN(parsed)) saida = parsed;
+    }
+    const restante = Math.max(0, (km / 33) * 3600 * 1000 - (Date.now() - saida));
+    const d = Math.floor(restante / 86400000);
+    const h = Math.floor((restante % 86400000) / 3600000);
+    const m = Math.floor((restante % 3600000) / 60000);
+    return `ETA: ${d}d ${h}h ${m}m`;
   }
 
   function renderTable() {
@@ -212,37 +347,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cargasFluxoList = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
 
+    // Herança pós-vinculação: contêiner que ganhou navio atualiza as cargas
+    sincronizarNaviosHerdados();
+
     const filterNavioVal = (document.getElementById('filterNavio')?.value || '').trim().toLowerCase();
     const filterContVal = (document.getElementById('filterContainer')?.value || '').trim().toLowerCase();
     const filterTipoVal = (document.getElementById('filterTipo')?.value || '').trim().toLowerCase();
+    const filterCodigoVal = (document.getElementById('filterCodigo')?.value || '').trim().toLowerCase();
     const filterStatusVal = (document.getElementById('filterStatus')?.value || '').trim();
     const filterDataInicioVal = (document.getElementById('filterDataInicio')?.value || '').trim();
     const filterDataFimVal = (document.getElementById('filterDataFim')?.value || '').trim();
     const filterBuscaVal = (document.getElementById('filterBusca')?.value || '').trim().toLowerCase();
 
-    // Atualiza status "ENTREGUE" AUTOMATICAMENTE se o navio chegou ao porto de destino
+    // Transições AUTOMÁTICAS pelo navio vinculado (sem botão "Liberar"):
+    // navio liberado (FORA_DO_PORTO) → carga EM_TRANSITO;
+    // navio no destino → carga ENTREGUE.
     const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    let statusAutoAlterado = false;
 
     cargasFluxoList.forEach(c => {
-      if (c.navio && c.status !== 'CANCELADA') {
-        const navObj = naviosLocais.find(n => n.nome && n.nome.toLowerCase() === c.navio.toLowerCase());
-        if (navObj && (navObj.localizacao === 'NO_PORTO_DE_DESTINO' || navObj.estado === 'NO_PORTO_DE_DESTINO')) {
-          c.status = 'ENTREGUE';
-        }
+      if (!c.navio || c.status === 'CANCELADA' || c.status === 'RECUSADA') return;
+      const navObj = naviosLocais.find(n => n.nome && n.nome.toLowerCase() === c.navio.toLowerCase());
+      if (!navObj) return;
+      const loc = navObj.localizacao || navObj.estado;
+      if ((loc === 'NO_PORTO_DE_DESTINO') && c.status !== 'ENTREGUE') {
+        c.status = 'ENTREGUE';
+        statusAutoAlterado = true;
+      } else if (loc === 'FORA_DO_PORTO' && !['EM_TRANSITO', 'ENTREGUE'].includes(c.status)) {
+        c.status = 'EM_TRANSITO';
+        statusAutoAlterado = true;
       }
     });
+    if (statusAutoAlterado) {
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('cargas');
+      }
+    }
 
+    // A tabela principal exibe apenas cargas pendentes no fluxo; canceladas e
+    // recusadas ficam nas tabelas próprias (cinza e vermelha).
     // Exibe cargas ativas aplicando Visão Própria / Visão Operacional (RF 1.3)
-    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA');
+    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA');
     if (window.NexusVision && window.NexusVision.filterCargasForUser) {
       cargasAtivas = window.NexusVision.filterCargasForUser(cargasAtivas, session);
     }
     const cargasCanceladas = cargasFluxoList.filter(c => c.status === 'CANCELADA');
+    const cargasRecusadas = cargasFluxoList.filter(c => c.status === 'RECUSADA');
 
     const userItems = cargasAtivas.filter(c => {
       if (filterNavioVal && !(c.navio || '').toLowerCase().includes(filterNavioVal)) return false;
       if (filterContVal && !(c.container || '').toLowerCase().includes(filterContVal)) return false;
       if (filterTipoVal && !(c.tipo || '').toLowerCase().includes(filterTipoVal) && !(c.natureza || '').toLowerCase().includes(filterTipoVal)) return false;
+      // Filtro por código da carga (usado pelo Scanner QR Code): compara id e QR
+      if (filterCodigoVal) {
+        const codigoHay = `${c.id || ''} ${c.qrCode || ''}`.toLowerCase();
+        const codigoBusca = filterCodigoVal.replace(/^qr-/i, '');
+        if (!codigoHay.includes(filterCodigoVal) && !codigoHay.includes(codigoBusca)) return false;
+      }
       if (filterStatusVal && c.status !== filterStatusVal) return false;
 
       // Busca rápida livre (Backlog 3 - 7b): código, QR, tipo, natureza, contêiner, navio
@@ -267,6 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     renderCargasCanceladasTable(cargasCanceladas);
+    renderCargasRecusadasTable(cargasRecusadas);
 
     // Contador "Exibindo X de Y" (Backlog 3 - 7b)
     const cargasCounterEl = document.getElementById('cargasCounter');
@@ -324,12 +487,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
+      // Sem botão "Liberar": a carga vai para EM_TRANSITO automaticamente quando
+      // o navio vinculado for liberado para o porto de destino (Embarcações & GPS).
       if (c.status === 'PRONTA_PARA_ENTREGA' && isSupervisor) {
-        if (emergenciaAtiva) {
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: liberação de saída bloqueada temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">local_shipping</span><span class="hidden sm:inline">Liberar</span></button>`;
-        } else {
-          actionButtonsHtml += `<button type="button" title="Liberar saída da carga do porto" aria-label="Liberar saída" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'LIBERAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">local_shipping</span><span class="hidden sm:inline">Liberar</span></button>`;
-        }
+        const navioInfoHtml = c.navio
+          ? `aguardando liberação do navio ${esc(c.navio)}`
+          : 'sem navio vinculado — use "Vincular"';
+        actionButtonsHtml += `<span title="A saída ocorre automaticamente quando o navio vinculado for liberado (${navioInfoHtml})" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-semibold text-[11px] flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span><span class="hidden sm:inline">Aguarda navio</span></span>`;
       }
 
       // C10: Botão manual de "Entregar" REMOVIDO — a entrega ocorre automaticamente quando o navio chega ao destino
@@ -342,6 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
         actionButtonsHtml = `<span class="text-slate-400 font-mono italic text-[11px]">Leitura (${esc(session.cargo_nome || userCargo)})</span>`;
       }
 
+      const etaLinha = etaCargaTexto(c, naviosLocais);
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
           <td class="p-3 font-mono font-bold text-nexus-500 whitespace-nowrap">
@@ -354,6 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 text-xs whitespace-nowrap">
             <span class="block font-mono ${c.container ? '' : 'text-slate-400 italic'}">${c.container ? esc(c.container) : 'Contêiner: não vinculado'}</span>
             <span class="block text-[10px] ${c.navio ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
+            ${etaLinha ? `<span class="block text-[10px] font-mono text-indigo-600 dark:text-indigo-400" title="Estimativa calculada pelo navio vinculado (@ 33 km/h)">${esc(etaLinha)}</span>` : ''}
           </td>
           <td class="p-3 whitespace-nowrap">
             <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase ${
@@ -384,6 +550,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const filterNavio = document.getElementById('filterNavio');
   const filterContainer = document.getElementById('filterContainer');
   const filterTipo = document.getElementById('filterTipo');
+  const filterCodigo = document.getElementById('filterCodigo');
   const filterStatus = document.getElementById('filterStatus');
   const filterDataInicio = document.getElementById('filterDataInicio');
   const filterDataFim = document.getElementById('filterDataFim');
@@ -392,18 +559,22 @@ document.addEventListener('DOMContentLoaded', () => {
   if (filterNavio) filterNavio.value = '';
   if (filterContainer) filterContainer.value = '';
   if (filterTipo) filterTipo.value = '';
+  if (filterCodigo) filterCodigo.value = '';
   if (filterStatus) filterStatus.value = '';
   if (filterDataInicio) filterDataInicio.value = '';
   if (filterDataFim) filterDataFim.value = '';
 
-  if (cargaQueryParam && filterTipo) {
-    filterTipo.value = cargaQueryParam.replace('QR-', '');
+  // Scanner QR Code ("Ir para Tela de Ação do Cargo"): o código escaneado vai
+  // para o campo de CÓDIGO da carga — antes caía no campo "Tipo de Carga" e
+  // filtrava todas as cargas para fora, inclusive a escaneada.
+  if (cargaQueryParam && filterCodigo) {
+    filterCodigo.value = cargaQueryParam.replace(/^QR-/i, '');
   }
 
   const filterBusca = document.getElementById('filterBusca');
   if (filterBusca) filterBusca.value = '';
 
-  [filterNavio, filterContainer, filterTipo, filterStatus, filterDataInicio, filterDataFim, filterBusca].forEach(el => {
+  [filterNavio, filterContainer, filterTipo, filterCodigo, filterStatus, filterDataInicio, filterDataFim, filterBusca].forEach(el => {
     if (el) {
       el.addEventListener('input', renderTable);
       el.addEventListener('change', renderTable);
@@ -415,6 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (filterNavio) filterNavio.value = '';
       if (filterContainer) filterContainer.value = '';
       if (filterTipo) filterTipo.value = '';
+      if (filterCodigo) filterCodigo.value = '';
       if (filterStatus) filterStatus.value = '';
       if (filterDataInicio) filterDataInicio.value = '';
       if (filterDataFim) filterDataFim.value = '';
@@ -456,24 +628,59 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  const agDataPrevistaEl = document.getElementById('agDataPrevista');
-  const todayStr = new Date().toISOString().split('T')[0];
-  if (agDataPrevistaEl) {
-    agDataPrevistaEl.setAttribute('min', todayStr);
+  // Destino final = rota marítima cadastrada (sem digitação manual). A estimativa
+  // de chegada é calculada pelo ETA do navio vinculado — não há mais campo de
+  // data prevista de entrega no agendamento.
+  const agDestinoSel = document.getElementById('agDestino');
+  let rotasDestinoCache = null;
+
+  async function carregarRotasDestino() {
+    if (Array.isArray(rotasDestinoCache)) return rotasDestinoCache;
+    rotasDestinoCache = [];
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('rotas_maritimas').select('*').order('destino', { ascending: true });
+        if (!error && Array.isArray(data)) rotasDestinoCache = data;
+      } catch (e) { /* mantém vazio */ }
+    }
+    return rotasDestinoCache;
+  }
+
+  async function preencherSelectDestinoRota() {
+    if (!agDestinoSel) return;
+    const rotas = await carregarRotasDestino();
+    if (!rotas || rotas.length === 0) {
+      agDestinoSel.innerHTML = '<option value="">Nenhuma rota cadastrada — peça ao Supervisor para registrar em Embarcações & GPS (Gestão de Rotas Marítimas).</option>';
+      return;
+    }
+    const atual = agDestinoSel.value;
+    agDestinoSel.innerHTML = '<option value="">Selecione o destino (rota cadastrada)...</option>' +
+      rotas.map((r, idx) => {
+        const dist = parseFloat(r.distancia_km);
+        const trechoKm = dist > 0 ? ` (${dist.toLocaleString('pt-BR')} km)` : '';
+        return `<option value="${idx}">${esc(r.origem)} ➔ ${esc(r.destino)}${esc(trechoKm)}</option>`;
+      }).join('');
+    if (atual) agDestinoSel.value = atual;
+  }
+
+  function rotaDestinoSelecionada() {
+    if (!agDestinoSel || agDestinoSel.value === '') return null;
+    const rotas = Array.isArray(rotasDestinoCache) ? rotasDestinoCache : [];
+    return rotas[parseInt(agDestinoSel.value, 10)] || null;
   }
 
   // A opção padrão da sessão precisa existir mesmo com o formulário oculto
   // (o agente WebMCP abre o formulário sem clicar no botão superior).
   preencherSelectEstivadorResponsavel();
+  preencherSelectDestinoRota();
+  carregarRotasCacheCargas().then(() => renderTable());
 
   if (toggleFormBtn && agendamentoForm) {
     toggleFormBtn.addEventListener('click', () => {
       agendamentoForm.classList.toggle('hidden');
-      if (!agendamentoForm.classList.contains('hidden') && agDataPrevistaEl) {
-        agDataPrevistaEl.setAttribute('min', new Date().toISOString().split('T')[0]);
-      }
       if (!agendamentoForm.classList.contains('hidden')) {
         preencherSelectEstivadorResponsavel();
+        preencherSelectDestinoRota();
       }
     });
   }
@@ -510,15 +717,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const valorVal = parseFloat(document.getElementById('agValor').value) || 0;
       const natureza = document.getElementById('agNatureza').value.trim();
       const portoDescarga = document.getElementById('agPortoDescarga').value;
-      const destino = document.getElementById('agDestino').value.trim();
-      const dataPrevista = agDataPrevistaEl ? agDataPrevistaEl.value : '';
-
-      // Tarefa 3: Bloquear data prevista de entrega no passado
-      const hojeData = new Date().toISOString().split('T')[0];
-      if (dataPrevista && dataPrevista < hojeData) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Inválida', 'A data prevista de entrega não pode ser anterior ao dia de hoje!');
+      const rotaDestino = rotaDestinoSelecionada();
+      if (!rotaDestino) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Destino Obrigatório', 'Selecione o destino final entre as rotas marítimas cadastradas no sistema. Se a rota desejada não existir, solicite ao Supervisor o registro em Embarcações & GPS (Gestão de Rotas Marítimas).');
         return;
       }
+      const destino = rotaDestino.destino;
+      const rotaOrigem = rotaDestino.origem || 'Porto de Santos';
 
       // Item 16: Validação de valores estritamente positivos em peso, volume e valor declarado
       if (pesoVal <= 0 || volumeVal <= 0 || valorVal <= 0) {
@@ -555,6 +760,8 @@ document.addEventListener('DOMContentLoaded', () => {
         natureza,
         portoDescarga,
         destino,
+        rotaOrigem,
+        rota_id: rotaDestino.id || null,
         status: 'AGENDAMENTO',
         container: '',
         navio: '',
@@ -602,9 +809,10 @@ document.addEventListener('DOMContentLoaded', () => {
               cargasFluxoList[lastIdx].rawDbId = resCarga.id;
               localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
             }
+            // Sem data prevista manual: a estimativa de chegada é o ETA do navio
+            // vinculado. O agendamento registra apenas o vínculo com a carga.
             await window.nexusSupabase.from('agendamentos').insert({
-              carga_id: resCarga.id,
-              data_prevista_entrega: dataPrevista || new Date().toISOString().split('T')[0]
+              carga_id: resCarga.id
             }).catch(() => {});
 
             // Backlog 3 (Anotação 3.4) — persiste a atribuição do responsável
@@ -920,6 +1128,10 @@ document.addEventListener('DOMContentLoaded', () => {
       targetCargaParaVinculacao.navio = navVal;
       targetCargaParaVinculacao.navioId = navUuid;
       targetCargaParaVinculacao.navio_id = navUuid;
+      // Opção "Herdar o navio do contêiner": se o contêiner ainda não tem
+      // navio, a carga passa a exibi-lo automaticamente quando ele for
+      // vinculado (sincronizarNaviosHerdados). Escolha explícita não herda.
+      targetCargaParaVinculacao.herdarNavioDoContainer = !vincularNavioSelect || vincularNavioSelect.value === '';
 
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
 
@@ -973,7 +1185,10 @@ document.addEventListener('DOMContentLoaded', () => {
       renderTable();
       fecharVincularModal();
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Vinculação Concluída', `Carga ${targetCargaParaVinculacao.id} vinculada ao Contêiner ${contIdentificacao} e Navio ${navVal} com sucesso!`);
+        const msgVinculo = navVal
+          ? `Carga ${targetCargaParaVinculacao.id} vinculada ao Contêiner ${contIdentificacao} e Navio ${navVal} com sucesso!`
+          : `Carga ${targetCargaParaVinculacao.id} vinculada ao Contêiner ${contIdentificacao}. O contêiner ainda não tem navio: assim que ele for vinculado a uma embarcação, a carga herdará o navio automaticamente.`;
+        window.mostrarFeedback('sucesso', 'Vinculação Concluída', msgVinculo);
       }
     });
   }
@@ -1006,8 +1221,163 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Movimentação entre setores do pátio: cria a tarefa pendente do guindaste
+  // (visível em Embarcações & GPS). O Setor do Pátio da carga só é alterado
+  // quando a tarefa for marcada como concluída por lá.
+  const SETORES_PATIO = [
+    'Pátio Principal (Setor A)',
+    'Pátio STS-01 (Setor B)',
+    'Pátio STS-01 (Setor C)',
+    'Pátio STS-01 (Setor Refrigeração)'
+  ];
+
+  function guindastesDisponiveis() {
+    let guindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+    if (!Array.isArray(guindastes) || guindastes.length === 0) {
+      guindastes = [
+        { id: 'GND-01-STS', identificacao: 'GND-01-STS', estado: 'OPERANTE' },
+        { id: 'GND-02-STS', identificacao: 'GND-02-STS', estado: 'OPERANTE' }
+      ];
+      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastes));
+    }
+    return guindastes;
+  }
+
+  function montarInstrucaoMovimentacao(carga, setorDestino, guindasteIdent) {
+    return `Movimentar a carga ${carga.id} (${carga.tipo || 'Carga Geral'} — ${carga.peso || '?'} / ${carga.volume || '?'}) ` +
+      `do setor "${carga.portoDescarga || 'atual'}" para o setor "${setorDestino}", utilizando o guindaste ${guindasteIdent}. ` +
+      `Após posicionar a carga no setor de destino, marcar esta tarefa como concluída para atualizar o Setor do Pátio da carga.`;
+  }
+
+  async function criarTarefaMovimentacao(carga, setorDestino, guindasteIdent) {
+    const guindastes = guindastesDisponiveis();
+    const gnd = guindastes.find(g => String(g.identificacao || '').toUpperCase() === String(guindasteIdent || '').toUpperCase());
+    if (!gnd) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Guindaste Inválido', `Guindaste "${guindasteIdent}" não encontrado no cadastro.`);
+      return false;
+    }
+    if (gnd.estado && gnd.estado !== 'OPERANTE') {
+      if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Guindaste Indisponível', `O guindaste ${gnd.identificacao} está em "${gnd.estado}" e não pode executar a tarefa. Escolha um guindaste OPERANTE.`);
+      return false;
+    }
+    if (!SETORES_PATIO.includes(setorDestino)) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Setor Inválido', 'Selecione um setor de destino válido do pátio.');
+      return false;
+    }
+    if (setorDestino === carga.portoDescarga) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Mesmo Setor', `A carga ${carga.id} já está no setor "${setorDestino}". Escolha um setor de destino diferente.`);
+      return false;
+    }
+
+    const instrucoes = montarInstrucaoMovimentacao(carga, setorDestino, gnd.identificacao);
+    const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+    const tarefasFiltradas = tarefasGnd.filter(t => t.cargaId !== carga.id);
+    const novaTarefa = {
+      id: `TRF-${carga.id}-${Date.now()}`,
+      guindasteId: gnd.identificacao,
+      cargaId: carga.id,
+      tipoCarga: carga.tipo || 'Carga Geral',
+      origem: carga.portoDescarga || 'Setor atual',
+      destino: setorDestino,
+      instrucoes,
+      status: 'PENDENTE',
+      dataCriacao: new Date().toLocaleString('pt-BR'),
+      solicitadoPor: session.nome || session.matricula || 'Estivador'
+    };
+    tarefasFiltradas.push(novaTarefa);
+    localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasFiltradas));
+
+    carga.guindasteDesignado = gnd.identificacao;
+    carga.movimentacaoPendente = setorDestino;
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao(carga.id, 'EDICAO', `Tarefa de movimentação criada: ${carga.portoDescarga} ➔ ${setorDestino} via Guindaste ${gnd.identificacao} (aguardando conclusão)`);
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('guindaste_tarefas');
+    }
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Tarefa de Movimentação Criada', `Carga ${carga.id}: movimentação de "${carga.portoDescarga}" para "${setorDestino}" atribuída ao guindaste ${gnd.identificacao}. A tarefa está pendente em Embarcações & GPS — o setor só muda após a conclusão por lá.`);
+    }
+    return true;
+  }
+
+  // Modal de movimentação (setor de destino + guindaste + instruções)
+  const movimentarModal = document.getElementById('movimentarModal');
+  const closeMovimentarModalBtn = document.getElementById('closeMovimentarModalBtn');
+  const cancelMovimentarModalBtn = document.getElementById('cancelMovimentarModalBtn');
+  const confirmMovimentarModalBtn = document.getElementById('confirmMovimentarModalBtn');
+  const movimentarSetorSelect = document.getElementById('movimentarSetorSelect');
+  const movimentarGuindasteSelect = document.getElementById('movimentarGuindasteSelect');
+  const movimentarCargaIdLabel = document.getElementById('movimentarCargaIdLabel');
+  const movimentarSetorAtualLabel = document.getElementById('movimentarSetorAtualLabel');
+  const movimentarInstrucaoBox = document.getElementById('movimentarInstrucaoBox');
+  const movimentarInstrucaoText = document.getElementById('movimentarInstrucaoText');
+  let targetCargaMovimentacao = null;
+
+  function fecharMovimentarModal() {
+    if (movimentarModal) movimentarModal.classList.add('hidden');
+    targetCargaMovimentacao = null;
+  }
+
+  function atualizarInstrucaoMovimentacao() {
+    if (!targetCargaMovimentacao || !movimentarSetorSelect || !movimentarGuindasteSelect) return;
+    const setor = movimentarSetorSelect.value;
+    const gnd = movimentarGuindasteSelect.value;
+    if (setor && gnd && movimentarInstrucaoBox && movimentarInstrucaoText) {
+      movimentarInstrucaoText.textContent = montarInstrucaoMovimentacao(targetCargaMovimentacao, setor, gnd);
+      movimentarInstrucaoBox.classList.remove('hidden');
+    } else if (movimentarInstrucaoBox) {
+      movimentarInstrucaoBox.classList.add('hidden');
+    }
+  }
+
+  window.abrirModalMovimentacao = function(idCarga) {
+    targetCargaMovimentacao = cargasFluxoList.find(c => c.id === idCarga);
+    if (!targetCargaMovimentacao || !movimentarModal) return;
+    if (movimentarCargaIdLabel) movimentarCargaIdLabel.textContent = targetCargaMovimentacao.id;
+    if (movimentarSetorAtualLabel) movimentarSetorAtualLabel.textContent = targetCargaMovimentacao.portoDescarga || '—';
+    if (movimentarSetorSelect) movimentarSetorSelect.value = '';
+    if (movimentarGuindasteSelect) {
+      const guindastes = guindastesDisponiveis();
+      movimentarGuindasteSelect.innerHTML = '<option value="">Selecione o guindaste...</option>' +
+        guindastes.map(g => {
+          const operante = !g.estado || g.estado === 'OPERANTE';
+          return `<option value="${esc(g.identificacao)}" ${operante ? '' : 'disabled'}>${esc(g.identificacao)} (${esc(g.estado || 'OPERANTE')})${operante ? '' : ' — indisponível'}</option>`;
+        }).join('');
+    }
+    if (movimentarInstrucaoBox) movimentarInstrucaoBox.classList.add('hidden');
+    movimentarModal.classList.remove('hidden');
+  };
+
+  if (movimentarSetorSelect) movimentarSetorSelect.addEventListener('change', atualizarInstrucaoMovimentacao);
+  if (movimentarGuindasteSelect) movimentarGuindasteSelect.addEventListener('change', atualizarInstrucaoMovimentacao);
+  if (closeMovimentarModalBtn) closeMovimentarModalBtn.addEventListener('click', fecharMovimentarModal);
+  if (cancelMovimentarModalBtn) cancelMovimentarModalBtn.addEventListener('click', fecharMovimentarModal);
+  if (confirmMovimentarModalBtn) {
+    confirmMovimentarModalBtn.addEventListener('click', async () => {
+      if (!targetCargaMovimentacao) return;
+      const setor = movimentarSetorSelect ? movimentarSetorSelect.value : '';
+      const gnd = movimentarGuindasteSelect ? movimentarGuindasteSelect.value : '';
+      if (!setor) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Setor Obrigatório', 'Selecione o setor de destino da carga no pátio.');
+        return;
+      }
+      if (!gnd) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Guindaste Obrigatório', 'Selecione o guindaste que executará a movimentação.');
+        return;
+      }
+      const ok = await criarTarefaMovimentacao(targetCargaMovimentacao, setor, gnd);
+      if (ok) {
+        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
+        fecharMovimentarModal();
+        renderTable();
+      }
+    });
+  }
+
   // Executa Ações Operacionais
-  // opcoes (uso do agente WebMCP; a interface não envia): { guindasteIdentificacao?, motivo? } evitam os diálogos.
+  // opcoes (uso do agente WebMCP; a interface não envia): { guindasteIdentificacao?, setorDestino?, motivo? } evitam os diálogos.
   window.executarAcaoCarga = async function(idCarga, acao, opcoes) {
     const op = opcoes || {};
     const carga = cargasFluxoList.find(c => c.id === idCarga);
@@ -1035,58 +1405,21 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Validacao de ocupacao de berço e concorrência: bercoAlvo.estado === 'OCUPADO' && bercoAlvo.carga_id !== idCarga
-      // Seleção do Guindaste para movimentar a carga até a Sala de Contêiner
-      let guindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
-      if (guindastes.length === 0) {
-        guindastes = [
-          { id: 'GND-01-STS', identificacao: 'GND-01-STS', estado: 'OPERANTE' },
-          { id: 'GND-02-STS', identificacao: 'GND-02-STS', estado: 'OPERANTE' }
-        ];
-        localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastes));
-      }
-
-      const gndOptionsText = guindastes.map((g, idx) => `${idx + 1} - ${g.identificacao} (${g.estado})`).join('\n');
-      let selecaoGnd;
-      if (op.guindasteIdentificacao !== undefined) {
-        const idxGnd = guindastes.findIndex((g) => g.identificacao === op.guindasteIdentificacao);
-        selecaoGnd = idxGnd >= 0 ? String(idxGnd + 1) : '';
-      } else {
-        selecaoGnd = await window.nexusPrompt('Movimentar para Sala de Contêiner', `Selecione o Guindaste que será usado para movimentar a carga ${idCarga} até a Sala de Contêiner:\n${gndOptionsText}`);
-      }
-
-      if (!selecaoGnd) return;
-
-      const idxSelGnd = parseInt(selecaoGnd, 10) - 1;
-      if (isNaN(idxSelGnd) || !guindastes[idxSelGnd]) {
-        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Guindaste selecionado é inválido.');
+      // Uso do agente WebMCP: setor + guindaste informados criam a tarefa sem modal.
+      if (op.setorDestino !== undefined || op.guindasteIdentificacao !== undefined) {
+        if (!op.setorDestino || !op.guindasteIdentificacao) {
+          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Dados Incompletos', 'Informe o setor de destino e o guindaste para criar a tarefa de movimentação.');
+          return;
+        }
+        await criarTarefaMovimentacao(carga, op.setorDestino, op.guindasteIdentificacao);
+        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
+        renderTable();
         return;
       }
 
-      const gndSelecionado = guindastes[idxSelGnd];
-      carga.portoDescarga = 'Sala de Contêiner';
-      carga.guindasteDesignado = gndSelecionado.identificacao;
-
-      // Adiciona tarefa para o guindaste na página Embarcações & GPS
-      const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-      // Evita duplicidade de tarefas ativas para a mesma carga
-      const tarefasFiltradas = tarefasGnd.filter(t => t.cargaId !== idCarga);
-      tarefasFiltradas.push({
-        id: `TRF-${idCarga}`,
-        guindasteId: gndSelecionado.identificacao,
-        cargaId: idCarga,
-        tipoCarga: carga.tipo || 'Carga Geral',
-        destino: 'Sala de Contêiner',
-        dataCriacao: new Date().toLocaleString('pt-BR')
-      });
-      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasFiltradas));
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao(idCarga, 'EDICAO', `Carga direcionada para Sala de Contêiner via Guindaste ${gndSelecionado.identificacao}`);
-      }
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Movimentação Solicitada', `Carga ${idCarga} associada ao Guindaste ${gndSelecionado.identificacao} com destino à Sala de Contêiner. Tarefa criada em Embarcações & GPS.`);
-      }
+      // Interface: abre o modal com setor de destino + guindaste.
+      window.abrirModalMovimentacao(idCarga);
+      return;
     } else if (acao === 'RECEBER') {
       if (!isConferenteRole) {
         if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Conferentes de Carga podem registrar o recebimento físico!');
@@ -1133,32 +1466,13 @@ document.addEventListener('DOMContentLoaded', () => {
       // C4, A6, A7: Modal centralizado de vinculação com trava de capacidade max 75 m³
       window.abrirModalVinculacao(idCarga);
     } else if (acao === 'LIBERAR') {
-      // Item 6 (backlog): nenhuma liberação de saída com o alarme de emergência ativo
-      if (typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva()) {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Emergência Ativa', 'Operações do pátio bloqueadas temporariamente enquanto o alarme de emergência estiver ativo.');
-        }
-        return;
-      }
-
-      // C17 & Regra A6: Carga não pode sair do porto ou ir para trânsito sem vincular a contêiner e navio
-      if (!carga.container || !carga.navio) {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Bloqueio de Segurança', `BLOQUEIO DE SEGURANÇA (Regra A6 / C17): A carga ${idCarga} não pode ser liberada para saída ou trânsito sem estar vinculada obrigatoriamente a um contêiner e a um navio! Use o botão "Vincular" primeiro.`);
-        }
-        return;
-      }
-      // Sem destino cadastrado na carga, a mensagem informa isso (nenhum destino padrão é inventado).
-      const destinoCarga = carga.portoDescarga || carga.destino || null;
-      const trechoDestino = destinoCarga ? `com destino a ${destinoCarga}` : '(destino não informado no cadastro da carga)';
-      carga.status = 'EM_TRANSITO';
-
-      if (window.registrarTrailDecisao) {
-        await window.registrarTrailDecisao('LIBEROU_CARGA', idCarga, `Liberada para saída pelo Supervisor ${trechoDestino}. Vínculos: Contêiner ${carga.container} / Navio ${carga.navio}`);
-      }
+      // Ação descontinuada: não existe mais liberação manual de carga. O status
+      // vai para EM_TRANSITO automaticamente quando o navio vinculado for
+      // liberado para o porto de destino (Embarcações & GPS → Liberar Saída).
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Saída Liberada', `Carga ${idCarga} liberada pelo Supervisor para saída ${trechoDestino}. Vínculos validados: Contêiner ${carga.container} / Navio ${carga.navio}.`);
+        window.mostrarFeedback('info', 'Liberação Automática', `A carga ${idCarga} entrará em EM_TRANSITO automaticamente quando o navio vinculado (${carga.navio || 'sem navio vinculado — use "Vincular"'}) for liberado em Embarcações & GPS. Não há mais liberação manual por botão.`);
       }
+      return;
     } else if (acao === 'CANCELAR') {
       const statusPermitidos = ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'];
       if (!statusPermitidos.includes(carga.status)) {
@@ -1178,6 +1492,10 @@ document.addEventListener('DOMContentLoaded', () => {
         carga.container_id = null;
         carga.navio = '';
         carga.navio_id = null;
+        carga.navioId = null;
+        carga.herdarNavioDoContainer = false;
+        carga.movimentacaoPendente = null;
+        carga.guindasteDesignado = null;
 
         // Item 3: Remove tarefas de guindaste atreladas à carga cancelada
         let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
