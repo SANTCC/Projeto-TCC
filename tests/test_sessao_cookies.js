@@ -40,9 +40,15 @@ function check(label, ok, detalhe) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Cliente Supabase falso: só o encadeamento usado por js/pages/login.js (from/select/eq/single). */
+/** Cliente Supabase falso: simula a função login_funcionario usada por js/pages/login.js. */
 function clienteSupabaseFalso(funcionarios) {
   return {
+    rpc(funcao, args) {
+      const codigo = String(args.p_codigo || '').toUpperCase();
+      const f = funcionarios.find((x) => x.ativo && (x.codigo_individual === codigo || x.matricula === codigo));
+      if (!f) return Promise.resolve({ data: { ok: false, error: 'invalido' }, error: null });
+      return Promise.resolve({ data: { ok: true, id: f.id, matricula: f.matricula, codigo_individual: f.codigo_individual, nome: f.nome, cargo: f.cargo }, error: null });
+    },
     from(tabela) {
       const filtros = [];
       const consulta = {
@@ -252,7 +258,7 @@ async function main() {
       antesDosScripts: (win) => { win.nexusSupabase = clienteSupabaseFalso(funcionarios); }
     });
     login.w.document.dispatchEvent(new login.w.Event('DOMContentLoaded', { bubbles: true }));
-    await sleep(10);
+    await sleep(1100); // login.js ignora envios antes de 1 s (anti-bot)
     const campo = login.w.document.getElementById('operatorCode');
     const form = login.w.document.getElementById('loginForm');
     campo.value = 'NX-8821';

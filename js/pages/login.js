@@ -16,6 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const authNoticeIcon = document.getElementById('authNoticeIcon');
   const authNoticeTitle = document.getElementById('authNoticeTitle');
   const authNoticeMessage = document.getElementById('authNoticeMessage');
+  const honeypotField = document.getElementById('website');
+  // Marca de tempo da carga da tela: envio mais rápido que 1 s é de robô (humano não digita código nesse tempo).
+  const TEMPO_MINIMO_ENVIO_MS = 1000;
+  const telaCarregadaEm = Date.now();
 
   // Modal Elements
   const recoveryModal = document.getElementById('recoveryModal');
@@ -124,6 +128,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      // Anti-bot silencioso: campo honeypot preenchido ou envio rápido demais são descartados sem mensagem.
+      if (honeypotField && honeypotField.value) return;
+      if (Date.now() - telaCarregadaEm < TEMPO_MINIMO_ENVIO_MS) return;
+
       const codeValue = operatorCodeInput ? operatorCodeInput.value.trim() : '';
 
       if (!codeValue) {
@@ -142,38 +151,39 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       let employeeFound = null;
+      let bloqueado = false;
 
       try {
         const client = window.nexusSupabase;
         if (client) {
-          // Busca no Supabase pela tabela de funcionários.
-          // maybeSingle(): "não encontrado" (0 linhas) é um resultado normal aqui,
-          // pois o campo aceita também a matrícula. Com .single() o PostgREST responde
-          // 406 (PGRST116) e o navegador registra um erro vermelho a cada login por matrícula.
-          const { data, error } = await client
-            .from('funcionarios')
-            .select('*')
-            .eq('codigo_individual', codeValue)
-            .eq('ativo', true)
-            .maybeSingle();
-
-          if (!error && data) {
+          // Validação no servidor (função login_funcionario, migration 20261010020000):
+          // aceita código individual ou matrícula e bloqueia após 5 falhas em 15 min.
+          const { data, error } = await client.rpc('login_funcionario', { p_codigo: codeValue });
+          if (error) throw error;
+          if (data && data.error === 'bloqueado') {
+            bloqueado = true;
+          } else if (data && data.ok) {
             employeeFound = data;
-          } else {
-            // Consulta também por matrícula caso o código digitado seja a matrícula
-            const { data: matData, error: matErr } = await client
-              .from('funcionarios')
-              .select('*')
-              .eq('matricula', codeValue)
-              .eq('ativo', true)
-              .maybeSingle();
-            if (!matErr && matData) {
-              employeeFound = matData;
-            }
           }
         }
       } catch (err) {
         console.warn('[NexusPort Login] Falha na consulta Supabase, recorrendo aos dados locais:', err);
+      }
+
+      if (bloqueado) {
+        showAuthNotice('error', 'Acesso Temporariamente Bloqueado', 'Muitas tentativas inválidas. Aguarde 15 minutos e tente novamente.');
+        if (codeStatusIcon) {
+          codeStatusIcon.textContent = 'lock';
+          codeStatusIcon.className = 'material-symbols-outlined text-red-500 text-[22px]';
+        }
+        if (loginSubmitBtn) {
+          loginSubmitBtn.disabled = false;
+          loginSubmitBtn.innerHTML = `
+            <span class="material-symbols-outlined text-[20px]">login</span>
+            <span>Acessar Sistema Portuário</span>
+          `;
+        }
+        return;
       }
 
       // 4.1 Validação de Invalidação e Reemissão de Códigos pelo Técnico em Portos (T1.8 / Spec.md RN 15)
