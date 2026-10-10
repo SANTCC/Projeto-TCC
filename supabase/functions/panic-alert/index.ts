@@ -38,8 +38,15 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
 };
 
-// Mesma matriz de RBAC de js/auth-guard.js (ação ACIONAR_EMERGENCIA)
+// Mesma matriz de RBAC de js/auth-guard.js (ação ACIONAR_EMERGENCIA).
+// Emergência pode ser acionada por QUALQUER funcionário autenticado.
 const ROLES_ACIONAR = [
+  "ESTIVADOR",
+  "CONFERENTE_CARGA",
+  "ARRUMADOR_CONSERTADOR",
+  "PLANEJADOR_PATIO_NAVIOS",
+  "TECNICO_PORTOS",
+  "SUPERVISOR_GERENTE_OPERACOES",
   "INSPETOR",
   "DIRETOR_OPERACOES_LOGISTICA",
   "DIRETOR_PRESIDENTE_SUPERINTENDENTE",

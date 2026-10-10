@@ -174,7 +174,8 @@
   const MIGRACOES_CONHECIDAS = {
     bercos: 'SPECs/migrations/001_create_bercos.sql',
     emergencias: 'supabase/migrations/20261008000000_emergencias_fix_404.sql',
-    panic_webhook_config: 'supabase/migrations/20261008000000_emergencias_fix_404.sql',
+    // `panic_webhook_config` não entra aqui: o front-end não usa webhook
+    // (nenhuma consulta do cliente toca essa tabela).
     // Auditoria (seção 8 do schema completo — não há migração incremental):
     logs_alteracoes: 'SPECs/schema.sql',
     trail_decisoes: 'SPECs/schema.sql'
@@ -323,7 +324,7 @@
      *   - berço OCUPADO identifique o navio por `navio_nome` ou `navio_imo`.
      * Cache local legado (berços marcados OCUPADO por carga, sem navio) ou ids
      * fora do padrão (`BERCO-6`) faziam o upsert — inclusive o lote de 15 berços
-     * em js/embarcacoes.js — abortar com:
+     * em js/pages/embarcacoes.js — abortar com:
      *   23514: new row for relation "bercos" violates check constraint
      *          "bercos_vinculo_navio_check"
      * como uma única linha inválida derruba a instrução inteira, o painel
@@ -615,6 +616,26 @@
     /** Aviso textual padronizado sobre uma tabela ausente (UI/diagnóstico) */
     avisoTabela: function (tabela) {
       return descricaoTabela(tabela);
+    },
+
+    /**
+     * Lê TODAS as linhas de uma consulta PostgREST, página a página (Backlog 3 — tempo real).
+     * O servidor devolve no máximo 1000 linhas por resposta: sem paginação, relatórios e
+     * contadores ignoram em silêncio o restante (ex.: produtividade com 0 para outros usuários).
+     * `montar` deve devolver uma consulta NOVA a cada chamada, com ordenação estável
+     * (ex.: () => sb.from('logs_alteracoes').select('*').order('id')). Erros são propagados.
+     */
+    lerTodasAsLinhas: async function (montar, tamanhoPagina) {
+      const passo = tamanhoPagina || 1000;
+      const linhas = [];
+      for (let inicio = 0; inicio < 10000000; inicio += passo) {
+        const res = await montar().range(inicio, inicio + passo - 1);
+        if (res && res.error) throw res.error;
+        const pagina = res && Array.isArray(res.data) ? res.data : [];
+        for (let i = 0; i < pagina.length; i++) linhas.push(pagina[i]);
+        if (pagina.length < passo) break;
+      }
+      return linhas;
     }
   };
 

@@ -8,9 +8,65 @@
   'use strict';
 
   const ENABLE_MOCKS = false;
+  const EVENTOS_QUE_INVALIDAM_CARGAS = new Set([
+    'cargas',
+    'navios',
+    'containers',
+    'estivador_cargas',
+    'funcionarios',
+    'nexus_cargas_fluxo',
+    'nexus_navios_list',
+    'nexus_containers_list',
+    'nexus_func_list',
+    'periodic_sync',
+    'window_focus'
+  ]);
+
+  function ehErroDaRelacaoEstivador(error) {
+    if (!error) return false;
+    const code = String(error.code || '');
+    const message = [error.message, error.details, error.hint].filter(Boolean).join(' ');
+    const erroDeSchema = ['PGRST200', 'PGRST201', 'PGRST204', '42703'].includes(code);
+    const mencionaRelacaoOpcional = /estivador_cargas|funcionarios/i.test(message);
+    const descricaoDeRelacaoAusente = /relationship|schema cache|column|could not find|does not exist|ambiguous/i.test(message);
+
+    // A consulta simples só é um fallback válido se o erro vier do join opcional.
+    // Erros de rede, autenticação ou da relação obrigatória com navios não devem
+    // causar uma segunda requisição imediata.
+    return (erroDeSchema && (!message || mencionaRelacaoOpcional)) ||
+      (mencionaRelacaoOpcional && descricaoDeRelacaoAusente);
+  }
+
+  function lerCacheCargas() {
+    try {
+      const lista = JSON.parse(window.localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      return Array.isArray(lista) ? lista : [];
+    } catch (error) {
+      console.warn('[NexusRepository] Cache local de cargas inválido:', error);
+      return [];
+    }
+  }
+
+  function clonarCargas(lista) {
+    return Array.isArray(lista) ? lista.map((carga) => Object.assign({}, carga)) : [];
+  }
 
   const NexusRepository = {
     ENABLE_MOCKS: ENABLE_MOCKS,
+    _cargasRevision: 0,
+    _cargasInFlight: new Map(),
+
+    /**
+     * Invalida leituras em andamento após uma alteração canônica de cargas/navios.
+     * As respostas antigas continuam podendo resolver para os seus chamadores, mas
+     * não podem sobrescrever o cache mais recente.
+     */
+    invalidarLeiturasCargas: function () {
+      this._cargasRevision += 1;
+      this._cargasInFlight.clear();
+      return this._cargasRevision;
+    },
+
 
     /**
      * Retorna o cliente Supabase se disponível
@@ -101,33 +157,51 @@
 
     /**
      * BUSCAR CARGAS
+     * Leituras idênticas em andamento compartilham uma única operação lógica.
+     * A deduplicação dura somente enquanto a requisição está em voo: não há cache
+     * de resposta concluída, e uma invalidação abre uma nova revisão.
      */
-    getCargas: async function () {
+    getCargas: function () {
       const client = this.getSupabase();
-      if (client) {
+      if (!client) return Promise.resolve(clonarCargas(lerCacheCargas()));
+
+      const repository = this;
+      const revision = this._cargasRevision;
+      const existing = this._cargasInFlight.get(revision);
+      if (existing) return existing.then(clonarCargas);
+
+      const request = (async function () {
         try {
-          // Tenta trazer também a atribuição do funcionário responsável
-          // (Backlog 3 — estivador_cargas); se a relação não estiver
-          // disponível no schema cache, repete a consulta sem o join.
-          let data = null;
-          let count = null;
-          {
-            const rJoined = await client.from('cargas').select('*, navios(id, nome), estivador_cargas(estivador_id, funcionarios(nome, matricula))', { count: 'exact' });
-            if (!rJoined.error && Array.isArray(rJoined.data)) {
-              data = rJoined.data;
-              count = rJoined.count;
-            } else {
-              const rPlain = await client.from('cargas').select('*, navios(id, nome)', { count: 'exact' });
-              if (!rPlain.error && Array.isArray(rPlain.data)) {
-                data = rPlain.data;
-                count = rPlain.count;
-              }
+          let result = await client
+            .from('cargas')
+            .select('*, navios(id, nome), estivador_cargas(estivador_id, funcionarios(nome, matricula))');
+
+          if (result && result.error) {
+            if (!ehErroDaRelacaoEstivador(result.error)) {
+              repository.tratarErroTabela('cargas', result.error);
+              return clonarCargas(lerCacheCargas());
+            }
+
+            // Fallback limitado ao erro de schema do join opcional. Erros de rede,
+            // autenticação e autorização retornam ao cache sem retry instantâneo.
+            result = await client
+              .from('cargas')
+              .select('*, navios(id, nome)');
+            if (result && result.error) {
+              repository.tratarErroTabela('cargas', result.error);
+              return clonarCargas(lerCacheCargas());
             }
           }
-          if (Array.isArray(data)) {
-            const mapped = data.map((c) => {
-              const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0 ? c.estivador_cargas[0] : null;
-              return {
+
+          if (!result || !Array.isArray(result.data)) {
+            return clonarCargas(lerCacheCargas());
+          }
+
+          const mapped = result.data.map((c) => {
+            const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0
+              ? c.estivador_cargas[0]
+              : null;
+            return {
               id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
               tipo: c.natureza || 'Carga Geral',
               peso: `${c.peso || 0} t`,
@@ -148,16 +222,29 @@
               estivador_id: vinculo ? vinculo.estivador_id : null,
               estivadorMatricula: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.matricula : null,
               estivador: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.nome : null
-              };
-            });
-            localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
-            return mapped;
+            };
+          });
+
+          // Uma resposta de geração antiga pode resolver para o chamador, mas não
+          // pode retroceder o cache após uma alteração mais recente.
+          if (repository._cargasRevision === revision) {
+            window.localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
           }
-        } catch (err) {
-          console.warn('[NexusRepository] Erro ao buscar cargas do Supabase:', err);
+          return mapped;
+        } catch (error) {
+          console.warn('[NexusRepository] Erro ao buscar cargas do Supabase:', error);
+          return clonarCargas(lerCacheCargas());
         }
-      }
-      return JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      })();
+
+      let trackedRequest;
+      trackedRequest = request.finally(() => {
+        if (repository._cargasInFlight.get(revision) === trackedRequest) {
+          repository._cargasInFlight.delete(revision);
+        }
+      });
+      this._cargasInFlight.set(revision, trackedRequest);
+      return trackedRequest.then(clonarCargas);
     },
 
     /**
@@ -537,15 +624,13 @@
       let osList = [];
 
       if (client) {
+        // Leitura paginada: o PostgREST corta cada resposta em 1000 linhas.
+        const lerTabela = (tabela) => this.lerTodasAsLinhas(() => client.from(tabela).select('*').order('id'));
         try {
-          const [resCargas, resNavios, resManut] = await Promise.all([
-            client.from('cargas').select('*'),
-            client.from('navios').select('*'),
-            client.from('manutencoes').select('*')
-          ]);
-          if (!resCargas.error && Array.isArray(resCargas.data)) cargas = resCargas.data;
-          if (!resNavios.error && Array.isArray(resNavios.data)) navios = resNavios.data;
-          if (!resManut.error && Array.isArray(resManut.data)) osList = resManut.data;
+          const [c, n, m] = await Promise.all([lerTabela('cargas'), lerTabela('navios'), lerTabela('manutencoes')]);
+          cargas = c;
+          navios = n;
+          osList = m;
         } catch (e) {
           console.warn('[NexusRepository] Erro ao buscar indicadores operacionais:', e);
         }
@@ -558,8 +643,8 @@
       const cargasArmazenagem = cargas.filter(c => c.status_fluxo === 'ARMAZENAGEM');
       const cargasProntas = cargas.filter(c => c.status_fluxo === 'PRONTA_PARA_ENTREGA');
 
-      const naviosManut = navios.filter(n => n.estado_operacional === 'EM_MANUTENCAO' || n.estado_operacional === 'AGENDADO_PARA_REFORMA');
-      const osEmManut = osList.filter(o => o.status === 'SOLICITADA' || o.status === 'APROVADA');
+      // Um equipamento conta uma única vez (ver derivarEquipamentosEmManutencao)
+      const emManutencao = this.derivarEquipamentosEmManutencao(navios, osList);
 
       const CAPACIDADE_MAXIMA_PATIO = 100;
       const taxaOcupacao = Math.min(100, Math.round((cargasArmazenagem.length / CAPACIDADE_MAXIMA_PATIO) * 100));
@@ -571,9 +656,9 @@
         cargasArmazenagem: { lista: cargasArmazenagem, total: cargasArmazenagem.length },
         cargasProntas: { lista: cargasProntas, total: cargasProntas.length },
         manutencao: {
-          navios: naviosManut,
-          ordens: osEmManut,
-          total: naviosManut.length + osEmManut.length
+          navios: emManutencao.navios,
+          ordens: emManutencao.ordens,
+          total: emManutencao.total
         },
         ocupacaoPatio: {
           capacidade: CAPACIDADE_MAXIMA_PATIO,
@@ -584,13 +669,86 @@
     },
 
     /**
+     * Lê todas as linhas de uma consulta (paginação); delega a NexusSupabaseUtils.
+     * `montar` deve devolver uma consulta nova a cada chamada.
+     */
+    lerTodasAsLinhas: async function (montar) {
+      if (window.NexusSupabaseUtils && typeof window.NexusSupabaseUtils.lerTodasAsLinhas === 'function') {
+        return window.NexusSupabaseUtils.lerTodasAsLinhas(montar);
+      }
+      const res = await montar();
+      if (res && res.error) throw res.error;
+      return Array.isArray(res && res.data) ? res.data : [];
+    },
+
+    /**
+     * EQUIPAMENTOS EM MANUTENÇÃO (Backlog 3 — indicadores em tempo real)
+     * Fonte única: ordens de serviço ATIVAS (manutencoes com status SOLICITADA ou APROVADA).
+     *  - Cada equipamento conta UMA vez: duas OS para o mesmo navio = 1; OS + estado de reforma
+     *    do mesmo navio = 1 (o estado do navio só serve para casar a OS com o navio).
+     *  - Estado de reforma de navio SEM OS ativa não conta: é resíduo de um fluxo anterior,
+     *    não manutenção em andamento (era a origem de "equipamentos" fantasmas no painel).
+     *  - OS antigas sem navio_id são casadas com o navio pelo nome gravado na descrição
+     *    ("Navio: NOME - ..."). Sem casamento, o navio é contado pelo nome.
+     * Retorna { total, navios (cadastros dos navios em manutenção), ordens (OS ativas) }.
+     */
+    derivarEquipamentosEmManutencao: function (navios, osList) {
+      const listaNavios = Array.isArray(navios) ? navios : [];
+      const ativas = (Array.isArray(osList) ? osList : [])
+        .filter(o => o && (o.status === 'SOLICITADA' || o.status === 'APROVADA'));
+
+      const naviosPorId = new Map();
+      const naviosPorNome = new Map();
+      listaNavios.forEach(n => {
+        if (n.id) naviosPorId.set(String(n.id), n);
+        const nomeKey = String(n.nome || '').trim().toLowerCase();
+        if (nomeKey && !naviosPorNome.has(nomeKey)) naviosPorNome.set(nomeKey, n);
+      });
+
+      const chaves = new Set();
+      const naviosEmManutencao = new Map();
+      ativas.forEach(o => {
+        if (o.navio_id) {
+          const navio = naviosPorId.get(String(o.navio_id));
+          chaves.add(`navio:${o.navio_id}`);
+          if (navio) naviosEmManutencao.set(String(navio.id), navio);
+          return;
+        }
+        if (o.container_id) { chaves.add(`container:${o.container_id}`); return; }
+        if (o.guindaste_id) { chaves.add(`guindaste:${o.guindaste_id}`); return; }
+        // OS legada: o navio aparece só no texto ("Navio: NOME - ...")
+        const casamento = /Navio:\s*(.+?)\s+-\s/.exec(String(o.descricao || ''));
+        const nomeLegado = casamento ? casamento[1].trim().toLowerCase() : '';
+        if (nomeLegado) {
+          const navio = naviosPorNome.get(nomeLegado);
+          if (navio) {
+            chaves.add(`navio:${navio.id || navio.nome}`);
+            naviosEmManutencao.set(String(navio.id || navio.nome), navio);
+          } else {
+            chaves.add(`navio-nome:${nomeLegado}`);
+          }
+          return;
+        }
+        chaves.add(`os:${o.id}`);
+      });
+
+      return {
+        total: chaves.size,
+        navios: Array.from(naviosEmManutencao.values()),
+        ordens: ativas
+      };
+    },
+
+    /**
      * SINCRONIZAÇÃO AUTOMÁTICA VIA SUPABASE REALTIME (Backlog 3 — Realtime-Sync)
      * Assina mudanças (INSERT/UPDATE/DELETE) das tabelas operacionais no schema
      * público e dispara o evento local `nexus_data_changed` (com debounce), que
      * já é o gatilho de re-render das telas. Assim, quando outro operador —
      * por exemplo o pessoal do scanner — altera um registro, as telas abertas
-     * atualizam sem intervenção manual. Se o Realtime não estiver habilitado
-     * no projeto Supabase, cai silenciosamente no polling de 10s existente.
+     * atualizam sem intervenção manual. A lista abaixo DEVE coincidir com as
+     * tabelas da publicação `supabase_realtime` (migração 20261009000000 e teste
+     * tests/test_tempo_real.js). Sem a publicação, o canal não recebe eventos e o
+     * polling de segurança (abaixo) é o que mantém os dados atualizados.
      */
     REALTIME_TABLES: [
       'cargas',
@@ -598,6 +756,7 @@
       'navios',
       'guindastes',
       'manutencoes',
+      'historico_manutencoes',
       'funcionarios',
       'visitantes',
       'bercos',
@@ -605,12 +764,20 @@
       'delegacoes_supervisor',
       'inspecoes',
       'inspecao_itens',
+      'checklist_modelos',
+      'checklist_itens',
       'tipos_carga',
       'leituras_qr_code',
+      'estivador_cargas',
+      'agendamentos',
       'logs_alteracoes',
       'trail_decisoes',
+      'retificacoes_trail',
       'emergencias'
     ],
+
+    /** Intervalo do polling de segurança (quando o Realtime não entrega eventos). */
+    POLLING_SEGURANCA_MS: 60000,
 
     _realtimeChannel: null,
     _realtimeDebounce: null,
@@ -644,7 +811,7 @@
           if (status === 'SUBSCRIBED') {
             console.log('[NexusRepository] Sincronização Realtime ativa.');
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn('[NexusRepository] Realtime indisponível (' + status + '); mantendo polling de 10s como fallback.');
+            console.warn('[NexusRepository] Realtime indisponível (' + status + '); o polling de segurança (' + (this.POLLING_SEGURANCA_MS / 1000) + ' s) mantém os dados atualizados.');
           }
         });
         this._realtimeChannel = channel;
@@ -692,6 +859,15 @@
     } catch (e) {}
   }
 
+  // O listener está na fase de captura para invalidar as respostas antigas antes
+  // que os módulos de página iniciem uma nova leitura no mesmo evento.
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    if (!entity || EVENTOS_QUE_INVALIDAM_CARGAS.has(entity)) {
+      NexusRepository.invalidarLeiturasCargas();
+    }
+  }, true);
+
   window.addEventListener('storage', (e) => {
     if (e.key && e.key.startsWith('nexus_')) {
       window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: e.key } }));
@@ -703,9 +879,11 @@
     NexusRepository.notifyChange('window_focus');
   });
 
+  // Polling de segurança: sem o Realtime (ou entre eventos perdidos), as telas são
+  // reconsultadas a cada POLLING_SEGURANCA_MS (60 s por padrão).
   setInterval(() => {
     NexusRepository.notifyChange('periodic_sync');
-  }, 60000);
+  }, NexusRepository.POLLING_SEGURANCA_MS);
 
   // Inicia a assinatura Realtime em todas as telas que carregam o repositório
   // (o cliente Supabase é criado antes deste módulo na ordem dos <script>).

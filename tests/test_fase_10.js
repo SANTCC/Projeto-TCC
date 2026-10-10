@@ -13,9 +13,9 @@ console.log('================================================================\n'
 
 // 1. Validando Fuso Horário e Formatação de Datas (10.1)
 console.log('1. Validando Manipulação de Datas e ISO/UTC (10.1)...');
-const dashboardJs = fs.readFileSync(path.join(__dirname, 'js/dashboard.js'), 'utf-8');
-const embarcacoesJs = fs.readFileSync(path.join(__dirname, 'js/embarcacoes.js'), 'utf-8');
-const cargasJs = fs.readFileSync(path.join(__dirname, 'js/cargas.js'), 'utf-8');
+const dashboardJs = fs.readFileSync(path.join(__dirname, 'js/pages/dashboard.js'), 'utf-8');
+const embarcacoesJs = fs.readFileSync(path.join(__dirname, 'js/pages/embarcacoes.js'), 'utf-8');
+const cargasJs = fs.readFileSync(path.join(__dirname, 'js/pages/cargas.js'), 'utf-8');
 
 assert(dashboardJs.includes('toISOString') || dashboardJs.includes('toLocaleString'), 'Fase 10: Datas devem ser padronizadas em ISO UTC e exibidas no padrão pt-BR.');
 assert(embarcacoesJs.includes('new Date().toISOString()'), 'Fase 10: Datas de saída e retorno de navios registradas em ISO.');
@@ -38,7 +38,7 @@ console.log('  ✅ [PASS] 10.3: Mecanismo reativo de broadcast nexus_data_change
 
 // 4. Validando Integridade Referencial e Exclusão Lógica / Soft Delete (10.4 & 10.5)
 console.log('4. Validando Soft Delete e Integridade Referencial (10.4 & 10.5)...');
-const tecnicoJs = fs.readFileSync(path.join(__dirname, 'js/tecnico_portos.js'), 'utf-8');
+const tecnicoJs = fs.readFileSync(path.join(__dirname, 'js/pages/tecnico_portos.js'), 'utf-8');
 assert(tecnicoJs.includes('ativo: false'), 'Fase 10: Exclusão de funcionário implementada como soft-delete seguro no Supabase.');
 assert(tecnicoJs.includes('deleteFuncionario') || tecnicoJs.includes('update({ ativo: false })'), 'Fase 10: Desativação de funcionário persiste status no banco.');
 console.log('  ✅ [PASS] 10.4 & 10.5: Exclusão lógica com preservação de integridade referencial validada.');

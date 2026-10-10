@@ -13,12 +13,12 @@
 const H = require('./webmcp-harness');
 const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, read } = H;
 
-const BASE = ['js/security.js', 'js/auth-guard.js', 'js/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js'];
+const BASE = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js'];
 
 /** Erros não capturados observados em cada página carregada (devem ser zero). */
 const ERROS_DE_PAGINA = [];
-const NUCLEO = ['js/webmcp-core.js'];
-const UI_DADOS_GLOBAL = ['js/webmcp-ui.js', 'js/webmcp-dados.js', 'js/webmcp-global.js'];
+const NUCLEO = ['js/webmcp/webmcp-core.js'];
+const UI_DADOS_GLOBAL = ['js/webmcp/webmcp-ui.js', 'js/webmcp/webmcp-dados.js', 'js/webmcp/webmcp-global.js'];
 
 /** Provedor de confirmação de teste: registra os pedidos e responde o valor de w.__resposta. */
 function provedorDeTeste(w) {
@@ -30,6 +30,43 @@ function provedorDeTeste(w) {
       return typeof w.__resposta === 'function' ? w.__resposta(pedido) : w.__resposta;
     }
   });
+}
+
+/**
+ * Cliente Supabase falso mínimo para a tabela rotas_maritimas (única fonte de rotas do
+ * módulo de embarcações desde o Backlog 3). Qualquer encadeamento é aceito (select, insert,
+ * upsert, order...); as demais tabelas respondem com erro "indisponível", o que aciona o
+ * fallback local já existente. `opcoes.falharInsert` simula falha de gravação.
+ */
+function supabaseRotasFalso(rotas, opcoes) {
+  const o = opcoes || {};
+  function resolver(tabela, estado) {
+    if (tabela !== 'rotas_maritimas') {
+      return Promise.resolve({ data: null, error: { message: 'tabela indisponível no teste' } });
+    }
+    if (estado.insert) {
+      if (o.falharInsert) return Promise.resolve({ data: null, error: { message: 'falha simulada na gravação' } });
+      rotas.push(Object.assign({}, estado.insert));
+      return Promise.resolve({ data: estado.insert, error: null });
+    }
+    return Promise.resolve({ data: rotas.map((x) => Object.assign({}, x)), error: null });
+  }
+  function construir(tabela) {
+    const estado = { insert: null };
+    const proxy = new Proxy({}, {
+      get(_, prop) {
+        if (prop === 'then') return (res, rej) => resolver(tabela, estado).then(res, rej);
+        if (prop === 'catch') return (rej) => resolver(tabela, estado).catch(rej);
+        if (typeof prop !== 'string') return undefined;
+        return (...args) => {
+          if (prop === 'insert') estado.insert = args[0];
+          return proxy;
+        };
+      }
+    });
+    return proxy;
+  }
+  return { from: (tabela) => construir(tabela) };
 }
 
 /** Carrega uma página real com seus scripts e o WebMCP correspondente. */
@@ -53,7 +90,7 @@ async function pronta(w) {
   return w;
 }
 
-const PAGINA_CARGAS = ['js/cargas.js', 'js/webmcp-cargas.js'];
+const PAGINA_CARGAS = ['js/pages/cargas.js', 'js/webmcp/webmcp-cargas.js'];
 
 function cargasBase() {
   const agora = new Date().toISOString();
@@ -77,8 +114,13 @@ async function testesCargas() {
     nexus_guindaste_tarefas: []
   };
 
+  // Rotas marítimas (fonte do destino final do agendamento): Supabase simulado,
+  // mesmo padrão dos testes de embarcações.
+  const rotasCargas = [{ origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }];
+  const supaRotasCargas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasCargas); };
+
   // Supervisor: leitura, vinculação com confirmação, cancelamento com motivo (sem diálogo)
-  let w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, adaptadores: PAGINA_CARGAS }));
+  let w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', supaRotasCargas], adaptadores: PAGINA_CARGAS }));
   let promptChamado = 0;
   w.nexusPrompt = async () => { promptChamado += 1; return 'não deveria'; };
   let r = await w.NexusWebMCP.executar('listar_cargas', {});
@@ -121,19 +163,24 @@ async function testesCargas() {
   const antes = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo')).length;
   r = await w.NexusWebMCP.executar('agendar_carga', {
     tipo: "Contêiner 20' Dry", peso: 12.5, volume: 40, valor: 150000, natureza: 'Agrícola',
-    porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Armazém Norte', data_prevista: new Date().toISOString().split('T')[0]
+    porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Porto de Roterdã', data_prevista: new Date().toISOString().split('T')[0]
   });
   const apos = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo'));
   check('agendar: cria a carga com QR e resposta traz o identificador', r.ok === true && apos.length === antes + 1 && /^CRG-2026-\d{3}$/.test(r.dados.id) && r.dados.codigo_qr.startsWith('QR-'), JSON.stringify(r).slice(0, 220));
   check('agendar: resumo mostra peso, volume e valor em formato brasileiro', w.__pedidos[w.__pedidos.length - 1].resumo.some((l) => /12\.5 t/.test(l) && /R\$/.test(l)));
+  check('agendar: destino final é a rota marítima cadastrada (sem digitação manual)', apos[apos.length - 1].destino === 'Porto de Roterdã', JSON.stringify(apos[apos.length - 1].destino));
   r = await w.NexusWebMCP.executar('agendar_carga', {
-    tipo: 'Tipo inexistente', peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Armazém Norte'
+    tipo: 'Tipo inexistente', peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Porto de Roterdã'
   });
   check('agendar: tipo de carga não cadastrado é recusado (RN 13)', r.codigo === 'TIPO_NAO_CADASTRADO', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('agendar_carga', {
-    tipo: "Contêiner 20' Dry", peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Setor Inexistente', destino: 'Armazém Norte'
+    tipo: "Contêiner 20' Dry", peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Setor Inexistente', destino: 'Porto de Roterdã'
   });
   check('agendar: setor fora da lista da tela é recusado pelo esquema', r.ok === false && r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r));
+  r = await w.NexusWebMCP.executar('agendar_carga', {
+    tipo: "Contêiner 20' Dry", peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Armazém Norte'
+  });
+  check('agendar: destino sem rota marítima cadastrada é recusado (sem digitação manual)', r.ok === false && r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r).slice(0, 200));
 
   r = await w.NexusWebMCP.executar('listar_cargas', {});
   check('emergência (supervisor): leitura continua disponível', r.ok === true);
@@ -157,13 +204,16 @@ async function testesCargas() {
   r = await w.NexusWebMCP.executar('movimentar_carga', { id: 'CRG-A', guindaste: 'GND-02-STS' });
   check('movimentar: guindaste em manutenção é recusado', r.codigo === 'GUINDASTE_INDISPONIVEL', JSON.stringify(r));
   w.__pedidos.length = 0;
-  r = await w.NexusWebMCP.executar('movimentar_carga', { id: 'CRG-A', guindaste: 'GND-01-STS' });
+  r = await w.NexusWebMCP.executar('movimentar_carga', { id: 'CRG-A', guindaste: 'GND-01-STS', setor: 'Pátio STS-01 (Setor C)' });
   local = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo'));
   const movida = local.find((c) => c.id === 'CRG-A');
   const tarefas = JSON.parse(w.localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-  check('movimentar: designa o guindaste e cria a tarefa (como na página)',
-    r.ok === true && movida.guindasteDesignado === 'GND-01-STS' && movida.portoDescarga === 'Sala de Contêiner' && tarefas.some((t) => t.cargaId === 'CRG-A'), JSON.stringify(r));
+  check('movimentar: designa o guindaste e cria a tarefa pendente (como na página)',
+    r.ok === true && movida.guindasteDesignado === 'GND-01-STS' && movida.movimentacaoPendente === 'Pátio STS-01 (Setor C)' && tarefas.some((t) => t.cargaId === 'CRG-A' && t.destino === 'Pátio STS-01 (Setor C)'), JSON.stringify(r));
+  check('movimentar: setor só muda após a conclusão da tarefa (não na criação)', movida.portoDescarga === 'Pátio STS-01 (Setor B)', movida.portoDescarga);
   check('movimentar: não usa o diálogo de escolha da página (nexusPrompt não chamado)', promptEstivador === 0, `chamadas: ${promptEstivador}`);
+  r = await w.NexusWebMCP.executar('movimentar_carga', { id: 'CRG-A', guindaste: 'GND-01-STS', setor: 'Pátio STS-01 (Setor B)' });
+  check('movimentar: mesmo setor de origem é recusado', r.codigo === 'MESMO_SETOR', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('liberar_carga_saida', { id: 'CRG-C' });
   check('estivador não pode liberar saída (PERMISSAO_NEGADA)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('agendar_carga', { tipo: "Contêiner 20' Dry", peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Armazém Norte' });
@@ -183,6 +233,114 @@ async function testesCargas() {
 }
 
 // ------------------------------------------------------------------
+/**
+ * Backlog 3 (L): a vinculação de carga só aceita navio atracado no Porto de Santos e operante.
+ * Seletor de navio com apenas navios aptos; contêineres de navio inapto ficam indisponíveis;
+ * a confirmação revalida o navio (inclusive quando ele sai do porto com o modal aberto).
+ */
+async function testesVinculacaoNavioNoPorto() {
+  log('\n[1b] Vinculação de carga a navio (somente atracado no porto e operante)');
+  const ontem = new Date(Date.now() - 86400000).toISOString();
+  const navios = () => [
+    { id: 'nA', nome: 'MV Apto', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9608, -46.3022', dataSaida: null },
+    { id: 'nD', nome: 'MV Outro', imo: 'JKL1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9700, -46.3100', dataSaida: null },
+    { id: 'nB', nome: 'MV Fora', imo: 'DEF7654321', localizacao: 'FORA_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.5000, -46.3000', dataSaida: ontem },
+    { id: 'nC', nome: 'MV Reforma', imo: 'GHI1234567', localizacao: 'DENTRO_DO_PORTO', estado_operacional: 'AGENDADO_PARA_REFORMA', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9800, -46.3200', dataSaida: null }
+  ];
+  const containers = () => [
+    { identificacao: 'MSCU1000001', tipo: 'Eletrônicos', estado: 'OPERANTE', navio: 'MV Apto', navio_id: 'nA' },
+    { identificacao: 'MSCU1000002', tipo: 'Têxteis', estado: 'OPERANTE', navio: 'MV Fora', navio_id: 'nB' },
+    { identificacao: 'MSCU1000003', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Reforma', navio_id: 'nC' },
+    { identificacao: 'MSCU1000004', tipo: 'Carga Geral', estado: 'OPERANTE', navio: '', navio_id: null },
+    { identificacao: 'MSCU1000005', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Outro', navio_id: 'nD' }
+  ];
+  const abrir = async (listaNavios) => {
+    const storage = { nexus_cargas_fluxo: cargasBase(), nexus_containers_list: containers(), nexus_navios_list: listaNavios || navios(), nexus_guindastes_list: [], nexus_guindaste_tarefas: [] };
+    const w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, adaptadores: PAGINA_CARGAS }));
+    w.mostrarFeedback = (tipo, titulo, texto) => { w.__avisos.push({ tipo, titulo, texto }); };
+    w.__avisos = [];
+    return w;
+  };
+  const sel = (w) => w.document.getElementById('vincularNavioSelect');
+  const cont = (w) => w.document.getElementById('vincularContainerSelect');
+  const opcaoCont = (w, ident) => Array.from(cont(w).options).find((o) => o.getAttribute('data-identificacao') === ident);
+  const cargaSalva = (w, id) => JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo')).find((c) => c.id === id);
+  const confirmar = (w) => { w.document.getElementById('confirmVincularModalBtn').click(); return aguardar(90); };
+
+  // 1) Seletor e contêineres
+  let w = await abrir();
+  await w.abrirModalVinculacao('CRG-A');
+  await aguardar(30);
+  const nomes = Array.from(sel(w).options).map((o) => o.textContent.trim());
+  check('L: seletor de navio lista somente os navios atracados e operantes (sem fora do porto nem em reforma)',
+    nomes.length === 3 && nomes.some((t) => /MV Apto/.test(t)) && nomes.some((t) => /MV Outro/.test(t))
+    && !nomes.some((t) => /MV Fora|MV Reforma/.test(t)), JSON.stringify(nomes));
+  check('L: contêiner de navio fora do porto fica indisponível, com o motivo',
+    opcaoCont(w, 'MSCU1000002') && opcaoCont(w, 'MSCU1000002').disabled && /em trânsito/.test(opcaoCont(w, 'MSCU1000002').textContent));
+  check('L: contêiner de navio em reforma fica indisponível, com o motivo',
+    opcaoCont(w, 'MSCU1000003') && opcaoCont(w, 'MSCU1000003').disabled && /não está operante/.test(opcaoCont(w, 'MSCU1000003').textContent));
+  check('L: contêiner de navio apto e contêiner livre permanecem disponíveis',
+    opcaoCont(w, 'MSCU1000001') && !opcaoCont(w, 'MSCU1000001').disabled && !opcaoCont(w, 'MSCU1000004').disabled);
+
+  // Escolher o navio "MV Apto" (valor = posição na lista de aptos): contêiner de outro navio fica indisponível
+  sel(w).value = '0';
+  sel(w).dispatchEvent(new w.Event('change', { bubbles: true }));
+  check('L: escolher um navio indisponibiliza contêiner de outro navio, com o motivo',
+    opcaoCont(w, 'MSCU1000005').disabled && /Vinculado ao navio MV Outro/.test(opcaoCont(w, 'MSCU1000005').textContent));
+
+  // Vinculação com navio escolhido e contêiner livre grava carga, contêiner e navio
+  cont(w).value = 'MSCU1000004';
+  await confirmar(w);
+  let c = cargaSalva(w, 'CRG-A');
+  check('L: vinculação com navio apto grava carga, contêiner e navio', c.container === 'MSCU1000004' && c.navio === 'MV Apto', JSON.stringify({ container: c.container, navio: c.navio }));
+  w.close();
+
+  // 2) Sem escolher navio: a carga herda o navio apto do contêiner
+  w = await abrir();
+  await w.abrirModalVinculacao('CRG-D');
+  await aguardar(30);
+  cont(w).value = 'MSCU1000001';
+  await confirmar(w);
+  c = cargaSalva(w, 'CRG-D');
+  check('L: sem escolher navio, a carga herda o navio apto do contêiner', c.container === 'MSCU1000001' && c.navio === 'MV Apto', JSON.stringify({ container: c.container, navio: c.navio }));
+  w.close();
+
+  // 3) Navio sai do porto depois de aberto o modal: a confirmação revalida e bloqueia
+  w = await abrir();
+  await w.abrirModalVinculacao('CRG-D');
+  await aguardar(30);
+  sel(w).value = '0';
+  sel(w).dispatchEvent(new w.Event('change', { bubbles: true }));
+  w.localStorage.setItem('nexus_navios_list', JSON.stringify(navios().map((n) => (n.id === 'nA' ? Object.assign({}, n, { localizacao: 'FORA_DO_PORTO', dataSaida: ontem }) : n))));
+  cont(w).value = 'MSCU1000004';
+  await confirmar(w);
+  c = cargaSalva(w, 'CRG-D');
+  check('L: navio que sai do porto com o modal aberto é bloqueado na confirmação',
+    w.__avisos.some((a) => a.titulo === 'Vinculação Bloqueada' && /em trânsito/.test(a.texto)) && c.container === '' && c.navio === '',
+    JSON.stringify(w.__avisos.map((a) => a.titulo)));
+  w.close();
+
+  // 4) Contêiner marcado como indisponível não pode ser forçado na confirmação
+  w = await abrir();
+  await w.abrirModalVinculacao('CRG-D');
+  await aguardar(30);
+  cont(w).value = 'MSCU1000002';
+  await confirmar(w);
+  c = cargaSalva(w, 'CRG-D');
+  check('L: contêiner de navio fora do porto não pode ser vinculado mesmo se forçado',
+    w.__avisos.some((a) => a.titulo === 'Contêiner Indisponível') && c.container === '');
+  w.close();
+
+  // 5) Nenhum navio apto: aviso visível e seletor só com a opção padrão
+  w = await abrir(navios().map((n) => Object.assign({}, n, { localizacao: 'FORA_DO_PORTO', dataSaida: ontem })));
+  await w.abrirModalVinculacao('CRG-D');
+  await aguardar(30);
+  const aviso = w.document.getElementById('vincularNavioAviso');
+  check('L: sem navio apto, o seletor fica só com a opção padrão e o aviso aparece',
+    sel(w).options.length === 1 && aviso && !aviso.classList.contains('hidden') && /Nenhum navio atracado no Porto de Santos/.test(aviso.textContent));
+  w.close();
+}
+
 async function testesInspecao() {
   log('\n[2] Inspeção & Checklist (inspecao.html)');
   const storage = {
@@ -191,7 +349,7 @@ async function testesInspecao() {
       { id: 'CRG-I2', tipo: 'Reefer (Contêiner Refrigerado)', peso: '8 t', volume: '30 m³', status: 'RECEBIMENTO_INSPECAO', portoDescarga: 'Pátio STS-01 (Setor C)', container: '', navio: '', qrCode: 'QR-CRG-I2', data_cadastro: new Date().toISOString() }
     ]
   };
-  const w = await pronta(pagina('inspecao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/inspecao.js'], adaptadores: ['js/webmcp-inspecao.js'] }));
+  const w = await pronta(pagina('inspecao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/pages/inspecao.js'], adaptadores: ['js/webmcp/webmcp-inspecao.js'] }));
   let r = await w.NexusWebMCP.executar('obter_checklist', { id: 'CRG-I1' });
   const criticos = r.ok ? r.dados.itens.filter((i) => i.critico).map((i) => i.item_id) : [];
   check('checklist: itens críticos do tipo da carga (RN 14)', r.ok && criticos.length === 5, JSON.stringify(r).slice(0, 200));
@@ -226,7 +384,7 @@ async function testesInspecao() {
   check('recusa com motivo: RECUSADA e motivo gravado', r.ok === true && recusada.status === 'RECUSADA' && recusada.motivoRecusa === 'Lacre violado no contêiner', JSON.stringify(r).slice(0, 200));
   w.close();
 
-  const supervisor = await pronta(pagina('inspecao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/inspecao.js'], adaptadores: ['js/webmcp-inspecao.js'] }));
+  const supervisor = await pronta(pagina('inspecao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/inspecao.js'], adaptadores: ['js/webmcp/webmcp-inspecao.js'] }));
   r = await supervisor.NexusWebMCP.executar('inspecionar_carga', { id: 'CRG-I1', decisao: 'APROVAR', respostas: [{ item_id: 'doc_1', conforme: true }] });
   check('supervisor consulta a inspeção, mas não inspeciona (PERMISSAO_NEGADA)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   supervisor.close();
@@ -235,6 +393,8 @@ async function testesInspecao() {
 // ------------------------------------------------------------------
 async function testesEmbarcacoes() {
   log('\n[3] Embarcações & GPS (embarcacoes.html)');
+  const rotasSupabase = [{ origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }];
+  const supaRotas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasSupabase); };
   const navios = [
     { id: 'n1', nome: 'MV Santos Star', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia: 10200, gps: '-23.9608, -46.3022', dataSaida: null },
     { id: 'n2', nome: 'MV Sem Rota', imo: 'DEF7654321', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Tóquio', distancia: 20000, gps: '-23.9700, -46.3100', dataSaida: null }
@@ -246,9 +406,9 @@ async function testesEmbarcacoes() {
     nexus_guindastes_list: [{ identificacao: 'ABC123DEF', estado: 'OPERANTE', dataManut: '2026-01-01' }],
     nexus_cargas_fluxo: []
   };
-  const adapt = ['js/webmcp-embarcacoes.js'];
-  const scr = ['js/embarcacoes.js'];
-  let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
+  const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
+  const scr = ['js/pages/embarcacoes.js'];
+  let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
   let r = await w.NexusWebMCP.executar('listar_navios', { localizacao: 'DENTRO_DO_PORTO' });
   check('listar_navios: filtro por localização', r.ok && r.dados.total === 2);
   r = await w.NexusWebMCP.executar('obter_navio', { imo: 'abc 1234567' });
@@ -268,16 +428,20 @@ async function testesEmbarcacoes() {
   check('vincular navio a berço: berço LIVRE recebe o navio (confirmado no estado)', r.ok === true && local.find((b) => b.nome === 'Berço 01').navio_imo === 'DEF7654321', JSON.stringify(r).slice(0, 160));
 
   w.__resposta = true;
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3', distancia_km: 10200 });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
   check('cadastrar navio: supervisor não cadastra (não é inspetor)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
 
-  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3', distancia_km: 10200 });
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
   check('cadastrar navio: IMO duplicado é recusado (Item 11)', r.codigo === 'IMO_DUPLICADO', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3', distancia_km: 10200 });
+  check('cadastrar navio: distância digitada manualmente é recusada pelo esquema (vem da rota)', r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r).slice(0, 160));
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
   local = JSON.parse(w.localStorage.getItem('nexus_navios_list'));
   check('cadastrar navio: cria pelo formulário da página (confirmado no estado)', r.ok === true && local.some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r).slice(0, 200));
+  const bercosAposCadastro = JSON.parse(w.localStorage.getItem('nexus_bercos_list'));
+  check('cadastrar navio: DENTRO_DO_PORTO ocupa o berço imediatamente (primeiro livre)', bercosAposCadastro.some((b) => b.nome === 'Berço 01' && b.estado === 'OCUPADO' && b.navio_imo === 'XYZ7654321'), JSON.stringify(bercosAposCadastro).slice(0, 200));
   r = await w.NexusWebMCP.executar('excluir_navio', { imo: 'XYZ7654321' });
   check('excluir navio: inspetor exclui com confirmação', r.ok === true && !JSON.parse(w.localStorage.getItem('nexus_navios_list')).some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r));
   r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU7654321', tipo: 'Têxteis', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
@@ -289,7 +453,7 @@ async function testesEmbarcacoes() {
   w.close();
 
   // Planejador: lê, mas não libera nem cadastra
-  w = await pronta(pagina('embarcacoes.html', { session: sessao('PLANEJADOR_PATIO_NAVIOS'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('PLANEJADOR_PATIO_NAVIOS'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
   r = await w.NexusWebMCP.executar('listar_navios', {});
   check('planejador lê navios', r.ok === true && r.dados.total >= 1);
   r = await w.NexusWebMCP.executar('liberar_saida_navio', { imo: 'ABC1234567' });
@@ -298,6 +462,75 @@ async function testesEmbarcacoes() {
 }
 
 // ------------------------------------------------------------------
+/**
+ * Backlog 3 (rotas marítimas): nenhuma rota estática; o select e a tabela mostram
+ * somente o que o Supabase devolve; falha de gravação não cria rota na tela.
+ */
+async function testesRotasMaritimas() {
+  log('\n[3b] Rotas marítimas (Supabase como única fonte)');
+  const scr = ['js/pages/embarcacoes.js'];
+  const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
+  const storage = { nexus_navios_list: [] };
+
+  // Banco vazio: nada de rota estática — mensagem explícita no select e na tabela
+  let rotas = [];
+  const vazio = (w) => { w.nexusSupabase = supabaseRotasFalso(rotas); };
+  let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', vazio].concat(scr), adaptadores: adapt }));
+  let sel = w.document.getElementById('navioRotaSelect');
+  check('rotas: banco vazio → select só com a mensagem de "nenhuma rota cadastrada"',
+    sel && sel.options.length === 1 && /Nenhuma rota cadastrada/.test(sel.options[0].textContent), sel && sel.options[0] && sel.options[0].textContent);
+  check('rotas: banco vazio → tabela informa ausência (sem rotas inventadas)',
+    /Nenhuma rota marítima cadastrada/.test(w.document.getElementById('rotasTableBody').textContent)
+    && !/Roterdã|Xangai|Hamburgo/.test(w.document.body.textContent));
+  w.close();
+
+  // Sem cliente Supabase (sem credenciais): mensagem de indisponibilidade, não lista padrão
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js'].concat(scr), adaptadores: adapt }));
+  sel = w.document.getElementById('navioRotaSelect');
+  check('rotas: sem Supabase → select informa que as rotas não puderam ser carregadas',
+    sel && sel.options.length === 1 && /Não foi possível carregar as rotas do Supabase/.test(sel.options[0].textContent),
+    sel && sel.options[0] && sel.options[0].textContent);
+  check('rotas: sem Supabase → nenhuma rota estática no DOM',
+    !/Roterdã|Xangai|Hamburgo/.test(w.document.body.textContent));
+  w.close();
+
+  // Banco com uma rota: o select mostra exatamente a rota do Supabase, com distância formatada
+  rotas = [{ origem: 'Porto de Santos', destino: 'Porto de Hamburgo', distancia_km: 10100 }];
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', vazio].concat(scr), adaptadores: adapt }));
+  sel = w.document.getElementById('navioRotaSelect');
+  check('rotas: select lista somente as rotas do Supabase (placeholder + 1)',
+    sel && sel.options.length === 2 && /Porto de Hamburgo/.test(sel.options[1].textContent) && /10\.100 km/.test(sel.options[1].textContent),
+    sel && Array.from(sel.options).map((o) => o.textContent).join(' | '));
+  w.close();
+
+  // Gravação com falha: a rota NÃO aparece na tela (a lista é a do banco)
+  const antes = rotas.length;
+  const falha = (win) => { win.nexusSupabase = supabaseRotasFalso(rotas, { falharInsert: true }); };
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', falha].concat(scr), adaptadores: adapt }));
+  w.document.getElementById('rotaOrigem').value = 'Porto de Santos';
+  w.document.getElementById('rotaDestino').value = 'Porto de Xangai';
+  w.document.getElementById('rotaDistancia').value = '18500';
+  w.document.getElementById('rotaForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await aguardar(60);
+  check('rotas: falha ao gravar no Supabase não cria rota na tela nem no banco',
+    rotas.length === antes && !/Porto de Xangai/.test(w.document.getElementById('rotasTableBody').textContent));
+  w.close();
+
+  // Gravação com sucesso: a rota aparece na tabela (distância e ETA) e na lista de seleção
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', vazio].concat(scr), adaptadores: adapt }));
+  w.document.getElementById('rotaOrigem').value = 'Porto de Santos';
+  w.document.getElementById('rotaDestino').value = 'Porto de Xangai';
+  w.document.getElementById('rotaDistancia').value = '18500';
+  w.document.getElementById('rotaForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await aguardar(60);
+  const linhaRota = Array.from(w.document.querySelectorAll('#rotasTableBody tr')).map((tr) => tr.textContent).join(' ');
+  check('rotas: rota gravada aparece na tabela com distância e ETA',
+    /Porto de Xangai/.test(linhaRota) && /18\.500 km/.test(linhaRota) && /@ 33 km\/h/.test(linhaRota), linhaRota.slice(0, 200));
+  check('rotas: rota gravada entra na lista de seleção do cadastro de navio',
+    Array.from(w.document.getElementById('navioRotaSelect').options).some((o) => /Porto de Xangai/.test(o.textContent)));
+  w.close();
+}
+
 async function testesManutencao() {
   log('\n[4] Manutenção & OS (manutencao.html)');
   const storage = {
@@ -305,7 +538,7 @@ async function testesManutencao() {
     nexus_os_list: [{ id: 'OS-2026-100', equipamento: 'Guindaste ABC123DEF', prioridade: 'ALTA', descricao: 'Revisão', status: 'SOLICITADA', data: '2026-10-01' }],
     nexus_containers_list: [], nexus_navios_list: []
   };
-  let w = await pronta(pagina('manutencao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/manutencao.js'], adaptadores: ['js/webmcp-manutencao.js'] }));
+  let w = await pronta(pagina('manutencao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/manutencao.js'], adaptadores: ['js/webmcp/webmcp-manutencao.js'] }));
   let r = await w.NexusWebMCP.executar('listar_ordens_servico', { status: 'SOLICITADA' });
   check('listar OS: filtra por status', r.ok && r.dados.total === 1);
   r = await w.NexusWebMCP.executar('obter_ordem_servico', { id: 'OS-2026-100' });
@@ -330,7 +563,7 @@ async function testesManutencao() {
   check('manutenção de navio: ferramenta declarativa de preenchimento registrada', Boolean(prep));
   w.close();
 
-  w = await pronta(pagina('manutencao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/manutencao.js'], adaptadores: ['js/webmcp-manutencao.js'] }));
+  w = await pronta(pagina('manutencao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/pages/manutencao.js'], adaptadores: ['js/webmcp/webmcp-manutencao.js'] }));
   r = await w.NexusWebMCP.executar('solicitar_manutencao_guindaste', { identificacao: 'ABC123DEF', justificativa: 'Teste de permissão' });
   check('inspetor não solicita manutenção de guindaste (só supervisão)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
@@ -342,7 +575,7 @@ async function testesDelegacaoETecnico() {
   const storage = {
     nexus_active_delegation: { substitutoMatricula: 'MAT-7001', substitutoNome: 'Carlos Substituto', substituidoNome: 'Ana Titular', substituidoMatricula: 'MAT-1001', inicio: '2026-10-01T08:00', fim: '2099-01-01T00:00' }
   };
-  let w = await pronta(pagina('delegacao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/delegacao.js'], adaptadores: ['js/webmcp-delegacao.js'] }));
+  let w = await pronta(pagina('delegacao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/delegacao.js'], adaptadores: ['js/webmcp/webmcp-delegacao.js'] }));
   let r = await w.NexusWebMCP.executar('obter_delegacao_ativa', {});
   check('delegação ativa: mostra substituto e vigência, sem CPF', r.ok && r.dados.ativa === true && !/cpf|CPF/.test(JSON.stringify(r.dados)), JSON.stringify(r).slice(0, 200));
   const form = w.document.getElementById('delegacaoForm');
@@ -369,7 +602,7 @@ async function testesDelegacaoETecnico() {
     nexus_vis_list: [{ id: 'VIS-1', nome: 'Visitante Um', documento: '123.456.789-09', motivo: 'Fiscalização', status: 'AGUARDANDO_AUTORIZACAO', data: '08/10/2026 10:00', por: 'MAT-1' }],
     nexus_code_overrides: {}
   };
-  w = await pronta(pagina('tecnico_portos.html', { session: sessao('TECNICO_PORTOS'), storage: storageTec, scriptsPagina: ['js/tecnico_portos.js'], adaptadores: ['js/webmcp-tecnico.js'] }));
+  w = await pronta(pagina('tecnico_portos.html', { session: sessao('TECNICO_PORTOS'), storage: storageTec, scriptsPagina: ['js/pages/tecnico_portos.js'], adaptadores: ['js/webmcp/webmcp-tecnico.js'] }));
   r = await w.NexusWebMCP.executar('pesquisar_funcionario', { matricula: '9900' });
   check('pesquisar funcionário: nome e cargo, sem código de acesso', r.ok === true && r.dados.nome === 'Joana Operadora' && !/NX-9900|codigo/i.test(JSON.stringify(r.dados)), JSON.stringify(r).slice(0, 200));
   r = await w.NexusWebMCP.executar('listar_visitantes', {});
@@ -390,7 +623,7 @@ async function testesDelegacaoETecnico() {
     r.ok === true && w.document.getElementById('visDocumento').value === '' && r.dados.preencher_pelo_operador.includes('visDocumento'));
   w.close();
 
-  w = await pronta(pagina('tecnico_portos.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: storageTec, scriptsPagina: ['js/tecnico_portos.js'], adaptadores: ['js/webmcp-tecnico.js'] }));
+  w = await pronta(pagina('tecnico_portos.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: storageTec, scriptsPagina: ['js/pages/tecnico_portos.js'], adaptadores: ['js/webmcp/webmcp-tecnico.js'] }));
   r = await w.NexusWebMCP.executar('reemitir_codigo_funcionario', { matricula: 'MAT-9900' });
   check('supervisor não reemite códigos (só Técnico e Direção)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
@@ -400,7 +633,7 @@ async function testesDelegacaoETecnico() {
 async function testesRelatoriosScannerPainel() {
   log('\n[7] Relatórios, Scanner e Painel Geral');
   const cargas = cargasBase();
-  let w = await pronta(pagina('relatorios.html', { session: sessao('DIRETOR_OPERACOES_LOGISTICA'), storage: { nexus_cargas_fluxo: cargas }, scriptsPagina: ['js/relatorios.js'], adaptadores: ['js/webmcp-relatorios.js'] }));
+  let w = await pronta(pagina('relatorios.html', { session: sessao('DIRETOR_OPERACOES_LOGISTICA'), storage: { nexus_cargas_fluxo: cargas }, scriptsPagina: ['js/pages/relatorios.js'], adaptadores: ['js/webmcp/webmcp-relatorios.js'] }));
   let exportou = 0;
   w.NexusVision.exportDadosHistoricos = async () => { exportou += 1; };
   w.__pedidos.length = 0;
@@ -409,12 +642,12 @@ async function testesRelatoriosScannerPainel() {
   check('exportar CSV: resumo informa que o conteúdo não vai ao agente', w.__pedidos[0].resumo.some((l) => /não é enviado ao agente/.test(l)));
   w.close();
 
-  w = await pronta(pagina('relatorios.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: { nexus_cargas_fluxo: cargas }, scriptsPagina: ['js/relatorios.js'], adaptadores: ['js/webmcp-relatorios.js'] }));
+  w = await pronta(pagina('relatorios.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: { nexus_cargas_fluxo: cargas }, scriptsPagina: ['js/pages/relatorios.js'], adaptadores: ['js/webmcp/webmcp-relatorios.js'] }));
   r = await w.NexusWebMCP.executar('exportar_historico_csv', {});
   check('exportar CSV: supervisor não exporta o histórico (só Direção)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
 
-  w = await pronta(pagina('scanner.html', { session: sessao('ESTIVADOR'), storage: { nexus_cargas_fluxo: cargas, nexus_audit_logs: [] }, scriptsPagina: ['js/scanner.js'], adaptadores: ['js/webmcp-scanner.js'] }));
+  w = await pronta(pagina('scanner.html', { session: sessao('ESTIVADOR'), storage: { nexus_cargas_fluxo: cargas, nexus_audit_logs: [] }, scriptsPagina: ['js/pages/scanner.js'], adaptadores: ['js/webmcp/webmcp-scanner.js'] }));
   r = await w.NexusWebMCP.executar('ler_codigo_qr', { codigo: 'CRG-A' });
   check('scanner: identifica a carga pelo código (com ação sugerida)', r.ok === true && r.dados.encontrado === true && r.dados.id === 'CRG-A' && typeof r.dados.acao_sugerida === 'string', JSON.stringify(r).slice(0, 220));
   r = await w.NexusWebMCP.executar('ler_codigo_qr', { codigo: "CRG-1,id.neq.0" });
@@ -429,8 +662,8 @@ async function testesRelatoriosScannerPainel() {
       nexus_trail_decisoes: [{ id: 'TRL-1', decisao: 'LIBEROU_NAVIO', entidade: 'NAVIO MV Santos Star', responsavel: 'Ana Titular (Supervisor de Operações) - SUP-0001', data_hora: new Date().toISOString(), motivo: 'Saída autorizada', retificacao: null }],
       nexus_audit_logs: [{ data_hora: new Date().toISOString(), cargo: 'INSPETOR', codigo_usuario: 'INS-6090', entidade: 'CRG-A', tipo_alteracao: 'EDICAO' }]
     },
-    scriptsPagina: ['js/data-repository.js', 'js/dashboard.js'],
-    adaptadores: ['js/webmcp-dashboard.js']
+    scriptsPagina: ['js/data-repository.js', 'js/pages/dashboard.js'],
+    adaptadores: ['js/webmcp/webmcp-dashboard.js']
   }));
   r = await w.NexusWebMCP.executar('listar_trilha_decisoes', {});
   check('trilha: responsável sem código individual (campo redigido)', r.ok && r.dados.itens[0].responsavel === 'Ana Titular (Supervisor de Operações)' && !/SUP-0001/.test(JSON.stringify(r)), JSON.stringify(r).slice(0, 200));
@@ -459,7 +692,7 @@ async function testesRelatoriosScannerPainel() {
 async function testesGlobaisEAcesso() {
   log('\n[8] Ferramentas globais, emergência e telas de acesso');
   const storage = {};
-  let w = await pronta(pagina('dashboard.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/dashboard.js'], adaptadores: ['js/webmcp-dashboard.js'] }));
+  let w = await pronta(pagina('dashboard.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/pages/dashboard.js'], adaptadores: ['js/webmcp/webmcp-dashboard.js'] }));
   let r = await w.NexusWebMCP.executar('obter_sessao', {});
   check('sessão: nome e cargo, sem código individual nem matrícula', r.ok && r.dados.cargo === 'INSPETOR' && !/NX-9001|MAT-9001|codigo|matricula/i.test(JSON.stringify(r.dados)), JSON.stringify(r).slice(0, 200));
   check('sessão: lista as ações permitidas ao cargo', Array.isArray(r.dados.acoes_permitidas) && r.dados.acoes_permitidas.includes('INSPECIONAR_CARGA'));
@@ -475,8 +708,8 @@ async function testesGlobaisEAcesso() {
   check('emergência: motivo chega ao módulo de pânico', chamadas[0] && chamadas[0].motivo === 'Incêndio na área de contêineres');
   w.close();
 
-  w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/cargas.js'], adaptadores: ['js/webmcp-cargas.js'] }));
-  check('emergência: supervisor não tem a ferramenta de acionar alarme (sem permissão ACIONAR_EMERGENCIA)', !w.NexusWebMCP.ativas().includes('acionar_emergencia'));
+  w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/cargas.js'], adaptadores: ['js/webmcp/webmcp-cargas.js'] }));
+  check('emergência: supervisor TEM a ferramenta de acionar alarme (qualquer cargo pode acionar)', w.NexusWebMCP.ativas().includes('acionar_emergencia'));
   r = await w.NexusWebMCP.executar('ir_para_pagina', { pagina: 'embarcacoes' });
   check('ir para página: destino permitido ao cargo', r.ok === true && r.dados.destino === 'embarcacoes.html', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('ir_para_pagina', { pagina: 'tecnico_portos' });
@@ -500,7 +733,7 @@ async function testesGlobaisEAcesso() {
 // ------------------------------------------------------------------
 async function principal() {
   log('=== WebMCP — páginas reais (integração) ===');
-  const todos = [testesCargas, testesInspecao, testesEmbarcacoes, testesManutencao, testesDelegacaoETecnico, testesRelatoriosScannerPainel, testesGlobaisEAcesso];
+  const todos = [testesCargas, testesVinculacaoNavioNoPorto, testesInspecao, testesEmbarcacoes, testesRotasMaritimas, testesManutencao, testesDelegacaoETecnico, testesRelatoriosScannerPainel, testesGlobaisEAcesso];
   for (const teste of todos) {
     try {
       await silenciarLog(teste);

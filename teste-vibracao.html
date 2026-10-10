@@ -1,14 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR" class="light">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-50V6WDEMPT"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-50V6WDEMPT');
-  </script>
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
+  <script src="js/analytics.js"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#dc2626" />
@@ -211,8 +205,22 @@
     })();
   </script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
-  <script src="js/webmcp-core.js"></script>
-  <script src="js/webmcp-ui.js"></script>
-  <script src="js/webmcp-vibracao.js"></script>
+  <script src="js/webmcp/webmcp-core.js"></script>
+  <script src="js/webmcp/webmcp-ui.js"></script>
+  <script src="js/webmcp/webmcp-vibracao.js"></script>
+
+  <!-- VLibras Widget (Acessibilidade em Libras) -->
+  <div vw class="enabled">
+    <div vw-access-button class="active"></div>
+    <div vw-plugin-wrapper>
+      <div class="vw-plugin-top-wrapper"></div>
+    </div>
+  </div>
+  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <script>
+    if (window.VLibras && window.VLibras.Widget) {
+      new window.VLibras.Widget('https://vlibras.gov.br/app');
+    }
+  </script>
 </body>
 </html>

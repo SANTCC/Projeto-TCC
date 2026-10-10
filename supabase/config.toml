@@ -3,6 +3,7 @@
 #   supabase link --project-ref <ref-do-projeto>
 #   supabase db push                                  (aplica supabase/migrations/*)
 #   supabase functions deploy panic-alert --no-verify-jwt
+#   supabase functions deploy relatorio-pdf --no-verify-jwt
 
 project_id = "nexusport"
 
@@ -13,3 +14,31 @@ project_id = "nexusport"
 # A autorização real é feita dentro da função (RBAC por cargo).
 [functions.panic-alert]
 verify_jwt = false
+
+# relatorio-pdf: mesma situação do panic-alert. O app não usa Supabase Auth; a identidade
+# (codigo_individual, funcionário ativo e cargo permitido) é validada dentro da função.
+[functions.relatorio-pdf]
+verify_jwt = false
+
+# kpis-calculo: cálculo consolidado de indicadores no servidor com RBAC por cargo.
+[functions.kpis-calculo]
+verify_jwt = false
+
+# despacho-embarcacao: liberação e despacho de navios com verificação de rota marítima e ETA.
+[functions.despacho-embarcacao]
+verify_jwt = false
+
+# scanner-qr: validação de leituras QR Code, matriz de ações por cargo e log automático.
+[functions.scanner-qr]
+verify_jwt = false
+
+# log-acesso: registra IP e user agent de usuários autenticados (codigo_individual ativo em funcionarios).
+# Sem Supabase Auth: a identidade é validada dentro da função.
+[functions.log-acesso]
+verify_jwt = false
+
+# Seed de demonstração (Backlog 3, itens C e D): usuários mock por cargo e dados fictícios de navios,
+# contêineres, cargas e histórico. `supabase db reset` roda este arquivo localmente. Não aplicar em produção.
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]

@@ -1,14 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-50V6WDEMPT"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-50V6WDEMPT');
-  </script>
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
+  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>NexusPort — Painel Geral</title>
@@ -51,12 +45,10 @@
     };
   </script>
 
-  <!-- Chart.js via CDN para Visão Estratégica -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <!-- Auth Guard & Layout Client-Side Scripts -->
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
   <script src="js/vision-layer.js"></script>
@@ -219,36 +211,6 @@
               </div>
             </button>
           </div>
-        </div>
-
-        <!-- Painel de Gráficos por Camada de Visão (Chart.js) — RF 1 / RF 7 / RF 16.
-             Merge com main: o painel permanece no Dashboard (botão Atualizar + cadência
-             de 1 minuto); a página de Relatórios mantém o catálogo expandido de gráficos. -->
-        <div id="chartsRolePanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <div class="flex items-start gap-3">
-              <div class="p-2.5 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-nexus-500 dark:text-indigo-400 shrink-0">
-                <span class="material-symbols-outlined text-[22px]">monitoring</span>
-              </div>
-              <div>
-                <h3 id="chartsRoleTitle" class="font-display font-bold text-sm text-nexus-900 dark:text-white">Análise gráfica por camada de visão</h3>
-                <p id="chartsRoleSubtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Carregando indicadores gráficos do seu cargo...</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <span id="chartsSyncStatus" role="status" aria-live="polite" class="text-[10px] font-mono text-slate-400 dark:text-slate-500 max-w-[220px] truncate"></span>
-              <span id="chartsRoleBadge" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[10px] font-bold uppercase">RLS</span>
-              <button id="chartsRefreshBtn" type="button" title="Consulta o servidor e redesenha os gráficos com os dados mais recentes" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 disabled:opacity-60 disabled:cursor-wait text-white font-bold text-xs flex items-center gap-1 transition-colors">
-                <span class="material-symbols-outlined text-[16px]">refresh</span>
-                <span>Atualizar</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Grade de gráficos renderizada dinamicamente por js/charts.js conforme o cargo -->
-          <div id="chartsRoleGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
-
-          <p id="chartsRoleFooter" class="text-[11px] font-mono text-slate-400 dark:text-slate-500"></p>
         </div>
 
         <!-- Tabela do Log Geral de Alterações (RF 12 / T7.1, T7.2) -->
@@ -453,16 +415,30 @@
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>
   <script src="js/supabase-client.js"></script>
+  <script src="js/online-presence.js"></script>
   <script src="js/data-repository.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/dashboard.js"></script>
+  <script src="js/pages/dashboard.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
-  <script src="js/webmcp-core.js"></script>
-  <script src="js/webmcp-ui.js"></script>
-  <script src="js/webmcp-dados.js"></script>
-  <script src="js/webmcp-global.js"></script>
-  <script src="js/webmcp-dashboard.js"></script>
+  <script src="js/webmcp/webmcp-core.js"></script>
+  <script src="js/webmcp/webmcp-ui.js"></script>
+  <script src="js/webmcp/webmcp-dados.js"></script>
+  <script src="js/webmcp/webmcp-global.js"></script>
+  <script src="js/webmcp/webmcp-dashboard.js"></script>
+
+  <!-- VLibras Widget (Acessibilidade em Libras) -->
+  <div vw class="enabled">
+    <div vw-access-button class="active"></div>
+    <div vw-plugin-wrapper>
+      <div class="vw-plugin-top-wrapper"></div>
+    </div>
+  </div>
+  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <script>
+    if (window.VLibras && window.VLibras.Widget) {
+      new window.VLibras.Widget('https://vlibras.gov.br/app');
+    }
+  </script>
 </body>
 </html>

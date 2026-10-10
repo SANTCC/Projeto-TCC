@@ -36,48 +36,15 @@
     }
   } catch (e) {}
 
-  const SESSION_KEY = 'nexus_session';
+  // Sessão em COOKIES (backlog 3). A gravação/leitura fica em js/session-cookies.js,
+  // carregado antes deste arquivo em todas as telas que usam o guard.
   const SESSION_COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60; // turno operacional de 12h (Backlog 3)
 
-  /**
-   * Grava a sessão ativa em cookie (Backlog 3: Cookies-Session).
-   * Usa SameSite=Lax (mesma origem, navegação top-level permitida para redirects)
-   * e Secure quando servido via HTTPS (Vercel). Observação: cookies gravados via
-   * JavaScript não podem ser HttpOnly — a exposição via XSS é a mesma que o
-   * armazenamento local já tinha, por isso soma-se a hierarquia `nexusEsc`.
-   */
-  function setSessionCookie(rawValue) {
-    try {
-      const attrs = [`path=/`, `SameSite=Lax`, `max-age=${SESSION_COOKIE_MAX_AGE_SECONDS}`];
-      if (window.location && window.location.protocol === 'https:') {
-        attrs.push('Secure');
-      }
-      document.cookie = `${SESSION_KEY}=${encodeURIComponent(rawValue)}; ${attrs.join('; ')}`;
-    } catch (e) {
-      console.warn('[NexusAuth] Não foi possível gravar cookie de sessão:', e);
+  function sessionCookies() {
+    if (!window.NexusSessionCookies) {
+      throw new Error('js/session-cookies.js deve ser carregado antes de js/auth-guard.js');
     }
-  }
-
-  function getSessionCookie() {
-    try {
-      const prefix = `${SESSION_KEY}=`;
-      const parts = (document.cookie || '').split(';');
-      for (const part of parts) {
-        const trimmed = part.trim();
-        if (trimmed.indexOf(prefix) === 0) {
-          return decodeURIComponent(trimmed.substring(prefix.length));
-        }
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function clearSessionCookie() {
-    try {
-      document.cookie = `${SESSION_KEY}=; path=/; SameSite=Lax; max-age=0`;
-    } catch (e) {}
+    return window.NexusSessionCookies;
   }
 
   // Matriz de Ações x Cargos com base no Spec.md RF 1
@@ -103,7 +70,9 @@
     'CADASTRAR_CONTAINER': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'CADASTRAR_GUINDASTE': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'INSPECIONAR_CARGA': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
-    'ACIONAR_EMERGENCIA': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    // Emergência pode ser acionada por QUALQUER funcionário autenticado,
+    // independente do cargo (botão na sidebar, visível em todas as telas).
+    'ACIONAR_EMERGENCIA': ['ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS', 'SUPERVISOR_GERENTE_OPERACOES', 'SUPERVISOR_SUBSTITUTO', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
 
     // Supervisor / Gerente de Operações
     'LIBERAR_NAVIO': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
@@ -135,14 +104,12 @@
 
   const NexusAuth = {
     /**
-     * Obtém a sessão ativa. Prioridade: cookie de sessão (Backlog 3), com
-     * leitura legada de sessionStorage/localStorage para sessões já ativas.
+     * Obtém a sessão ativa, lida do cookie `nexus_session`. Não há mais leitura de
+     * sessionStorage/localStorage: sessões gravadas por versões antigas exigem novo login.
      */
     getSession: function () {
       try {
-        const raw = getSessionCookie()
-          || sessionStorage.getItem(SESSION_KEY)
-          || localStorage.getItem(SESSION_KEY);
+        const raw = sessionCookies().lerSessao();
         if (!raw) return null;
         const session = JSON.parse(raw);
         if (!session || !session.codigo_individual) return null;
@@ -211,7 +178,7 @@
 
     /**
      * Informa, sem redirecionar, se o cargo da sessão pode abrir a página (mesma regra de requireAuth).
-     * Usado pelas ferramentas WebMCP (js/webmcp-core.js) para o mesmo controle de acesso das páginas.
+     * Usado pelas ferramentas WebMCP (js/webmcp/webmcp-core.js) para o mesmo controle de acesso das páginas.
      * @param {string} pageName - Nome do arquivo HTML (ex.: 'cargas.html')
      * @returns {boolean}
      */
@@ -238,34 +205,52 @@
         return false;
       }
 
-      return allowedRoles.includes(session.cargo);
+      // Validação direta do cargo
+      if (allowedRoles.includes(session.cargo)) return true;
+
+      // Suporte a SUPERVISOR_SUBSTITUTO ou delegação ativa dentro da vigência
+      const activeDelegRaw = localStorage.getItem('nexus_active_delegation');
+      let temDelegacaoAtiva = false;
+      if (activeDelegRaw) {
+        try {
+          const activeDeleg = JSON.parse(activeDelegRaw);
+          if (activeDeleg) {
+            const now = new Date();
+            const dentroVigencia = (!activeDeleg.fim || now <= new Date(activeDeleg.fim)) &&
+                                  (!activeDeleg.inicio || now >= new Date(activeDeleg.inicio));
+            if (dentroVigencia) {
+              const subMat = String(activeDeleg.substitutoMatricula || '').toUpperCase();
+              const userMat = String(session.matricula || '').toUpperCase();
+              if (subMat === userMat || subMat === `MAT-${userMat}` || session.cargo === 'SUPERVISOR_SUBSTITUTO' || session.delegacao_ativa === true) {
+                temDelegacaoAtiva = true;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (temDelegacaoAtiva) {
+        if (allowedRoles.includes('SUPERVISOR_SUBSTITUTO') || allowedRoles.includes('SUPERVISOR_GERENTE_OPERACOES')) {
+          return true;
+        }
+      }
+
+      return false;
     },
 
     /**
      * Estabelece a sessão ativa após a confirmação do cargo (T1.2/T1.3).
-     * Grava em cookie (principal) e localStorage (espelho legado de outras
-     * telas/guards) e limpa o espelho antigo no sessionStorage.
+     * Grava somente em cookie (js/session-cookies.js) e apaga cópias legadas.
      */
     establishSession: function (sessionData) {
-      const raw = JSON.stringify(sessionData);
-      setSessionCookie(raw);
-      try {
-        localStorage.setItem(SESSION_KEY, raw);
-        sessionStorage.removeItem(SESSION_KEY);
-        sessionStorage.removeItem('nexus_pending_auth');
-      } catch (e) {}
+      sessionCookies().gravarSessao(sessionData);
     },
 
     /**
      * Encerra a sessão ativa do usuário e redireciona para o login
      */
     logout: function () {
-      clearSessionCookie();
-      try {
-        sessionStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(SESSION_KEY);
-        sessionStorage.removeItem('nexus_pending_auth');
-      } catch (e) {}
+      sessionCookies().limparSessao();
       window.location.href = 'index.html';
     }
   };

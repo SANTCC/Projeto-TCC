@@ -1,0 +1,19 @@
+{
+  "name": "nexusport-screenshots",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dependências vendorizadas das capturas de tela (substituem os CDNs no ambiente de captura). Instalação: npm install --prefix tools/screenshots",
+  "license": "MIT",
+  "devDependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/montserrat": "^5.2.8",
+    "@supabase/supabase-js": "^2.99.0",
+    "chart.js": "^4.5.1",
+    "html5-qrcode": "^2.3.8",
+    "jspdf": "^2.5.1",
+    "material-symbols": "^0.39.2",
+    "qrcode": "^1.5.1",
+    "tailwindcss": "^3.4.19"
+  }
+}

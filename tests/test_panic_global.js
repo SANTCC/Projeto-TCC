@@ -1,6 +1,7 @@
 /**
  * Teste de Verificação — Botão de Pânico GLOBAL
- * (Edge Function panic-alert + Broadcast WebSocket + Webhook opcional OFF por padrão)
+ * (Edge Function panic-alert + Broadcast WebSocket; webhook opcional existe
+ * apenas no servidor — o front-end não possui UI nem chamadas de webhook)
  *
  * Executar: node tests/test_panic_global.js
  */
@@ -12,7 +13,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf-8');
 
 function testPanicGlobal() {
   console.log('================================================================');
-  console.log('TESTE — BOTÃO DE PÂNICO GLOBAL (EDGE FUNCTION + WEBSOCKET + WEBHOOK)');
+  console.log('TESTE — BOTÃO DE PÂNICO GLOBAL (EDGE FUNCTION + WEBSOCKET; WEBHOOK SÓ NO SERVIDOR)');
   console.log('================================================================\n');
 
   let passed = true;
@@ -38,8 +39,8 @@ function testPanicGlobal() {
   const cfg = read('supabase/config.toml');
   check('config.toml desliga verify_jwt do panic-alert (evita 401 no preflight CORS)', /\[functions\.panic-alert\]\s*\nverify_jwt\s*=\s*false/.test(cfg));
 
-  // 2. Webhook OPCIONAL — DESATIVADO POR PADRÃO
-  console.log('\n2. Validando webhook opcional (OFF por padrão)...');
+  // 2. Webhook OPCIONAL — DESATIVADO POR PADRÃO (SOMENTE no servidor)
+  console.log('\n2. Validando webhook opcional do servidor (OFF por padrão)...');
   check('Lê configuração de panic_webhook_config', fn.includes('panic_webhook_config'));
   check('Padrão do código: enabled=false quando não há configuração', fn.includes('return { id: null, enabled: false, url: null }'));
   check('Só dispara com enabled=true E url configurada', fn.includes('webhookConfig.enabled && webhookConfig.url'));
@@ -66,7 +67,8 @@ function testPanicGlobal() {
   check('Sincroniza estado inicial via tabela emergencias', pr.includes("from('emergencias')") && pr.includes("eq('estado', 'ATIVA')"));
   check('Fallback de broadcast direto quando a função está indisponível', pr.includes('client_fallback') && pr.includes('ch.send'));
   check('Não usa fallback quando o servidor bloqueia por RBAC (401/403)', pr.includes('httpStatus === 401 || httpStatus === 403'));
-  check('Bind do painel de configuração do webhook', pr.includes('bindWebhookSettingsUI') && pr.includes('panicWebhookEnabled'));
+  check('Front-end SEM webhook (painel/bind removidos do módulo cliente)',
+    !pr.includes('bindWebhookSettingsUI') && !pr.includes('panicWebhookEnabled') && !pr.includes("from('panic_webhook_config')"));
   check('Evento global nexus_panic_changed', pr.includes('nexus_panic_changed'));
   check('Indicador SOS anima em todas as páginas enquanto ativo', pr.includes('nexus-panic-vibrating') && pr.includes('nexusPanicVibrate'));
   check('Vibração tátil periódica em dispositivos compatíveis', pr.includes('navigator.vibrate') && pr.includes('HAPTIC_INTERVAL_MS'));
@@ -88,7 +90,7 @@ function testPanicGlobal() {
 
   // 5. Botão existente delegado ao fluxo global
   console.log('\n5. Validando integração do botão existente (manutencao)...');
-  const man = read('js/manutencao.js');
+  const man = read('js/pages/manutencao.js');
   check('panicBtn delega para NexusPanic.triggerPanic', man.includes('window.NexusPanic.triggerPanic'));
   check('resetEmergencyBtn delega para NexusPanic.clearPanic', man.includes('window.NexusPanic.clearPanic'));
   check('Banner da página sincroniza via nexus_panic_changed', man.includes("window.addEventListener('nexus_panic_changed'"));
@@ -99,12 +101,15 @@ function testPanicGlobal() {
   const pages = ['dashboard.html', 'cargas.html', 'inspecao.html', 'scanner.html', 'embarcacoes.html', 'manutencao.html', 'delegacao.html', 'tecnico_portos.html', 'relatorios.html'];
   pages.forEach(p => check(`${p} carrega js/panic-realtime.js`, read(p).includes('<script src="js/panic-realtime.js"></script>')));
 
-  // 7. Painel do webhook + botão original em manutencao.html
-  console.log('\n7. Validando UI do webhook em manutencao.html...');
+  // 7. Botão original + diagnóstico de banco em manutencao.html (sem painel de webhook)
+  console.log('\n7. Validando UI do pânico em manutencao.html...');
   const mh = read('manutencao.html');
   check('Botão de pânico original preservado (#panicButton)', mh.includes('id="panicButton"'));
-  check('Painel do webhook: toggle + URL + salvar + testar', ['panicWebhookEnabled', 'panicWebhookUrl', 'panicWebhookSaveBtn', 'panicWebhookTestBtn'].every(id => mh.includes(id)));
-  check('Documentado como desativado por padrão', mh.includes('Desativado por padrão'));
+  check('Painel de webhook REMOVIDO do front-end',
+    !['panicWebhookPanel', 'panicWebhookEnabled', 'panicWebhookUrl', 'panicWebhookSaveBtn',
+      'panicWebhookTestBtn', 'panicWebhookStatus'].some(id => mh.includes(id)));
+  check('Diagnóstico das tabelas do pânico preservado (Verificar + status)',
+    mh.includes('id="panicTablesCheckBtn"') && mh.includes('id="panicTablesStatus"'));
 
   // 7.1 Painel "Alerta no Aparelho" + testes dedicados
   console.log('\n7.1. Validando painel de vibração/som e testes dedicados...');

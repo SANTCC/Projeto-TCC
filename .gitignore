@@ -11,3 +11,14 @@ dist/
 out/
 .DS_Store
 *.log
+
+# Relatórios do gate Lighthouse (gerados por npm run lighthouse)
+lighthouse-report/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Dependências das capturas de tela (npm install --prefix tools/screenshots).
+tools/screenshots/node_modules/

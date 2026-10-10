@@ -4,8 +4,11 @@
   "description": "NexusPort - Sistema de Gestão Operacional Portuária para o Porto de Santos (STS-01)",
   "main": "index.html",
   "scripts": {
+    "build": "node tools/build.js",
     "start": "npx serve -l 3000 .",
-    "test": "python3 verify_phase4.py && python3 verify_phase5.py && python3 verify_phase6.py && python3 verify_phase7.py && python3 verify_phase8.py && python3 verify_phase9.py",
+    "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
+    "test:vlibras": "node tests/test_vlibras.js",
+    "test:edge-functions": "node tests/test_edge_functions.js",
     "test:graficos": "node tests/test_graficos_por_cargo.js",
     "test:refresh": "node tests/test_charts_refresh.js",
     "test:autorefresh": "node tests/test_charts_autorefresh.js",
@@ -18,11 +21,29 @@
     "test:panic": "node tests/test_panic_global.js && node tests/test_emergencias_404.js && node tests/test_enum_emergencia.js",
     "test:enum": "node tests/test_enum_emergencia.js",
     "test:net-debug": "node tests/test_net_debug.js",
-    "test:backlog3": "node tests/test_backlog3_correcoes.js && node tests/test_backlog3_restantes.js",
+    "test:backlog3": "node tests/test_backlog3_correcoes.js && node tests/test_backlog3_restantes.js && node tests/test_sessao_cookies.js",
     "test:backlog3:restantes": "node tests/test_backlog3_restantes.js",
+    "test:sessao": "node tests/test_sessao_cookies.js",
+    "test:pendentes": "node tests/test_backlog3_pendentes.js",
     "test:webmcp": "node tests/test_webmcp.js && node tests/test_webmcp_paginas.js",
     "test:gravacao": "node tests/test_gravacao_inspecao_login.js",
-    "test:single-flight": "node tests/test_single_flight.js"
+    "test:single-flight": "node tests/test_single_flight.js",
+    "test:cargas-loop": "node tests/test_cargas_request_control.js",
+    "test:funcionario-cpf": "node tests/test_funcionario_cpf_validation.js",
+    "test:tempo-real": "node tests/test_tempo_real.js",
+    "test:presenca": "node tests/test_presenca_online.js",
+    "test:analytics": "node tests/test_analytics.js",
+    "test:build": "node tests/test_build.js",
+    "lighthouse": "node tools/lighthouse-check.js",
+    "screenshots": "node tools/screenshots/capturar.js",
+    "about": "node tools/screenshots/gerar-about.js",
+    "test:screenshots": "node tests/test_screenshots.js",
+    "test:about": "node tests/test_about_page.js",
+    "test:lighthouse": "node tests/test_lighthouse.js",
+    "test:relatorio-pdf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_relatorio_pdf.js",
+    "test:seed": "node tests/test_seed_demo.js",
+    "test:python": "python3 -m unittest discover -s tests -p \"test_python_suite.py\"",
+    "test:log-acesso": "node tests/test_log_acesso.js"
   },
   "keywords": [
     "nexusport",
@@ -34,6 +55,12 @@
   "author": "NexusPort Team",
   "license": "MIT",
   "devDependencies": {
-    "jsdom": "^30.1.2"
+    "chrome-launcher": "^1.2.2",
+    "clean-css": "^5.3.3",
+    "jsdom": "^30.1.2",
+    "lighthouse": "^13.5.0",
+    "pdf-lib": "^1.17.1",
+    "puppeteer-core": "^25.13.0",
+    "terser": "^5.51.2"
   }
 }

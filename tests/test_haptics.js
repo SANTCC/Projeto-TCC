@@ -354,7 +354,7 @@ async function testHaptics() {
   mockUserActivation(w13);
   const vibracoes = [];
   w13.navigator.vibrate = (pattern) => { vibracoes.push(pattern); return true; };
-  w13.localStorage.setItem('nexus_session', JSON.stringify({
+  w13.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify({
     id: '11111111-1111-1111-1111-111111111111',
     matricula: '777001',
     codigo_individual: 'INS-1001',
@@ -362,8 +362,9 @@ async function testHaptics() {
     cargo: 'INSPETOR',
     cargo_nome: 'Inspetor',
     status: 'ATIVO'
-  }));
+  })) + '; path=/';
   w13.nexusSupabase = null;
+  w13.eval(read('js/session-cookies.js'));
   w13.eval(read('js/auth-guard.js'));
   w13.currentUserSession = w13.NexusAuth.getSession();
   w13.eval(HAPTICS_SRC);

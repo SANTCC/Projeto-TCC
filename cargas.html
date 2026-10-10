@@ -1,14 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-50V6WDEMPT"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-50V6WDEMPT');
-  </script>
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
+  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>NexusPort — Cargas & Pátio</title>
@@ -53,9 +47,10 @@
 
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
-  <script src="js/tipos-carga.js"></script>
+  <script src="js/pages/tipos-carga.js"></script>
   <script src="js/vision-layer.js"></script>
   <script src="js/layout.js"></script>
 </head>
@@ -139,13 +134,12 @@
               <option value="Pátio STS-01 (Setor Refrigeração)">Pátio STS-01 (Setor Refrigeração)</option>
             </select>
           </div>
-          <div>
-            <label class="block font-bold text-slate-500 mb-1">Destino Final</label>
-            <input type="text" id="agDestino" required placeholder="Ex: Amsterdã, Holanda" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
-          </div>
-          <div>
-            <label class="block font-bold text-slate-500 mb-1">Data Prevista de Entrega</label>
-            <input type="date" id="agDataPrevista" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+          <div class="sm:col-span-2">
+            <label class="block font-bold text-slate-500 mb-1">Destino Final (Rota Marítima Cadastrada)</label>
+            <select id="agDestino" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold">
+              <option value="">Carregando rotas marítimas cadastradas...</option>
+            </select>
+            <p class="text-[11px] text-slate-400 mt-1">O destino é escolhido entre as rotas marítimas cadastradas no sistema (Gestão de Rotas em Embarcações &amp; GPS) — digitação manual não é permitida, para evitar falhas. A estimativa de chegada (ETA) é calculada automaticamente pelo navio vinculado (@ 33 km/h).</p>
           </div>
           <div class="sm:col-span-3">
             <label class="block font-bold text-slate-500 mb-1">Funcionário Responsável pela Carga</label>
@@ -188,6 +182,10 @@
               <input type="search" id="filterBusca" placeholder="Buscar por código, tipo, natureza, contêiner ou navio..." class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
+              <label class="block font-bold text-slate-500 mb-1">Código da Carga</label>
+              <input type="text" id="filterCodigo" placeholder="Ex: CRG-2026-001" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
+            </div>
+            <div>
               <label class="block font-bold text-slate-500 mb-1">1. Nome do Navio</label>
               <input type="text" id="filterNavio" placeholder="Ex: Santos Star" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
@@ -217,8 +215,6 @@
                 <option value="PRONTA_PARA_ENTREGA">PRONTA_PARA_ENTREGA</option>
                 <option value="EM_TRANSITO">EM_TRANSITO</option>
                 <option value="ENTREGUE">ENTREGUE</option>
-                <option value="RECUSADA">RECUSADA</option>
-                <option value="CANCELADA">CANCELADA</option>
               </select>
             </div>
             <div class="flex items-end">
@@ -248,7 +244,7 @@
                   <th class="p-3">Código / QR</th>
                   <th class="p-3">Tipo / Natureza</th>
                   <th class="p-3">Peso / Volume</th>
-                  <th class="p-3">Porto Descarga</th>
+                  <th class="p-3">Setor do Pátio</th>
                   <th class="p-3">Contêiner / Navio</th>
                   <th class="p-3">Status do Fluxo</th>
                   <th class="p-3 text-right">Ações do Cargo (RF 1)</th>
@@ -261,11 +257,11 @@
           </div>
         </div>
 
-        <!-- Tabela Separada de Cargas Canceladas (C9) -->
-        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
-          <div class="flex items-center justify-between pb-3 border-b border-nexus-border dark:border-nexus-dark-border">
-            <span class="font-display font-bold text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
-              <span class="material-symbols-outlined text-red-500">block</span>
+        <!-- Tabela de Cargas Canceladas (cinza) — a tabela principal exibe apenas cargas pendentes -->
+        <div class="bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-300 dark:border-slate-700 p-6 shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-300 dark:border-slate-700">
+            <span class="font-display font-bold text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+              <span class="material-symbols-outlined text-slate-500">block</span>
               Tabela de Cargas Canceladas (C9)
             </span>
             <span class="text-xs font-mono text-slate-400">
@@ -275,16 +271,46 @@
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 font-mono uppercase">
+              <thead class="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono uppercase">
                 <tr>
                   <th class="p-3">Código</th>
                   <th class="p-3">Tipo</th>
-                  <th class="p-3">Berço de Retorno</th>
+                  <th class="p-3">Setor do Pátio</th>
                   <th class="p-3">Motivo do Cancelamento</th>
                   <th class="p-3">Status</th>
                 </tr>
               </thead>
-              <tbody id="cargasCanceladasTableBody" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">
+              <tbody id="cargasCanceladasTableBody" class="divide-y divide-slate-300 dark:divide-slate-700 font-medium">
+                <!-- Renderizado via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tabela de Cargas Recusadas (vermelha) — recusadas na inspeção formal -->
+        <div class="bg-red-50 dark:bg-red-950/30 rounded-2xl border border-red-200 dark:border-red-900/60 p-6 shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between pb-3 border-b border-red-200 dark:border-red-900/60">
+            <span class="font-display font-bold text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
+              <span class="material-symbols-outlined text-red-600">cancel</span>
+              Tabela de Cargas Recusadas
+            </span>
+            <span class="text-xs font-mono text-red-400 dark:text-red-500">
+              Recusadas na Inspeção
+            </span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 font-mono uppercase">
+                <tr>
+                  <th class="p-3">Código</th>
+                  <th class="p-3">Tipo</th>
+                  <th class="p-3">Setor do Pátio</th>
+                  <th class="p-3">Motivo da Recusa</th>
+                  <th class="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody id="cargasRecusadasTableBody" class="divide-y divide-red-200 dark:divide-red-900/60 font-medium">
                 <!-- Renderizado via JS -->
               </tbody>
             </table>
@@ -368,6 +394,14 @@
         </p>
 
         <div>
+          <label for="vincularNavioSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Navio (somente atracados no Porto de Santos e operantes):</label>
+          <select id="vincularNavioSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-xs">
+            <!-- Preenchido via JS: apenas navios aptos para receber carga -->
+          </select>
+          <p id="vincularNavioAviso" class="hidden mt-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400"></p>
+        </div>
+
+        <div>
           <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Selecione o Contêiner (Limite: 75 m³):</label>
           <select id="vincularContainerSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-xs">
             <!-- Preenchido via JS -->
@@ -387,20 +421,91 @@
     </div>
   </div>
 
+  <!-- Modal de Movimentação entre Setores do Pátio (Estivador) -->
+  <div id="movimentarModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-xl w-full p-6 shadow-xl flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+        <h3 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-amber-600">forklift</span>
+          Movimentar Carga entre Setores do Pátio
+        </h3>
+        <button type="button" id="closeMovimentarModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+
+      <div class="flex flex-col gap-3 text-xs">
+        <p class="text-slate-500 dark:text-slate-400">
+          Carga selecionada: <strong id="movimentarCargaIdLabel" class="text-nexus-500">--</strong>
+          (Setor atual: <span id="movimentarSetorAtualLabel" class="font-mono font-bold text-nexus-900 dark:text-white">--</span>)
+        </p>
+
+        <div>
+          <label for="movimentarSetorSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1">1. Setor de destino no pátio:</label>
+          <select id="movimentarSetorSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-xs">
+            <option value="">Selecione o setor de destino...</option>
+            <option value="Pátio Principal (Setor A)">Pátio Principal (Setor A)</option>
+            <option value="Pátio STS-01 (Setor B)">Pátio STS-01 (Setor B)</option>
+            <option value="Pátio STS-01 (Setor C)">Pátio STS-01 (Setor C)</option>
+            <option value="Pátio STS-01 (Setor Refrigeração)">Pátio STS-01 (Setor Refrigeração)</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="movimentarGuindasteSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1">2. Guindaste responsável pela tarefa:</label>
+          <select id="movimentarGuindasteSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-xs">
+            <option value="">Selecione o guindaste...</option>
+          </select>
+          <p class="text-[11px] text-slate-400 mt-1">A tarefa aparece como pendente na seção de guindastes (Embarcações &amp; GPS). O setor da carga só é alterado quando a tarefa for concluída por lá.</p>
+        </div>
+
+        <div id="movimentarInstrucaoBox" class="hidden p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs leading-relaxed">
+          <span class="font-bold block mb-0.5">Instruções da tarefa:</span>
+          <span id="movimentarInstrucaoText">--</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-nexus-border dark:border-nexus-dark-border">
+        <button type="button" id="cancelMovimentarModalBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs">
+          Cancelar
+        </button>
+        <button type="button" id="confirmMovimentarModalBtn" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors">
+          <span class="material-symbols-outlined text-sm">forklift</span>
+          Criar Tarefa de Movimentação
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>
   <script src="js/supabase-client.js"></script>
+  <script src="js/online-presence.js"></script>
   <script src="js/data-repository.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
-  <script src="js/cargas.js"></script>
+  <script src="js/pages/cargas.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
-  <script src="js/webmcp-core.js"></script>
-  <script src="js/webmcp-ui.js"></script>
-  <script src="js/webmcp-dados.js"></script>
-  <script src="js/webmcp-global.js"></script>
-  <script src="js/webmcp-cargas.js"></script>
+  <script src="js/webmcp/webmcp-core.js"></script>
+  <script src="js/webmcp/webmcp-ui.js"></script>
+  <script src="js/webmcp/webmcp-dados.js"></script>
+  <script src="js/webmcp/webmcp-global.js"></script>
+  <script src="js/webmcp/webmcp-cargas.js"></script>
+
+  <!-- VLibras Widget (Acessibilidade em Libras) -->
+  <div vw class="enabled">
+    <div vw-access-button class="active"></div>
+    <div vw-plugin-wrapper>
+      <div class="vw-plugin-top-wrapper"></div>
+    </div>
+  </div>
+  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <script>
+    if (window.VLibras && window.VLibras.Widget) {
+      new window.VLibras.Widget('https://vlibras.gov.br/app');
+    }
+  </script>
 </body>
 </html>

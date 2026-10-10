@@ -1,0 +1,266 @@
+#!/usr/bin/env node
+/**
+ * TESTE — VALIDAÇÃO DE CPF NO CADASTRO DE FUNCIONÁRIOS (tecnico_portos.html)
+ * ----------------------------------------------------------------------------
+ * Regra do produto: o CPF pode ser fictício. A única restrição é que ele não se
+ * repita dentro do sistema. Por isso o cadastro de funcionário NÃO confere os
+ * dígitos verificadores (módulo 11), assim como os cadastros de visitante e de
+ * substituto da delegação. Ele recusa apenas CPF incompleto ou com todos os
+ * dígitos iguais, e bloqueia CPF já cadastrado.
+ *
+ * Este teste garante, com a página real montada em jsdom e o módulo
+ * js/pages/tecnico_portos.js executando:
+ *   1. o placeholder não sugere um CPF de exemplo;
+ *   2. a página explica que o CPF pode ser fictício, mas não pode se repetir;
+ *   3. um CPF fictício com dígitos verificadores inválidos é aceito quando não está duplicado;
+ *   4. CPF repetido (mesmo número, outra matrícula) continua bloqueado;
+ *   5. CPF incompleto ou com todos os dígitos iguais é recusado;
+ *   6. a mensagem de erro descreve a regra atual, sem exemplo enganoso;
+ *   7. um CPF válido é aceito: gravado só com dígitos e exibido formatado;
+ *   8. a máscara automática formata os 11 dígitos e o valor mascarado é aceito;
+ *   9. corrigir um dígito no meio do CPF preserva o cursor, sem embaralhar os
+ *      números (regressão: a máscara jogava o cursor para o fim e o CPF que o
+ *      operador digitou certo era recusado como inválido);
+ *  10. o CPF corrigido no meio do campo é realmente aceito no envio.
+ *
+ * Uso: node tests/test_funcionario_cpf_validation.js
+ */
+const H = require('./webmcp-harness');
+const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, htmlDaPagina } = H;
+
+const PAGINA = 'tecnico_portos.html';
+const CPF_FICTICIO = '123.456.789-00'; // dígitos verificadores inválidos: aceito (CPF fictício)
+const MATRICULA_2 = 'MAT-4322';
+const CPF_VALIDO = '529.982.247-25';
+const CPF_VALIDO_DIGITOS = '52998224725';
+const MATRICULA = 'MAT-4321';
+const NASCIMENTO = '1985-04-12';
+const ID_INSERIDO = '44444444-4444-4444-8444-444444444444';
+
+/** Cliente Supabase mínimo: só o suficiente para o CRUD de funcionários da página. */
+function clienteSupabase(estado) {
+  const encadeamento = (tabela) => {
+    const enc = {
+      select() { return enc; },
+      order() { return enc; },
+      eq() { return enc; },
+      or() { return enc; },
+      update() { return enc; },
+      insert(payload) {
+        estado.insercoes.push({ tabela, payload });
+        if (tabela === 'funcionarios') estado.funcionarios.push(payload);
+        return enc;
+      },
+      single() { return Promise.resolve({ data: { id: ID_INSERIDO }, error: null }); },
+      maybeSingle() { return Promise.resolve({ data: null, error: null }); },
+      then(resolver, rejeitar) {
+        const dados = tabela === 'funcionarios' ? estado.funcionarios : estado.visitantes;
+        return Promise.resolve({ data: dados, error: null }).then(resolver, rejeitar);
+      }
+    };
+    return enc;
+  };
+  return { from: (tabela) => encadeamento(tabela) };
+}
+
+async function carregarPagina() {
+  const estado = { funcionarios: [], visitantes: [], insercoes: [], feedbacks: [] };
+  const janela = criarJanela({
+    url: `https://nexusport.test/${PAGINA}`,
+    html: htmlDaPagina(PAGINA),
+    session: sessao('TECNICO_PORTOS', { matricula: 'MAT-9002', nome: 'Técnico de Testes' }),
+    storage: { nexus_func_list: [], nexus_vis_list: [] },
+    scripts: [
+      'js/security.js',
+      'js/session-cookies.js',
+      'js/auth-guard.js',
+      (win) => {
+        win.currentUserSession = win.NexusAuth.getSession();
+        win.nexusSupabase = clienteSupabase(estado);
+        win.mostrarFeedback = (tipo, titulo, mensagem) => estado.feedbacks.push({ tipo, titulo, mensagem });
+        win.console.warn = () => {};
+      },
+      'js/pages/tecnico_portos.js'
+    ]
+  });
+  const w = janela.w;
+  await prontoDom(w);
+  await aguardar(60);
+  return { janela, w, estado };
+}
+
+/** Digita um caractere na posição do cursor (mesmo comportamento do navegador). */
+function digitar(w, input, caractere) {
+  const pos = input.selectionStart == null ? input.value.length : input.selectionStart;
+  input.value = input.value.slice(0, pos) + caractere + input.value.slice(pos);
+  input.setSelectionRange(pos + 1, pos + 1);
+  input.dispatchEvent(new w.Event('input', { bubbles: true }));
+}
+
+/** Backspace na posição do cursor (mesmo comportamento do navegador). */
+function apagar(w, input) {
+  const pos = input.selectionStart == null ? input.value.length : input.selectionStart;
+  if (pos === 0) return;
+  input.value = input.value.slice(0, pos - 1) + input.value.slice(pos);
+  input.setSelectionRange(pos - 1, pos - 1);
+  input.dispatchEvent(new w.Event('input', { bubbles: true }));
+}
+
+function preencherFormulario(w, cpf) {
+  w.document.getElementById('funcMatricula').value = MATRICULA;
+  w.document.getElementById('funcNome').value = 'Funcionário de Teste';
+  if (cpf !== undefined) w.document.getElementById('funcCpf').value = cpf;
+  w.document.getElementById('funcDataNasc').value = NASCIMENTO;
+}
+
+/** Envia o formulário real; `cpf` undefined mantém o valor já digitado. */
+function enviarFormulario(w, cpf) {
+  preencherFormulario(w, cpf);
+  w.document.getElementById('funcCrudForm')
+    .dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+}
+
+async function esperar(condicao, limiteMs = 1200) {
+  const fim = Date.now() + limiteMs;
+  while (Date.now() < fim) {
+    if (condicao()) return true;
+    await aguardar(10);
+  }
+  return Boolean(condicao());
+}
+
+const titulos = (estado, titulo) => estado.feedbacks.filter((f) => f.titulo === titulo);
+
+(async function main() {
+  log('=== Testes — validação de CPF no cadastro de funcionários ===');
+  const janelas = [];
+  try {
+    // ------------------------------------------------------------------
+    log('\n1. Interface: placeholder neutro e orientação sobre CPF fictício e unicidade');
+    const paginaA = await carregarPagina();
+    janelas.push(paginaA.janela);
+    const campoCpf = paginaA.w.document.getElementById('funcCpf');
+    const placeholder = campoCpf ? (campoCpf.getAttribute('placeholder') || '') : '';
+    check('o placeholder não sugere mais o exemplo inválido 123.456.789-00',
+      Boolean(campoCpf) && !/123\.456\.789-00/.test(placeholder) && !/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(placeholder),
+      `placeholder="${placeholder}"`);
+
+    const ajuda = paginaA.w.document.getElementById('funcCpfAjuda');
+    const textoAjuda = ajuda ? String(ajuda.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    check('a página diz que o CPF pode ser fictício, mas precisa ser único',
+      Boolean(ajuda) && campoCpf.getAttribute('aria-describedby') === 'funcCpfAjuda' &&
+      /fict[íi]cio/i.test(textoAjuda) && /[úu]nic/i.test(textoAjuda) && !/d[íi]gitos? verificador/i.test(textoAjuda),
+      `ajuda="${textoAjuda}"`);
+
+    // ------------------------------------------------------------------
+    log('\n2. Formulário real: CPF fictício é aceito quando não está duplicado');
+    const paginaF = await carregarPagina();
+    janelas.push(paginaF.janela);
+    enviarFormulario(paginaF.w, CPF_FICTICIO);
+    await esperar(() => paginaF.estado.insercoes.length > 0);
+    const payloadFicticio = (paginaF.estado.insercoes[0] || {}).payload || {};
+    check('CPF fictício com dígitos verificadores inválidos é aceito quando não está duplicado',
+      paginaF.estado.insercoes.length === 1 && payloadFicticio.cpf === '12345678900' &&
+      titulos(paginaF.estado, 'Funcionário Cadastrado').length === 1 &&
+      titulos(paginaF.estado, 'CPF Inválido').length === 0,
+      `inserções=${paginaF.estado.insercoes.length}, cpf=\"${payloadFicticio.cpf}\", ` +
+      `recusas=${titulos(paginaF.estado, 'CPF Inválido').length}`);
+
+    // Mesmo CPF com outra matrícula: a unicidade do CPF precisa bloquear.
+    paginaF.w.document.getElementById('funcMatricula').value = MATRICULA_2;
+    paginaF.w.document.getElementById('funcNome').value = 'Outro Funcionário';
+    paginaF.w.document.getElementById('funcCpf').value = CPF_FICTICIO;
+    paginaF.w.document.getElementById('funcDataNasc').value = NASCIMENTO;
+    paginaF.w.document.getElementById('funcCrudForm')
+      .dispatchEvent(new paginaF.w.Event('submit', { bubbles: true, cancelable: true }));
+    await esperar(() => titulos(paginaF.estado, 'CPF Já Cadastrado').length > 0);
+    check('CPF repetido (outra matrícula) continua bloqueado',
+      titulos(paginaF.estado, 'CPF Já Cadastrado').length === 1 && paginaF.estado.insercoes.length === 1,
+      `bloqueios=${titulos(paginaF.estado, 'CPF Já Cadastrado').length}, inserções=${paginaF.estado.insercoes.length}`);
+
+    // ------------------------------------------------------------------
+    log('\n3. Formulário real: CPF incompleto ou com todos os dígitos iguais é recusado');
+    const paginaR = await carregarPagina();
+    janelas.push(paginaR.janela);
+    enviarFormulario(paginaR.w, '111.111.111-11'); // dígitos repetidos
+    enviarFormulario(paginaR.w, '12345'); // incompleto
+    await esperar(() => titulos(paginaR.estado, 'CPF Inválido').length >= 2);
+    check('CPF com dígitos repetidos ou incompleto é recusado e não é gravado',
+      titulos(paginaR.estado, 'CPF Inválido').length === 2 && paginaR.estado.insercoes.length === 0,
+      `recusas=${titulos(paginaR.estado, 'CPF Inválido').length}, inserções=${paginaR.estado.insercoes.length}`);
+
+    const mensagem = String((paginaR.estado.feedbacks[0] || {}).mensagem || '');
+    check('a mensagem de erro descreve a regra atual (fictício pode, repetido não), sem exemplo enganoso',
+      /fict[íi]cio/i.test(mensagem) && /repet/i.test(mensagem) && !/d[íi]gitos? verificador/i.test(mensagem) &&
+      !/\d{3}\.\d{3}\.\d{3}-\d{2}/.test(mensagem),
+      `mensagem=\"${mensagem}\"`);
+
+    // ------------------------------------------------------------------
+    log('\n4. CPF válido: aceito, gravado somente com dígitos e exibido formatado');
+    const paginaB = await carregarPagina();
+    janelas.push(paginaB.janela);
+    enviarFormulario(paginaB.w, CPF_VALIDO);
+    await esperar(() => paginaB.estado.insercoes.length > 0);
+    await aguardar(80);
+    const payload = (paginaB.estado.insercoes[0] || {}).payload || {};
+    const tabela = paginaB.w.document.getElementById('funcCrudTableBody').textContent || '';
+    check('um CPF válido é aceito (sucesso, payload só com dígitos e linha formatada)',
+      titulos(paginaB.estado, 'Funcionário Cadastrado').length === 1 &&
+      titulos(paginaB.estado, 'CPF Inválido').length === 0 &&
+      payload.cpf === CPF_VALIDO_DIGITOS &&
+      tabela.includes(CPF_VALIDO) && tabela.includes(MATRICULA),
+      `sucessos=${titulos(paginaB.estado, 'Funcionário Cadastrado').length}, cpf="${payload.cpf}", tabela="${tabela.slice(0, 120)}"`);
+
+    // ------------------------------------------------------------------
+    log('\n5. Máscara automática: formata a digitação preservando o CPF');
+    const campoDigitado = paginaA.w.document.getElementById('funcCpf');
+    campoDigitado.value = CPF_VALIDO_DIGITOS;
+    campoDigitado.dispatchEvent(new paginaA.w.Event('input', { bubbles: true }));
+    const mascarado = campoDigitado.value;
+    enviarFormulario(paginaA.w); // mantém o valor mascarado
+    await esperar(() => paginaA.estado.insercoes.length > 0);
+    const payloadMascarado = (paginaA.estado.insercoes[0] || {}).payload || {};
+    check('a máscara formata os 11 dígitos e o CPF mascarado é aceito no envio',
+      mascarado === CPF_VALIDO && paginaA.estado.insercoes.length === 1 &&
+      payloadMascarado.cpf === CPF_VALIDO_DIGITOS &&
+      titulos(paginaA.estado, 'Funcionário Cadastrado').length === 1,
+      `mascarado="${mascarado}", cpf="${payloadMascarado.cpf}", inserções=${paginaA.estado.insercoes.length}`);
+
+    // ------------------------------------------------------------------
+    log('\n6. Regressão: corrigir um dígito no meio do CPF não embaralha os números');
+    const paginaC = await carregarPagina();
+    janelas.push(paginaC.janela);
+    const campoC = paginaC.w.document.getElementById('funcCpf');
+    for (const caractere of CPF_VALIDO_DIGITOS) digitar(paginaC.w, campoC, caractere);
+    const digitado = campoC.value;
+    campoC.setSelectionRange(6, 6); // cursor entre o 4º e o 5º dígito ("529.98|2")
+    apagar(paginaC.w, campoC); // apaga o 4º dígito (8)
+    const cursorAposApagar = campoC.selectionStart;
+    digitar(paginaC.w, campoC, '8'); // redigita o mesmo dígito corrigido
+    const cursorAposCorrigir = campoC.selectionStart;
+    check('corrigir um dígito no meio preserva o cursor e mantém a ordem dos números',
+      digitado === CPF_VALIDO && campoC.value === CPF_VALIDO &&
+      cursorAposApagar === 5 && cursorAposCorrigir === 6,
+      `digitado="${digitado}", após corrigir="${campoC.value}", ` +
+      `cursor=${cursorAposApagar}->${cursorAposCorrigir}`);
+
+    enviarFormulario(paginaC.w); // envia o valor que ficou no campo
+    await esperar(() => paginaC.estado.insercoes.length > 0);
+    const payloadCorrigido = (paginaC.estado.insercoes[0] || {}).payload || {};
+    check('o CPF corrigido no meio do campo é aceito no envio',
+      paginaC.estado.insercoes.length === 1 && payloadCorrigido.cpf === CPF_VALIDO_DIGITOS &&
+      titulos(paginaC.estado, 'CPF Inválido').length === 0 &&
+      titulos(paginaC.estado, 'Funcionário Cadastrado').length === 1,
+      `cpf="${payloadCorrigido.cpf}", inserções=${paginaC.estado.insercoes.length}, ` +
+      `recusas=${titulos(paginaC.estado, 'CPF Inválido').length}`);
+  } catch (erro) {
+    log(`\n❌ Erro inesperado: ${erro && erro.stack ? erro.stack : erro}`);
+    process.exitCode = 1;
+  } finally {
+    janelas.forEach((janela) => { try { janela.w.close(); } catch (e) { /* já fechada */ } });
+  }
+
+  const resultado = resumo();
+  log(`\nResultado: ${resultado.total - resultado.falhas}/${resultado.total} verificações aprovadas.`);
+  if (resultado.falhas > 0) process.exitCode = 1;
+})();

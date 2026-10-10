@@ -6,17 +6,17 @@
  *     Edge Function "panic-alert" (supabase/functions/panic-alert/index.ts);
  *  2. A função faz um BROADCAST via WebSocket (Supabase Realtime, canal
  *     "nexus-emergency") para TODOS os clientes conectados;
- *  3. Um WEBHOOK OPCIONAL — DESATIVADO POR PADRÃO — é disparado pela
- *     função quando `panic_webhook_config.enabled = true` + URL válida
- *     (configurável no painel em manutencao.html);
- *  4. Todos os clientes exibem uma mensagem fixa no RODAPÉ da tela
+ *  3. Todos os clientes exibem uma mensagem fixa no RODAPÉ da tela
  *     informando que está ocorrendo uma emergência.
  *
  * Resiliência: se a Edge Function não estiver implantada (ou o Supabase
  * não estiver configurado), o módulo faz o broadcast diretamente pelo
  * canal Realtime (cliente → clientes) e persiste o estado localmente,
- * mantendo o alerta global funcionando. Nesse fallback o webhook NÃO
- * é disparado (somente o servidor possui a integração).
+ * mantendo o alerta global funcionando.
+ *
+ * O front-end NÃO possui integração de webhook: o módulo nunca dispara
+ * POSTs externos nem lê/escreve configuração de webhook (o painel que
+ * existia em manutencao.html foi removido).
  */
 
 (function (window) {
@@ -342,7 +342,7 @@
   /**
    * Toque/confirmação do operador: vibra o padrão SOS NA HORA, antes de
    * qualquer ida à rede. O celular precisa responder no momento do toque —
-   * a chamada da Edge Function/webhook pode levar segundos.
+   * a chamada da Edge Function pode levar segundos.
    */
   function primeActivationAlert() {
     lastActivationAlertAt = Date.now();
@@ -725,7 +725,6 @@
 
       let via = 'edge_function';
       let usouFallback = false;
-      let webhook = null;
       let functionError = null;
       let emergenciaId = null;
 
@@ -755,7 +754,6 @@
             feedback('erro', 'Erro no Servidor', data.error || 'A Edge Function recusou a ação.');
             return { ok: false, error: data.error || 'unknown' };
           } else {
-            webhook = (data && data.webhook) || null;
             emergenciaId = data && data.emergencia ? data.emergencia.id : null;
             // O servidor processou a ação, mas o broadcast Realtime falhou?
             // Complementa com broadcast direto para não deixar clientes sem o alerta.
@@ -867,7 +865,7 @@
       const utils = getUtils();
       const tabelaPendente = Boolean(utils && typeof utils.tabelaIndisponivel === 'function' && utils.tabelaIndisponivel('emergencias'));
       const fallbackNote = via === 'client_fallback'
-        ? ' (Edge Function indisponível — broadcast direto via WebSocket; webhook não disparado' +
+        ? ' (Edge Function indisponível — broadcast direto via WebSocket' +
           (tabelaPendente ? `; tabela emergencias ausente no Supabase: aplique ${migracaoDaTabela('emergencias')}` : '') +
           ')'
         : '';
@@ -881,16 +879,10 @@
           : ' ⚠️ Auditoria não gravada (detalhe no console).';
       }
       if (ativando) {
-        let webhookNote = '';
-        if (webhook && webhook.fired) {
-          webhookNote = webhook.ok
-            ? ' Webhook externo disparado com sucesso.'
-            : ` Webhook disparado, porém respondeu com erro (${webhook.status || webhook.error || '?'}).`;
-        }
         feedback(
           'erro',
           'EMERGÊNCIA CRÍTICA DECLARADA',
-          `Alarme global enviado a todos os clientes conectados via WebSocket. Operações do pátio ${TERMINAL} bloqueadas temporariamente.${webhookNote}${fallbackNote}${auditoriaNote}`
+          `Alarme global enviado a todos os clientes conectados via WebSocket. Operações do pátio ${TERMINAL} bloqueadas temporariamente.${fallbackNote}${auditoriaNote}`
         );
       } else {
         feedback(
@@ -900,7 +892,7 @@
         );
       }
 
-      return { ok: true, via, webhook, emergencia_id: emergenciaId, auditoria };
+      return { ok: true, via, emergencia_id: emergenciaId, auditoria };
     } finally {
       inFlight = false;
     }
@@ -917,7 +909,7 @@
   }
 
   /**
-   * Aciona o botão de pânico global (Edge Function → broadcast WebSocket → webhook opcional).
+   * Aciona o botão de pânico global (Edge Function → broadcast WebSocket).
    * @param {Object} options - { confirmar?: boolean (padrão true), motivo?: string }
    */
   async function triggerPanic(options = {}) {
@@ -945,12 +937,16 @@
 
     const motivo = typeof options.motivo === 'string' && options.motivo.trim() ? options.motivo.trim() : null;
     const identity = buildIdentity();
-    return await executePanicAction('activate', {
+    const resultadoAcionamento = await executePanicAction('activate', {
       action: 'activate',
       motivo,
       acionado_por: identity,
       terminal: TERMINAL
     }, identity, motivo);
+    if (resultadoAcionamento && resultadoAcionamento.ok && window.NexusAnalytics) {
+      window.NexusAnalytics.track('botao_panico_acionado');
+    }
+    return resultadoAcionamento;
   }
 
   /**
@@ -982,135 +978,7 @@
   }
 
   // ------------------------------------------------------------------
-  // Painel de configuração do Webhook (opcional, DESLIGADO por padrão)
-  // Presente em manutencao.html; bind automático se os elementos existirem.
-  // ------------------------------------------------------------------
-  function bindWebhookSettingsUI() {
-    const enabledInput = document.getElementById('panicWebhookEnabled');
-    const urlInput = document.getElementById('panicWebhookUrl');
-    const saveBtn = document.getElementById('panicWebhookSaveBtn');
-    const testBtn = document.getElementById('panicWebhookTestBtn');
-    const statusEl = document.getElementById('panicWebhookStatus');
-    if (!enabledInput || !urlInput || !saveBtn) return;
-
-    function setStatus(msg) {
-      if (statusEl) statusEl.textContent = msg;
-    }
-
-    async function getConfigRow() {
-      const sb = getSupabase();
-      if (!sb) return null;
-      try {
-        const { data } = await sb
-          .from('panic_webhook_config')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (data) return data;
-        // Garante a linha única de configuração (padrão: DESLIGADO)
-        const { data: created } = await sb
-          .from('panic_webhook_config')
-          .insert({ enabled: false, url: null })
-          .select()
-          .maybeSingle();
-        return created || null;
-      } catch (e) {
-        console.warn('[NexusPanic] Falha ao ler panic_webhook_config:', e);
-        return null;
-      }
-    }
-
-    async function load() {
-      setStatus('Carregando configuração do webhook...');
-      const cfg = await getConfigRow();
-      if (!cfg) {
-        enabledInput.disabled = true;
-        urlInput.disabled = true;
-        saveBtn.disabled = true;
-        setStatus('⚠️ Não foi possível ler panic_webhook_config. Aplique a migração supabase/migrations/20261007000000_panic_button_global.sql.');
-        return;
-      }
-      enabledInput.checked = cfg.enabled === true;
-      urlInput.value = cfg.url || '';
-      setStatus(cfg.enabled
-        ? `✔ Webhook ATIVO — o servidor disparará um POST para a URL configurada a cada evento de pânico (última atualização: ${cfg.updated_at ? formatHora(cfg.updated_at) : '--'}).`
-        : 'Webhook DESATIVADO (padrão). Ative o interruptor e salve para que a Edge Function dispare o POST em cada evento de pânico.');
-    }
-
-    saveBtn.addEventListener('click', async () => {
-      const sb = getSupabase();
-      const cfg = await getConfigRow();
-      if (!sb || !cfg) {
-        feedback('erro', 'Erro ao Salvar', 'Supabase não configurado ou tabela panic_webhook_config ausente (aplique a migração SQL).');
-        return;
-      }
-      const url = urlInput.value.trim();
-      if (enabledInput.checked && !/^https?:\/\/.+/i.test(url)) {
-        feedback('erro', 'URL Inválida', 'Informe uma URL http(s) válida para o webhook ou desative o interruptor.');
-        return;
-      }
-      try {
-        const { error } = await sb
-          .from('panic_webhook_config')
-          .update({ enabled: enabledInput.checked, url: url || null, updated_at: new Date().toISOString() })
-          .eq('id', cfg.id);
-        if (error) throw error;
-        feedback('sucesso', 'Configuração Salva', enabledInput.checked
-          ? 'Webhook de emergência ATIVADO. A Edge Function passará a disparar o POST configurado.'
-          : 'Webhook de emergência DESATIVADO. Nenhum POST externo será disparado.');
-        registrarAuditoria(enabledInput.checked ? 'WEBHOOK_EMERGENCIA_ATIVADO' : 'WEBHOOK_EMERGENCIA_DESATIVADO', { url_configurada: Boolean(url) });
-        await load();
-      } catch (e) {
-        feedback('erro', 'Erro ao Salvar', e && e.message ? e.message : String(e));
-      }
-    });
-
-    if (testBtn) {
-      testBtn.addEventListener('click', async () => {
-        const sb = getSupabase();
-        if (!sb || !sb.functions) {
-          feedback('erro', 'Indisponível', 'Cliente Supabase não inicializado.');
-          return;
-        }
-        setStatus('Enviando evento de teste para a Edge Function...');
-        try {
-          const { data, error } = await sb.functions.invoke(FUNCTION_SLUG, {
-            body: { action: 'test-webhook', acionado_por: buildIdentity() }
-          });
-          if (error) {
-            let serverMsg = null;
-            try {
-              if (error.context && typeof error.context.json === 'function') {
-                const ctxBody = await error.context.json();
-                serverMsg = ctxBody && ctxBody.error;
-              }
-            } catch (e) { /* ignore */ }
-            throw new Error(serverMsg || error.message || 'Falha ao invocar a Edge Function.');
-          }
-          if (data && data.ok === false) throw new Error(data.error || 'A Edge Function recusou o teste.');
-          const wh = (data && data.webhook) || {};
-          feedback(
-            wh.ok ? 'sucesso' : 'erro',
-            wh.ok ? 'Webhook Respondeu OK' : 'Webhook Respondeu com Erro',
-            `Status HTTP: ${wh.status != null ? wh.status : '?'}${wh.error ? ` — ${wh.error}` : ''}`
-          );
-          setStatus(wh.ok
-            ? `✔ Teste realizado com sucesso (HTTP ${wh.status}).`
-            : `⚠️ Teste falhou: ${wh.error || `HTTP ${wh.status}`}.`);
-        } catch (e) {
-          const msg = e && e.message ? e.message : String(e);
-          feedback('erro', 'Falha no Teste', `${msg} — verifique se a Edge Function "panic-alert" está implantada (supabase functions deploy panic-alert --no-verify-jwt).`);
-          setStatus(`⚠️ Teste falhou: ${msg}`);
-        }
-      });
-    }
-
-    load();
-  }
-
-  // ------------------------------------------------------------------
-  // Diagnóstico das tabelas do pânico (emergencias + panic_webhook_config)
+  // Diagnóstico das tabelas do pânico (emergencias + auditoria EMERGENCIA)
   // --------------------------------------------------------------
   // Responde, em uma frase, o motivo do 404 relatado no painel Network:
   //   GET /rest/v1/emergencias?... -> 404 (PGRST205: tabela fora do cache)
@@ -1127,7 +995,9 @@
       };
     }
 
-    const nomes = ['emergencias', 'panic_webhook_config'];
+    // Tabelas que o protocolo de emergência usa no cliente. O front-end não
+    // possui mais integração de webhook — nada aqui consulta outras tabelas.
+    const nomes = ['emergencias'];
     const tabelas = {};
     for (const nome of nomes) {
       tabelas[nome] = await utils.diagnosticar(nome);
@@ -1148,7 +1018,7 @@
 
     let mensagem;
     if (pendentes.length === 0 && !enumPendente) {
-      mensagem = '✔ Tabelas do botão de pânico provisionadas (emergencias + panic_webhook_config) ' +
+      mensagem = '✔ Tabelas do botão de pânico provisionadas (emergencias) ' +
         'e auditoria com o valor EMERGENCIA disponível.';
     } else if (pendentes.length > 0) {
       mensagem = `⚠️ Tabela(s) ausente(s) no Supabase: ${pendentes.join(', ')}. ` +
@@ -1257,7 +1127,6 @@
     renderBanner();
     subscribeRealtime();
     loadStateFromDb();
-    bindWebhookSettingsUI();
     bindDatabaseDiagnosticsUI();
     bindDeviceAlertUI();
 
@@ -1306,7 +1175,6 @@
     clearPanic,
     getState: () => Object.assign({}, state),
     isActive: () => Boolean(state.active),
-    bindWebhookSettingsUI,
     bindDatabaseDiagnosticsUI,
     bindDeviceAlertUI,
     verificarTabelas,

@@ -1,14 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-50V6WDEMPT"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-50V6WDEMPT');
-  </script>
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
+  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>NexusPort — Técnico em Portos</title>
@@ -53,6 +47,7 @@
 
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>
     window.currentUserSession = NexusAuth.requireAuth(['TECNICO_PORTOS', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO']);
@@ -100,9 +95,10 @@
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div>
-              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Matrícula do Funcionário</label>
-              <input type="text" id="empMatriculaSearch" placeholder="Ex: MAT-1040" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-mono font-semibold" />
+            <div class="relative">
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Buscar Funcionário (matrícula, nome ou CPF)</label>
+              <input type="text" id="empMatriculaSearch" placeholder="Ex: MAT-1040, nome ou CPF..." autocomplete="off" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-mono font-semibold" />
+              <div id="empSearchSuggest" class="hidden absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white dark:bg-slate-900 border border-nexus-border dark:border-slate-700 rounded-xl shadow-xl text-xs"></div>
             </div>
 
             <button id="searchEmpBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-10">
@@ -173,6 +169,15 @@
               </select>
             </div>
             <div>
+              <label class="block font-bold text-slate-500 mb-1">CPF</label>
+              <input type="text" id="funcCpf" required placeholder="11 dígitos — pode ser fictício" inputmode="numeric" aria-describedby="funcCpfAjuda" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
+              <p id="funcCpfAjuda" class="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">A formatação é automática. O CPF pode ser fictício, mas precisa ser único: não é permitido cadastrar dois funcionários com o mesmo CPF.</p>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-500 mb-1">Data de Nascimento</label>
+              <input type="date" id="funcDataNasc" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
+            </div>
+            <div>
               <label class="block font-bold text-slate-500 mb-1">Documentação Interna</label>
               <input type="text" id="funcDoc" placeholder="Ex: Livro Registro #102" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
@@ -192,6 +197,8 @@
                   <th class="p-3">Nome</th>
                   <th class="p-3">Cargo</th>
                   <th class="p-3">Código Individual</th>
+                  <th class="p-3">CPF</th>
+                  <th class="p-3">Nascimento</th>
                   <th class="p-3">Doc. Interna</th>
                 </tr>
               </thead>
@@ -302,15 +309,30 @@
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>
   <script src="js/supabase-client.js"></script>
+  <script src="js/online-presence.js"></script>
   <script src="js/data-repository.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
-  <script src="js/tecnico_portos.js"></script>
+  <script src="js/pages/tecnico_portos.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
-  <script src="js/webmcp-core.js"></script>
-  <script src="js/webmcp-ui.js"></script>
-  <script src="js/webmcp-dados.js"></script>
-  <script src="js/webmcp-global.js"></script>
-  <script src="js/webmcp-tecnico.js"></script>
+  <script src="js/webmcp/webmcp-core.js"></script>
+  <script src="js/webmcp/webmcp-ui.js"></script>
+  <script src="js/webmcp/webmcp-dados.js"></script>
+  <script src="js/webmcp/webmcp-global.js"></script>
+  <script src="js/webmcp/webmcp-tecnico.js"></script>
+
+  <!-- VLibras Widget (Acessibilidade em Libras) -->
+  <div vw class="enabled">
+    <div vw-access-button class="active"></div>
+    <div vw-plugin-wrapper>
+      <div class="vw-plugin-top-wrapper"></div>
+    </div>
+  </div>
+  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <script>
+    if (window.VLibras && window.VLibras.Widget) {
+      new window.VLibras.Widget('https://vlibras.gov.br/app');
+    }
+  </script>
 </body>
 </html>

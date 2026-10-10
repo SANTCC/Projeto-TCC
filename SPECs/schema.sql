@@ -87,7 +87,8 @@ create type tipo_alteracao_enum as enum (
   'CRIACAO',
   'EDICAO',
   'EXCLUSAO',
-  'REIMPRESSAO_ETIQUETA'
+  'REIMPRESSAO_ETIQUETA',
+  'EXPORTACAO'
 );
 
 create type referencia_tempo_enum as enum ('DATA_FABRICACAO', 'DATA_ULTIMA_MANUTENCAO');

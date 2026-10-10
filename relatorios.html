@@ -1,14 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-50V6WDEMPT"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-50V6WDEMPT');
-  </script>
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
+  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>NexusPort — Relatórios & PDF</title>
@@ -53,6 +47,7 @@
 
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <script src="js/session-cookies.js"></script>
 
   <!-- Chart.js via CDN para os gráficos de produtividade por camada de visão -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -192,6 +187,43 @@
 
           <p class="text-[11px] text-slate-400 dark:text-slate-500 -mt-1">Esta é a página central de gráficos do sistema: todos os conjuntos por camada de visão (incluindo os antes exibidos no Dashboard) foram consolidados aqui.</p>
 
+          <!-- Filtros REAIS dos gráficos: recortam os dados antes da construção de cada gráfico -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col gap-1">
+              <label for="chartsFiltroStatus" class="block text-[11px] font-bold uppercase text-slate-500">Status da carga</label>
+              <select id="chartsFiltroStatus" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold">
+                <option value="GERAL" selected>Geral (todos os status)</option>
+                <option value="AGENDAMENTO">Agendamento</option>
+                <option value="INSPECAO">Em Inspeção</option>
+                <option value="ARMAZENADA">Armazenada</option>
+                <option value="PRONTA_PARA_ENTREGA">Pronta para Entrega</option>
+                <option value="EM_TRANSITO">Em Trânsito</option>
+                <option value="ENTREGUE">Entregue</option>
+                <option value="RECUSADA">Recusada</option>
+                <option value="CANCELADA">Cancelada</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="chartsFiltroNavio" class="block text-[11px] font-bold uppercase text-slate-500">Navio</label>
+              <select id="chartsFiltroNavio" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold font-mono">
+                <option value="GERAL" selected>Geral (todos os navios)</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="chartsFiltroContainer" class="block text-[11px] font-bold uppercase text-slate-500">Contêiner</label>
+              <select id="chartsFiltroContainer" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold font-mono">
+                <option value="GERAL" selected>Geral (todos os contêineres)</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1 justify-end">
+              <button id="chartsLimparFiltrosBtn" type="button" class="w-full px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">filter_alt_off</span>
+                <span>Limpar filtros</span>
+              </button>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 -mt-2">O <strong>Período de Referência</strong> (topo da página) também filtra os gráficos. Os filtros ativos aparecem no rodapé do painel.</p>
+
           <div id="relatoriosChartsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
 
           <p id="chartsRoleFooter" class="text-[11px] font-mono text-slate-400 dark:text-slate-500"></p>
@@ -229,22 +261,36 @@
     </main>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>
   <script src="js/supabase-client.js"></script>
+  <script src="js/online-presence.js"></script>
   <script src="js/data-repository.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/relatorios.js"></script>
+  <script src="js/pages/charts.js"></script>
+  <script src="js/pages/relatorios.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
-  <script src="js/webmcp-core.js"></script>
-  <script src="js/webmcp-ui.js"></script>
-  <script src="js/webmcp-dados.js"></script>
-  <script src="js/webmcp-global.js"></script>
-  <script src="js/webmcp-relatorios.js"></script>
+  <script src="js/webmcp/webmcp-core.js"></script>
+  <script src="js/webmcp/webmcp-ui.js"></script>
+  <script src="js/webmcp/webmcp-dados.js"></script>
+  <script src="js/webmcp/webmcp-global.js"></script>
+  <script src="js/webmcp/webmcp-relatorios.js"></script>
+
+  <!-- VLibras Widget (Acessibilidade em Libras) -->
+  <div vw class="enabled">
+    <div vw-access-button class="active"></div>
+    <div vw-plugin-wrapper>
+      <div class="vw-plugin-top-wrapper"></div>
+    </div>
+  </div>
+  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <script>
+    if (window.VLibras && window.VLibras.Widget) {
+      new window.VLibras.Widget('https://vlibras.gov.br/app');
+    }
+  </script>
 </body>
 </html>
