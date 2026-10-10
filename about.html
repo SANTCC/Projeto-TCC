@@ -101,6 +101,27 @@
       background: linear-gradient(135deg, rgba(68, 89, 135, .12), rgba(68, 89, 135, .02));
       border: 1px solid var(--borda); border-radius: 1.4rem; padding: 2.2rem; box-shadow: var(--sombra);
     }
+    .hero-grade {
+      display: flex; flex-direction: column; gap: 2rem;
+    }
+    @media (min-width: 900px) {
+      .hero-grade {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr;
+        align-items: center;
+        gap: 2.5rem;
+      }
+    }
+    .hero-ilustracao {
+      display: flex; align-items: center; justify-content: center;
+    }
+    .undraw-hero {
+      width: 100%; max-width: 440px; height: auto; object-fit: contain;
+      filter: drop-shadow(0 10px 25px rgba(30, 41, 59, 0.08));
+    }
+    html.dark .undraw-hero {
+      filter: drop-shadow(0 10px 25px rgba(0, 0, 0, 0.45));
+    }
     .selo {
       display: inline-block; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
       font-weight: 700; color: var(--nexus-500); margin-bottom: .6rem;
@@ -125,12 +146,28 @@
       padding: 1.35rem; box-shadow: var(--sombra);
     }
     .grade-pilares { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .pilar { display: flex; flex-direction: column; }
+    .pilar-ilustracao {
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(68, 89, 135, .05); border-radius: .8rem;
+      padding: .75rem; margin-bottom: .9rem; height: 110px;
+    }
+    html.dark .pilar-ilustracao { background: rgba(15, 23, 42, .45); }
+    .undraw-pilar-img { width: 100%; height: 100%; max-height: 95px; object-fit: contain; }
+    .pilar-cabecalho { display: flex; align-items: center; gap: .5rem; margin-bottom: .35rem; }
     .pilar-icone { color: var(--nexus-500); }
     html.dark .pilar-icone { color: #A5B4FC; }
-    .pilar h3 { font-size: 1.02rem; }
+    .pilar h3 { font-size: 1.02rem; margin: 0; }
     .pilar p { margin: 0; font-size: .9rem; color: var(--texto-suave); }
 
     .grade-arquitetura { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    .arq-ilustracao {
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(68, 89, 135, .04); border-radius: .7rem;
+      padding: .6rem; margin-bottom: .8rem; height: 90px;
+    }
+    html.dark .arq-ilustracao { background: rgba(15, 23, 42, .4); }
+    .undraw-arq-img { width: 100%; height: 100%; max-height: 80px; object-fit: contain; }
     .arq header { display: flex; align-items: center; gap: .6rem; margin-bottom: .6rem; }
     .arq header .material-symbols-outlined { color: var(--nexus-500); }
     html.dark .arq header .material-symbols-outlined { color: #A5B4FC; }
@@ -289,25 +326,32 @@
   <main>
   <!-- Hero -->
   <section class="hero" id="inicio">
-    <p class="selo">Documentação ilustrada • 10 de outubro de 2026</p>
-    <h1>Como funciona o sistema NexusPort</h1>
-    <p class="hero-texto">
-      O NexusPort é a plataforma de gestão operacional do <strong>Terminal STS-01 (Porto de Santos)</strong>.
-      Ele acompanha a carga do agendamento à entrega, formaliza a inspeção técnica, controla o pátio e as
-      embarcações e mantém uma trilha auditável de todas as decisões críticas. Esta página explica o
-      funcionamento de cada parte e mostra, com capturas reais, o que cada perfil vê ao entrar.
-    </p>
-    <ul class="hero-numeros">
-      <li><strong>3</strong><span>contas de demonstração</span></li>
-      <li><strong>30</strong><span>telas capturadas</span></li>
-      <li><strong>10</strong><span>cargos com visões distintas</span></li>
-      <li><strong>9</strong><span>status no fluxo da carga</span></li>
-    </ul>
-    <p class="nota">
-      <span class="material-symbols-outlined" aria-hidden="true">info</span>
-      <span>As capturas desta página foram geradas em ambiente local com dados fictícios de demonstração
-      (equivalente ao <code>supabase/seed.sql</code>) e sem credenciais de produção.</span>
-    </p>
+    <div class="hero-grade">
+      <div class="hero-conteudo">
+        <p class="selo">Documentação ilustrada • 10 de outubro de 2026 • Ícones por <a href="https://undraw.co/" target="_blank" rel="noopener noreferrer">unDraw</a></p>
+        <h1>Como funciona o sistema NexusPort</h1>
+        <p class="hero-texto">
+          O NexusPort é a plataforma de gestão operacional do <strong>Terminal STS-01 (Porto de Santos)</strong>.
+          Ele acompanha a carga do agendamento à entrega, formaliza a inspeção técnica, controla o pátio e as
+          embarcações e mantém uma trilha auditável de todas as decisões críticas. Esta página explica o
+          funcionamento de cada parte e mostra, com capturas reais, o que cada perfil vê ao entrar.
+        </p>
+        <ul class="hero-numeros">
+          <li><strong>3</strong><span>contas de demonstração</span></li>
+          <li><strong>30</strong><span>telas capturadas</span></li>
+          <li><strong>10</strong><span>cargos com visões distintas</span></li>
+          <li><strong>9</strong><span>status no fluxo da carga</span></li>
+        </ul>
+        <p class="nota">
+          <span class="material-symbols-outlined" aria-hidden="true">info</span>
+          <span>As capturas desta página foram geradas em ambiente local com dados fictícios de demonstração
+          (equivalente ao <code>supabase/seed.sql</code>) e sem credenciais de produção.</span>
+        </p>
+      </div>
+      <div class="hero-ilustracao">
+        <img src="design/undraw/container-ship.svg" alt="Ilustração unDraw de navio porta-contêineres no Porto de Santos" width="480" height="270" class="undraw-hero" loading="lazy" />
+      </div>
+    </div>
   </section>
 
   <!-- Fluxo operacional -->
@@ -319,38 +363,73 @@
     </p>
     <div class="grade-pilares">
       <article class="cartao pilar">
-        <span class="material-symbols-outlined pilar-icone" aria-hidden="true">badge</span>
-        <h3>1. Acesso e identidade</h3>
+        <div class="pilar-ilustracao">
+          <img src="design/undraw/authentication.svg" alt="Ícone unDraw de autenticação e acesso seguro com credencial" class="undraw-pilar-img" loading="lazy" />
+        </div>
+        <div class="pilar-cabecalho">
+          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">badge</span>
+          <h3>1. Acesso e identidade</h3>
+        </div>
         <p>Login pelo código individual vinculado à matrícula, confirmação obrigatória do cargo e sessão em cookie de 12 h (um turno). O cargo define a camada de visão: própria, operacional ou estratégica.</p>
       </article>
       <article class="cartao pilar">
-        <span class="material-symbols-outlined pilar-icone" aria-hidden="true">event_available</span>
-        <h3>2. Agendamento e recebimento</h3>
+        <div class="pilar-ilustracao">
+          <img src="design/undraw/deliveries.svg" alt="Ícone unDraw de agendamento de entrega e recebimento de cargas" class="undraw-pilar-img" loading="lazy" />
+        </div>
+        <div class="pilar-cabecalho">
+          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">event_available</span>
+          <h3>2. Agendamento e recebimento</h3>
+        </div>
         <p>A carga entra em AGENDAMENTO com data prevista de entrega e destino; no recebimento é conferida contra o checklist do tipo de carga e recebe QR Code com etiqueta A4.</p>
       </article>
       <article class="cartao pilar">
-        <span class="material-symbols-outlined pilar-icone" aria-hidden="true">fact_check</span>
-        <h3>3. Inspeção formal</h3>
+        <div class="pilar-ilustracao">
+          <img src="design/undraw/inspection.svg" alt="Ícone unDraw de inspeção técnica formal e conferência de itens" class="undraw-pilar-img" loading="lazy" />
+        </div>
+        <div class="pilar-cabecalho">
+          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">fact_check</span>
+          <h3>3. Inspeção formal</h3>
+        </div>
         <p>O inspetor executa o checklist item a item. A aprovação só é liberada quando 100% dos itens críticos estão conformes (RN 14); a recusa exige motivo, que vai para a auditoria.</p>
       </article>
       <article class="cartao pilar">
-        <span class="material-symbols-outlined pilar-icone" aria-hidden="true">warehouse</span>
-        <h3>4. Pátio e vínculo</h3>
+        <div class="pilar-ilustracao">
+          <img src="design/undraw/logistics.svg" alt="Ícone unDraw de armazenagem e logística de contêineres no pátio" class="undraw-pilar-img" loading="lazy" />
+        </div>
+        <div class="pilar-cabecalho">
+          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">warehouse</span>
+          <h3>4. Pátio e vínculo</h3>
+        </div>
         <p>Aprovada, a carga é armazenada em baia e vinculada a contêiner e navio. O sistema mantém berços, guindastes e a localização das embarcações com ETA por rota.</p>
       </article>
       <article class="cartao pilar">
-        <span class="material-symbols-outlined pilar-icone" aria-hidden="true">verified_user</span>
-        <h3>5. Despacho e liberação</h3>
+        <div class="pilar-ilustracao">
+          <img src="design/undraw/security.svg" alt="Ícone unDraw de despacho operacional supervisionado e liberação segura" class="undraw-pilar-img" loading="lazy" />
+        </div>
+        <div class="pilar-cabecalho">
+          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">verified_user</span>
+          <h3>5. Despacho e liberação</h3>
+        </div>
         <p>O supervisor (ou o substituto delegado) libera a saída, cancela entregas e responde por decisões que ficam registradas na trilha imutável com justificativa formal.</p>
       </article>
       <article class="cartao pilar">
-        <span class="material-symbols-outlined pilar-icone" aria-hidden="true">monitoring</span>
-        <h3>6. Comando e auditoria</h3>
+        <div class="pilar-ilustracao">
+          <img src="design/undraw/dashboard.svg" alt="Ícone unDraw de painel de controle executivo com gráficos e KPIs" class="undraw-pilar-img" loading="lazy" />
+        </div>
+        <div class="pilar-cabecalho">
+          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">monitoring</span>
+          <h3>6. Comando e auditoria</h3>
+        </div>
         <p>O painel consolida KPIs e gráficos por camada de visão; toda alteração relevante vai para logs_alteracoes e toda decisão crítica para trail_decisoes com retificações anexáveis.</p>
       </article>
       <article class="cartao pilar">
-        <span class="material-symbols-outlined pilar-icone" aria-hidden="true">qr_code_scanner</span>
-        <h3>7. Operação em campo</h3>
+        <div class="pilar-ilustracao">
+          <img src="design/undraw/qr-code-scan.svg" alt="Ícone unDraw de operação de campo e leitura de QR Code em smartphone" class="undraw-pilar-img" loading="lazy" />
+        </div>
+        <div class="pilar-cabecalho">
+          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">qr_code_scanner</span>
+          <h3>7. Operação em campo</h3>
+        </div>
         <p>O scanner QR funciona no celular: leitura por câmera ou digitação, com registro da leitura. O botão de pânico é global e propaga o alerta em tempo real para todas as telas.</p>
       </article>
     </div>
@@ -379,6 +458,9 @@
     </p>
     <div class="grade-arquitetura">
       <article class="cartao arq">
+        <div class="arq-ilustracao">
+          <img src="design/undraw/source-code.svg" alt="Ícone unDraw de front-end estático em JavaScript" class="undraw-arq-img" loading="lazy" />
+        </div>
         <header>
           <span class="material-symbols-outlined" aria-hidden="true">web</span>
           <h3>Front-end estático</h3>
@@ -391,6 +473,9 @@
         </ul>
       </article>
       <article class="cartao arq">
+        <div class="arq-ilustracao">
+          <img src="design/undraw/server.svg" alt="Ícone unDraw de banco de dados e PostgREST Supabase" class="undraw-arq-img" loading="lazy" />
+        </div>
         <header>
           <span class="material-symbols-outlined" aria-hidden="true">storage</span>
           <h3>Supabase (PostgreSQL + PostgREST)</h3>
@@ -403,6 +488,9 @@
         </ul>
       </article>
       <article class="cartao arq">
+        <div class="arq-ilustracao">
+          <img src="design/undraw/cloud-sync.svg" alt="Ícone unDraw de computação serverless com Edge Functions" class="undraw-arq-img" loading="lazy" />
+        </div>
         <header>
           <span class="material-symbols-outlined" aria-hidden="true">functions</span>
           <h3>Edge Functions (Deno)</h3>
@@ -415,6 +503,9 @@
         </ul>
       </article>
       <article class="cartao arq">
+        <div class="arq-ilustracao">
+          <img src="design/undraw/secure-server.svg" alt="Ícone unDraw de segurança, RBAC e trilha de auditoria" class="undraw-arq-img" loading="lazy" />
+        </div>
         <header>
           <span class="material-symbols-outlined" aria-hidden="true">shield</span>
           <h3>Segurança e conformidade</h3>
@@ -427,6 +518,9 @@
         </ul>
       </article>
       <article class="cartao arq">
+        <div class="arq-ilustracao">
+          <img src="design/undraw/teamwork.svg" alt="Ícone unDraw de equipe com diferentes camadas de visão" class="undraw-arq-img" loading="lazy" />
+        </div>
         <header>
           <span class="material-symbols-outlined" aria-hidden="true">groups</span>
           <h3>Camadas de visão</h3>
@@ -438,6 +532,9 @@
         </ul>
       </article>
       <article class="cartao arq">
+        <div class="arq-ilustracao">
+          <img src="design/undraw/ai-code-generation.svg" alt="Ícone unDraw de assistente inteligente e agentes de IA WebMCP" class="undraw-arq-img" loading="lazy" />
+        </div>
         <header>
           <span class="material-symbols-outlined" aria-hidden="true">smart_toy</span>
           <h3>WebMCP (agentes de IA)</h3>
@@ -1401,6 +1498,7 @@ npm run lighthouse       # gate de qualidade por página</code></pre>
     <div class="rodape-conteudo">
       <span>NexusPort © 2026 — Terminal STS-01, Porto de Santos</span>
       <span>Documentação ilustrada gerada a partir de 30 capturas de tela</span>
+      <span>Ícones e ilustrações por <a href="https://undraw.co/" target="_blank" rel="noopener noreferrer">unDraw</a></span>
       <span><a href="index.html">Acessar o sistema</a> · <a href="README.md">README</a></span>
     </div>
   </footer>

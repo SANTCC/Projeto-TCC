@@ -68,7 +68,7 @@ Do levantamento de performance, acessibilidade e SEO (`SPECs/backlog4.md`):
 
 | Item | Status | Resumo |
 | --- | --- | --- |
-| 1.1 Logomarca com 1 MB / 1254×1254 exibida em 36×36 | 🔴 não implementado | redimensionar e converter para WebP/AVIF (>1 MB economizado por carregamento) |
+| 1.1 Logomarca com ≈0,9 MB (934 KB) / 1254×1254 exibida em 36×36 | 🔴 não implementado | redimensionar e converter para WebP/AVIF (quase 1 MB economizado por carregamento) |
 | 1.2 `width`/`height` explícitos nas imagens | 🔴 não implementado | evita CLS no logo e nos avatares |
 | 1.3 Recursos que bloqueiam a renderização | 🔴 não implementado | Tailwind CDN, Google Fonts e supabase-js carregados de forma síncrona (LCP > 4 s em 4G simulado) |
 | 1.4 JS/CSS não utilizados | 🔴 não implementado | Tailwind CDN entrega mais do que a página usa (mais de 240 KiB) |

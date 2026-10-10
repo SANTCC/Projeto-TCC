@@ -38,7 +38,7 @@ O projeto registra o trabalho em quatro arquivos de backlog mais o de relatório
 
 | Item | Status | Dívida |
 | --- | --- | --- |
-| 1.1 Logomarca de 1 MB exibida em 36×36 | 🔴 | redimensionar e converter para WebP/AVIF |
+| 1.1 Logomarca de ≈0,9 MB (934 KB) exibida em 36×36 | 🔴 | redimensionar e converter para WebP/AVIF |
 | 1.2 `width`/`height` em `<img>` | 🔴 | reduzir CLS |
 | 1.3 Recursos que bloqueiam a renderização | 🔴 | Tailwind CDN, fontes e supabase-js síncronos (LCP > 4 s em 4G) |
 | 1.4 JS/CSS não utilizados | 🔴 | Tailwind CDN entrega mais do que a página usa (> 240 KiB) |

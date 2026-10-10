@@ -14,7 +14,7 @@ description: Árvore comentada de todas as pastas e arquivos do repositório, co
 ```text
 Projeto-TCC/
 ├── *.html                     13 telas do sistema (ver "Páginas")
-├── favicon.ico                ícone do app (1 MB — item de otimização do backlog 004)
+├── favicon.ico                ícone do app (≈1,0 MB — item de otimização do backlog 004)
 ├── logo_porto.png             logotipo (raiz: usado pelas páginas que não referenciam design/)
 ├── package.json               scripts de teste/build/capturas/documentação
 ├── package-lock.json          trava de versões do Node
@@ -92,6 +92,7 @@ Projeto-TCC/
 ├── website/                   FONTE do site Docusaurus (este documento vive aqui)
 ├── lighthouse/limiares.json   limiares e exceções do gate
 ├── design/logo_porto.png      logotipo canônico usado pelas páginas
+├── design/undraw/             14 ilustrações SVG (unDraw) usadas no about.html
 ├── diagnostico/               2 relatórios (espelho de SPECs/diagnostico)
 ├── .github/workflows/         lighthouse.yml (PRs) + docs.yml (GitHub Pages da documentação)
 └── .jules/bolt.md             diário de otimizações (aprendizados de performance)
@@ -140,4 +141,5 @@ navegador precisa: HTML, `js/`, imagens e assets estáticos. Detalhes em
 | `supabase/` | [Banco de dados](/banco-de-dados/visao-geral) e [Edge Functions](/arquitetura/edge-functions) |
 | `tests/`, `tools/` | [Testes](/operacao/testes) |
 | `THEME/` | [Protótipos visuais](/design/prototipos-theme) |
+| `design/undraw/` | [Documentação ilustrada](/operacao/documentacao-ilustrada) (seção 1.1) |
 | `website/` | [Como documentar](/referencia/como-documentar) |

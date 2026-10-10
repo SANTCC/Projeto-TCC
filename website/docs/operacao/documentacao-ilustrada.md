@@ -7,9 +7,10 @@ description: O about.html gerado a partir de capturas reais, o PostgREST simulad
 
 # Documentação ilustrada (`about.html`)
 
-`about.html` é uma página **autocontida** (79 kB) que explica como o sistema funciona — fluxo operacional,
+`about.html` é uma página **autocontida** (82 kB) que explica como o sistema funciona — fluxo operacional,
 arquitetura, perfis e camadas de visão, regras de negócio e o passo a passo de implantação — **com capturas
-de tela reais** de todas as páginas, abertas pelas contas de demonstração.
+de tela reais** de todas as páginas, abertas pelas contas de demonstração, e **ilustrações unDraw** nos
+pilares e na seção de arquitetura.
 
 :::danger Não edite `about.html` à mão
 O arquivo é **gerado** por `tools/screenshots/gerar-about.js`. O teste `npm run test:about` compara o
@@ -39,6 +40,22 @@ O Chromium é dirigido por `tools/screenshots/capturar.js`, que:
    `js/auth-guard.js`), salvando um PNG de **página inteira** por tela.
 
 **Nada é gravado no banco e nenhuma credencial real é usada.**
+
+---
+
+## 1.1 Ilustrações unDraw
+
+O `about.html` usa **14 ilustrações SVG** da biblioteca [unDraw](https://undraw.co/) (licença livre, uso
+comercial permitido, sem atribuição obrigatória — os créditos aparecem no selo do topo da página):
+
+| Pasta | Conteúdo |
+| --- | --- |
+| `design/undraw/` | `authentication`, `deliveries`, `inspection`, `logistics`, `dashboard`, `security`, `qr-code-scan`, `container-ship`, `teamwork`, `server`, `secure-server`, `cloud-sync`, `ai-code-generation`, `source-code` |
+
+São referenciadas como **`<img src="design/undraw/<arquivo>.svg">`** (não inline), com `alt` descritivo,
+`width`/`height` explícitos e `loading="lazy"` — coerente com o backlog 004 (1.2). O gerador recebe cada
+pilar da página com seu ícone e texto alternativo, o que mantém o `about.html` sempre reproduzível a partir
+do código: nada é colado à mão.
 
 ---
 

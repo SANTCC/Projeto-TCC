@@ -96,7 +96,7 @@ Originado de uma **auditoria Lighthouse**, com 11 seções em quatro eixos:
 
 | Eixo | Itens |
 | --- | --- |
-| ⚡ Desempenho | 1.1 logomarca de 1 MB → redimensionar; 1.2 `width`/`height` nas imagens; 1.3 recursos que bloqueiam a renderização; 1.4 JS/CSS não utilizados; 1.5 cache de estáticos (`Cache-Control`) |
+| ⚡ Desempenho | 1.1 logomarca de ≈0,9 MB → redimensionar; 1.2 `width`/`height` nas imagens; 1.3 recursos que bloqueiam a renderização; 1.4 JS/CSS não utilizados; 1.5 cache de estáticos (`Cache-Control`) |
 | ♿ Acessibilidade | 2.1 liberar o zoom; 2.2 contraste de texto de apoio; 2.3 ordem hierárquica de títulos |
 | 🛡️ Segurança | 3.1 CSP; 3.2 cabeçalhos (HSTS, COOP, X-Frame-Options) |
 | 🔍 SEO | 4.1 `meta description` em todas as páginas |
