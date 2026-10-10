@@ -187,6 +187,43 @@
 
           <p class="text-[11px] text-slate-400 dark:text-slate-500 -mt-1">Esta é a página central de gráficos do sistema: todos os conjuntos por camada de visão (incluindo os antes exibidos no Dashboard) foram consolidados aqui.</p>
 
+          <!-- Filtros REAIS dos gráficos: recortam os dados antes da construção de cada gráfico -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col gap-1">
+              <label for="chartsFiltroStatus" class="block text-[11px] font-bold uppercase text-slate-500">Status da carga</label>
+              <select id="chartsFiltroStatus" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold">
+                <option value="GERAL" selected>Geral (todos os status)</option>
+                <option value="AGENDAMENTO">Agendamento</option>
+                <option value="INSPECAO">Em Inspeção</option>
+                <option value="ARMAZENADA">Armazenada</option>
+                <option value="PRONTA_PARA_ENTREGA">Pronta para Entrega</option>
+                <option value="EM_TRANSITO">Em Trânsito</option>
+                <option value="ENTREGUE">Entregue</option>
+                <option value="RECUSADA">Recusada</option>
+                <option value="CANCELADA">Cancelada</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="chartsFiltroNavio" class="block text-[11px] font-bold uppercase text-slate-500">Navio</label>
+              <select id="chartsFiltroNavio" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold font-mono">
+                <option value="GERAL" selected>Geral (todos os navios)</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="chartsFiltroContainer" class="block text-[11px] font-bold uppercase text-slate-500">Contêiner</label>
+              <select id="chartsFiltroContainer" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold font-mono">
+                <option value="GERAL" selected>Geral (todos os contêineres)</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1 justify-end">
+              <button id="chartsLimparFiltrosBtn" type="button" class="w-full px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">filter_alt_off</span>
+                <span>Limpar filtros</span>
+              </button>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 -mt-2">O <strong>Período de Referência</strong> (topo da página) também filtra os gráficos. Os filtros ativos aparecem no rodapé do painel.</p>
+
           <div id="relatoriosChartsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
 
           <p id="chartsRoleFooter" class="text-[11px] font-mono text-slate-400 dark:text-slate-500"></p>

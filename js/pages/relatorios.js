@@ -108,6 +108,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (periodoSelect && periodoSelect.value !== novoPeriodo) periodoSelect.value = novoPeriodo;
       sincronizarChips();
       renderProdutividadeTable();
+      // O período filtra os GRÁFICOS de verdade (não só a tabela)
+      if (window.NexusCharts && typeof window.NexusCharts.definirFiltros === 'function') {
+        window.NexusCharts.definirFiltros({ periodo: novoPeriodo });
+      }
     }
 
     if (chipsWrap) {
@@ -326,10 +330,70 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderProdutividadeTable();
 
+  // Filtros REAIS dos gráficos: status (geral ou específico), navio e contêiner
+  // recortam os dados antes da construção de cada gráfico, junto com o
+  // Período de Referência (que antes era apenas visual e não filtrava nada).
+  function aplicarFiltrosAosGraficos(parcial) {
+    if (window.NexusCharts && typeof window.NexusCharts.definirFiltros === 'function') {
+      window.NexusCharts.definirFiltros(parcial);
+    }
+  }
+
+  async function popularFiltrosGraficos() {
+    const navioSel = document.getElementById('chartsFiltroNavio');
+    const contSel = document.getElementById('chartsFiltroContainer');
+    if (!navioSel && !contSel) return;
+    let navios = [];
+    let containers = [];
+    if (window.NexusRepository) {
+      try {
+        if (typeof window.NexusRepository.getNavios === 'function') navios = await window.NexusRepository.getNavios();
+        if (typeof window.NexusRepository.getContainers === 'function') containers = await window.NexusRepository.getContainers();
+      } catch (e) { /* segue para o cache local */ }
+    }
+    if (navios.length === 0) {
+      try { navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]'); } catch (e) {}
+    }
+    if (containers.length === 0) {
+      try { containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]'); } catch (e) {}
+    }
+    if (navioSel) {
+      const nomes = [...new Set((navios || []).map(n => String(n.nome || n.navio || '').trim()).filter(Boolean))].sort();
+      navioSel.innerHTML = '<option value="GERAL">Geral (todos os navios)</option>' +
+        nomes.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    }
+    if (contSel) {
+      const ids = [...new Set((containers || []).map(c => String(c.identificacao || c.numero_identificacao || c.id || '').trim()).filter(Boolean))].sort();
+      contSel.innerHTML = '<option value="GERAL">Geral (todos os contêineres)</option>' +
+        ids.map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join('');
+    }
+  }
+
+  (function ligarFiltrosGraficos() {
+    const statusSel = document.getElementById('chartsFiltroStatus');
+    const navioSel = document.getElementById('chartsFiltroNavio');
+    const contSel = document.getElementById('chartsFiltroContainer');
+    const limparBtn = document.getElementById('chartsLimparFiltrosBtn');
+    if (statusSel) statusSel.addEventListener('change', () => aplicarFiltrosAosGraficos({ status: statusSel.value }));
+    if (navioSel) navioSel.addEventListener('change', () => aplicarFiltrosAosGraficos({ navio: navioSel.value }));
+    if (contSel) contSel.addEventListener('change', () => aplicarFiltrosAosGraficos({ container: contSel.value }));
+    if (limparBtn) {
+      limparBtn.addEventListener('click', () => {
+        if (statusSel) statusSel.value = 'GERAL';
+        if (navioSel) navioSel.value = 'GERAL';
+        if (contSel) contSel.value = 'GERAL';
+        aplicarFiltrosAosGraficos({ status: 'GERAL', navio: 'GERAL', container: 'GERAL' });
+      });
+    }
+    popularFiltrosGraficos();
+  })();
+
   // Gráficos por camada de visão — página central única de gráficos do sistema
   // (RF 16 / RF 1 / Backlog 3: a análise gráfica saiu do Dashboard e foi
   // consolidada aqui).
   if (window.NexusCharts && typeof window.NexusCharts.initRelatorios === 'function') {
+    // Sincroniza o período inicial antes da primeira renderização
+    aplicarFiltrosAosGraficos({ periodo: periodoRelatorioAtual });
     window.NexusCharts.initRelatorios();
 
     // Botão "Atualizar": reconsulta o SERVIDOR (ignora o cache em memória) e

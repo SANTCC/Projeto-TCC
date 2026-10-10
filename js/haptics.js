@@ -352,17 +352,62 @@
     } catch (e) { /* vibração indisponível neste navegador */ }
   }
 
-  /** Um ciclo de alerta do aparelho = vibração + som quando habilitado. */
+  /**
+   * Sirene de emergência (WebAudio): alternância agressiva de dois tons
+   * (grave ↔ agudo) com leve varredura, repetida em ciclos. Propositalmente
+   * incômoda — precisa transmitir PERIGO, não um toque de notificação comum.
+   * `ciclos`: quantas idas-e-voltas da sirene (alert=2, acionamento=4).
+   */
+  function siren(ciclos) {
+    if (!isSoundEnabled()) return false;
+    const ctx = ensureAudio();
+    if (!ctx) return false;
+    try {
+      if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+        const resumePromise = ctx.resume();
+        if (resumePromise && typeof resumePromise.catch === 'function') resumePromise.catch(function () {});
+      }
+      const total = Math.max(1, Math.min(6, Math.floor(ciclos || 2)));
+      const TOM_GRAVE = 620;
+      const TOM_AGUDO = 1240;
+      const DURACAO_TOM = 0.32;
+      const start = ctx.currentTime + 0.01;
+      for (let i = 0; i < total * 2; i++) {
+        const at = start + i * (DURACAO_TOM + 0.04);
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        const de = (i % 2 === 0) ? TOM_GRAVE : TOM_AGUDO;
+        const para = (i % 2 === 0) ? TOM_AGUDO : TOM_GRAVE;
+        // Varredura entre os tons (efeito de sirene de verdade)
+        osc.frequency.setValueAtTime(de, at);
+        osc.frequency.exponentialRampToValueAtTime(para, at + DURACAO_TOM);
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(0.14, at + 0.03);
+        gain.gain.setValueAtTime(0.14, at + DURACAO_TOM - 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + DURACAO_TOM);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(at);
+        osc.stop(at + DURACAO_TOM + 0.02);
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Um ciclo de alerta do aparelho = vibração + sirene quando habilitada. */
   function alert() {
     const fired = vibrate('alert');
-    const sounded = beep(1);
+    const sounded = siren(2);
     return { fired: fired, sounded: sounded, reason: lastReason, status: status() };
   }
 
   /** Padrão completo de SOS, usado no acionamento do botão de pânico. */
   function sos() {
     const fired = vibrate('sos');
-    const sounded = beep(3);
+    const sounded = siren(4);
     return { fired: fired, sounded: sounded, reason: lastReason, status: status() };
   }
 
@@ -497,6 +542,7 @@
     stop: stop,
     test: test,
     beep: beep,
+    siren: siren,
     unlock: unlock,
     isEnabled: isEnabled,
     setEnabled: setEnabled,

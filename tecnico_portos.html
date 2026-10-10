@@ -95,9 +95,10 @@
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div>
-              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Matrícula do Funcionário</label>
-              <input type="text" id="empMatriculaSearch" placeholder="Ex: MAT-1040" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-mono font-semibold" />
+            <div class="relative">
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Buscar Funcionário (matrícula, nome ou CPF)</label>
+              <input type="text" id="empMatriculaSearch" placeholder="Ex: MAT-1040, nome ou CPF..." autocomplete="off" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-mono font-semibold" />
+              <div id="empSearchSuggest" class="hidden absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white dark:bg-slate-900 border border-nexus-border dark:border-slate-700 rounded-xl shadow-xl text-xs"></div>
             </div>
 
             <button id="searchEmpBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-10">
@@ -168,6 +169,14 @@
               </select>
             </div>
             <div>
+              <label class="block font-bold text-slate-500 mb-1">CPF</label>
+              <input type="text" id="funcCpf" required placeholder="Ex: 123.456.789-00" inputmode="numeric" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-500 mb-1">Data de Nascimento</label>
+              <input type="date" id="funcDataNasc" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
+            </div>
+            <div>
               <label class="block font-bold text-slate-500 mb-1">Documentação Interna</label>
               <input type="text" id="funcDoc" placeholder="Ex: Livro Registro #102" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
@@ -187,6 +196,8 @@
                   <th class="p-3">Nome</th>
                   <th class="p-3">Cargo</th>
                   <th class="p-3">Código Individual</th>
+                  <th class="p-3">CPF</th>
+                  <th class="p-3">Nascimento</th>
                   <th class="p-3">Doc. Interna</th>
                 </tr>
               </thead>

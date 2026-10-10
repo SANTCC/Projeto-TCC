@@ -342,13 +342,6 @@
           badge: 'RF 7'
         },
         {
-          id: 'tempo_permanencia',
-          titulo: 'Tempo médio de permanência por tipo',
-          descricao: 'Média de dias da carga no porto (entrada → saída) por natureza de mercadoria.',
-          icone: 'schedule',
-          badge: 'RF 4'
-        },
-        {
           id: 'embarcacoes_utilizadas',
           titulo: 'Embarcações mais utilizadas (Top 5)',
           descricao: 'Volume de cargas operadas por embarcação ativa no sistema.',
@@ -745,6 +738,115 @@
     misto: 'servidor + cache local'
   };
   let metaCarregamento = { origem: 'local', atualizadoEm: null, porFonte: {}, forcar: false };
+
+  // ---------------------------------------------------------------------
+  // Filtros do painel (relatorios.html) — aplicados DE VERDADE aos dados
+  // ---------------------------------------------------------------------
+  // O "Período de Referência", o "Status da carga" (Geral ou específico), o
+  // "Navio" e o "Contêiner" selecionados na página filtram o pacote de dados
+  // ANTES da construção de cada gráfico (renderPainel → aplicarFiltrosAosDados).
+  // Antes desta mudança, o período era apenas visual e não afetava os gráficos.
+  const FILTRO_GERAL = 'GERAL';
+  const filtrosGraficos = { periodo: '30D', status: FILTRO_GERAL, navio: FILTRO_GERAL, container: FILTRO_GERAL };
+
+  const ROTULOS_PERIODO = {
+    HOJE: 'hoje',
+    '7D': 'últimos 7 dias',
+    '30D': 'últimos 30 dias',
+    MENSAL: 'este mês',
+    TRIMESTRAL: 'trimestre atual',
+    ANUAL: 'ano atual',
+    TODOS: 'todo o histórico'
+  };
+
+  function inicioDoPeriodoGraficos(periodo) {
+    const agora = new Date();
+    if (periodo === 'HOJE') {
+      const d = new Date(agora); d.setHours(0, 0, 0, 0); return d;
+    }
+    if (periodo === '7D')  { const d = new Date(agora); d.setDate(d.getDate() - 7);  d.setHours(0, 0, 0, 0); return d; }
+    if (periodo === '30D') { const d = new Date(agora); d.setDate(d.getDate() - 30); d.setHours(0, 0, 0, 0); return d; }
+    if (periodo === 'MENSAL') { return new Date(agora.getFullYear(), agora.getMonth(), 1); }
+    if (periodo === 'TRIMESTRAL') { return new Date(agora.getFullYear(), agora.getMonth() - 2, 1); }
+    if (periodo === 'ANUAL') { return new Date(agora.getFullYear(), 0, 1); }
+    return null; // 'TODOS' ou valor desconhecido: sem corte de data
+  }
+
+  function textoFiltro(valor) {
+    return String(valor === null || valor === undefined ? '' : valor).trim().toLowerCase();
+  }
+
+  function dataDentroDoPeriodo(dataValor, inicio, semDataPassa) {
+    if (!inicio) return true;
+    if (!dataValor) return !!semDataPassa;
+    const d = new Date(dataValor);
+    return !Number.isNaN(d.getTime()) && d >= inicio;
+  }
+
+  /**
+   * Recorta o pacote de dados conforme os filtros ativos. Retorna um NOVO
+   * objeto (não muta o cache), para que trocar filtros nunca destrua os dados
+   * carregados do servidor.
+   */
+  function aplicarFiltrosAosDados(dados) {
+    const origem = dados || {};
+    const inicio = inicioDoPeriodoGraficos(filtrosGraficos.periodo);
+    const statusFiltro = String(filtrosGraficos.status || FILTRO_GERAL).toUpperCase();
+    const navioFiltro = textoFiltro(filtrosGraficos.navio);
+    const contFiltro = textoFiltro(filtrosGraficos.container);
+    const usarStatus = statusFiltro && statusFiltro !== FILTRO_GERAL;
+    const usarNavio = navioFiltro && navioFiltro !== 'geral';
+    const usarContainer = contFiltro && contFiltro !== 'geral';
+
+    const cargas = (origem.cargas || []).filter(c => {
+      if (usarStatus && String(c.status || '').toUpperCase() !== statusFiltro) return false;
+      if (usarNavio) {
+        const candidatos = [c.navioNome, c.navioId].map(textoFiltro);
+        if (candidatos.indexOf(navioFiltro) === -1) return false;
+      }
+      if (usarContainer) {
+        if (textoFiltro(c.containerId) !== contFiltro) return false;
+      }
+      // Cargas sem qualquer data de referência passam (não há como julgá-las
+      // pelo período); as datadas precisam estar dentro do período.
+      const referencia = c.dataEntrada || c.dataSaida;
+      if (!dataDentroDoPeriodo(referencia, inicio, true)) return false;
+      return true;
+    });
+
+    // Logs/trail sempre têm data: corte rígido pelo período.
+    const logs = (origem.logs || []).filter(l => dataDentroDoPeriodo(l.data, inicio, false));
+    const trail = (origem.trail || []).filter(t => dataDentroDoPeriodo(t.data, inicio, false));
+    // Manutenções e visitantes: registros sem data passam, datados são cortados.
+    const manutencoes = (origem.manutencoes || []).filter(m => dataDentroDoPeriodo(m.data, inicio, true));
+    const visitantes = (origem.visitantes || []).filter(v => dataDentroDoPeriodo(v.entrada, inicio, true));
+
+    return {
+      cargas: cargas,
+      navios: origem.navios || [],
+      containers: origem.containers || [],
+      manutencoes: manutencoes,
+      bercos: origem.bercos || [],
+      funcionarios: origem.funcionarios || [],
+      visitantes: visitantes,
+      logs: logs,
+      trail: trail
+    };
+  }
+
+  function resumoFiltrosAtivos() {
+    const partes = [`período: ${ROTULOS_PERIODO[filtrosGraficos.periodo] || filtrosGraficos.periodo}`];
+    if (filtrosGraficos.status && String(filtrosGraficos.status).toUpperCase() !== FILTRO_GERAL) {
+      partes.push(`status: ${filtrosGraficos.status}`);
+    }
+    if (filtrosGraficos.navio && textoFiltro(filtrosGraficos.navio) !== 'geral') {
+      partes.push(`navio: ${filtrosGraficos.navio}`);
+    }
+    if (filtrosGraficos.container && textoFiltro(filtrosGraficos.container) !== 'geral') {
+      partes.push(`contêiner: ${filtrosGraficos.container}`);
+    }
+    return partes.join(' • ');
+  }
 
   function lerLocalStorage(chave) {
     try {
@@ -1324,39 +1426,6 @@
     },
 
 
-    /** Tempo médio de permanência no porto por tipo de carga (RF 4). */
-    tempo_permanencia: function (dados) {
-      if (!dados.cargas.length) return null;
-      const acumulado = new Map();
-      let amostragemTotal = 0;
-      dados.cargas.forEach(c => {
-        // Prioriza cargas já concluídas; cargas em pátio usam a data corrente.
-        const finalizado = c.dataSaida || ['EM_TRANSITO', 'ENTREGUE', 'CANCELADA'].includes(c.status);
-        const inicio = c.dataEntrada;
-        if (!inicio) return;
-        const dias = diferencaEmDias(inicio, finalizado ? (c.dataSaida || null) : null);
-        if (dias === null) return;
-        const tipoNormalizado = normalizarTipoCarga(c.tipo);
-        const atual = acumulado.get(tipoNormalizado) || { dias: 0, quantidade: 0 };
-        atual.dias += dias;
-        atual.quantidade += 1;
-        amostragemTotal += 1;
-        acumulado.set(tipoNormalizado, atual);
-      });
-      if (!acumulado.size) return null;
-      const medias = Array.from(acumulado.entries())
-        .map(([tipo, info]) => [tipo, Math.round((info.dias / info.quantidade) * 10) / 10])
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5);
-      const geral = medias.reduce((acc, [, m]) => acc + m, 0) / medias.length;
-      return {
-        tipo: 'bar',
-        labels: medias.map(([tipo]) => tipo),
-        datasets: [datasetBarras('Dias médios no porto', medias.map(([, m]) => m), CORES.primaria)],
-        resumo: `Média geral de ${geral.toFixed(1)} dia(s) por tipo de carga [Fórmula: Σ(Data Saída - Data Entrada) / Total de Cargas] • Amostragem: ${amostragemTotal} carga(s) analisada(s)`
-      };
-    },
-
     /** Embarcações mais utilizadas — Top 5 da frota ativa (RF 2). */
     embarcacoes_utilizadas: function (dados) {
       if (!dados.navios.length) return null;
@@ -1676,7 +1745,7 @@
     const hora = metaCarregamento.atualizadoEm
       ? new Date(metaCarregamento.atualizadoEm).toLocaleTimeString('pt-BR')
       : '--';
-    elFooter.textContent = `${base} • dados de ${textoOrigem(metaCarregamento.origem)} • atualizado às ${hora} • atualização periódica automática`;
+    elFooter.textContent = `${base} • dados de ${textoOrigem(metaCarregamento.origem)} • atualizado às ${hora} • atualização periódica automática • filtros ativos: ${resumoFiltrosAtivos()}`;
   }
 
   function observadorDeTema() {
@@ -1729,11 +1798,15 @@
     // Uma renderização mais recente pode ter sido disparada durante os awaits.
     if (meuToken !== tokenRender) return { ok: false, motivo: 'substituido' };
 
+    // Filtros (período + status + navio + contêiner) aplicados aos dados
+    // carregados ANTES de construir cada gráfico.
+    const dadosFiltrados = aplicarFiltrosAosDados(dados);
+
     let html = '';
     const paraRenderizar = [];
 
     definicoes.forEach((def, indice) => {
-      const spec = construirSpec(def.id, dados, sessao);
+      const spec = construirSpec(def.id, dadosFiltrados, sessao);
       if (!spec) {
         html += cartaoVazio(def, 'Sem dados suficientes para gerar este gráfico. Os indicadores aparecerão automaticamente assim que houver registros no sistema.');
         return;
@@ -1850,11 +1923,12 @@
       // sistema (a análise gráfica saiu do Dashboard). Os conjuntos foram
       // expandidos com as visões que antes só existiam no painel do Dashboard,
       // e com os conjuntos planejados que estavam ausentes (navios por
-      // localização, embarcações mais utilizadas, tempo de permanência das
-      // cargas, decisões do trail, etc.).
+      // localização, embarcações mais utilizadas, decisões do trail, etc.).
+      // O gráfico "Tempo médio de permanência por tipo" foi removido do
+      // painel por solicitação operacional.
       const conjuntos = {
         DIRETOR: {
-          charts: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes', 'tempo_permanencia', 'bercos_ocupacao', 'embarcacoes_utilizadas', 'navios_localizacao'],
+          charts: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes', 'bercos_ocupacao', 'embarcacoes_utilizadas', 'navios_localizacao'],
           fontes: ['cargas', 'logs', 'funcionarios', 'navios', 'bercos']
         },
         INSPETOR: {
@@ -1899,6 +1973,35 @@
       }
       return renderPainel(padraoAtual.sessao, Object.assign({}, padraoAtual, { forcar: true }, opcoes || {}));
     },
+
+    /**
+     * Define os filtros do painel e redesenha os gráficos com os dados
+     * recortados. Aceita qualquer subconjunto de:
+     * { periodo: 'HOJE'|'7D'|'30D'|'MENSAL'|'TRIMESTRAL'|'ANUAL'|'TODOS',
+     *   status: 'GERAL'|<STATUS_DA_CARGA>, navio: 'GERAL'|<nome/id>,
+     *   container: 'GERAL'|<identificação> }.
+     * Reaproveita o cache de dados (não reconsulta o servidor à toa) — a não
+     * ser que o painel ainda não tenha sido inicializado.
+     */
+    definirFiltros: function (parcial) {
+      const p = parcial || {};
+      if (p.periodo !== undefined) filtrosGraficos.periodo = String(p.periodo || '30D');
+      if (p.status !== undefined) filtrosGraficos.status = String(p.status || FILTRO_GERAL).toUpperCase();
+      if (p.navio !== undefined) filtrosGraficos.navio = String(p.navio || FILTRO_GERAL);
+      if (p.container !== undefined) filtrosGraficos.container = String(p.container || FILTRO_GERAL);
+      if (!padraoAtual.sessao) {
+        return Promise.resolve({ ok: false, motivo: 'sem-sessao' });
+      }
+      return renderPainel(padraoAtual.sessao, padraoAtual);
+    },
+
+    /** Cópia somente-leitura dos filtros ativos (para a UI e testes). */
+    filtrosAtuais: function () {
+      return { periodo: filtrosGraficos.periodo, status: filtrosGraficos.status, navio: filtrosGraficos.navio, container: filtrosGraficos.container };
+    },
+
+    /** Recorte puro de um pacote de dados (exposto para testes automatizados). */
+    filtrarDados: aplicarFiltrosAosDados,
 
     /** Origem dos dados do último carregamento (auditoria do refresh). */
     ultimaAtualizacao: function () {

@@ -173,6 +173,19 @@
               </nav>
             </div>
 
+            <!-- Botão de Emergência GLOBAL: visível para TODOS os cargos em
+                 todas as telas. Qualquer funcionário pode acionar, pois uma
+                 situação grave não pode esperar por permissão de página. -->
+            <button id="sidebarEmergencyBtn" type="button" aria-label="Acionar botão de emergência"
+              class="w-full px-3 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-display font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/40 transition-all flex items-center justify-center gap-2 border border-red-400/60">
+              <span class="relative flex h-2.5 w-2.5">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+              </span>
+              <span class="material-symbols-outlined text-[20px]">e911_emergency</span>
+              <span>Emergência</span>
+            </button>
+
           </div>
 
           <div class="pt-4 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono text-slate-400">
@@ -377,6 +390,178 @@
       `;
       document.body.appendChild(promptModal);
     }
+
+    // Modal GLOBAL de emergência (sidebar): relato estruturado da ocorrência.
+    // Local + acontecimento + gravidade + equipamento + relato livre compõem o
+    // motivo enviado a todos os clientes via NexusPanic.
+    (function injetarModalEmergencia() {
+      if (document.getElementById('nexusEmergencyModal')) return;
+      const bercosOptsHtml = Array.from({ length: 15 }, (_, i) => {
+        const num = String(i + 1).padStart(2, '0');
+        return `<option value="Berço ${String(num)}">Berço ${String(num)}</option>`;
+      }).join('');
+      const modal = document.createElement('div');
+      modal.id = 'nexusEmergencyModal';
+      modal.className = 'fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-red-950/70 backdrop-blur-sm transition-all duration-200';
+      modal.setAttribute('role', 'alertdialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-label', 'Relatar emergência no terminal');
+      modal.innerHTML = `
+        <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border-2 border-red-500 p-6 flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
+          <div class="flex items-center gap-3 border-b border-red-200 dark:border-red-900 pb-3">
+            <div class="w-11 h-11 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 animate-pulse">
+              <span class="material-symbols-outlined text-[26px]">e911_emergency</span>
+            </div>
+            <div>
+              <h4 class="font-display font-bold text-base text-red-700 dark:text-red-400">RELATAR EMERGÊNCIA — Terminal STS-01</h4>
+              <span class="text-[11px] font-mono text-slate-500 dark:text-slate-400">O alerta sonoro e visual chega a TODOS os funcionários conectados</span>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div>
+              <label for="emergLocal" class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Local da ocorrência *</label>
+              <select id="emergLocal" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold">
+                <option value="">Selecione o local...</option>
+                <optgroup label="Pátio">
+                  <option value="Pátio Principal (Setor A)">Pátio Principal (Setor A)</option>
+                  <option value="Pátio STS-01 (Setor B)">Pátio STS-01 (Setor B)</option>
+                  <option value="Pátio STS-01 (Setor C)">Pátio STS-01 (Setor C)</option>
+                  <option value="Pátio STS-01 (Setor Refrigeração)">Pátio STS-01 (Setor Refrigeração)</option>
+                  <option value="Sala de Contêiner">Sala de Contêiner</option>
+                </optgroup>
+                <optgroup label="Berços de atracação">${bercosOptsHtml}</optgroup>
+                <optgroup label="Outras áreas">
+                  <option value="Gate de entrada/saída">Gate de entrada/saída</option>
+                  <option value="Armazém">Armazém</option>
+                  <option value="Guarita STS-01">Guarita STS-01</option>
+                  <option value="Área administrativa">Área administrativa</option>
+                  <option value="Outro local">Outro local (descrever no relato)</option>
+                </optgroup>
+              </select>
+            </div>
+            <div>
+              <label for="emergAcontecimento" class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Acontecimento *</label>
+              <select id="emergAcontecimento" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold">
+                <option value="">Selecione o que houve...</option>
+                <option value="Incêndio">🔥 Incêndio</option>
+                <option value="Vazamento químico/óleo">☢️ Vazamento químico/óleo</option>
+                <option value="Acidente com vítima">🚑 Acidente com vítima</option>
+                <option value="Queda de contêiner/carga">📦 Queda de contêiner/carga</option>
+                <option value="Falha elétrica / curto-circuito">⚡ Falha elétrica / curto-circuito</option>
+                <option value="Problema estrutural / desabamento">🏗️ Problema estrutural / desabamento</option>
+                <option value="Ocorrência de segurança / invasão">🚨 Ocorrência de segurança / invasão</option>
+                <option value="Emergência médica">🩺 Emergência médica</option>
+                <option value="Outro">Outro (descrever no relato)</option>
+              </select>
+            </div>
+            <div>
+              <label for="emergGravidade" class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Gravidade *</label>
+              <select id="emergGravidade" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold">
+                <option value="CRÍTICA — risco à vida">CRÍTICA — risco à vida</option>
+                <option value="ALTA — operação parada">ALTA — operação parada</option>
+                <option value="MÉDIA — atenção imediata">MÉDIA — atenção imediata</option>
+              </select>
+            </div>
+            <div>
+              <label for="emergEquipamento" class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Equipamento envolvido</label>
+              <select id="emergEquipamento" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono">
+                <option value="Nenhum / não se aplica">Nenhum / não se aplica</option>
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <label for="emergRelato" class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Relato do acontecimento *</label>
+              <textarea id="emergRelato" rows="3" placeholder="Ex.: Fumaça intensa próxima aos contêineres refrigerados, sem vítimas até o momento..." class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium focus:ring-2 focus:ring-red-500 focus:outline-none"></textarea>
+            </div>
+          </div>
+          <p class="text-[11px] text-red-600 dark:text-red-400 font-semibold flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px]">warning</span>
+            <span>Ao confirmar, o alarme dispara em todos os aparelhos conectados e as operações do pátio são bloqueadas até a desativação.</span>
+          </p>
+          <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <button type="button" id="nexusEmergencyCancelBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors">
+              Cancelar
+            </button>
+            <button type="button" id="nexusEmergencyConfirmBtn" class="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-colors shadow-md flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[18px]">campaign</span>
+              <span>ACIONAR ALARME AGORA</span>
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const fechar = () => modal.classList.add('hidden');
+      modal.querySelector('#nexusEmergencyCancelBtn').addEventListener('click', fechar);
+      modal.addEventListener('click', (e) => { if (e.target === modal) fechar(); });
+
+      // Equipamentos reais do terminal (guindastes + navios + contêineres)
+      function carregarEquipamentosEmergencia() {
+        const sel = modal.querySelector('#emergEquipamento');
+        if (!sel) return;
+        const grupos = [];
+        try {
+          const gnds = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+          if (gnds.length) grupos.push({ rotulo: 'Guindastes', itens: gnds.map(g => `Guindaste ${g.identificacao || g.id}`) });
+        } catch (e) {}
+        try {
+          const navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+          if (navios.length) grupos.push({ rotulo: 'Navios', itens: navios.map(n => `Navio ${n.nome || n.imo}`) });
+        } catch (e) {}
+        try {
+          const conts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+          if (conts.length) grupos.push({ rotulo: 'Contêineres', itens: conts.slice(0, 50).map(c => `Contêiner ${c.identificacao || c.id}`) });
+        } catch (e) {}
+        const atual = sel.value;
+        while (sel.firstChild) sel.removeChild(sel.firstChild);
+        const nenhuma = document.createElement('option');
+        nenhuma.value = 'Nenhum / não se aplica';
+        nenhuma.textContent = 'Nenhum / não se aplica';
+        sel.appendChild(nenhuma);
+        grupos.forEach(g => {
+          const grupoEl = document.createElement('optgroup');
+          grupoEl.label = g.rotulo;
+          g.itens.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item;
+            opt.textContent = item;
+            grupoEl.appendChild(opt);
+          });
+          sel.appendChild(grupoEl);
+        });
+        if (atual) sel.value = atual;
+      }
+
+      modal.querySelector('#nexusEmergencyConfirmBtn').addEventListener('click', async () => {
+        const local = modal.querySelector('#emergLocal').value;
+        const acontecimento = modal.querySelector('#emergAcontecimento').value;
+        const gravidade = modal.querySelector('#emergGravidade').value;
+        const equipamento = modal.querySelector('#emergEquipamento').value;
+        const relato = modal.querySelector('#emergRelato').value.trim();
+        if (!local || !acontecimento || !relato) {
+          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Relato Incompleto', 'Preencha ao menos o local, o acontecimento e o relato do que está acontecendo.');
+          return;
+        }
+        fechar();
+        const motivo = `[${gravidade}] ${acontecimento} — Local: ${local} | Equipamento: ${equipamento} | Relato: ${relato}`;
+        if (window.NexusPanic && typeof window.NexusPanic.triggerPanic === 'function') {
+          await window.NexusPanic.triggerPanic({ confirmar: false, motivo });
+        } else if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Módulo Indisponível', 'O módulo de emergência não foi carregado. Recarregue a página e tente novamente.');
+        }
+      });
+
+      // Abertura pelo botão da sidebar (qualquer cargo, qualquer tela)
+      window.abrirModalEmergencia = function () {
+        if (window.nexusEmergenciaAtiva && window.nexusEmergenciaAtiva()) {
+          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Emergência Já Ativa', 'O alarme já está ativo em todos os clientes. A desativação é feita na página Manutenção & OS (Supervisor/Inspetor/Direção).');
+          return;
+        }
+        carregarEquipamentosEmergencia();
+        modal.classList.remove('hidden');
+      };
+      const sidebarBtn = document.getElementById('sidebarEmergencyBtn');
+      if (sidebarBtn) sidebarBtn.addEventListener('click', () => window.abrirModalEmergencia());
+    })();
 
     // Ajusta o contêiner principal para considerar a navbar fixa (Item 7).
     // A altura é limitada à viewport no desktop (md+) para que apenas o <main>

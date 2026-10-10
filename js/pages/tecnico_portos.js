@@ -27,6 +27,66 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedEmp = null;
   const employeeList = [];
 
+  // Normalização para busca fuzzy: minúsculas, sem acento, espaços únicos
+  function normalizarBuscaFuzzy(texto) {
+    return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+  }
+
+  // Pontuação fuzzy simples: substring direta vale mais; subsequência em ordem
+  // (letras do termo aparecendo na ordem no alvo) vale menos. 0 = sem match.
+  function pontuarFuzzy(termoNorm, alvoNorm) {
+    if (!termoNorm || !alvoNorm) return 0;
+    if (alvoNorm === termoNorm) return 100;
+    if (alvoNorm.startsWith(termoNorm)) return 80;
+    if (alvoNorm.includes(termoNorm)) return 60;
+    let pos = 0;
+    let acertos = 0;
+    for (const ch of termoNorm) {
+      if (ch === ' ') continue;
+      const idx = alvoNorm.indexOf(ch, pos);
+      if (idx === -1) return 0;
+      pos = idx + 1;
+      acertos++;
+    }
+    const letrasTermo = termoNorm.replace(/ /g, '').length;
+    if (letrasTermo < 2 || acertos < letrasTermo) return 0;
+    return Math.max(5, 40 - Math.max(0, alvoNorm.length - letrasTermo));
+  }
+
+  function fatiarCpfSomenteDigitos(cpf) {
+    return String(cpf || '').replace(/\D/g, '');
+  }
+
+  // Formata 11 dígitos como 000.000.000-00 para exibição
+  function formatarCpfExibicao(cpf) {
+    const d = fatiarCpfSomenteDigitos(cpf);
+    if (d.length !== 11) return cpf || '—';
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+
+  // Converte data ISO (AAAA-MM-DD) para DD/MM/AAAA
+  function formatarDataNascExibicao(iso) {
+    const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return iso ? String(iso) : '—';
+    return `${m[3]}/${m[2]}/${m[1]}`;
+  }
+
+  // Validação de CPF: 11 dígitos + dígitos verificadores (módulo 11)
+  function validarCpf(cpf) {
+    const d = fatiarCpfSomenteDigitos(cpf);
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    let soma = 0;
+    for (let i = 0; i < 9; i++) soma += parseInt(d[i], 10) * (10 - i);
+    let resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    if (resto !== parseInt(d[9], 10)) return false;
+    soma = 0;
+    for (let i = 0; i < 10; i++) soma += parseInt(d[i], 10) * (11 - i);
+    resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    return resto === parseInt(d[10], 10);
+  }
+
   // Busca por matrícula (usada pela interface e pelas ferramentas WebMCP).
   async function buscarFuncionarioPorMatricula(q) {
       if (!q) {
@@ -61,10 +121,39 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // 2. Consulta no cache local de funcionários reais se Supabase indisponível
+      // 2. Busca por CPF no Supabase (coluna nova: falha silenciosa se a migração
+      // ainda não foi aplicada — nunca quebra a busca por matrícula).
+      const digitosBusca = fatiarCpfSomenteDigitos(q);
+      if (!found && digitosBusca.length >= 3 && window.nexusSupabase) {
+        try {
+          const { data: porCpf, error: errCpf } = await window.nexusSupabase
+            .from('funcionarios')
+            .select('*')
+            .or(`cpf.eq.${digitosBusca},cpf.ilike.%${digitosBusca}%`)
+            .limit(5);
+          if (!errCpf && Array.isArray(porCpf) && porCpf.length === 1) {
+            const data = porCpf[0];
+            found = {
+              codigo: data.codigo_individual || `NX-${String(data.matricula || '').replace('MAT-', '')}-SP`,
+              matricula: data.matricula,
+              nome: data.nome,
+              cargo: data.cargo,
+              cargo_nome: data.cargo_nome || data.cargo
+            };
+          }
+        } catch (err) { /* coluna cpf ausente ou sem conexão: segue para o cache */ }
+      }
+
+      // 3. Consulta no cache local de funcionários reais se Supabase indisponível
       if (!found) {
         const dynamicFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
-        const dyn = dynamicFuncs.find(f => f.matricula && (f.matricula.toUpperCase() === q || f.matricula.toUpperCase() === formattedMatricula));
+        const qNorm = normalizarBuscaFuzzy(q);
+        const dyn = dynamicFuncs.find(f => {
+          if (f.matricula && (f.matricula.toUpperCase() === q || f.matricula.toUpperCase() === formattedMatricula)) return true;
+          if (digitosBusca.length >= 3 && fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === digitosBusca) return true;
+          if (qNorm.length >= 3 && normalizarBuscaFuzzy(f.nome) === qNorm) return true;
+          return false;
+        });
         if (dyn) {
           found = {
             codigo: dyn.codigo || dyn.codigo_individual,
@@ -100,6 +189,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (searchBtn && searchInput) {
     searchBtn.addEventListener('click', () => buscarFuncionarioPorMatricula(searchInput.value.trim().toUpperCase()));
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); buscarFuncionarioPorMatricula(searchInput.value.trim().toUpperCase()); }
+    });
+
+    // Sugestões com BUSCA FUZZY (RN15): digitar parte do nome, matrícula ou CPF
+    // sugere os funcionários mais prováveis sem exigir a grafia exata.
+    const suggestBox = document.getElementById('empSearchSuggest');
+    let suggestTimer = null;
+    const esconderSugestoes = () => { if (suggestBox) suggestBox.classList.add('hidden'); };
+    function montarSugestoes(termo) {
+      if (!suggestBox) return;
+      const termoNorm = normalizarBuscaFuzzy(termo);
+      const digitos = fatiarCpfSomenteDigitos(termo);
+      if (termoNorm.length < 2 && digitos.length < 3) {
+        esconderSugestoes();
+        return;
+      }
+      const candidatos = [];
+      (mergedFuncList || []).forEach(f => {
+        const nomeNorm = normalizarBuscaFuzzy(f.nome);
+        const matNorm = normalizarBuscaFuzzy(f.matricula);
+        let pontos = Math.max(pontuarFuzzy(termoNorm, nomeNorm), pontuarFuzzy(termoNorm, matNorm));
+        const cpfF = fatiarCpfSomenteDigitos(f.cpf || f.documento || '');
+        if (digitos.length >= 3 && cpfF.includes(digitos)) {
+          pontos = Math.max(pontos, cpfF === digitos ? 90 : 70);
+        }
+        if (pontos > 0) candidatos.push({ f, pontos });
+      });
+      candidatos.sort((a, b) => b.pontos - a.pontos);
+      const top = candidatos.slice(0, 8);
+      if (top.length === 0) {
+        esconderSugestoes();
+        return;
+      }
+      suggestBox.innerHTML = top.map(({ f }) => {
+        const mat = String(f.matricula || '');
+        const nome = String(f.nome || 'Sem nome');
+        const cargo = String(f.cargo_nome || f.cargo || '');
+        return `<button type="button" data-matricula="${esc(mat)}" class="w-full text-left px-3 py-2 hover:bg-nexus-bg dark:hover:bg-slate-800 flex flex-col gap-0.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+          <span class="font-mono font-bold text-nexus-900 dark:text-white">${esc(nome)}</span>
+          <span class="font-mono text-slate-500 dark:text-slate-400">${esc(mat)} • ${esc(cargo)}</span>
+        </button>`;
+      }).join('');
+      suggestBox.classList.remove('hidden');
+    }
+    searchInput.addEventListener('input', () => {
+      clearTimeout(suggestTimer);
+      suggestTimer = setTimeout(() => montarSugestoes(searchInput.value), 120);
+    });
+    searchInput.addEventListener('blur', () => setTimeout(esconderSugestoes, 150));
+    if (suggestBox) {
+      suggestBox.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-matricula]');
+        if (!btn) return;
+        searchInput.value = btn.getAttribute('data-matricula');
+        esconderSugestoes();
+        buscarFuncionarioPorMatricula(searchInput.value.trim().toUpperCase());
+      });
+    }
   }
 
   // Reemissão de código (RN 15). Só a interface do Técnico exibe o novo código; ele nunca volta para o agente.
@@ -189,7 +337,9 @@ document.addEventListener('DOMContentLoaded', () => {
             matricula: s.matricula,
             nome: s.nome,
             cargo: s.cargo_nome || s.cargo,
-            codigo: s.codigo_individual || `NX-${s.matricula.replace('MAT-', '')}-SP`,
+            codigo: s.codigo_individual || `NX-${String(s.matricula || '').replace('MAT-', '')}-SP`,
+            cpf: s.cpf || '',
+            data_nascimento: s.data_nascimento || '',
             doc: s.ativo ? 'Ativo no Supabase' : 'Inativo no Supabase',
             ativo: s.ativo,
             id: s.id
@@ -217,6 +367,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 font-bold">${esc(f.nome)}</td>
         <td class="p-3 text-slate-500 font-semibold">${esc(f.cargo)}</td>
         <td class="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">${esc(f.codigo)}</td>
+        <td class="p-3 font-mono text-slate-600 dark:text-slate-300">${esc(formatarCpfExibicao(f.cpf))}</td>
+        <td class="p-3 font-mono text-slate-500">${esc(formatarDataNascExibicao(f.data_nascimento))}</td>
         <td class="p-3 text-slate-400 font-mono text-xs flex items-center justify-between">
           <span class="${f.ativo ? 'text-emerald-600 font-bold' : 'text-slate-400'}">${esc(f.doc || 'Cadastrado')}</span>
           <button type="button" onclick="window.excluirFuncionarioReal(${jsArg(f.matricula)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
@@ -255,6 +407,19 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleFuncBtn.addEventListener('click', () => funcForm.classList.toggle('hidden'));
   }
 
+  // Máscara automática de CPF (000.000.000-00) durante a digitação
+  const funcCpfInput = document.getElementById('funcCpf');
+  if (funcCpfInput) {
+    funcCpfInput.addEventListener('input', () => {
+      const d = fatiarCpfSomenteDigitos(funcCpfInput.value).slice(0, 11);
+      let masked = d;
+      if (d.length > 9) masked = `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+      else if (d.length > 6) masked = `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+      else if (d.length > 3) masked = `${d.slice(0, 3)}.${d.slice(3)}`;
+      funcCpfInput.value = masked;
+    });
+  }
+
   if (funcForm) {
     funcForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -264,6 +429,34 @@ document.addEventListener('DOMContentLoaded', () => {
       const cargoValue = cargoSelect ? cargoSelect.value : 'ESTIVADOR';
       const cargoText = cargoSelect && cargoSelect.options[cargoSelect.selectedIndex] ? cargoSelect.options[cargoSelect.selectedIndex].text : cargoValue;
       const doc = document.getElementById('funcDoc').value.trim();
+      const cpfRaw = document.getElementById('funcCpf').value.trim();
+      const cpfDigits = fatiarCpfSomenteDigitos(cpfRaw);
+      const dataNasc = document.getElementById('funcDataNasc').value;
+
+      // CPF obrigatório e válido (11 dígitos + dígitos verificadores)
+      if (!validarCpf(cpfRaw)) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', 'Informe um CPF válido com 11 dígitos (Exemplo: 123.456.789-09). O cadastro só é permitido com CPF válido.');
+        return;
+      }
+
+      // Data de nascimento: obrigatória, passada e de pessoa maior de idade
+      if (!dataNasc) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data de Nascimento Obrigatória', 'Informe a data de nascimento do funcionário.');
+        return;
+      }
+      const nascDate = new Date(`${dataNasc}T12:00:00`);
+      const hoje = new Date();
+      if (Number.isNaN(nascDate.getTime()) || nascDate > hoje) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Inválida', 'A data de nascimento não pode ser futura.');
+        return;
+      }
+      let idade = hoje.getFullYear() - nascDate.getFullYear();
+      const fezAniversario = (hoje.getMonth() > nascDate.getMonth()) || (hoje.getMonth() === nascDate.getMonth() && hoje.getDate() >= nascDate.getDate());
+      if (!fezAniversario) idade--;
+      if (idade < 18) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Menor de Idade', `Funcionários do terminal precisam ter 18 anos ou mais. A data informada corresponde a ${idade} ano(s).`);
+        return;
+      }
 
       const formattedMatricula = matriculaRaw.toUpperCase().startsWith('MAT-') ? matriculaRaw.toUpperCase() : `MAT-${matriculaRaw.toUpperCase()}`;
 
@@ -280,6 +473,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (funcionarioExistente) {
         const msg = `BLOQUEIO DE DUPLICIDADE: A matrícula "${formattedMatricula}" já está cadastrada no sistema para o funcionário "${funcionarioExistente.nome}". Não é permitido cadastrar mais de uma pessoa com a mesma matrícula!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Matrícula Duplicada', msg);
+        return;
+      }
+
+      // Bloqueio de CPF duplicado no cache local
+      const cpfDuplicadoLocal = mergedFuncList.find(f => fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === cpfDigits);
+      if (cpfDuplicadoLocal) {
+        const msg = `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para "${cpfDuplicadoLocal.nome}" (${cpfDuplicadoLocal.matricula}). Cada pessoa pode ter apenas um cadastro no sistema!`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', msg);
         return;
       }
 
@@ -300,6 +501,22 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
           console.warn('[NexusPort] Erro ao verificar duplicidade no Supabase:', err);
         }
+
+        // CPF duplicado no Supabase (coluna nova: ignora se a migração pendente)
+        try {
+          const { data: dupCpf, error: dupCpfErr } = await window.nexusSupabase
+            .from('funcionarios')
+            .select('nome, matricula')
+            .eq('cpf', cpfDigits)
+            .maybeSingle();
+          if (!dupCpfErr && dupCpf) {
+            const msg = `BLOQUEIO DE DUPLICIDADE (Supabase): o CPF ${formatarCpfExibicao(cpfDigits)} já pertence ao funcionário "${dupCpf.nome}" (${dupCpf.matricula}). Não é permitido cadastrar duplicidades!`;
+            if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', msg);
+            return;
+          }
+        } catch (err) {
+          console.warn('[NexusPort] Verificação de CPF no Supabase indisponível (migração pendente?):', err);
+        }
       }
 
       const suffix = Math.floor(1000 + Math.random() * 9000);
@@ -311,6 +528,8 @@ document.addEventListener('DOMContentLoaded', () => {
         cargo: cargoText,
         cargo_enum: cargoValue,
         codigo: codigo,
+        cpf: cpfDigits,
+        data_nascimento: dataNasc,
         doc: doc || 'Cadastrado no Sistema',
         ativo: true
       };
@@ -320,15 +539,33 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('nexus_func_list', JSON.stringify(localList));
 
       let insertedFuncId = null;
+      let avisoMigracao = '';
       if (window.nexusSupabase) {
         try {
-          const { data: insData, error: insErr } = await window.nexusSupabase.from('funcionarios').insert({
+          const payloadBase = {
             matricula: formattedMatricula,
             codigo_individual: codigo,
             nome: nome,
             cargo: cargoValue,
             ativo: true
-          }).select('id').single();
+          };
+          const payloadCompleto = { ...payloadBase, cpf: cpfDigits, data_nascimento: dataNasc };
+          let insData = null;
+          const tentativa1 = await window.nexusSupabase.from('funcionarios').insert(payloadCompleto).select('id').single();
+          if (tentativa1.error) {
+            const msgErro = `${tentativa1.error.message || ''} ${tentativa1.error.code || ''}`;
+            if (/column|PGRST204|42703/i.test(msgErro)) {
+              // Colunas cpf/data_nascimento ainda não existem no banco: salva o
+              // básico e avisa o técnico para aplicar a migração SQL.
+              avisoMigracao = ' Aviso: as colunas cpf/data_nascimento ainda não existem no Supabase — aplique a migração supabase/migrations/20261010_funcionarios_cpf_nascimento.sql para sincronizá-las.';
+              const tentativa2 = await window.nexusSupabase.from('funcionarios').insert(payloadBase).select('id').single();
+              insData = tentativa2.data || null;
+            } else {
+              throw tentativa1.error;
+            }
+          } else {
+            insData = tentativa1.data;
+          }
 
           if (insData) insertedFuncId = insData.id;
 
@@ -349,7 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
       funcForm.classList.add('hidden');
 
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Funcionário Cadastrado', `Funcionário ${nome} cadastrado com sucesso! Código de acesso gerado: ${codigo}`);
+        window.mostrarFeedback('sucesso', 'Funcionário Cadastrado', `Funcionário ${nome} cadastrado com sucesso! Código de acesso gerado: ${codigo}${avisoMigracao}`);
       }
     });
   }

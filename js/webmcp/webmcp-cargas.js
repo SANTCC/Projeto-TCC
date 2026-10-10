@@ -194,8 +194,8 @@
         valor: { type: 'number', minimum: 0.01, maximum: 1000000000000, rotulo: 'Valor declarado (R$)', description: 'Valor declarado em reais (maior que zero).' },
         natureza: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Natureza', description: 'Natureza da mercadoria, por exemplo Agrícola ou Perecível.' },
         porto_descarga: { type: 'string', enum: D.SETORES_PATIO, rotulo: 'Setor do pátio', description: 'Setor do pátio de descarga.' },
-        destino: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Destino', description: 'Destino da carga.' },
-        data_prevista: { type: 'string', format: 'date', rotulo: 'Data prevista', description: 'Data prevista de entrega (AAAA-MM-DD), hoje ou futura.' }
+        destino: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Destino (rota cadastrada)', description: 'Porto de destino de uma rota marítima JÁ CADASTRADA (ver listar_rotas). Não há destino manual: o valor precisa casar com uma rota registrada.' },
+        data_prevista: { type: 'string', format: 'date', rotulo: 'Data prevista (ignorado)', description: 'Aceito por compatibilidade, mas IGNORADO: a previsão de chegada agora é o ETA do navio vinculado, não há mais data manual no agendamento.' }
       },
       required: ['tipo', 'peso', 'volume', 'valor', 'natureza', 'porto_descarga', 'destino'],
       additionalProperties: false
@@ -207,15 +207,12 @@
           return { codigo: 'TIPO_NAO_CADASTRADO', mensagem: 'O tipo de carga precisa estar cadastrado com checklist antes do agendamento (RN 13).' };
         }
       }
-      if (args.data_prevista && args.data_prevista < hojeIso()) {
-        return { codigo: 'DATA_INVALIDA', mensagem: 'A data prevista de entrega não pode ser anterior a hoje.' };
-      }
       return null;
     },
     resumo: (args) => [
       `Agendar nova carga do tipo ${args.tipo}.`,
       `Peso ${args.peso} t · volume ${args.volume} m³ · valor declarado ${D.moeda(args.valor)}.`,
-      `Setor ${args.porto_descarga} · destino ${args.destino} · previsão ${args.data_prevista || hojeIso()}.`
+      `Setor ${args.porto_descarga} · destino ${args.destino} (rota cadastrada) · ETA calculado pelo navio vinculado.`
     ],
     executar: async (args) => {
       const form = document.getElementById('agendamentoCargaForm');
@@ -229,11 +226,32 @@
         D.definirCampo(form, 'agValor', args.valor);
         D.definirCampo(form, 'agNatureza', args.natureza);
         D.definirCampo(form, 'agPortoDescarga', args.porto_descarga);
-        D.definirCampo(form, 'agDestino', args.destino);
-        D.definirCampo(form, 'agDataPrevista', args.data_prevista || hojeIso());
       } catch (erro) {
         return { ok: false, codigo: 'ARGUMENTOS_INVALIDOS', mensagem: `Um valor não corresponde às opções da tela (${erro.message}).` };
       }
+      // Destino final = rota marítima cadastrada (sem digitação manual, sem
+      // data prevista): o agente casa o destino pedido com o rótulo da rota
+      // ("origem ➔ destino (km)") carregado pela própria página.
+      const agDestinoSel = form.querySelector('#agDestino');
+      if (!agDestinoSel) {
+        return { ok: false, codigo: 'INDISPONIVEL', mensagem: 'Seletor de destino indisponível no formulário de agendamento.' };
+      }
+      if (D.esperar) {
+        await D.esperar(() => Array.from(agDestinoSel.options).some((o) => o.value !== ''), 4000);
+      }
+      const rotasDisponiveis = Array.from(agDestinoSel.options).filter((o) => o.value !== '');
+      if (rotasDisponiveis.length === 0) {
+        return { ok: false, codigo: 'ROTA_NAO_CADASTRADA', mensagem: 'Nenhuma rota marítima cadastrada no sistema. Peça à supervisão para registrar a rota na Gestão de Rotas Marítimas (Embarcações & GPS) antes de agendar.' };
+      }
+      const destinoAlvo = String(args.destino || '').trim().toLowerCase();
+      const opcaoRota = rotasDisponiveis.find((o) => (o.textContent || '').toLowerCase().includes(destinoAlvo)) ||
+        rotasDisponiveis.find((o) => o.value === String(args.destino));
+      if (!opcaoRota) {
+        const lista = rotasDisponiveis.map((o) => (o.textContent || '').trim()).join(' | ');
+        return { ok: false, codigo: 'ARGUMENTOS_INVALIDOS', mensagem: `O destino "${args.destino}" não corresponde a nenhuma rota marítima cadastrada. Rotas disponíveis: ${lista}.` };
+      }
+      agDestinoSel.value = opcaoRota.value;
+      agDestinoSel.dispatchEvent(new Event('change', { bubbles: true }));
       // Backlog 3 (3.4 / WebMCP): o formulário exige o Responsável pela Carga
       // (#agEstivadorResponsavel), preenchido de forma assíncrona pela página.
       // O agente aguarda o preenchimento e, se nada tiver sido escolhido, assume
@@ -284,7 +302,7 @@
   const movimentar = {
     nome: 'movimentar_carga',
     titulo: 'Movimentar carga',
-    descricao: 'Designa um guindaste OPERANTE para levar a carga à Sala de Contêiner e cria a tarefa do guindaste. Não funciona em trânsito nem durante emergência. Exige confirmação.',
+    descricao: 'Move a carga entre setores do pátio: designa um guindaste OPERANTE e cria a tarefa de movimentação (pendente em Embarcações & GPS); o setor só muda quando a tarefa for concluída por lá. Não funciona em trânsito nem durante emergência. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: ['ESTIVADOR', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     permissao: 'MOVIMENTAR_CARGA',
@@ -293,7 +311,8 @@
       type: 'object',
       properties: {
         id: ESQUEMA_ID,
-        guindaste: { type: 'string', minLength: 2, maxLength: 40, rotulo: 'Guindaste', description: 'Identificação de um guindaste OPERANTE (ver listar_guindastes).' }
+        guindaste: { type: 'string', minLength: 2, maxLength: 40, rotulo: 'Guindaste', description: 'Identificação de um guindaste OPERANTE (ver listar_guindastes).' },
+        setor: { type: 'string', enum: D.SETORES_PATIO, rotulo: 'Setor de destino', description: 'Setor do pátio de destino. Se omitido, usa o primeiro setor diferente do atual.' }
       },
       required: ['id', 'guindaste'],
       additionalProperties: false
@@ -305,6 +324,9 @@
         if (carga.status === 'EM_TRANSITO') {
           return { codigo: 'ESTADO_INVALIDO', mensagem: `A carga ${carga.id} está em trânsito e não pode ser movimentada.` };
         }
+        if (args.setor !== undefined && carga.portoDescarga === args.setor) {
+          return { codigo: 'MESMO_SETOR', mensagem: `A carga ${carga.id} já está no setor "${args.setor}". Escolha um setor de destino diferente.` };
+        }
       }
       if (args.guindaste !== undefined) {
         const g = listaGuindastes().find((x) => x.identificacao === args.guindaste);
@@ -313,15 +335,25 @@
       }
       return null;
     },
-    resumo: (args) => [
-      `Movimentar a carga ${args.id} até a Sala de Contêiner com o guindaste ${args.guindaste}.`,
-      'Cria a tarefa do guindaste em Embarcações & GPS.'
-    ],
+    resumo: async (args) => {
+      const carga = await cargaDoOperador(args.id).catch(() => null);
+      const origem = (carga && carga.portoDescarga) || 'setor atual';
+      const destino = args.setor || D.SETORES_PATIO.find((s) => s !== origem) || args.setor;
+      return [
+        `Movimentar a carga ${args.id} do setor "${origem}" para o setor "${destino}" com o guindaste ${args.guindaste}.`,
+        'Cria a tarefa pendente do guindaste em Embarcações & GPS; o Setor do Pátio só muda após a conclusão por lá.'
+      ];
+    },
     executar: async (args) => {
-      await window.executarAcaoCarga(args.id, 'MOVIMENTAR', { guindasteIdentificacao: args.guindaste });
+      const antes = cargaLocal(args.id);
+      const setorDestino = args.setor || D.SETORES_PATIO.find((s) => s !== ((antes && antes.portoDescarga) || ''));
+      if (!setorDestino) return falhaNaoConcluida('Não há setor de destino diferente do atual para esta carga.');
+      await window.executarAcaoCarga(args.id, 'MOVIMENTAR', { guindasteIdentificacao: args.guindaste, setorDestino: setorDestino });
       const c = cargaLocal(args.id);
-      if (c && c.guindasteDesignado === args.guindaste && c.portoDescarga === 'Sala de Contêiner') {
-        return { mensagem: `Carga ${args.id} associada ao guindaste ${args.guindaste}. Tarefa criada.`, dados: D.resumirCarga(c) };
+      const tarefas = D.lerLista('nexus_guindaste_tarefas');
+      const tarefaCriada = tarefas.some((t) => t.cargaId === args.id && t.guindasteId === args.guindaste && (!t.status || t.status === 'PENDENTE'));
+      if (c && c.guindasteDesignado === args.guindaste && c.movimentacaoPendente === setorDestino && tarefaCriada) {
+        return { mensagem: `Carga ${args.id} associada ao guindaste ${args.guindaste}. Tarefa de movimentação para "${setorDestino}" criada (pendente em Embarcações & GPS).`, dados: D.resumirCarga(c) };
       }
       return falhaNaoConcluida();
     }

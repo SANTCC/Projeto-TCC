@@ -114,8 +114,13 @@ async function testesCargas() {
     nexus_guindaste_tarefas: []
   };
 
+  // Rotas marítimas (fonte do destino final do agendamento): Supabase simulado,
+  // mesmo padrão dos testes de embarcações.
+  const rotasCargas = [{ origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }];
+  const supaRotasCargas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasCargas); };
+
   // Supervisor: leitura, vinculação com confirmação, cancelamento com motivo (sem diálogo)
-  let w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, adaptadores: PAGINA_CARGAS }));
+  let w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', supaRotasCargas], adaptadores: PAGINA_CARGAS }));
   let promptChamado = 0;
   w.nexusPrompt = async () => { promptChamado += 1; return 'não deveria'; };
   let r = await w.NexusWebMCP.executar('listar_cargas', {});
@@ -158,19 +163,24 @@ async function testesCargas() {
   const antes = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo')).length;
   r = await w.NexusWebMCP.executar('agendar_carga', {
     tipo: "Contêiner 20' Dry", peso: 12.5, volume: 40, valor: 150000, natureza: 'Agrícola',
-    porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Armazém Norte', data_prevista: new Date().toISOString().split('T')[0]
+    porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Porto de Roterdã', data_prevista: new Date().toISOString().split('T')[0]
   });
   const apos = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo'));
   check('agendar: cria a carga com QR e resposta traz o identificador', r.ok === true && apos.length === antes + 1 && /^CRG-2026-\d{3}$/.test(r.dados.id) && r.dados.codigo_qr.startsWith('QR-'), JSON.stringify(r).slice(0, 220));
   check('agendar: resumo mostra peso, volume e valor em formato brasileiro', w.__pedidos[w.__pedidos.length - 1].resumo.some((l) => /12\.5 t/.test(l) && /R\$/.test(l)));
+  check('agendar: destino final é a rota marítima cadastrada (sem digitação manual)', apos[apos.length - 1].destino === 'Porto de Roterdã', JSON.stringify(apos[apos.length - 1].destino));
   r = await w.NexusWebMCP.executar('agendar_carga', {
-    tipo: 'Tipo inexistente', peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Armazém Norte'
+    tipo: 'Tipo inexistente', peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Porto de Roterdã'
   });
   check('agendar: tipo de carga não cadastrado é recusado (RN 13)', r.codigo === 'TIPO_NAO_CADASTRADO', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('agendar_carga', {
-    tipo: "Contêiner 20' Dry", peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Setor Inexistente', destino: 'Armazém Norte'
+    tipo: "Contêiner 20' Dry", peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Setor Inexistente', destino: 'Porto de Roterdã'
   });
   check('agendar: setor fora da lista da tela é recusado pelo esquema', r.ok === false && r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r));
+  r = await w.NexusWebMCP.executar('agendar_carga', {
+    tipo: "Contêiner 20' Dry", peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Armazém Norte'
+  });
+  check('agendar: destino sem rota marítima cadastrada é recusado (sem digitação manual)', r.ok === false && r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r).slice(0, 200));
 
   r = await w.NexusWebMCP.executar('listar_cargas', {});
   check('emergência (supervisor): leitura continua disponível', r.ok === true);
@@ -194,13 +204,16 @@ async function testesCargas() {
   r = await w.NexusWebMCP.executar('movimentar_carga', { id: 'CRG-A', guindaste: 'GND-02-STS' });
   check('movimentar: guindaste em manutenção é recusado', r.codigo === 'GUINDASTE_INDISPONIVEL', JSON.stringify(r));
   w.__pedidos.length = 0;
-  r = await w.NexusWebMCP.executar('movimentar_carga', { id: 'CRG-A', guindaste: 'GND-01-STS' });
+  r = await w.NexusWebMCP.executar('movimentar_carga', { id: 'CRG-A', guindaste: 'GND-01-STS', setor: 'Pátio STS-01 (Setor C)' });
   local = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo'));
   const movida = local.find((c) => c.id === 'CRG-A');
   const tarefas = JSON.parse(w.localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-  check('movimentar: designa o guindaste e cria a tarefa (como na página)',
-    r.ok === true && movida.guindasteDesignado === 'GND-01-STS' && movida.portoDescarga === 'Sala de Contêiner' && tarefas.some((t) => t.cargaId === 'CRG-A'), JSON.stringify(r));
+  check('movimentar: designa o guindaste e cria a tarefa pendente (como na página)',
+    r.ok === true && movida.guindasteDesignado === 'GND-01-STS' && movida.movimentacaoPendente === 'Pátio STS-01 (Setor C)' && tarefas.some((t) => t.cargaId === 'CRG-A' && t.destino === 'Pátio STS-01 (Setor C)'), JSON.stringify(r));
+  check('movimentar: setor só muda após a conclusão da tarefa (não na criação)', movida.portoDescarga === 'Pátio STS-01 (Setor B)', movida.portoDescarga);
   check('movimentar: não usa o diálogo de escolha da página (nexusPrompt não chamado)', promptEstivador === 0, `chamadas: ${promptEstivador}`);
+  r = await w.NexusWebMCP.executar('movimentar_carga', { id: 'CRG-A', guindaste: 'GND-01-STS', setor: 'Pátio STS-01 (Setor B)' });
+  check('movimentar: mesmo setor de origem é recusado', r.codigo === 'MESMO_SETOR', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('liberar_carga_saida', { id: 'CRG-C' });
   check('estivador não pode liberar saída (PERMISSAO_NEGADA)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('agendar_carga', { tipo: "Contêiner 20' Dry", peso: 1, volume: 1, valor: 1, natureza: 'Geral', porto_descarga: 'Pátio STS-01 (Setor B)', destino: 'Armazém Norte' });
@@ -427,6 +440,8 @@ async function testesEmbarcacoes() {
   r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
   local = JSON.parse(w.localStorage.getItem('nexus_navios_list'));
   check('cadastrar navio: cria pelo formulário da página (confirmado no estado)', r.ok === true && local.some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r).slice(0, 200));
+  const bercosAposCadastro = JSON.parse(w.localStorage.getItem('nexus_bercos_list'));
+  check('cadastrar navio: DENTRO_DO_PORTO ocupa o berço imediatamente (primeiro livre)', bercosAposCadastro.some((b) => b.nome === 'Berço 01' && b.estado === 'OCUPADO' && b.navio_imo === 'XYZ7654321'), JSON.stringify(bercosAposCadastro).slice(0, 200));
   r = await w.NexusWebMCP.executar('excluir_navio', { imo: 'XYZ7654321' });
   check('excluir navio: inspetor exclui com confirmação', r.ok === true && !JSON.parse(w.localStorage.getItem('nexus_navios_list')).some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r));
   r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU7654321', tipo: 'Têxteis', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
@@ -694,7 +709,7 @@ async function testesGlobaisEAcesso() {
   w.close();
 
   w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/cargas.js'], adaptadores: ['js/webmcp/webmcp-cargas.js'] }));
-  check('emergência: supervisor não tem a ferramenta de acionar alarme (sem permissão ACIONAR_EMERGENCIA)', !w.NexusWebMCP.ativas().includes('acionar_emergencia'));
+  check('emergência: supervisor TEM a ferramenta de acionar alarme (qualquer cargo pode acionar)', w.NexusWebMCP.ativas().includes('acionar_emergencia'));
   r = await w.NexusWebMCP.executar('ir_para_pagina', { pagina: 'embarcacoes' });
   check('ir para página: destino permitido ao cargo', r.ok === true && r.dados.destino === 'embarcacoes.html', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('ir_para_pagina', { pagina: 'tecnico_portos' });
