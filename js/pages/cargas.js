@@ -531,6 +531,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Regra 2.9 (Área do pátio / Capacidade máxima): Limite regulamentar de 100 ha (1.000.000 m² / 100 posições ativas)
+      const CAPACIDADE_MAXIMA_PATIO_HA = 100;
+      const cargasAtivasPatio = cargasFluxoList.filter(c => ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'].includes(c.status));
+      if (cargasAtivasPatio.length >= CAPACIDADE_MAXIMA_PATIO_HA) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Capacidade Máxima do Pátio Excedida', `BLOQUEIO DE CAPACIDADE REGULAMENTAR (Regra 2.9): O pátio atingiu o limite operacional máximo de 100 hectares (1.000.000 m² / ${CAPACIDADE_MAXIMA_PATIO_HA} cargas em fluxo ativo)! Não é permitido agendar novas cargas até a liberação de espaço.`);
+        }
+        return;
+      }
+
       const idNum = Math.floor(100 + Math.random() * 900);
       const newId = `CRG-2026-${idNum}`;
       const newQrCode = `QR-${newId}`;

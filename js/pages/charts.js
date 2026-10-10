@@ -962,12 +962,37 @@
   }
 
   function classificarInspecao(carga) {
+    if (carga.status === 'CANCELADA') return 'CANCELADA';
     const resultado = (carga.inspecao || '').toUpperCase();
     if (resultado.includes('RECUS')) return 'RECUSADA';
     if (resultado.includes('APROV')) return 'APROVADA';
     if (carga.status === 'RECUSADA') return 'RECUSADA';
     if (['ARMAZENAGEM', 'PRONTA_PARA_ENTREGA', 'EM_TRANSITO', 'ENTREGUE'].includes(carga.status)) return 'APROVADA';
     return 'PENDENTE';
+  }
+
+    /**
+   * Normaliza a categoria do tipo de carga para evitar duplicidades no gráfico
+   * devido a diferenças de caixa e acentuação (ex: 'Perecível' vs 'PERECIVEL').
+   */
+  function normalizarTipoCarga(tipo) {
+    if (!tipo) return 'Carga Geral';
+    const str = String(tipo).trim();
+    if (!str) return 'Carga Geral';
+
+    const semAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const chave = semAcento(str);
+
+    const tipos = (typeof window !== 'undefined' && Array.isArray(window.NEXUS_TIPOS_CARGA)) ? window.NEXUS_TIPOS_CARGA : [];
+    for (const t of tipos) {
+      const nomeOficial = typeof t === 'string' ? t : (t && t.nome);
+      if (nomeOficial && semAcento(nomeOficial) === chave) {
+        return nomeOficial;
+      }
+    }
+
+    // Capitalização limpa se não constar no catálogo
+    return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
   const CONSTRUTORES = {
@@ -1138,25 +1163,44 @@
     /** Resultado consolidado das inspeções técnicas. */
     inspecoes_resultado: function (dados) {
       if (!dados.cargas.length) return null;
-      const porResultado = new Map([['APROVADA', 0], ['RECUSADA', 0], ['PENDENTE', 0]]);
+      // Deduplicação por ID de carga para evitar contagem múltipla da mesma carga
+      const cargasUnicas = [];
+      const vistos = new Set();
       dados.cargas.forEach(c => {
+        const id = c.id || c.qr_code_url || JSON.stringify(c);
+        if (!vistos.has(id)) {
+          vistos.add(id);
+          cargasUnicas.push(c);
+        }
+      });
+
+      const porResultado = new Map([['APROVADA', 0], ['RECUSADA', 0], ['PENDENTE', 0], ['CANCELADA', 0]]);
+      cargasUnicas.forEach(c => {
         const chave = classificarInspecao(c);
         porResultado.set(chave, (porResultado.get(chave) || 0) + 1);
       });
-      const total = dados.cargas.length;
+      const total = cargasUnicas.length;
       if (total === 0) return null;
       const aprovadas = porResultado.get('APROVADA') || 0;
       const recusadas = porResultado.get('RECUSADA') || 0;
+      const pendentes = porResultado.get('PENDENTE') || 0;
+      const canceladas = porResultado.get('CANCELADA') || 0;
+
+      // Cargas canceladas são excluídas da taxa de aprovação/eficiência
+      const baseCalculoTaxa = total - canceladas;
+      const taxaAprovacao = baseCalculoTaxa > 0 ? percentual(aprovadas, baseCalculoTaxa) : 0;
+      const taxaRecusa = baseCalculoTaxa > 0 ? percentual(recusadas, baseCalculoTaxa) : 0;
+
       return {
         tipo: 'doughnut',
-        labels: ['Aprovadas', 'Recusadas', 'Pendentes'],
+        labels: ['Aprovadas', 'Recusadas', 'Pendentes', 'Canceladas'],
         datasets: [{
           label: 'Cargas',
-          data: [aprovadas, recusadas, porResultado.get('PENDENTE') || 0],
-          backgroundColor: ['#2E7D32', '#C62828', '#D97706'],
+          data: [aprovadas, recusadas, pendentes, canceladas],
+          backgroundColor: ['#2E7D32', '#C62828', '#D97706', '#64748B'],
           borderWidth: 0
         }],
-        resumo: `${total} carga(s) inspecionada(s) • taxa de aprovação de ${percentual(aprovadas, total)}% e recusa de ${percentual(recusadas, total)}%`
+        resumo: `${total} carga(s) analisada(s) (${aprovadas} aprovadas, ${recusadas} recusadas, ${pendentes} pendentes, ${canceladas} canceladas) • taxa de aprovação de ${taxaAprovacao}% e recusa de ${taxaRecusa}% (excluindo canceladas)`
       };
     },
 
@@ -1241,31 +1285,50 @@
     /** Taxa de aprovação/recusa consolidada (Visão Estratégica). */
     aprovacao_recusa: function (dados) {
       if (!dados.cargas.length) return null;
-      const porResultado = new Map([['APROVADA', 0], ['RECUSADA', 0], ['PENDENTE', 0]]);
+      const cargasUnicas = [];
+      const vistos = new Set();
       dados.cargas.forEach(c => {
+        const id = c.id || c.qr_code_url || JSON.stringify(c);
+        if (!vistos.has(id)) {
+          vistos.add(id);
+          cargasUnicas.push(c);
+        }
+      });
+
+      const porResultado = new Map([['APROVADA', 0], ['RECUSADA', 0], ['PENDENTE', 0], ['CANCELADA', 0]]);
+      cargasUnicas.forEach(c => {
         const chave = classificarInspecao(c);
         porResultado.set(chave, (porResultado.get(chave) || 0) + 1);
       });
-      const total = dados.cargas.length;
+      const total = cargasUnicas.length;
       const aprovadas = porResultado.get('APROVADA') || 0;
       const recusadas = porResultado.get('RECUSADA') || 0;
+      const pendentes = porResultado.get('PENDENTE') || 0;
+      const canceladas = porResultado.get('CANCELADA') || 0;
+
+      const baseCalculoTaxa = total - canceladas;
+      const taxaAprovacao = baseCalculoTaxa > 0 ? percentual(aprovadas, baseCalculoTaxa) : 0;
+      const taxaRecusa = baseCalculoTaxa > 0 ? percentual(recusadas, baseCalculoTaxa) : 0;
+
       return {
         tipo: 'doughnut',
-        labels: ['Aprovadas', 'Recusadas', 'Pendentes'],
+        labels: ['Aprovadas', 'Recusadas', 'Pendentes', 'Canceladas'],
         datasets: [{
           label: 'Cargas',
-          data: [aprovadas, recusadas, porResultado.get('PENDENTE') || 0],
-          backgroundColor: ['#2E7D32', '#C62828', '#D97706'],
+          data: [aprovadas, recusadas, pendentes, canceladas],
+          backgroundColor: ['#2E7D32', '#C62828', '#D97706', '#64748B'],
           borderWidth: 0
         }],
-        resumo: `Taxa de aprovação de ${percentual(aprovadas, total)}% e recusa de ${percentual(recusadas, total)}% sobre ${total} carga(s)`
+        resumo: `Taxa de aprovação de ${taxaAprovacao}% e recusa de ${taxaRecusa}% sobre ${baseCalculoTaxa} carga(s) ativas (${canceladas} canceladas excluídas)`
       };
     },
+
 
     /** Tempo médio de permanência no porto por tipo de carga (RF 4). */
     tempo_permanencia: function (dados) {
       if (!dados.cargas.length) return null;
       const acumulado = new Map();
+      let amostragemTotal = 0;
       dados.cargas.forEach(c => {
         // Prioriza cargas já concluídas; cargas em pátio usam a data corrente.
         const finalizado = c.dataSaida || ['EM_TRANSITO', 'ENTREGUE', 'CANCELADA'].includes(c.status);
@@ -1273,10 +1336,12 @@
         if (!inicio) return;
         const dias = diferencaEmDias(inicio, finalizado ? (c.dataSaida || null) : null);
         if (dias === null) return;
-        const atual = acumulado.get(c.tipo) || { dias: 0, quantidade: 0 };
+        const tipoNormalizado = normalizarTipoCarga(c.tipo);
+        const atual = acumulado.get(tipoNormalizado) || { dias: 0, quantidade: 0 };
         atual.dias += dias;
         atual.quantidade += 1;
-        acumulado.set(c.tipo, atual);
+        amostragemTotal += 1;
+        acumulado.set(tipoNormalizado, atual);
       });
       if (!acumulado.size) return null;
       const medias = Array.from(acumulado.entries())
@@ -1288,7 +1353,7 @@
         tipo: 'bar',
         labels: medias.map(([tipo]) => tipo),
         datasets: [datasetBarras('Dias médios no porto', medias.map(([, m]) => m), CORES.primaria)],
-        resumo: `Média geral de ${geral.toFixed(1)} dia(s) por tipo de carga (entrada → saída/trânsito)`
+        resumo: `Média geral de ${geral.toFixed(1)} dia(s) por tipo de carga [Fórmula: Σ(Data Saída - Data Entrada) / Total de Cargas] • Amostragem: ${amostragemTotal} carga(s) analisada(s)`
       };
     },
 
@@ -1872,6 +1937,7 @@
       ordenarMapa: ordenarMapa,
       percentual: percentual,
       normalizarCargo: normalizarCargo,
+      normalizarTipoCarga: normalizarTipoCarga,
       nomeCargo: nomeCargo,
       chaveMes: chaveMes,
       montarConfig: montarConfig,
