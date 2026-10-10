@@ -476,6 +476,22 @@ document.addEventListener('DOMContentLoaded', () => {
           const msTotaisPrevistos = horasTotaisPrevistas * 3600 * 1000;
           const msRestantes = Math.max(0, msTotaisPrevistos - diffMs);
 
+          // Transição automática para NO_PORTO_DE_DESTINO se o ETA zerou
+          if (msRestantes <= 0 && n.localizacao === 'FORA_DO_PORTO') {
+            n.localizacao = 'NO_PORTO_DE_DESTINO';
+            localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+            if (window.nexusSupabase) {
+              window.nexusSupabase.from('navios')
+                .update({ localizacao: 'NO_PORTO_DE_DESTINO' })
+                .eq('numero_imo', n.imo)
+                .then(() => {})
+                .catch(err => console.warn('Erro ao atualizar chegada ao destino no Supabase:', err));
+            }
+            if (window.NexusRepository && window.NexusRepository.notifyChange) {
+              window.NexusRepository.notifyChange('navios');
+            }
+          }
+
           const diasRestantes = Math.floor(msRestantes / (1000 * 60 * 60 * 24));
           const horasRestantes = Math.floor((msRestantes % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
           const minRestantes = Math.floor((msRestantes % (1000 * 60 * 60)) / (1000 * 60));

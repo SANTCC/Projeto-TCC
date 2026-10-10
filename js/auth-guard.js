@@ -70,7 +70,7 @@
     'CADASTRAR_CONTAINER': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'CADASTRAR_GUINDASTE': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'INSPECIONAR_CARGA': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
-    'ACIONAR_EMERGENCIA': ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    'ACIONAR_EMERGENCIA': ['INSPETOR', 'SUPERVISOR_SUBSTITUTO', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
 
     // Supervisor / Gerente de Operações
     'LIBERAR_NAVIO': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
@@ -203,7 +203,37 @@
         return false;
       }
 
-      return allowedRoles.includes(session.cargo);
+      // Validação direta do cargo
+      if (allowedRoles.includes(session.cargo)) return true;
+
+      // Suporte a SUPERVISOR_SUBSTITUTO ou delegação ativa dentro da vigência
+      const activeDelegRaw = localStorage.getItem('nexus_active_delegation');
+      let temDelegacaoAtiva = false;
+      if (activeDelegRaw) {
+        try {
+          const activeDeleg = JSON.parse(activeDelegRaw);
+          if (activeDeleg) {
+            const now = new Date();
+            const dentroVigencia = (!activeDeleg.fim || now <= new Date(activeDeleg.fim)) &&
+                                  (!activeDeleg.inicio || now >= new Date(activeDeleg.inicio));
+            if (dentroVigencia) {
+              const subMat = String(activeDeleg.substitutoMatricula || '').toUpperCase();
+              const userMat = String(session.matricula || '').toUpperCase();
+              if (subMat === userMat || subMat === `MAT-${userMat}` || session.cargo === 'SUPERVISOR_SUBSTITUTO' || session.delegacao_ativa === true) {
+                temDelegacaoAtiva = true;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (temDelegacaoAtiva) {
+        if (allowedRoles.includes('SUPERVISOR_SUBSTITUTO') || allowedRoles.includes('SUPERVISOR_GERENTE_OPERACOES')) {
+          return true;
+        }
+      }
+
+      return false;
     },
 
     /**

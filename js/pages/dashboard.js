@@ -358,12 +358,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const naviosNoPorto = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
     const osAtivas = manutencoes.filter(m => m.status === 'SOLICITADA' || m.status === 'APROVADA' || m.status === 'EM_MANUTENCAO').length;
 
-    const indicadores = [
-      { categoria: 'Contêineres Cadastrados e Alocados', volume: totalConts, meta: 20, atingimento: Math.min(100, Math.round((totalConts / 20) * 100)), tempo: 1.5, status: 'IDEAL' },
-      { categoria: 'Cargas Gerais no Fluxo Operacional', volume: totalCargas, meta: 30, atingimento: Math.min(100, Math.round((totalCargas / 30) * 100)), tempo: 2.1, status: 'IDEAL' },
-      { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto, meta: 5, atingimento: Math.min(100, Math.round((naviosNoPorto / 5) * 100)), tempo: 18.4, status: 'IDEAL' },
-      { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas, meta: 5, atingimento: osAtivas === 0 ? 100 : Math.max(10, 100 - (osAtivas * 10)), tempo: 4.8, status: 'IDEAL' }
+    function calcularStatus(atingimento) {
+      if (atingimento >= 85) return 'IDEAL';
+      if (atingimento >= 50) return 'ATENÇÃO';
+      return 'CRÍTICO';
+    }
+
+    const rawIndicadores = [
+      { categoria: 'Contêineres Cadastrados e Alocados', volume: totalConts, meta: 20, tempo: 1.5 },
+      { categoria: 'Cargas Gerais no Fluxo Operacional', volume: totalCargas, meta: 30, tempo: 2.1 },
+      { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto, meta: 5, tempo: 18.4 },
+      { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas, meta: 5, tempo: 4.8 }
     ];
+
+    const indicadores = rawIndicadores.map(item => {
+      const atingimento = item.meta > 0 ? Math.round((item.volume / item.meta) * 100) : 0;
+      const status = calcularStatus(atingimento);
+      return {
+        categoria: item.categoria,
+        volume: item.volume,
+        meta: item.meta,
+        atingimento,
+        tempo: item.tempo,
+        status
+      };
+    });
 
     // Backlog 3 (7f): mantém a cópia em memória para a exportação CSV
     window.__nexusIndicadoresExecutivos = indicadores;
@@ -376,7 +395,11 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${esc(i.atingimento)}%</td>
         <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${esc(i.tempo)} h</td>
         <td class="p-3 text-center">
-          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">${esc(i.status)}</span>
+          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+            i.status === 'IDEAL' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+            i.status === 'ATENÇÃO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+            'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+          }">${esc(i.status)}</span>
         </td>
       </tr>
     `).join('');
