@@ -1,0 +1,146 @@
+{
+  "descricao": "Gate Lighthouse para pull requests (Backlog 3, item H). Categorias: pontuação mínima de 0 a 1. Auditorias críticas precisam passar, exceto nas exceções por página, que são dívida conhecida e devem ser removidas ao serem corrigidas. Calibrado com as páginas estilizadas (Tailwind carregado): sem os estilos, a auditoria de contraste não é medida. Cada página é medida em 3 rodadas: a pontuação de categoria é a mediana, e uma auditoria crítica só reprova se falhar na maioria das rodadas (o CI compartilhado é ruidoso). Os mínimos são piso de regressão.",
+  "rede": {
+    "bloquearHosts": [
+      "*supabase.co*"
+    ],
+    "motivo": "A medição não lê nem escreve dados reais e não entra na contagem de usuários on-line (item E)."
+  },
+  "categorias": {
+    "performance": 0.6,
+    "accessibility": 0.75,
+    "best-practices": 0.9,
+    "seo": 0.9
+  },
+  "rodadas": 3,
+  "paginas": [
+    {
+      "arquivo": "index.html",
+      "sessao": "publica"
+    },
+    {
+      "arquivo": "confirm-role.html",
+      "sessao": "pendencia"
+    },
+    {
+      "arquivo": "dashboard.html",
+      "sessao": "sessao"
+    },
+    {
+      "arquivo": "cargas.html",
+      "sessao": "sessao"
+    },
+    {
+      "arquivo": "delegacao.html",
+      "sessao": "sessao"
+    },
+    {
+      "arquivo": "embarcacoes.html",
+      "sessao": "sessao"
+    },
+    {
+      "arquivo": "inspecao.html",
+      "sessao": "sessao"
+    },
+    {
+      "arquivo": "manutencao.html",
+      "sessao": "sessao"
+    },
+    {
+      "arquivo": "relatorios.html",
+      "sessao": "sessao"
+    },
+    {
+      "arquivo": "scanner.html",
+      "sessao": "sessao"
+    },
+    {
+      "arquivo": "tecnico_portos.html",
+      "sessao": "sessao"
+    }
+  ],
+  "auditoriasCriticas": [
+    "meta-viewport",
+    "label",
+    "select-name",
+    "aria-dialog-name",
+    "button-name",
+    "image-alt",
+    "link-name",
+    "document-title",
+    "html-has-lang",
+    "color-contrast",
+    "aria-required-attr",
+    "aria-valid-attr",
+    "aria-valid-attr-value",
+    "aria-allowed-attr",
+    "aria-hidden-focus",
+    "duplicate-id-aria",
+    "frame-title",
+    "input-image-alt",
+    "td-headers-attr",
+    "th-has-data-cells",
+    "tabindex",
+    "list",
+    "listitem",
+    "definition-list",
+    "dlitem",
+    "is-on-https",
+    "geolocation-on-start"
+  ],
+  "excecoes": {
+    "meta-viewport": {
+      "paginas": [
+        "index.html",
+        "confirm-role.html",
+        "dashboard.html",
+        "cargas.html",
+        "delegacao.html",
+        "embarcacoes.html",
+        "inspecao.html",
+        "manutencao.html",
+        "relatorios.html",
+        "scanner.html",
+        "tecnico_portos.html"
+      ],
+      "motivo": "viewport com user-scalable=no e maximum-scale=1.0 impede o zoom (WCAG 1.4.4). Decisão de UX pendente: remover o bloqueio de zoom."
+    },
+    "label": {
+      "paginas": [
+        "delegacao.html",
+        "manutencao.html"
+      ],
+      "motivo": "campos de formulário sem rótulo acessível. Corrigir e remover a exceção."
+    },
+    "select-name": {
+      "paginas": [
+        "cargas.html",
+        "inspecao.html",
+        "relatorios.html"
+      ],
+      "motivo": "select sem nome acessível. Corrigir e remover a exceção."
+    },
+    "aria-dialog-name": {
+      "paginas": [
+        "manutencao.html"
+      ],
+      "motivo": "diálogo sem nome acessível (aria-labelledby ou aria-label). Corrigir e remover a exceção."
+    },
+    "color-contrast": {
+      "paginas": [
+        "index.html",
+        "confirm-role.html",
+        "dashboard.html",
+        "cargas.html",
+        "delegacao.html",
+        "embarcacoes.html",
+        "inspecao.html",
+        "manutencao.html",
+        "relatorios.html",
+        "scanner.html",
+        "tecnico_portos.html"
+      ],
+      "motivo": "texto secundário (rótulos e textos em cinza/slate) abaixo de 4,5:1 sobre o fundo claro, medido com os estilos do Tailwind carregados. Dívida conhecida: revisar as cores de texto secundário e remover a exceção."
+    }
+  }
+}

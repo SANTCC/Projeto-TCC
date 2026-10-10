@@ -7,13 +7,19 @@ async def verify():
         context = await browser.new_context()
         page = await context.new_page()
 
-        session_data = '{\\"id\\":\\"1\\",\\"cargo\\":\\"SUPERVISOR_GERENTE_OPERACOES\\",\\"cargo_nome\\":\\"Supervisor de Operações\\",\\"matricula\\":\\"MAT-1914\\",\\"codigo_individual\\":\\"OP-1914\\",\\"nome\\":\\"Maxwell Philip da Cruz\\"}'
+        session_json = '{"id":"1","cargo":"SUPERVISOR_GERENTE_OPERACOES","cargo_nome":"Supervisor de Operações","matricula":"MAT-1914","codigo_individual":"OP-1914","nome":"Maxwell Philip da Cruz"}'
 
-        await page.goto('http://localhost:3000/index.html')
-        await page.evaluate(f'''() => {{
-            localStorage.setItem('nexus_ghost_clean_v1', 'true');
-            localStorage.setItem('nexus_session', '{session_data}');
-            localStorage.setItem('nexus_cargas_fluxo', JSON.stringify([{{
+        await context.add_cookies([{
+            'name': 'nexus_session',
+            'value': session_json,
+            'url': 'http://localhost:3000'
+        }])
+
+        await page.goto('http://localhost:3000/cargas.html')
+        await page.wait_for_selector('#cargasTableBody')
+
+        await page.evaluate('''() => {
+            localStorage.setItem('nexus_cargas_fluxo', JSON.stringify([{
                 id: 'CRG-TEST-GND',
                 tipo: 'Carga Geral',
                 peso: '10 t',
@@ -23,15 +29,15 @@ async def verify():
                 portoDescarga: 'Berço 01',
                 status: 'AGENDAMENTO',
                 qrCode: 'QR-CRG-TEST-GND'
-            }}]));
-            localStorage.setItem('nexus_guindastes_list', JSON.stringify([{{
+            }]));
+            localStorage.setItem('nexus_guindastes_list', JSON.stringify([{
                 id: 'GND-01-STS',
                 identificacao: 'GND-01-STS',
                 estado: 'OPERANTE'
-            }}]));
-        }}''')
+            }]));
+        }''')
 
-        await page.goto('http://localhost:3000/cargas.html')
+        await page.reload()
         await page.wait_for_selector('#cargasTableBody')
         await page.wait_for_function('() => typeof window.executarAcaoCarga === "function"')
 

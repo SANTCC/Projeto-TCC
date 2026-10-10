@@ -13,7 +13,7 @@ console.log('================================================================\n'
 
 // 1. Validando Relatórios & PDF A4 (Seção 8 do Backlog)
 console.log('1. Validando Emissão do Relatório PDF A4 e Auditoria (Seção 8)...');
-const relatoriosJs = fs.readFileSync(path.join(__dirname, 'js/relatorios.js'), 'utf-8');
+const relatoriosJs = fs.readFileSync(path.join(__dirname, 'js/pages/relatorios.js'), 'utf-8');
 
 assert(relatoriosJs.includes('EXPORTACAO'), 'Fase 8: Geração de PDF deve registrar log de auditoria com tipo EXPORTACAO.');
 assert(relatoriosJs.includes('1. DADOS DA CARGA') && relatoriosJs.includes('2. DADOS DO NAVIO') && relatoriosJs.includes('3. DADOS DO CONTÊINER') && relatoriosJs.includes('4. RESUMO DO FLUXO OPERACIONAL'), 'Fase 8: Relatório PDF A4 deve estruturar as 4 seções operacionais sequenciais.');
@@ -50,9 +50,9 @@ console.log('  ✅ [PASS] Pop-ups nativos 100% substituídos por modais consiste
 
 // 4. Validando Resiliência, Edge Cases e Concorrência (Seção 10 do Backlog)
 console.log('4. Validando Resiliência Operacional, Reatividade e Validações Rígidas (Seção 10)...');
-const cargasJs = fs.readFileSync(path.join(__dirname, 'js/cargas.js'), 'utf-8');
-const embarcacoesJs = fs.readFileSync(path.join(__dirname, 'js/embarcacoes.js'), 'utf-8');
-const tecnicoJs = fs.readFileSync(path.join(__dirname, 'js/tecnico_portos.js'), 'utf-8');
+const cargasJs = fs.readFileSync(path.join(__dirname, 'js/pages/cargas.js'), 'utf-8');
+const embarcacoesJs = fs.readFileSync(path.join(__dirname, 'js/pages/embarcacoes.js'), 'utf-8');
+const tecnicoJs = fs.readFileSync(path.join(__dirname, 'js/pages/tecnico_portos.js'), 'utf-8');
 
 // 10.6: Validação de limites numéricos estritamente maiores que zero
 assert(cargasJs.includes('pesoVal <= 0 || volumeVal <= 0 || valorVal <= 0'), 'Fase 8: Cargas deve validar campos estritamente positivos (Item 16).');

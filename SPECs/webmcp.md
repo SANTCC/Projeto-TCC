@@ -41,11 +41,11 @@ Este documento descreve a camada WebMCP do NexusPort: o que foi implementado, po
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `js/webmcp-core.js` | Núcleo: API (nativa, legada ou polyfill), registro por página, RBAC, validação, confirmação, saídas, limites, fila, MCP e formulários declarativos |
-| `js/webmcp-ui.js` | Diálogo de confirmação e painel "Agentes IA" (chave de desligamento, ferramentas da página, atividade) |
-| `js/webmcp-dados.js` | Leitores compartilhados: cada um devolve só o necessário para a tarefa; grupos de cargos |
-| `js/webmcp-global.js` | Ferramentas em todas as telas; recursos `nexus://…`; prompts `resumo_turno` e `pendencias_inspecao` |
-| `js/webmcp-<página>.js` | Dez adaptadores de página: cargas, inspecao, embarcacoes, manutencao, delegacao, tecnico, relatorios, scanner, dashboard, vibracao |
+| `js/webmcp/webmcp-core.js` | Núcleo: API (nativa, legada ou polyfill), registro por página, RBAC, validação, confirmação, saídas, limites, fila, MCP e formulários declarativos |
+| `js/webmcp/webmcp-ui.js` | Diálogo de confirmação e painel "Agentes IA" (chave de desligamento, ferramentas da página, atividade) |
+| `js/webmcp/webmcp-dados.js` | Leitores compartilhados: cada um devolve só o necessário para a tarefa; grupos de cargos |
+| `js/webmcp/webmcp-global.js` | Ferramentas em todas as telas; recursos `nexus://…`; prompts `resumo_turno` e `pendencias_inspecao` |
+| `js/webmcp/webmcp-<página>.js` | Dez adaptadores de página: cargas, inspecao, embarcacoes, manutencao, delegacao, tecnico, relatorios, scanner, dashboard, vibracao |
 | `tests/test_webmcp.js`, `tests/test_webmcp_paginas.js`, `tests/webmcp-harness.js` | Suítes de verificação (seção 10) |
 
 As páginas existentes receberam pequenas mudanças compatíveis (ver seção 9.2): parâmetros
@@ -140,7 +140,6 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
 | `dashboard.html` | `listar_trilha_decisoes` | leitura | todos |
 | `dashboard.html` | `listar_auditoria` | leitura | todos |
 | `dashboard.html` | `calcular_chegada_navio` | leitura | todos |
-| `dashboard.html` | `atualizar_graficos` | leitura | todos |
 | `cargas.html` | `listar_cargas` | leitura | todos |
 | `cargas.html` | `obter_carga` | leitura | todos |
 | `cargas.html` | `exibir_etiqueta_qr` | leitura | todos |
@@ -195,6 +194,7 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
 | `tecnico_portos.html` | `registrar_saida_visitante` | ação (confirmação) | Técnico, Dir.Oper, Dir.Pres, Conselho · CADASTRAR_VISITANTE |
 | `tecnico_portos.html` | `preparar_cadastro_visitante` | preenche formulário | Técnico, Dir.Oper, Dir.Pres, Conselho · CADASTRAR_VISITANTE |
 | `tecnico_portos.html` | `preparar_cadastro_funcionario` | preenche formulário | Técnico, Dir.Oper, Dir.Pres, Conselho |
+| `relatorios.html` | `atualizar_graficos` | leitura | todos |
 | `relatorios.html` | `gerar_relatorio_carga` | leitura | todos |
 | `relatorios.html` | `exportar_historico_csv` | ação (confirmação) | Dir.Oper, Dir.Pres, Conselho · EXPORTAR_HISTORICO |
 | `teste-vibracao.html` | `obter_estado_vibracao` | leitura | público |
@@ -238,12 +238,12 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
 
 ### 9.1 Corrigidos nesta entrega
 
-1. **Movimentação de carga não era salva** (`js/cargas.js`): o evento `nexus_data_changed` era
+1. **Movimentação de carga não era salva** (`js/pages/cargas.js`): o evento `nexus_data_changed` era
    disparado antes de gravar; o listener relia o cache antigo e a gravação seguinte sobrescrevia a
    designação do guindaste. Removido o disparo prematuro (a atualização já ocorre no fim da ação).
-2. **Contêiner só local não podia ser vinculado** (`js/cargas.js`): o modal usava `rawDbId || id` como
+2. **Contêiner só local não podia ser vinculado** (`js/pages/cargas.js`): o modal usava `rawDbId || id` como
    valor da opção; sem `id`, o valor ficava vazio. Agora usa a identificação como último recurso.
-3. **Erro ao concluir/solicitar manutenção de guindaste** (`js/manutencao.js`): `renderGuindastesTable()`
+3. **Erro ao concluir/solicitar manutenção de guindaste** (`js/pages/manutencao.js`): `renderGuindastesTable()`
    era chamada sem guarda (a função só existe em `embarcacoes.js`), gerando `ReferenceError` depois de
    gravar. Agora tem a mesma guarda já usada na linha anterior.
 
@@ -262,23 +262,23 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
 
 ### 9.3 Achados não corrigidos (recomendação)
 
-4. **Código de acesso gravado na trilha** (`js/dashboard.js`, `registrarTrailDecisao`): o campo
+4. **Código de acesso gravado na trilha** (`js/pages/dashboard.js`, `registrarTrailDecisao`): o campo
    `responsavel` recebe `session.codigo_individual` em texto puro (`Nome (Cargo) - CÓDIGO`). É uma
    credencial em registro de auditoria. A leitura pelo WebMCP redige o código, mas a gravação deve
    deixar de incluí-lo.
 5. **Confirmação automática em headless** (`js/layout.js`, `nexusConfirm`): confirma após 50 ms quando o
    User-Agent contém `Headless` ou `Playwright`. Não é usado pelo WebMCP, mas é um risco de contorno
    em automações.
-6. **Ações sem checagem de cargo dentro da função** (`js/embarcacoes.js`): `excluirNavio`,
+6. **Ações sem checagem de cargo dentro da função** (`js/pages/embarcacoes.js`): `excluirNavio`,
    `excluirContainer`, `excluirGuindaste` e `vincularNavioABerco` não verificam o cargo; a tela mostra
    o botão a todos os cargos da página. O WebMCP exige o cargo de cadastro.
-7. **Agendamento visível a todos** (`js/cargas.js`): o botão "Agendar Nova Cargas" aparece a todos os
+7. **Agendamento visível a todos** (`js/pages/cargas.js`): o botão "Agendar Nova Cargas" aparece a todos os
    cargos da página, mas o envio só é aceito para Supervisor, Inspetor e Direção.
 8. **Exportação sem checagem interna** (`js/vision-layer.js`, `exportDadosHistoricos`): não verifica o
    cargo e não tem botão na interface. O WebMCP só a expõe a `EXPORTAR_HISTORICO`.
-9. **Filtro com texto livre** (`js/scanner.js`): o código lido é interpolado em filtros PostgREST
+9. **Filtro com texto livre** (`js/pages/scanner.js`): o código lido é interpolado em filtros PostgREST
    (`or(...)`). O WebMCP aceita só identificadores; a tela deveria validar do mesmo modo.
-10. **Validação de CPF ineficaz** (`js/delegacao.js`, `validarCPF`): calcula o dígito verificador e
+10. **Validação de CPF ineficaz** (`js/pages/delegacao.js`, `validarCPF`): calcula o dígito verificador e
     devolve `true` em qualquer caso.
 11. **Arquivo `js/config.js` versionado** apesar de listado em `.gitignore` (já assinalado antes;
     não alterado).

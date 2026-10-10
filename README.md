@@ -122,7 +122,64 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 ---
 
+## 🔄 Tempo Real das Tabelas
+
+- **Mecanismo:** as telas assinam o Supabase Realtime das tabelas operacionais listadas em `NexusRepository.REALTIME_TABLES` (`js/data-repository.js`) e se recarregam quando um registro muda. Há também uma sincronização de segurança a cada 60 s.
+- **Implantação:** aplique a migração `supabase/migrations/20261009000000_realtime_publication.sql` (`supabase db push`). Sem ela, o canal conecta mas não recebe eventos, e as telas atualizam só pela sincronização de 60 s.
+- **Testes:** `npm run test:tempo-real`.
+
+- **Usuários on-line:** o cabeçalho mostra quantos códigos de funcionário estão conectados (Supabase Realtime Presence, canal `nexus-online`), atualizado a cada 30 s. Sem Supabase, mostra "—". Teste: `npm run test:presenca`.
+
+---
+
+## 📈 Medição de Uso (Google Analytics 4)
+
+- **Configuração:** `js/analytics.js` (comum a todas as páginas). O identificador do aparelho é o cookie `_ga` do próprio GA4; não há fingerprinting.
+- **Eventos:** `NexusAnalytics.track(evento, parametros)`. Nunca envie nome, código ou matrícula: esses campos são descartados.
+- **Pendência:** consentimento de cookies (LGPD) não implementado.
+- **Testes:** `npm run test:analytics`.
+
+---
+
+## 📦 Build de Produção (minificação)
+
+- **Comando:** `npm run build` gera `dist/` com JS (Terser) e CSS (clean-css) minificados. Os caminhos não mudam.
+- **Deploy:** o `vercel.json` executa o mesmo comando (`buildCommand`) e publica `dist/` (`outputDirectory`).
+- **Desenvolvimento:** `npm start` continua servindo o código-fonte.
+- **Testes:** `npm run test:build`.
+
+---
+
+## 🚦 Gate Lighthouse (Pull Requests)
+
+- **CI:** `.github/workflows/lighthouse.yml` roda em todo PR. Os relatórios vão como artefato.
+- **Local:** `npm run lighthouse` (precisa de Google Chrome ou Chromium; use `CHROME_PATH` se não estiver no PATH). Gera `lighthouse-report/`.
+- **Limiares e exceções:** `lighthouse/limiares.json`. Cada página é medida em 3 rodadas (mediana). Exceções são dívida conhecida por página e devem ser removidas quando corrigidas.
+- **Testes:** `npm run test:lighthouse`.
+
+---
+
+## 📄 Relatório PDF no Servidor
+
+- **Função:** `supabase/functions/relatorio-pdf` gera o PDF A4 (pdf-lib). O navegador envia só o identificador da carga e recebe o arquivo do servidor.
+- **Cache:** bucket privado `relatorios-pdf`. O nome do arquivo é o SHA-256 do conteúdo, então dados iguais reaproveitam o PDF.
+- **Implantação:** `supabase db push` (migrações `20261009010000` e `20261009020000`) e `supabase functions deploy relatorio-pdf --no-verify-jwt`.
+- **Testes:** `npm run test:relatorio-pdf`.
+
+---
+
+## 🧪 Dados de Demonstração (seed)
+
+- **Arquivo:** `supabase/seed.sql`. Só para demonstração e desenvolvimento local. **Não aplicar em produção.**
+- **Usuários de teste:** 2 por cargo, com nome `[CARGO]_mock123` e `[CARGO]_mock321`. Acesso pelo código individual `MOCK-[CARGO]-123` e `MOCK-[CARGO]-321`.
+- **Dados:** 4 navios, 6 contêineres, 12 cargas (os 9 status do fluxo), tipos de carga, rotas a partir de Santos e histórico de alterações. IMOs e distâncias são fictícios.
+- **Aplicar:** local com `supabase db reset`; projeto de demonstração com `psql "$DATABASE_URL" -f supabase/seed.sql`. Reexecutar não duplica nada.
+- **Testes:** `npm run test:seed` (estrutura) e `python tests/verify_seed_demo.py` (PostgreSQL local; requer `pip install pgserver psycopg2-binary`).
+
+---
+
 ## 🔒 Banco de Dados e Schemas
 
 - **DDL Completo:** `SPECs/schema.sql`
 - **Migrações Incrementais:** `supabase/migrations/`
+- **Diagnósticos de banco:** `SPECs/diagnostico/`

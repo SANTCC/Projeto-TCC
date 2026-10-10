@@ -1,5 +1,5 @@
 /**
- * TESTE DE REGRESSÃO — BOTÃO "ATUALIZAR" DOS GRÁFICOS (js/charts.js)
+ * TESTE DE REGRESSÃO — BOTÃO "ATUALIZAR" DOS GRÁFICOS (js/pages/charts.js)
  *
  * Sintoma relatado:
  *   "Clicar no botão Atualizar dos gráficos não traz dado novo do servidor —
@@ -175,7 +175,7 @@ async function testarAtualizacaoDoPainel() {
   // página dedicada de Relatórios (central única de gráficos do sistema).
   const htmlRelatorios = read('relatorios.html');
   // Mesma ordem de scripts de relatorios.html (basta o que o painel de gráficos usa).
-  const fontes = ['js/security.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/charts.js', 'js/relatorios.js']
+  const fontes = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/vision-layer.js', 'js/supabase-client.js', 'js/pages/charts.js', 'js/pages/relatorios.js']
     .map((f) => ({ arquivo: f, codigo: read(f) }));
 
   const CARGAS_INICIAIS = [
@@ -235,9 +235,9 @@ async function testarAtualizacaoDoPainel() {
   win.localStorage.setItem('nexus_audit_logs', JSON.stringify([
     { data_hora: new Date(Date.now() - 86400000).toISOString(), cargo: 'ESTIVADOR', codigo_individual: 'COD-1', entidade: 'CARGA CRG-ANTIGA', tipo_alteracao: 'EDICAO' }
   ]));
-  win.localStorage.setItem('nexus_session', JSON.stringify({
+  win.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify({
     cargo: 'ESTIVADOR', nome: 'Operador Teste', codigo_individual: 'COD-1', matricula: 'MAT-1040'
-  }));
+  })) + '; path=/';
 
   fontes.forEach((f) => win.eval(f.codigo));
   win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
@@ -345,11 +345,11 @@ async function testarAtualizacaoDoPainel() {
  * ================================================================== */
 function testarLigacaoEstatica() {
   console.log('\n3. Validando a ligação botão → módulo (código)...');
-  const charts = read('js/charts.js');
-  const relatorios = read('js/relatorios.js');
+  const charts = read('js/pages/charts.js');
+  const relatorios = read('js/pages/relatorios.js');
   const htmlRelatorio = read('relatorios.html');
   const htmlDashboard = read('dashboard.html');
-  const dashboard = read('js/dashboard.js');
+  const dashboard = read('js/pages/dashboard.js');
 
   check(
     'relatorios.html tem o botão e o indicador de sincronia (central única de gráficos)',
@@ -367,15 +367,23 @@ function testarLigacaoEstatica() {
     'O clique é tratado de forma assíncrona, com feedback e reentrância bloqueada',
     relatorios.includes('chartsSyncStatus') && /await\s+window\.NexusCharts\.atualizar\(\)/.test(relatorios)
   );
-  // Backlog 3 — dedup: o Dashboard NÃO pode continuar renderizando gráficos
-  // (a análise gráfica mora exclusivamente na página de Relatórios).
+  // Backlog 3 — remoção de gráficos duplicados: o Painel Geral NÃO renderiza mais
+  // gráficos; a análise gráfica mora exclusivamente em Relatórios & PDF.
   check(
-    'dashboard.html mantém o painel de gráficos por cargo (merge com main: cadência de 1 minuto no painel; catálogo expandido fica centralizado em Relatórios)',
-    htmlDashboard.includes('chartsRolePanel') && htmlDashboard.includes('chartsRoleGrid') && htmlDashboard.includes('chartsRefreshBtn')
+    'dashboard.html não tem mais o painel de gráficos nem o botão de atualização dos gráficos',
+    !htmlDashboard.includes('chartsRolePanel') && !htmlDashboard.includes('chartsRoleGrid') && !htmlDashboard.includes('chartsRefreshBtn')
   );
   check(
-    'dashboard.js dispara a inicialização do painel consolidado de Chart.js (NexusCharts.initDashboard)',
-    /NexusCharts\s*\./.test(dashboard)
+    'dashboard.html não carrega mais a biblioteca Chart.js nem js/pages/charts.js',
+    !htmlDashboard.includes('cdn.jsdelivr.net/npm/chart.js') && !htmlDashboard.includes('js/pages/charts.js')
+  );
+  check(
+    'dashboard.js não inicializa mais gráficos (sem NexusCharts)',
+    !dashboard.includes('NexusCharts')
+  );
+  check(
+    'relatorios.html continua carregando os gráficos e o painel consolidado (central única)',
+    htmlRelatorio.includes('js/pages/charts.js') && htmlRelatorio.includes('relatoriosChartsGrid')
   );
 }
 

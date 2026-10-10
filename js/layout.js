@@ -87,6 +87,10 @@
         </div>
 
         <div class="flex items-center gap-3">
+          <div id="headerOnline" data-estado="indisponivel" title="Contagem indisponível: sem conexão com o Supabase." class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60">
+            <span class="material-symbols-outlined text-[16px] text-emerald-600 dark:text-emerald-400" aria-hidden="true">group</span>
+            <span class="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 whitespace-nowrap"><span id="headerOnlineCount" aria-live="polite">—</span><span class="hidden md:inline"> on-line</span></span>
+          </div>
           <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
             <div id="headerAvatar" class="w-7 h-7 rounded-lg bg-nexus-500 text-white flex items-center justify-center font-mono text-xs font-bold">
               ${esc(initials)}
@@ -209,6 +213,11 @@
       navLinks.forEach(link => link.addEventListener('click', fecharSidebarMobile));
     }
 
+    // Nº de usuários on-line (Backlog 3, item E): presença por codigo_individual no Supabase Realtime.
+    if (window.NexusOnlinePresence) {
+      window.NexusOnlinePresence.iniciar({ codigo: session.codigo_individual });
+    }
+
     // Configura estado inicial do ícone e eventos de Dark Mode e Logout no topbar
     const themeBtn = document.getElementById('themeToggle');
     const themeIcon = document.getElementById('themeToggleIcon');
@@ -232,6 +241,7 @@
     if (logoutBtnElem) {
       logoutBtnElem.addEventListener('click', async () => {
         if (await window.nexusConfirm('Encerrar Sessão', 'Deseja encerrar sua sessão operacional no terminal STS-01?')) {
+          if (window.NexusAnalytics) window.NexusAnalytics.track('logout');
           if (window.NexusAuth) window.NexusAuth.logout();
           else window.location.href = 'index.html';
         }

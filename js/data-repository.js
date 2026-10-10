@@ -127,44 +127,27 @@
           if (Array.isArray(data)) {
             const mapped = data.map((c) => {
               const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0 ? c.estivador_cargas[0] : null;
-              let statusCalc = c.status_fluxo || 'AGENDAMENTO';
-              let resInsp = c.resultado_inspecao || null;
-
-              if (resInsp === 'APROVADA' && (statusCalc === 'AGENDAMENTO' || statusCalc === 'RECEBIMENTO_INSPECAO')) {
-                statusCalc = 'ARMAZENAGEM';
-              } else if (!resInsp && statusCalc === 'ARMAZENAGEM') {
-                resInsp = 'APROVADA';
-              } else if (!resInsp && statusCalc === 'RECUSADA') {
-                resInsp = 'RECUSADA';
-              }
-
               return {
-                id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
-                tipo: c.natureza || 'Carga Geral',
-                peso: `${c.peso || 0} t`,
-                volume: `${c.volume || 0} m³`,
-                valor: `R$ ${(c.valor_declarado || 0).toLocaleString('pt-BR')}`,
-                natureza: c.natureza || 'Geral',
-                portoDescarga: c.porto_descarga || 'Terminal STS-01',
-                destino: c.destino || 'Destino Geral',
-                data_prevista_entrega: c.data_prevista_entrega || null,
-                dataPrevista: c.data_prevista_entrega || null,
-                status: statusCalc,
-                resultadoInspecao: resInsp,
-                resultado_inspecao: resInsp,
-                motivoRecusa: c.motivo_recusa || null,
-                motivo_recusa: c.motivo_recusa || null,
-                container: c.container_id || '',
-                navio: (c.navios && c.navios.nome) ? c.navios.nome : '',
-                navioId: c.navio_id || null,
-                qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
-                motivoCancelamento: c.motivo_recusa || null,
-                rawDbId: c.id,
-                data_cadastro: c.created_at || c.data_cadastro || null,
-                created_at: c.created_at || null,
-                estivador_id: vinculo ? vinculo.estivador_id : null,
-                estivadorMatricula: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.matricula : null,
-                estivador: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.nome : null
+              id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
+              tipo: c.natureza || 'Carga Geral',
+              peso: `${c.peso || 0} t`,
+              volume: `${c.volume || 0} m³`,
+              valor: `R$ ${(c.valor_declarado || 0).toLocaleString('pt-BR')}`,
+              natureza: c.natureza || 'Geral',
+              portoDescarga: c.porto_descarga || 'Terminal STS-01',
+              destino: c.destino || 'Destino Geral',
+              status: c.status_fluxo || 'AGENDAMENTO',
+              container: c.container_id || '',
+              navio: (c.navios && c.navios.nome) ? c.navios.nome : '',
+              navioId: c.navio_id || null,
+              qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
+              motivoCancelamento: c.motivo_recusa || null,
+              rawDbId: c.id,
+              data_cadastro: c.created_at || c.data_cadastro || null,
+              created_at: c.created_at || null,
+              estivador_id: vinculo ? vinculo.estivador_id : null,
+              estivadorMatricula: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.matricula : null,
+              estivador: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.nome : null
               };
             });
             localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
@@ -413,7 +396,7 @@
           const { data, error } = await client
             .from('cargas')
             .select('*')
-            .or('status_fluxo.eq.RECUSADA,status_fluxo.eq.CANCELADA,resultado_inspecao.eq.RECUSADA');
+            .in('status_fluxo', ['RECUSADA', 'CANCELADA']);
 
           if (!error && Array.isArray(data)) {
             data.forEach(c => {
@@ -427,11 +410,8 @@
                 motivo: c.motivo_recusa || 'Sem motivo registrado',
                 portoDescarga: c.porto_descarga || 'Terminal STS-01'
               };
-              if (c.status_fluxo === 'RECUSADA' || c.resultado_inspecao === 'RECUSADA') {
-                if (!cargasRecusadas.some(x => x.id === item.id)) cargasRecusadas.push(item);
-              } else if (c.status_fluxo === 'CANCELADA') {
-                if (!cargasCanceladas.some(x => x.id === item.id)) cargasCanceladas.push(item);
-              }
+              if (c.status_fluxo === 'RECUSADA') cargasRecusadas.push(item);
+              else cargasCanceladas.push(item);
             });
             return {
               recusadas: cargasRecusadas,
@@ -557,15 +537,13 @@
       let osList = [];
 
       if (client) {
+        // Leitura paginada: o PostgREST corta cada resposta em 1000 linhas.
+        const lerTabela = (tabela) => this.lerTodasAsLinhas(() => client.from(tabela).select('*').order('id'));
         try {
-          const [resCargas, resNavios, resManut] = await Promise.all([
-            client.from('cargas').select('*'),
-            client.from('navios').select('*'),
-            client.from('manutencoes').select('*')
-          ]);
-          if (!resCargas.error && Array.isArray(resCargas.data)) cargas = resCargas.data;
-          if (!resNavios.error && Array.isArray(resNavios.data)) navios = resNavios.data;
-          if (!resManut.error && Array.isArray(resManut.data)) osList = resManut.data;
+          const [c, n, m] = await Promise.all([lerTabela('cargas'), lerTabela('navios'), lerTabela('manutencoes')]);
+          cargas = c;
+          navios = n;
+          osList = m;
         } catch (e) {
           console.warn('[NexusRepository] Erro ao buscar indicadores operacionais:', e);
         }
@@ -575,23 +553,11 @@
       const preventivaObj = await this.buscarEquipamentosPreventivaSugerida();
 
       const naviosFora = navios.filter(n => n.localizacao === 'FORA_DO_PORTO' || n.localizacao === 'NO_PORTO_DE_DESTINO');
-      const cargasArmazenagem = cargas.filter(c => c.status_fluxo === 'ARMAZENAGEM' || c.status === 'ARMAZENAGEM');
-      const cargasProntas = cargas.filter(c => c.status_fluxo === 'PRONTA_PARA_ENTREGA' || c.status === 'PRONTA_PARA_ENTREGA');
+      const cargasArmazenagem = cargas.filter(c => c.status_fluxo === 'ARMAZENAGEM');
+      const cargasProntas = cargas.filter(c => c.status_fluxo === 'PRONTA_PARA_ENTREGA');
 
-      const osEmManut = osList.filter(o => o.status === 'SOLICITADA' || o.status === 'APROVADA' || o.status === 'EM_MANUTENCAO');
-
-      // Navios em reforma/manutenção que possuem Ordem de Serviço ativa associada (BL-007)
-      const naviosManut = navios.filter(n => {
-        const emManutState = ['EM_MANUTENCAO', 'AGENDADO_PARA_REFORMA', 'EM_REFORMA'].includes(String(n.estado_operacional || '').toUpperCase());
-        if (!emManutState) return false;
-        const nomeNavio = String(n.nome || '').toLowerCase().trim();
-        if (!nomeNavio) return false;
-        return osEmManut.some(o => {
-          const desc = String(o.descricao || '').toLowerCase();
-          const eq = String(o.equipamento || o.alvo || '').toLowerCase();
-          return desc.includes(nomeNavio) || eq.includes(nomeNavio);
-        });
-      });
+      // Um equipamento conta uma única vez (ver derivarEquipamentosEmManutencao)
+      const emManutencao = this.derivarEquipamentosEmManutencao(navios, osList);
 
       const CAPACIDADE_MAXIMA_PATIO = 100;
       const taxaOcupacao = Math.min(100, Math.round((cargasArmazenagem.length / CAPACIDADE_MAXIMA_PATIO) * 100));
@@ -603,9 +569,9 @@
         cargasArmazenagem: { lista: cargasArmazenagem, total: cargasArmazenagem.length },
         cargasProntas: { lista: cargasProntas, total: cargasProntas.length },
         manutencao: {
-          navios: naviosManut,
-          ordens: osEmManut,
-          total: naviosManut.length + osEmManut.length
+          navios: emManutencao.navios,
+          ordens: emManutencao.ordens,
+          total: emManutencao.total
         },
         ocupacaoPatio: {
           capacidade: CAPACIDADE_MAXIMA_PATIO,
@@ -616,13 +582,86 @@
     },
 
     /**
+     * Lê todas as linhas de uma consulta (paginação); delega a NexusSupabaseUtils.
+     * `montar` deve devolver uma consulta nova a cada chamada.
+     */
+    lerTodasAsLinhas: async function (montar) {
+      if (window.NexusSupabaseUtils && typeof window.NexusSupabaseUtils.lerTodasAsLinhas === 'function') {
+        return window.NexusSupabaseUtils.lerTodasAsLinhas(montar);
+      }
+      const res = await montar();
+      if (res && res.error) throw res.error;
+      return Array.isArray(res && res.data) ? res.data : [];
+    },
+
+    /**
+     * EQUIPAMENTOS EM MANUTENÇÃO (Backlog 3 — indicadores em tempo real)
+     * Fonte única: ordens de serviço ATIVAS (manutencoes com status SOLICITADA ou APROVADA).
+     *  - Cada equipamento conta UMA vez: duas OS para o mesmo navio = 1; OS + estado de reforma
+     *    do mesmo navio = 1 (o estado do navio só serve para casar a OS com o navio).
+     *  - Estado de reforma de navio SEM OS ativa não conta: é resíduo de um fluxo anterior,
+     *    não manutenção em andamento (era a origem de "equipamentos" fantasmas no painel).
+     *  - OS antigas sem navio_id são casadas com o navio pelo nome gravado na descrição
+     *    ("Navio: NOME - ..."). Sem casamento, o navio é contado pelo nome.
+     * Retorna { total, navios (cadastros dos navios em manutenção), ordens (OS ativas) }.
+     */
+    derivarEquipamentosEmManutencao: function (navios, osList) {
+      const listaNavios = Array.isArray(navios) ? navios : [];
+      const ativas = (Array.isArray(osList) ? osList : [])
+        .filter(o => o && (o.status === 'SOLICITADA' || o.status === 'APROVADA'));
+
+      const naviosPorId = new Map();
+      const naviosPorNome = new Map();
+      listaNavios.forEach(n => {
+        if (n.id) naviosPorId.set(String(n.id), n);
+        const nomeKey = String(n.nome || '').trim().toLowerCase();
+        if (nomeKey && !naviosPorNome.has(nomeKey)) naviosPorNome.set(nomeKey, n);
+      });
+
+      const chaves = new Set();
+      const naviosEmManutencao = new Map();
+      ativas.forEach(o => {
+        if (o.navio_id) {
+          const navio = naviosPorId.get(String(o.navio_id));
+          chaves.add(`navio:${o.navio_id}`);
+          if (navio) naviosEmManutencao.set(String(navio.id), navio);
+          return;
+        }
+        if (o.container_id) { chaves.add(`container:${o.container_id}`); return; }
+        if (o.guindaste_id) { chaves.add(`guindaste:${o.guindaste_id}`); return; }
+        // OS legada: o navio aparece só no texto ("Navio: NOME - ...")
+        const casamento = /Navio:\s*(.+?)\s+-\s/.exec(String(o.descricao || ''));
+        const nomeLegado = casamento ? casamento[1].trim().toLowerCase() : '';
+        if (nomeLegado) {
+          const navio = naviosPorNome.get(nomeLegado);
+          if (navio) {
+            chaves.add(`navio:${navio.id || navio.nome}`);
+            naviosEmManutencao.set(String(navio.id || navio.nome), navio);
+          } else {
+            chaves.add(`navio-nome:${nomeLegado}`);
+          }
+          return;
+        }
+        chaves.add(`os:${o.id}`);
+      });
+
+      return {
+        total: chaves.size,
+        navios: Array.from(naviosEmManutencao.values()),
+        ordens: ativas
+      };
+    },
+
+    /**
      * SINCRONIZAÇÃO AUTOMÁTICA VIA SUPABASE REALTIME (Backlog 3 — Realtime-Sync)
      * Assina mudanças (INSERT/UPDATE/DELETE) das tabelas operacionais no schema
      * público e dispara o evento local `nexus_data_changed` (com debounce), que
      * já é o gatilho de re-render das telas. Assim, quando outro operador —
      * por exemplo o pessoal do scanner — altera um registro, as telas abertas
-     * atualizam sem intervenção manual. Se o Realtime não estiver habilitado
-     * no projeto Supabase, cai silenciosamente no polling de 10s existente.
+     * atualizam sem intervenção manual. A lista abaixo DEVE coincidir com as
+     * tabelas da publicação `supabase_realtime` (migração 20261009000000 e teste
+     * tests/test_tempo_real.js). Sem a publicação, o canal não recebe eventos e o
+     * polling de segurança (abaixo) é o que mantém os dados atualizados.
      */
     REALTIME_TABLES: [
       'cargas',
@@ -630,6 +669,7 @@
       'navios',
       'guindastes',
       'manutencoes',
+      'historico_manutencoes',
       'funcionarios',
       'visitantes',
       'bercos',
@@ -637,12 +677,20 @@
       'delegacoes_supervisor',
       'inspecoes',
       'inspecao_itens',
+      'checklist_modelos',
+      'checklist_itens',
       'tipos_carga',
       'leituras_qr_code',
+      'estivador_cargas',
+      'agendamentos',
       'logs_alteracoes',
       'trail_decisoes',
+      'retificacoes_trail',
       'emergencias'
     ],
+
+    /** Intervalo do polling de segurança (quando o Realtime não entrega eventos). */
+    POLLING_SEGURANCA_MS: 60000,
 
     _realtimeChannel: null,
     _realtimeDebounce: null,
@@ -676,7 +724,7 @@
           if (status === 'SUBSCRIBED') {
             console.log('[NexusRepository] Sincronização Realtime ativa.');
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn('[NexusRepository] Realtime indisponível (' + status + '); mantendo polling de 10s como fallback.');
+            console.warn('[NexusRepository] Realtime indisponível (' + status + '); o polling de segurança (' + (this.POLLING_SEGURANCA_MS / 1000) + ' s) mantém os dados atualizados.');
           }
         });
         this._realtimeChannel = channel;
@@ -735,9 +783,11 @@
     NexusRepository.notifyChange('window_focus');
   });
 
+  // Polling de segurança: sem o Realtime (ou entre eventos perdidos), as telas são
+  // reconsultadas a cada POLLING_SEGURANCA_MS (60 s por padrão).
   setInterval(() => {
     NexusRepository.notifyChange('periodic_sync');
-  }, 60000);
+  }, NexusRepository.POLLING_SEGURANCA_MS);
 
   // Inicia a assinatura Realtime em todas as telas que carregam o repositório
   // (o cliente Supabase é criado antes deste módulo na ordem dos <script>).
