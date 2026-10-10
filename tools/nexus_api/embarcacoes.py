@@ -112,6 +112,20 @@ class EmbarcacoesAPI:
     def delete_navio(self, id_or_imo):
         return self.client.request("DELETE", f"navios?numero_imo=eq.{id_or_imo}")
 
+    def despachar_embarcacao_edge_function(self, navio_id, codigo_individual, motivo=None):
+        """
+        Executa o despacho do navio via Edge Function 'despacho-embarcacao'.
+        """
+        payload = {
+            "navio_id": navio_id,
+            "codigo_individual": codigo_individual,
+            "motivo": motivo
+        }
+        res = self.client.invoke_edge_function("despacho-embarcacao", body=payload, method="POST")
+        if res and isinstance(res, dict) and res.get("ok"):
+            return res
+        return None
+
     def liberar_saida_navio(self, navio_id, motivo=None, funcionario_info=None):
         navio = self.get_navio(navio_id)
         if not navio:
