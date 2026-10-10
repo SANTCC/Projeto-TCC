@@ -45,7 +45,8 @@
     "test:relatorio-pdf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_relatorio_pdf.js",
     "test:seed": "node tests/test_seed_demo.js",
     "test:python": "python3 -m unittest discover -s tests -p \"test_python_suite.py\"",
-    "test:log-acesso": "node tests/test_log_acesso.js"
+    "test:log-acesso": "node tests/test_log_acesso.js",
+    "test:login-protecao": "node tests/test_login_protecao.js"
   },
   "keywords": [
     "nexusport",

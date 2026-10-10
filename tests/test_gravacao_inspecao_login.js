@@ -73,6 +73,20 @@ function check(label, cond, extra) {
  * consulta (tabela, operação, filtros, payload, terminal e status).
  * `tratar(q)` devolve { data, error, status }.
  */
+/** Cliente Supabase falso que simula a função SQL login_funcionario (migration 20261010020000). */
+function criarRpcLoginFalso(funcionarios, registro) {
+  return {
+    from() { throw new Error('login não deve consultar tabelas diretamente'); },
+    rpc(funcao, args) {
+      registro.push({ funcao, args });
+      const codigo = String(args.p_codigo || '').toUpperCase();
+      const f = funcionarios.find((x) => x.ativo && (x.codigo_individual === codigo || x.matricula === codigo));
+      if (!f) return Promise.resolve({ data: { ok: false, error: 'invalido' }, error: null });
+      return Promise.resolve({ data: { ok: true, id: f.id, matricula: f.matricula, codigo_individual: f.codigo_individual, nome: f.nome, cargo: f.cargo }, error: null });
+    }
+  };
+}
+
 function criarSupabaseFalso(tratar, registro) {
   return {
     from(tabela) {
@@ -208,10 +222,12 @@ async function testarLoginPorMatricula() {
     scripts: ['js/pages/login.js'],
     session: null,
     setup(window) {
-      window.nexusSupabase = criarSupabaseFalso((q) => respostaPostgrest(q, funcionarios), registro);
+      window.nexusSupabase = criarRpcLoginFalso(funcionarios, registro);
     }
   });
   const { window } = dom;
+  // login.js ignora envios feitos antes de 1 s após carregar a tela (anti-bot)
+  await sleep(1100);
   window.document.getElementById('operatorCode').value = '777001';
   window.document
     .getElementById('loginForm')
@@ -220,12 +236,12 @@ async function testarLoginPorMatricula() {
 
   const pendente = lerCookie(window, 'nexus_pending_auth');
   check('matrícula 777001 é reconhecida no login', Boolean(pendente) && JSON.parse(pendente).matricula === '777001', pendente);
-  check('nenhuma consulta de funcionário recebe 406 (PGRST116)', !registro.some((r) => r.status === 406), JSON.stringify(registro));
   check(
-    'busca por código e depois por matrícula, ambas com .maybeSingle()',
-    registro.length === 2 && registro.every((r) => r.terminal === 'maybeSingle'),
-    JSON.stringify(registro.map((r) => r.terminal))
+    'login chama a função login_funcionario (validação e limite no servidor)',
+    registro.length === 1 && registro[0].funcao === 'login_funcionario' && registro[0].args.p_codigo === '777001',
+    JSON.stringify(registro)
   );
+  check('login não consulta a tabela funcionarios diretamente', !registro.some((r) => r.tabela === 'funcionarios'));
   window.close();
 }
 

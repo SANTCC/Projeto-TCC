@@ -76,6 +76,12 @@
 
       <!-- Formulário de Autenticação -->
       <form id="loginForm" class="flex flex-col gap-5" onsubmit="return false;">
+        <!-- Honeypot anti-bot: escondido de humanos (fora da tela, sem display:none); robôs que preenchem tudo caem aqui -->
+        <div aria-hidden="true" style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">
+          <label for="website">Site</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+        </div>
+
 
         <!-- Campo: Código Individual Único vinculado à Matrícula -->
         <div class="flex flex-col gap-2">
@@ -217,6 +223,7 @@
   <script src="js/net-debug.js"></script>
   <script src="js/supabase-client.js"></script>
   <script src="js/data-repository.js"></script>
+  <script src="js/vendor/bot-detector.iife.min.js" onerror="this.remove()"></script>
   <script src="js/pages/login.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
   <script src="js/webmcp/webmcp-core.js"></script>
