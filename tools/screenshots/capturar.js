@@ -487,8 +487,10 @@ async function principal() {
     geradoEm: new Date().toISOString(),
     descricao: 'Capturas de tela do NexusPort por conta de demonstração (ambiente local com PostgREST simulado e dados fictícios).',
     ambiente: {
-      url: 'https://nexusport-tcc.vercel.app',
-      observacao: 'Capturas geradas por tools/screenshots/capturar.js com Tailwind, fontes e bibliotecas vendorizados; o widget VLibras não é carregado offline.'
+      servidor: 'HTTP local (raiz do repositório) + PostgREST simulado (tools/screenshots/mock-postgrest.js)',
+      supabase: 'nenhuma conexão com o Supabase; js/config.js é substituído em memória pelo endereço do servidor simulado',
+      recursos: 'Tailwind, fontes e bibliotecas vendorizados (tools/screenshots/vendor.js); o widget VLibras e o Realtime não são carregados',
+      dados: 'fictícios, derivados do seed de demonstração (tools/screenshots/demo-data.js)'
     },
     tamanho: { largura: opcoes.largura, altura: opcoes.altura, tema: opcoes.tema },
     publicas: [],
