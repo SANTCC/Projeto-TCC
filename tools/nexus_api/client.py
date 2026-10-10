@@ -29,6 +29,12 @@ class NexusClient:
             headers.update(custom_headers)
         return headers
 
+    def invoke_edge_function(self, function_name, body=None, params=None, method="POST"):
+        """
+        Invoca uma Supabase Edge Function pelo nome.
+        """
+        return self.request(method, function_name, params=params, body=body, is_edge_function=True)
+
     def request(self, method, path, params=None, body=None, headers=None, is_edge_function=False):
         """
         Realiza requisição HTTP para PostgREST ou Edge Functions.
@@ -63,6 +69,14 @@ class NexusClient:
         clean_table = path.split("?")[0].split("/")[0]
         if clean_table not in self.mock_db:
             self.mock_db[clean_table] = []
+
+        if "?" in path and not params:
+            query_str = path.split("?", 1)[1]
+            params = {}
+            for pair in query_str.split("&"):
+                if "=" in pair:
+                    k, v = pair.split("=", 1)
+                    params[k] = v
 
         method_upper = method.upper()
 

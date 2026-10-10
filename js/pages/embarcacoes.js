@@ -652,6 +652,22 @@ document.addEventListener('DOMContentLoaded', () => {
     return rotasMaritimasList.map((r) => ({ origem: r.origem, destino: r.destino, distancia_km: r.distancia_km }));
   };
 
+  // Função para despachar embarcação via Edge Function "despacho-embarcacao"
+  window.nexusDespacharEmbarcacaoEdgeFunction = async function(navioId, motivo) {
+    if (!window.nexusSupabase || !window.nexusSupabase.functions) return null;
+    try {
+      const codigo = session && session.codigo_individual;
+      const { data, error } = await window.nexusSupabase.functions.invoke('despacho-embarcacao', {
+        body: { navio_id: navioId, codigo_individual: codigo, motivo: motivo }
+      });
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.warn('despacho-embarcacao Edge Function:', e);
+      return null;
+    }
+  };
+
   function renderRotasTable() {
     if (!rotasTableBody) return;
     if (rotasMaritimasList.length === 0) {

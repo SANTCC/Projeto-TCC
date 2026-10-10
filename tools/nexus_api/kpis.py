@@ -27,6 +27,18 @@ class KPIsAPI:
             "totalGeral": len(recusadas) + len(canceladas)
         }
 
+    def calcular_kpis_edge_function(self, codigo_individual=None):
+        """
+        Calcula os KPIs através da Edge Function 'kpis-calculo'.
+        """
+        payload = {}
+        if codigo_individual:
+            payload["codigo_individual"] = codigo_individual
+        res = self.client.invoke_edge_function("kpis-calculo", body=payload, method="POST")
+        if res and isinstance(res, dict) and res.get("ok"):
+            return res
+        return None
+
     def buscar_indicadores_operacionais(self):
         cargas = self.cargas_api.get_cargas()
         navios = self.embarcacoes_api.get_navios()
