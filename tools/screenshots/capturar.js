@@ -17,7 +17,7 @@
  *
  * Uso:
  *   CHROME_PATH=/caminho/para/chromium node tools/screenshots/capturar.js
- *   ... --saida about/screenshots --largura 1440 --tema claro --contas MAT-0000,MAT-9999
+ *   ... --saida docs/screenshots --largura 1440 --tema claro --contas MAT-0000,MAT-9999
  *
  * Requisitos: Chromium/Chrome (CHROME_PATH) e `npm install --prefix tools/screenshots`.
  */
@@ -40,7 +40,7 @@ const RAIZ = path.join(__dirname, '..', '..');
 // ---------------------------------------------------------------------------
 function analisarArgumentos(argv) {
   const opcoes = {
-    saida: path.join(RAIZ, 'about', 'screenshots'),
+    saida: path.join(RAIZ, 'docs', 'screenshots'),
     largura: 1440,
     altura: 900,
     tema: 'claro',

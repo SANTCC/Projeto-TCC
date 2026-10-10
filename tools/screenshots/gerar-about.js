@@ -8,7 +8,7 @@
  * segurança) e mostra, tela por tela, as capturas de cada conta de demonstração.
  *
  * Uso:
- *   node tools/screenshots/capturar.js          # gera about/screenshots/*.png + manifest.json
+ *   node tools/screenshots/capturar.js          # gera docs/screenshots/*.png + manifest.json
  *   node tools/screenshots/gerar-about.js       # gera about.html a partir do manifest
  *
  * Opções: --manifest <arquivo> --saida <arquivo.html>
@@ -22,7 +22,7 @@ const { PAGINAS } = require('./paginas');
 const { CONTAS, CARGO_META } = require('./demo-data');
 
 const RAIZ = path.join(__dirname, '..', '..');
-const MANIFEST_PADRAO = path.join(RAIZ, 'about', 'screenshots', 'manifest.json');
+const MANIFEST_PADRAO = path.join(RAIZ, 'docs', 'screenshots', 'manifest.json');
 const SAIDA_PADRAO = path.join(RAIZ, 'about.html');
 
 // ---------------------------------------------------------------------------
@@ -389,8 +389,8 @@ function blocoContas(manifest) {
         </dl>
         <p class="conta-texto">${esc(conta.descricao || '')}</p>
         <p class="conta-resumo">${primarias.length} telas capturadas nesta conta.</p>
-        ${capa ? `<a class="miniatura" href="about/screenshots/${esc(capa)}" data-ampliar="${esc(capa)}">
-          <img src="about/screenshots/${esc(capa)}" alt="Painel do sistema aberto com a conta ${esc(conta.matricula)} (${esc(conta.cargoNome)})" loading="lazy" />
+        ${capa ? `<a class="miniatura" href="docs/screenshots/${esc(capa)}" data-ampliar="${esc(capa)}">
+          <img src="docs/screenshots/${esc(capa)}" alt="Painel do sistema aberto com a conta ${esc(conta.matricula)} (${esc(conta.cargoNome)})" loading="lazy" />
           <span class="miniatura-rotulo">Ver as capturas desta conta</span>
         </a>` : ''}
         <a class="botao" href="#galeria-${esc(conta.matricula.toLowerCase())}">Ir para a galeria desta conta</a>
@@ -456,8 +456,8 @@ ${cargos.length > 4 ? `            <span class="etiqueta">+${cargos.length - 4}<
 ${destaques}
         </ul>
 
-        ${primeira.imagem ? `<a class="miniatura miniatura-principal" href="about/screenshots/${esc(primeira.imagem)}" data-ampliar="${esc(primeira.imagem)}">
-          <img src="about/screenshots/${esc(primeira.imagem)}" alt="Captura da tela ${esc(pagina.titulo)}" loading="lazy" />
+        ${primeira.imagem ? `<a class="miniatura miniatura-principal" href="docs/screenshots/${esc(primeira.imagem)}" data-ampliar="${esc(primeira.imagem)}">
+          <img src="docs/screenshots/${esc(primeira.imagem)}" alt="Captura da tela ${esc(pagina.titulo)}" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>` : ''}
 
@@ -483,7 +483,7 @@ ${extras.map((c) => linhaCaptura(c, c.contaFixa || 'público', c.descricao)).joi
 
 function linhaCaptura(captura, rotulo, detalhe) {
   return `            <li>
-              <a href="about/screenshots/${esc(captura.imagem)}" data-ampliar="${esc(captura.imagem)}">
+              <a href="docs/screenshots/${esc(captura.imagem)}" data-ampliar="${esc(captura.imagem)}">
                 <span class="captura-rotulo"><code>${esc(rotulo)}</code>${detalhe ? ` <span class="captura-detalhe">${esc(detalhe)}</span>` : ''}</span>
                 <span class="captura-meta">${esc(captura.titulo)} • ${esc(kb(captura.bytes))}</span>
               </a>
@@ -545,7 +545,7 @@ function blocoComoFoiFeito(manifest) {
           <li>Serve o repositório por HTTP local, com o Supabase apontando para esse servidor.</li>
           <li>Responde os CDNs com arquivos vendorizados: Tailwind, Inter/Montserrat/JetBrains Mono, Material Symbols, supabase-js, Chart.js, qrcode.js, jsPDF e html5-qrcode.</li>
           <li>Faz login com a matrícula, confirma o cargo e navega pelas telas liberadas ao perfil.</li>
-          <li>Salva um PNG de página inteira por tela e atualiza <code>about/screenshots/manifest.json</code>.</li>
+          <li>Salva um PNG de página inteira por tela e atualiza <code>docs/screenshots/manifest.json</code>.</li>
         </ol>
         <pre><code>npm install --prefix tools/screenshots
 CHROME_PATH=/usr/bin/chromium node tools/screenshots/capturar.js
@@ -923,7 +923,7 @@ const SCRIPT = `
           if (!caixa || typeof caixa.showModal !== 'function') return;
           evento.preventDefault();
           var arquivo = link.getAttribute('data-ampliar');
-          imagem.src = 'about/screenshots/' + arquivo;
+          imagem.src = 'docs/screenshots/' + arquivo;
           imagem.alt = (link.querySelector('img') && link.querySelector('img').alt) || 'Captura da tela';
           legenda.textContent = arquivo;
           caixa.showModal();

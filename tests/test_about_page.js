@@ -28,7 +28,7 @@ const { gerarHtml } = require('../tools/screenshots/gerar-about');
 const { PAGINAS } = require('../tools/screenshots/paginas');
 const { CONTAS } = require('../tools/screenshots/demo-data');
 
-const MANIFEST = path.join(ROOT, 'about', 'screenshots', 'manifest.json');
+const MANIFEST = path.join(ROOT, 'docs', 'screenshots', 'manifest.json');
 
 // ---------------------------------------------------------------------------
 // 1. Documento
@@ -117,8 +117,8 @@ function testarTelas(html, manifest) {
     ...(manifest.publicas || []).map((c) => c.imagem),
     ...(manifest.contas || []).flatMap((c) => c.paginas.map((p) => p.imagem))
   ];
-  const referenciadas = new Set(html.match(/about\/screenshots\/[A-Za-z0-9_.-]+\.png/g) || []);
-  const faltandoNoHtml = imagensDoManifesto.filter((i) => !referenciadas.has(`about/screenshots/${i}`));
+  const referenciadas = new Set(html.match(/docs\/screenshots\/[A-Za-z0-9_.-]+\.png/g) || []);
+  const faltandoNoHtml = imagensDoManifesto.filter((i) => !referenciadas.has(`docs/screenshots/${i}`));
   check(`todas as ${imagensDoManifesto.length} capturas do manifesto aparecem na página`,
     faltandoNoHtml.length === 0, faltandoNoHtml.slice(0, 3).join(', '));
 

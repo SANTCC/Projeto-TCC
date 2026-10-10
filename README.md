@@ -175,11 +175,11 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 - **Página:** `about.html` explica como o sistema funciona — fluxo operacional, arquitetura, perfis/camadas de visão, regras de negócio e o passo a passo de implantação — com **capturas de tela de todas as páginas**, abertas pelas contas de demonstração.
 - **Contas usadas nas capturas:** `MAT-0000` (Diretor-Presidente/Superintendente — Visão Estratégica), `MAT-2011` (Supervisor/Gerente de Operações — Visão Operacional) e `MAT-9999` (Técnico em Portos — Visão Própria). Cada conta entra pelo fluxo real (login → confirmação de cargo) e navega apenas pelas telas liberadas ao seu cargo.
-- **Imagens e manifesto:** `about/screenshots/` (PNG de página inteira + `manifest.json` com a origem de cada captura).
+- **Imagens e manifesto:** `docs/screenshots/` (PNG de página inteira + `manifest.json` com a origem de cada captura).
 - **Gerar novamente:**
   ```bash
   npm install --prefix tools/screenshots   # Tailwind, fontes e bibliotecas vendorizadas
-  CHROME_PATH=/usr/bin/chromium npm run screenshots   # capturas → about/screenshots/
+  CHROME_PATH=/usr/bin/chromium npm run screenshots   # capturas → docs/screenshots/
   npm run about                                       # regenera o about.html
   ```
 - **Como funciona:** o Chromium é dirigido por `tools/screenshots/capturar.js`, que sobe um **PostgREST simulado** (`tools/screenshots/mock-postgrest.js`) com os dados de `tools/screenshots/demo-data.js`, substitui os CDNs por arquivos locais (`tools/screenshots/vendor.js`) e percorre `tools/screenshots/paginas.js`. Nada é gravado no banco e nenhuma credencial real é usada.
@@ -202,20 +202,3 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 - **DDL Completo:** `SPECs/schema.sql`
 - **Migrações Incrementais:** `supabase/migrations/`
 - **Diagnósticos de banco:** `SPECs/diagnostico/`
-
----
-
-## 📚 Documentação Técnica (Docusaurus)
-
-- **Site:** `website/` é a fonte e `docs/` é a **saída do build** (publicada em `/docs/`, com a paleta e a identidade visual do sistema).
-- **Conteúdo:** 53 páginas em português — domínio (RF 1–18, RN 1–19), arquitetura, design system, banco de dados, segurança, operação e referência, além de uma galeria com as capturas de tela.
-- **Comandos:**
-  ```bash
-  npm run docs:install   # instala as dependências da documentação (website/)
-  npm run docs:start     # servidor de desenvolvimento com recarga ao vivo
-  npm run docs:build     # build de produção → docs/
-  npm start              # serve o repositório: app em / e documentação em /docs/
-  ```
-- **Publicação:** `.github/workflows/docs.yml` (novo, exclusivo da documentação) publica no GitHub Pages. O workflow `lighthouse.yml` e o `vercel.json` **não** são alterados.
-- **Ao editar:** nunca mexa em `docs/` à mão (é gerado); escreva em `website/docs/` e ajuste `website/sidebars.js`. Guia completo na própria documentação, em *Referência → Como manter a documentação*.
-
