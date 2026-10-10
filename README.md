@@ -18,7 +18,7 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 - **Gráficos por Camada de Visão (Chart.js):** Painéis gráficos recortados por cargo (Visão Própria, Visão Operacional e Visão Estratégica).
 - **Auditoria, Trail & Delegação:** Trilha imutável de decisões críticas com anexação de retificações e gestão de substituto ativo.
 - **Localização & Tempos:** Posicionamento GPS dos navios, classificação automática de status e cálculo de ETA.
-- **🚨 Botão de Pânico Global (Tempo Real):** Disparo de emergência via Supabase Realtime (WebSocket) com banner fixo em todas as telas conectadas, alerta tátil (vibração/áudio) e suporte a webhook.
+- **🚨 Botão de Pânico Global (Tempo Real):** Disparo de emergência via Supabase Realtime (WebSocket) com banner fixo em todas as telas conectadas e alerta tátil (vibração/áudio). O front-end não possui integração de webhook.
 - **🤖 Agentes de IA (WebMCP):** Interface para agentes de IA do navegador com controle humano e permissões por cargo.
 
 ---
@@ -100,6 +100,7 @@ Os gráficos são montados em tempo de execução recortados pela **camada de vi
 - **Mecanismo:** O acionamento via `manutencao.html` ou módulo global dispara a Edge Function `panic-alert` e transmite o alerta via WebSocket para todos os navegadores abertos.
 - **Feedback Tátil & Sonoro (`js/haptics.js`):** Em dispositivos móveis e navegadores suportados, o alerta ativa vibração em padrão SOS e aviso sonoro.
 - **Resiliência:** Se o banco ou a Edge Function estiverem indisponíveis, o front-end utiliza broadcast direto Realtime como fallback.
+- **Sem webhook no cliente:** o front-end não configura, dispara nem testa webhooks (o painel que existia em `manutencao.html` foi removido). O disparo opcional permanece exclusivo da Edge Function, desativado por padrão na tabela `panic_webhook_config` — qualquer alteração nela é feita direto no banco (SQL Editor).
 - **Implantação da Edge Function:**
   ```bash
   supabase functions deploy panic-alert --no-verify-jwt

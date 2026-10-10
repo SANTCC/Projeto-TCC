@@ -132,10 +132,12 @@ function testarUiEDocumentacao() {
 
   check('Painel "Banco de dados" com botão Verificar em manutencao.html',
     mh.includes('id="panicTablesCheckBtn"') && mh.includes('id="panicTablesStatus"'));
-  check('IDs originais do painel de webhook preservados',
-    ['panicWebhookEnabled', 'panicWebhookUrl', 'panicWebhookSaveBtn', 'panicWebhookTestBtn', 'panicWebhookStatus']
-      .every((id) => mh.includes(id)));
-  check('Aviso de webhook desativado por padrão preservado', mh.includes('Desativado por padrão'));
+  check('Painel de webhook REMOVIDO do front-end (o app não configura/dispara webhooks)',
+    !['panicWebhookPanel', 'panicWebhookEnabled', 'panicWebhookUrl', 'panicWebhookSaveBtn',
+      'panicWebhookTestBtn', 'panicWebhookStatus']
+      .some((id) => mh.includes(id)));
+  check('Nenhuma chamada de webhook no módulo do pânico',
+    !/bindWebhookSettingsUI|panic_webhook_config|test-webhook/.test(read('js/panic-realtime.js').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')));
   check('js/panic-realtime.js monta o diagnóstico (bindDatabaseDiagnosticsUI)',
     read('js/panic-realtime.js').includes('bindDatabaseDiagnosticsUI()'));
 

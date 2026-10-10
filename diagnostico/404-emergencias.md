@@ -32,8 +32,9 @@ requisição a uma tabela que não está no seu *schema cache*.
 
 A consulta vem de `js/panic-realtime.js` → `loadStateFromDb()` (estado inicial do
 rodapé de emergência, para clientes que conectam durante uma emergência ativa).
-A mesma origem dispara a consulta a `panic_webhook_config` (painel de webhook em
-`manutencao.html`), que sofria do mesmo `404`.
+Na época, a mesma origem também consultava `panic_webhook_config` (painel de webhook em
+`manutencao.html`), que sofria do mesmo `404`. Esse painel foi removido do front-end: hoje o
+cliente consulta somente `emergencias`.
 
 **Proveniência das tabelas:** `supabase/migrations/20261007000000_panic_button_global.sql`
 (mais `SPECs/schema.sql`, seção 15, e `TABLES.md`). O arquivo sempre existiu no
@@ -86,8 +87,8 @@ curl "https://loedodixvmadxqgykehh.supabase.co/rest/v1/emergencias?select=*&esta
 # esperado: 200 ([] quando não há emergência ativa, ou a linha da emergência ATIVA)
 ```
 
-No app: **Manutenção → Webhook de Emergência → Banco de dados → Verificar**
-(testa `emergencias` e `panic_webhook_config` e diz o que falta) ou, no console:
+No app: **Manutenção → Banco de dados (tabelas do pânico) → Verificar**
+(testa `emergencias` e o valor `EMERGENCIA` da auditoria e diz o que falta) ou, no console:
 
 ```js
 await NexusPanic.diagnose()        // { disponivel: true, migracao, retry_agendado, estado_local }
