@@ -557,7 +557,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (/column|PGRST204|42703/i.test(msgErro)) {
               // Colunas cpf/data_nascimento ainda não existem no banco: salva o
               // básico e avisa o técnico para aplicar a migração SQL.
-              avisoMigracao = ' Aviso: as colunas cpf/data_nascimento ainda não existem no Supabase — aplique a migração supabase/migrations/20261010_funcionarios_cpf_nascimento.sql para sincronizá-las.';
+              avisoMigracao = ' Aviso: as colunas cpf/data_nascimento ainda não existem no Supabase — aplique a migração supabase/migrations/20261010000000_funcionarios_cpf_nascimento.sql para sincronizá-las.';
               const tentativa2 = await window.nexusSupabase.from('funcionarios').insert(payloadBase).select('id').single();
               insData = tentativa2.data || null;
             } else {
