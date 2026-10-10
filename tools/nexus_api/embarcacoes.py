@@ -6,6 +6,8 @@ Aplica as mesmas validações e normalização 1:1 do front-end (js/embarcacoes.
 import re
 from datetime import datetime
 
+from .uuid_utils import is_valid_uuid, uuid_or_none
+
 def normalizar_berco(berco_data):
     """
     Normaliza um berço conforme as regras de banco de public.bercos (regras de bercos_vinculo_navio_check e bercos_id_formato_check):
@@ -89,10 +91,23 @@ class EmbarcacoesAPI:
                 return n
         return None
 
+    def _buscar_navio_por_imo(self, imo):
+        """numero_imo é UNIQUE no banco: localiza o navio já cadastrado com este IMO."""
+        if not imo:
+            return None
+        rows = self.client.request("GET", "navios", params={"select": "*", "numero_imo": f"eq.{imo}"}) or []
+        if not isinstance(rows, list):
+            return None
+        for r in rows:
+            if str(r.get("numero_imo")) == str(imo):
+                return r
+        return None
+
     def save_navio(self, data):
+        imo = data.get("imo") or data.get("numero_imo")
         payload = {
             "nome": data.get("nome"),
-            "numero_imo": data.get("imo") or data.get("numero_imo"),
+            "numero_imo": imo,
             "estado_operacional": data.get("estado", "OPERANTE"),
             "localizacao": data.get("localizacao", "DENTRO_DO_PORTO"),
             "porto_origem": data.get("origem", "Porto de Santos"),
@@ -100,7 +115,12 @@ class EmbarcacoesAPI:
             "quantidade_cargas_realizadas": int(data.get("operacoes", 0))
         }
         nid = data.get("id")
-        if nid:
+        if not is_valid_uuid(nid):
+            # Sem id válido: se o IMO já existe, atualiza o registro existente (evita 23505)
+            existente = self._buscar_navio_por_imo(imo)
+            nid = existente.get("id") if existente else None
+
+        if is_valid_uuid(nid):
             res = self.client.request("PATCH", f"navios?id=eq.{nid}", body=payload)
         else:
             payload["data_registro_sistema"] = datetime.now().strftime("%Y-%m-%d")
@@ -128,7 +148,7 @@ class EmbarcacoesAPI:
 
     def liberar_saida_navio(self, navio_id, motivo=None, funcionario_info=None):
         navio = self.get_navio(navio_id)
-        if not navio:
+        if not navio or not is_valid_uuid(navio.get("id")):
             return None
         payload = {
             "localizacao": "FORA_DO_PORTO",
@@ -152,7 +172,7 @@ class EmbarcacoesAPI:
 
     def autorizar_retorno_navio(self, navio_id, funcionario_info=None):
         navio = self.get_navio(navio_id)
-        if not navio:
+        if not navio or not is_valid_uuid(navio.get("id")):
             return None
         payload = {
             "localizacao": "DENTRO_DO_PORTO",
@@ -191,7 +211,7 @@ class EmbarcacoesAPI:
             alvo["estado"] = "OCUPADO"
             alvo["navio_nome"] = navio_data.get("nome")
             alvo["navio_imo"] = navio_data.get("imo")
-            alvo["navio_id"] = navio_data.get("id")
+            alvo["navio_id"] = uuid_or_none(navio_data.get("id"))
         else:
             alvo["estado"] = "LIVRE"
             alvo["navio_nome"] = None
@@ -209,18 +229,22 @@ class EmbarcacoesAPI:
             "numero_identificacao": container_data.get("numero_identificacao") or container_data.get("identificacao"),
             "material_carregado": container_data.get("material_carregado"),
             "estado": container_data.get("estado", "OPERANTE"),
-            "navio_id": container_data.get("navio_id")
+            "navio_id": uuid_or_none(container_data.get("navio_id"))
         }
         cid = container_data.get("id")
-        if cid:
+        if is_valid_uuid(cid):
             return self.client.request("PATCH", f"containers?id=eq.{cid}", body=payload)
         return self.client.request("POST", "containers", body=payload)
 
     def delete_container(self, container_id):
+        if not is_valid_uuid(container_id):
+            return None
         return self.client.request("DELETE", f"containers?id=eq.{container_id}")
 
     def vincular_container_navio(self, container_id, navio_id):
-        return self.client.request("PATCH", f"containers?id=eq.{container_id}", body={"navio_id": navio_id})
+        if not is_valid_uuid(container_id):
+            return None
+        return self.client.request("PATCH", f"containers?id=eq.{container_id}", body={"navio_id": uuid_or_none(navio_id)})
 
     # GUINDASTES
     def get_guindastes(self):
@@ -232,11 +256,13 @@ class EmbarcacoesAPI:
             "estado": data.get("estado", "OPERANTE")
         }
         gid = data.get("id")
-        if gid:
+        if is_valid_uuid(gid):
             return self.client.request("PATCH", f"guindastes?id=eq.{gid}", body=payload)
         return self.client.request("POST", "guindastes", body=payload)
 
     def delete_guindaste(self, guindaste_id):
+        if not is_valid_uuid(guindaste_id):
+            return None
         return self.client.request("DELETE", f"guindastes?id=eq.{guindaste_id}")
 
     # ROTAS
@@ -250,6 +276,6 @@ class EmbarcacoesAPI:
             "distancia_km": float(data.get("distancia_km", 0))
         }
         rid = data.get("id")
-        if rid:
+        if is_valid_uuid(rid):
             return self.client.request("PATCH", f"rotas_maritimas?id=eq.{rid}", body=payload)
         return self.client.request("POST", "rotas_maritimas", body=payload)

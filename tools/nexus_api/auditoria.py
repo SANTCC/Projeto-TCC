@@ -4,6 +4,8 @@ Módulo de Auditoria, Trail de Decisões, Retificações e Scanner QR Code (tool
 
 from datetime import datetime
 
+from .uuid_utils import uuid_or_none
+
 class AuditoriaAPI:
     def __init__(self, client):
         self.client = client
@@ -23,7 +25,7 @@ class AuditoriaAPI:
             "detalhes": detalhes or {}
         }
         if funcionario_info:
-            payload["funcionario_id"] = funcionario_info.get("id")
+            payload["funcionario_id"] = uuid_or_none(funcionario_info.get("id"))
             payload["cargo"] = funcionario_info.get("cargo")
             payload["codigo_individual"] = funcionario_info.get("codigo_individual")
 
@@ -39,7 +41,7 @@ class AuditoriaAPI:
             "detalhes": detalhes or {}
         }
         if funcionario_info:
-            payload["funcionario_id"] = funcionario_info.get("id")
+            payload["funcionario_id"] = uuid_or_none(funcionario_info.get("id"))
             payload["cargo"] = funcionario_info.get("cargo")
             payload["codigo_individual"] = funcionario_info.get("codigo_individual")
 
@@ -47,9 +49,9 @@ class AuditoriaAPI:
 
     def adicionar_retificacao_trail(self, trail_id, retificacao, funcionario_id=None):
         payload = {
-            "trail_id": trail_id,
+            "trail_id": uuid_or_none(trail_id),
             "retificacao": retificacao,
-            "funcionario_id": funcionario_id,
+            "funcionario_id": uuid_or_none(funcionario_id),
             "data_hora": datetime.now().isoformat()
         }
         return self.client.request("POST", "retificacoes_trail", body=payload)
@@ -58,7 +60,7 @@ class AuditoriaAPI:
         payload = {
             "entidade_tipo": entidade_tipo,
             "entidade_id": str(entidade_id),
-            "funcionario_id": funcionario_id,
+            "funcionario_id": uuid_or_none(funcionario_id),
             "data_hora": datetime.now().isoformat()
         }
         return self.client.request("POST", "leituras_qr_code", body=payload)

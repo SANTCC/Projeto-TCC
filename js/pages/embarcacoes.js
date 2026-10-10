@@ -1223,6 +1223,25 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Item 11: a lista local pode estar desatualizada; numero_imo é UNIQUE no banco (evita erro 23505)
+      if (window.nexusSupabase) {
+        try {
+          const { data: imoDb } = await window.nexusSupabase
+            .from('navios')
+            .select('nome, numero_imo')
+            .eq('numero_imo', imo)
+            .maybeSingle();
+
+          if (imoDb) {
+            const msg = `BLOQUEIO DE DUPLICIDADE (Item 11): Já existe um navio cadastrado com o número IMO "${imo}" (${imoDb.nome}). Cada embarcação deve possuir IMO único!`;
+            if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Duplicado', msg);
+            return;
+          }
+        } catch (err) {
+          console.warn('[NexusPort] Erro ao verificar IMO no Supabase:', err);
+        }
+      }
+
       // Item 12: Validação de Coordenada GPS Real
       if (!validarCoordenadaGPS(gps)) {
         const msg = 'COORDENADA GPS INVÁLIDA (Item 12): Informe uma coordenada geográfica real dentro dos limites válidos (ex.: "-23.9608, -46.3022" ou "23.9608° S, 46.3022° W").';

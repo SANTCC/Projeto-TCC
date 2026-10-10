@@ -109,8 +109,11 @@ class NexusAuth:
                 else:
                     cargo = "SUPERVISOR_GERENTE_OPERACOES"
 
+            # Sessão de fallback (funcionário não encontrado no banco): sem id de banco.
+            # Não usar um id textual aqui: ele iria para colunas uuid (funcionario_id,
+            # inspetor_id, solicitado_por...) e geraria erro 22P02 no Supabase.
             func = {
-                "id": "func-default-id",
+                "id": None,
                 "matricula": ident,
                 "codigo_individual": ident if "-" in ident else f"COD-{ident}",
                 "nome": "Operador NexusPort",

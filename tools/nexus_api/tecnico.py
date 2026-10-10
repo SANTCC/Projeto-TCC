@@ -4,6 +4,8 @@ Módulo do Técnico em Portos - Gestão de Funcionários e Visitantes (tools/nex
 
 from datetime import datetime
 
+from .uuid_utils import is_valid_uuid
+
 class TecnicoAPI:
     def __init__(self, client):
         self.client = client
@@ -19,6 +21,18 @@ class TecnicoAPI:
                 return f
         return None
 
+    def _buscar_funcionario_por_matricula(self, matricula):
+        """matricula é UNIQUE no banco: localiza o funcionário já cadastrado."""
+        if not matricula:
+            return None
+        rows = self.client.request("GET", "funcionarios", params={"select": "*", "matricula": f"eq.{matricula}"}) or []
+        if not isinstance(rows, list):
+            return None
+        for r in rows:
+            if str(r.get("matricula")) == str(matricula):
+                return r
+        return None
+
     def save_funcionario(self, func_data):
         payload = {
             "matricula": func_data.get("matricula"),
@@ -30,7 +44,11 @@ class TecnicoAPI:
             "ativo": func_data.get("ativo", True)
         }
         fid = func_data.get("id")
-        if fid:
+        if not is_valid_uuid(fid):
+            # Sem id válido: se a matrícula já existe, atualiza o cadastro existente (evita 23505)
+            existente = self._buscar_funcionario_por_matricula(payload["matricula"])
+            fid = existente.get("id") if existente else None
+        if is_valid_uuid(fid):
             return self.client.request("PATCH", f"funcionarios?id=eq.{fid}", body=payload)
         return self.client.request("POST", "funcionarios", body=payload)
 

@@ -5,6 +5,8 @@ Aplica o ciclo de vida de OS e a busca unificada de preventiva sugerida (> 3 ano
 
 from datetime import datetime
 
+from .uuid_utils import is_valid_uuid, uuid_or_none
+
 class ManutencaoAPI:
     def __init__(self, client):
         self.client = client
@@ -21,19 +23,23 @@ class ManutencaoAPI:
         return None
 
     def solicitar_manutencao(self, entidade_tipo, entidade_id, descricao, solicitado_por=None):
+        # Chaves estrangeiras da OS são uuid: entidade inválida é recusada antes de chegar ao banco
+        if entidade_tipo in ("NAVIO", "CONTAINER", "GUINDASTE") and not is_valid_uuid(entidade_id):
+            raise ValueError(f"ID de {entidade_tipo.lower()} inválido (esperado UUID): {entidade_id!r}")
+
         payload = {
             "entidade_tipo": entidade_tipo,
             "descricao": descricao,
             "status": "SOLICITADA",
             "data_solicitacao": datetime.now().isoformat(),
-            "solicitado_por": solicitado_por
+            "solicitado_por": uuid_or_none(solicitado_por)
         }
         if entidade_tipo == "NAVIO":
-            payload["navio_id"] = entidade_id
+            payload["navio_id"] = str(entidade_id)
         elif entidade_tipo == "CONTAINER":
-            payload["container_id"] = entidade_id
+            payload["container_id"] = str(entidade_id)
         elif entidade_tipo == "GUINDASTE":
-            payload["guindaste_id"] = entidade_id
+            payload["guindaste_id"] = str(entidade_id)
 
         res = self.client.request("POST", "manutencoes", body=payload)
         if isinstance(res, list) and len(res) > 0:
@@ -41,22 +47,28 @@ class ManutencaoAPI:
         return res
 
     def aprovar_manutencao(self, os_id, aprovado_por=None):
+        if not is_valid_uuid(os_id):
+            return None
         payload = {
             "status": "APROVADA",
             "data_aprovacao": datetime.now().isoformat(),
-            "aprovado_por": aprovado_por
+            "aprovado_por": uuid_or_none(aprovado_por)
         }
         return self.client.request("PATCH", f"manutencoes?id=eq.{os_id}", body=payload)
 
     def recusar_manutencao(self, os_id, aprovado_por=None, motivo=None):
+        if not is_valid_uuid(os_id):
+            return None
         payload = {
             "status": "RECUSADA",
             "data_aprovacao": datetime.now().isoformat(),
-            "aprovado_por": aprovado_por
+            "aprovado_por": uuid_or_none(aprovado_por)
         }
         return self.client.request("PATCH", f"manutencoes?id=eq.{os_id}", body=payload)
 
     def concluir_manutencao(self, os_id):
+        if not is_valid_uuid(os_id):
+            return None
         payload = {
             "status": "CONCLUIDA",
             "data_conclusao": datetime.now().isoformat()
@@ -64,10 +76,14 @@ class ManutencaoAPI:
         return self.client.request("PATCH", f"manutencoes?id=eq.{os_id}", body=payload)
 
     def solicitar_manutencao_guindaste(self, guindaste_id, solicitado_por=None):
+        if not is_valid_uuid(guindaste_id):
+            return None
         self.client.request("PATCH", f"guindastes?id=eq.{guindaste_id}", body={"estado": "EM_MANUTENCAO"})
         return self.solicitar_manutencao("GUINDASTE", guindaste_id, "Manutenção de guindaste", solicitado_por)
 
     def concluir_manutencao_guindaste(self, guindaste_id):
+        if not is_valid_uuid(guindaste_id):
+            return None
         self.client.request("PATCH", f"guindastes?id=eq.{guindaste_id}", body={"estado": "OPERANTE"})
         os_list = self.get_manutencoes()
         for o in os_list:

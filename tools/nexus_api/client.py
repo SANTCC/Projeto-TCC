@@ -1,4 +1,5 @@
 import json
+import uuid
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -93,10 +94,16 @@ class NexusClient:
             return list(table_data)
 
         elif method_upper == "POST":
+            # Simula a geração de PK uuid do banco (gen_random_uuid) para linhas sem id
             if isinstance(body, list):
+                for row in body:
+                    if isinstance(row, dict) and not row.get("id"):
+                        row["id"] = str(uuid.uuid4())
                 self.mock_db[clean_table].extend(body)
                 return body
             elif isinstance(body, dict):
+                if not body.get("id"):
+                    body["id"] = str(uuid.uuid4())
                 self.mock_db[clean_table].append(body)
                 return [body]
             return body

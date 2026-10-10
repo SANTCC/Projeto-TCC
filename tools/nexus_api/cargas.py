@@ -5,6 +5,9 @@ Suporte 1:1 ao fluxo operacional de cargas do front-end (cargas.html e js/cargas
 
 from datetime import datetime
 
+from .uuid_utils import is_valid_uuid, uuid_or_none
+
+
 class CargasAPI:
     def __init__(self, client):
         self.client = client
@@ -54,11 +57,15 @@ class CargasAPI:
         Salva/atualiza uma carga na tabela 'cargas'.
         """
         raw_id = carga_data.get("rawDbId")
+        if not is_valid_uuid(raw_id):
+            raw_id = None
         val_raw = carga_data.get("valor", 0)
         if isinstance(val_raw, str):
             val_num = float(val_raw.replace("R$", "").replace(".", "").replace(",", ".").strip() or 0)
         else:
             val_num = float(val_raw or 0)
+
+        qr_code_url = carga_data.get("qrCode") or f"QR-{carga_data.get('id', 'NEW')}"
 
         db_payload = {
             "natureza": carga_data.get("natureza") or carga_data.get("tipo", "Geral"),
@@ -68,11 +75,18 @@ class CargasAPI:
             "porto_descarga": carga_data.get("portoDescarga", "Terminal STS-01"),
             "destino": carga_data.get("destino", "Destino Geral"),
             "status_fluxo": carga_data.get("status", "AGENDAMENTO"),
-            "qr_code_url": carga_data.get("qrCode") or f"QR-{carga_data.get('id', 'NEW')}",
-            "container_id": carga_data.get("container") or None,
-            "navio_id": carga_data.get("navioId") or None,
+            "qr_code_url": qr_code_url,
+            # Chaves estrangeiras uuid: valores que não sejam UUID viram NULL
+            "container_id": uuid_or_none(carga_data.get("container")),
+            "navio_id": uuid_or_none(carga_data.get("navioId")),
             "motivo_recusa": carga_data.get("motivoCancelamento") or None
         }
+
+        # qr_code_url é UNIQUE: se a carga já existe (mesmo QR), atualiza em vez de inserir.
+        if not raw_id:
+            existente = self._buscar_por_qr(qr_code_url)
+            if existente:
+                raw_id = existente.get("id")
 
         if raw_id:
             res = self.client.request("PATCH", f"cargas?id=eq.{raw_id}", body=db_payload)
@@ -80,6 +94,16 @@ class CargasAPI:
             res = self.client.request("POST", "cargas", body=db_payload)
 
         return res
+
+    def _buscar_por_qr(self, qr_code_url):
+        """Localiza a linha de carga pelo qr_code_url (chave única no banco)."""
+        rows = self.client.request("GET", "cargas", params={"select": "*", "qr_code_url": f"eq.{qr_code_url}"}) or []
+        if not isinstance(rows, list):
+            return None
+        for r in rows:
+            if str(r.get("qr_code_url")) == str(qr_code_url):
+                return r
+        return None
 
     def agendar_carga(self, data, funcionario_info=None):
         """
@@ -184,8 +208,8 @@ class CargasAPI:
 
     def atribuir_estivador(self, estivador_id, carga_id, estado_carregamento="EM_CARREGAMENTO"):
         payload = {
-            "estivador_id": estivador_id,
-            "carga_id": carga_id,
+            "estivador_id": uuid_or_none(estivador_id),
+            "carga_id": uuid_or_none(carga_id),
             "estado_carregamento": estado_carregamento
         }
         return self.client.request("POST", "estivador_cargas", body=payload)
@@ -195,7 +219,7 @@ class CargasAPI:
             return
         log_payload = {
             "data_hora": datetime.now().isoformat(),
-            "funcionario_id": func.get("id"),
+            "funcionario_id": uuid_or_none(func.get("id")),
             "cargo": func.get("cargo"),
             "codigo_individual": func.get("codigo_individual"),
             "entidade_tipo": ent_tipo,
@@ -207,7 +231,7 @@ class CargasAPI:
 
         trail_payload = {
             "data_hora": datetime.now().isoformat(),
-            "funcionario_id": func.get("id"),
+            "funcionario_id": uuid_or_none(func.get("id")),
             "cargo": func.get("cargo"),
             "codigo_individual": func.get("codigo_individual"),
             "tipo_decisao": dec_tipo,

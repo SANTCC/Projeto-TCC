@@ -6,6 +6,8 @@ desativando inspeções anteriores para histórico (ativa = False).
 
 from datetime import datetime
 
+from .uuid_utils import uuid_or_none
+
 class InspecoesAPI:
     def __init__(self, client):
         self.client = client
@@ -54,7 +56,7 @@ class InspecoesAPI:
         # 2. Insere a nova inspeção ativa
         inspecao_payload = {
             "carga_id": db_carga_id,
-            "inspetor_id": inspetor_id or (funcionario_info.get("id") if funcionario_info else None),
+            "inspetor_id": uuid_or_none(inspetor_id or (funcionario_info.get("id") if funcionario_info else None)),
             "data_inspecao": datetime.now().isoformat(),
             "resultado": resultado,
             "observacoes": observacoes or "",
@@ -68,7 +70,7 @@ class InspecoesAPI:
             for item in itens:
                 item_payload = {
                     "inspecao_id": new_insp_id,
-                    "checklist_item_id": item.get("item_id"),
+                    "checklist_item_id": uuid_or_none(item.get("item_id")),
                     "conforme": item.get("conforme", True),
                     "observacao": item.get("observacao", "")
                 }
@@ -90,7 +92,7 @@ class InspecoesAPI:
             dec_tipo = "APROVOU_CARGA" if resultado == "APROVADA" else "RECUSOU_CARGA"
             trail_payload = {
                 "data_hora": datetime.now().isoformat(),
-                "funcionario_id": funcionario_info.get("id"),
+                "funcionario_id": uuid_or_none(funcionario_info.get("id")),
                 "cargo": funcionario_info.get("cargo"),
                 "codigo_individual": funcionario_info.get("codigo_individual"),
                 "tipo_decisao": dec_tipo,

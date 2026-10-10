@@ -52,6 +52,8 @@ class DelegacaoAPI:
         return res
 
     def revogar_delegacao(self, delegacao_id):
+        if not _is_valid_uuid(delegacao_id):
+            return None
         payload = {
             "ativo": False,
             "data_revogacao": datetime.now().isoformat()
