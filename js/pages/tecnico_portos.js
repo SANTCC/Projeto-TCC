@@ -71,7 +71,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${m[3]}/${m[2]}/${m[1]}`;
   }
 
-  // Validação de CPF: 11 dígitos + dígitos verificadores (módulo 11)
+  // Validação de CPF: 11 dígitos + dígitos verificadores (módulo 11).
+  // Os dois últimos dígitos são calculados a partir dos 9 primeiros, por isso
+  // sequências genéricas de documentação não passam na checagem e não podem ser
+  // sugeridas como placeholder: a interface orienta apenas sobre a regra.
   function validarCpf(cpf) {
     const d = fatiarCpfSomenteDigitos(cpf);
     if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
@@ -435,7 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // CPF obrigatório e válido (11 dígitos + dígitos verificadores)
       if (!validarCpf(cpfRaw)) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', 'Informe um CPF válido com 11 dígitos (Exemplo: 123.456.789-09). O cadastro só é permitido com CPF válido.');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', 'Informe um CPF válido com 11 dígitos. Os dois últimos números são os dígitos verificadores, calculados a partir dos 9 primeiros, e precisam conferir: o cadastro é recusado quando eles são inventados.');
         return;
       }
 
