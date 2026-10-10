@@ -164,21 +164,200 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Carrega lista de cargas
   let cargasFluxoList = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+  let cargasLoadRevision = 0;
+  let cargasRefreshTimer = null;
+  const transicoesStatusEmVoo = new Map();
+  const CARGA_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  async function carregarCargasSupabase() {
+  function obterTransicoesAutomaticas(cargas) {
+    let naviosLocais = [];
+    try {
+      const valor = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+      if (Array.isArray(valor)) naviosLocais = valor;
+    } catch (error) {
+      console.warn('[NexusPort] Cache local de navios inválido ao avaliar status das cargas:', error);
+    }
+
+    const naviosPorNome = new Map();
+    naviosLocais.forEach((navio) => {
+      const nome = String(navio && navio.nome || '').trim().toLowerCase();
+      if (nome) naviosPorNome.set(nome, navio);
+    });
+
+    const transicoes = [];
+    (Array.isArray(cargas) ? cargas : []).forEach((carga) => {
+      if (!carga || !carga.navio || ['CANCELADA', 'RECUSADA'].includes(carga.status)) return;
+      const navio = naviosPorNome.get(String(carga.navio).trim().toLowerCase());
+      if (!navio) return;
+
+      const localizacao = navio.localizacao || navio.estado;
+      let statusNovo = null;
+      if (localizacao === 'NO_PORTO_DE_DESTINO' && carga.status !== 'ENTREGUE') {
+        statusNovo = 'ENTREGUE';
+      } else if (localizacao === 'FORA_DO_PORTO' && !['EM_TRANSITO', 'ENTREGUE'].includes(carga.status)) {
+        statusNovo = 'EM_TRANSITO';
+      }
+      if (statusNovo) transicoes.push({ carga, statusAnterior: carga.status, statusNovo });
+    });
+    return transicoes;
+  }
+
+  /** Persiste transições reais uma vez por grupo de status; não dispara um refresh local. */
+  async function aplicarStatusAutomaticoCargas(cargas, requestRevision) {
+    const transicoes = obterTransicoesAutomaticas(cargas);
+    if (transicoes.length === 0) return false;
+
+    const client = window.nexusSupabase || null;
+    const locais = transicoes.filter((t) => !client || !CARGA_UUID_RE.test(String(t.carga.rawDbId || '')));
+    const remotas = transicoes.filter((t) => client && CARGA_UUID_RE.test(String(t.carga.rawDbId || '')));
+    const promessasPorChave = new Map();
+    const gruposNovos = new Map();
+
+    locais.forEach((t) => {
+      t.carga.status = t.statusNovo;
+    });
+
+    remotas.forEach((t) => {
+      const id = String(t.carga.rawDbId);
+      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo]);
+      const existente = transicoesStatusEmVoo.get(chave);
+      if (existente) {
+        promessasPorChave.set(chave, existente);
+        return;
+      }
+      const chaveGrupo = JSON.stringify([t.statusAnterior, t.statusNovo]);
+      if (!gruposNovos.has(chaveGrupo)) {
+        gruposNovos.set(chaveGrupo, {
+          statusAnterior: t.statusAnterior,
+          statusNovo: t.statusNovo,
+          ids: new Set(),
+          chaves: new Set()
+        });
+      }
+      gruposNovos.get(chaveGrupo).ids.add(id);
+      gruposNovos.get(chaveGrupo).chaves.add(chave);
+    });
+
+    gruposNovos.forEach((grupo) => {
+      const ids = Array.from(grupo.ids);
+      const tracked = Promise.resolve().then(async () => {
+        if (requestRevision !== undefined && requestRevision !== cargasLoadRevision) {
+          return { ok: false, obsoleta: true, atualizados: new Set() };
+        }
+        const { data, error } = await client
+          .from('cargas')
+          .update({ status_fluxo: grupo.statusNovo })
+          .in('id', ids)
+          .eq('status_fluxo', grupo.statusAnterior)
+          .select('id');
+        if (error) throw error;
+        const atualizados = new Set((Array.isArray(data) ? data : []).map((linha) => String(linha.id)));
+        const faltantes = ids.filter((id) => !atualizados.has(id));
+        if (faltantes.length > 0) {
+          console.warn(`[NexusPort] ${faltantes.length} carga(s) não tiveram a transição automática aplicada; o status mudou em paralelo ou a política do Supabase não autorizou a atualização.`);
+        }
+        return { ok: faltantes.length === 0, atualizados, faltantes };
+      }).catch((error) => {
+        console.warn('[NexusPort] Não foi possível persistir a transição automática de status das cargas:', error);
+        return { ok: false, erro: error, atualizados: new Set() };
+      }).finally(() => {
+        grupo.chaves.forEach((chave) => {
+          if (transicoesStatusEmVoo.get(chave) === tracked) transicoesStatusEmVoo.delete(chave);
+        });
+      });
+
+      grupo.chaves.forEach((chave) => {
+        transicoesStatusEmVoo.set(chave, tracked);
+        promessasPorChave.set(chave, tracked);
+      });
+    });
+
+    const promessas = Array.from(new Set(promessasPorChave.values()));
+    const resultados = await Promise.all(promessas);
+    const resultadoPorPromessa = new Map(promessas.map((promessa, indice) => [promessa, resultados[indice]]));
+    let houveGravacaoRemota = false;
+
+    remotas.forEach((t) => {
+      const id = String(t.carga.rawDbId);
+      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo]);
+      const resultado = resultadoPorPromessa.get(promessasPorChave.get(chave));
+      if (resultado && resultado.atualizados && resultado.atualizados.has(id)) {
+        t.carga.status = t.statusNovo;
+        houveGravacaoRemota = true;
+      }
+    });
+
+    // Invalida qualquer leitura iniciada antes da gravação, mesmo se este carregador
+    // já ficou obsoleto. Só a revisão atual pode gravar seu snapshot no cache local.
+    if (houveGravacaoRemota && window.NexusRepository && typeof window.NexusRepository.invalidarLeiturasCargas === 'function') {
+      window.NexusRepository.invalidarLeiturasCargas();
+    }
+
+    // Uma falha remota não pode fazer outra aba ler um status rejeitado; uma
+    // resposta de carregamento obsoleta também não pode sobrescrever dados novos.
+    const revisaoAindaAtual = requestRevision === undefined || requestRevision === cargasLoadRevision;
+    if (revisaoAindaAtual && (locais.length > 0 || houveGravacaoRemota)) {
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
+    }
+
+    // Mantém a transição visível nesta tela se o Supabase estiver indisponível,
+    // mas sem salvá-la no cache compartilhado nem notificar um novo carregamento.
+    remotas.forEach((t) => {
+      const id = String(t.carga.rawDbId);
+      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo]);
+      const resultado = resultadoPorPromessa.get(promessasPorChave.get(chave));
+      if (resultado && resultado.erro && !resultado.obsoleta) t.carga.status = t.statusNovo;
+    });
+
+    return true;
+  }
+
+  async function carregarCargasSupabase(revision) {
+    const requestRevision = revision === undefined ? ++cargasLoadRevision : revision;
     if (window.NexusRepository) {
       try {
         const loadedCargas = await window.NexusRepository.getCargas();
-        if (loadedCargas) {
-          cargasFluxoList = loadedCargas;
-          localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
-        }
+        if (requestRevision !== cargasLoadRevision) return;
+        if (Array.isArray(loadedCargas)) cargasFluxoList = loadedCargas;
       } catch (err) {
-        console.warn('[NexusPort] Erro ao carregar cargas via repositório:', err);
+        if (requestRevision === cargasLoadRevision) {
+          console.warn('[NexusPort] Erro ao carregar cargas via repositório:', err);
+        }
       }
     }
+
+    if (requestRevision !== cargasLoadRevision) return;
+    // Resolve primeiro os navios herdados do contêiner, para as mesmas transições
+    // automáticas continuarem válidas também para cargas vinculadas indiretamente.
+    sincronizarNaviosHerdados();
+    try {
+      await aplicarStatusAutomaticoCargas(cargasFluxoList, requestRevision);
+    } catch (err) {
+      console.warn('[NexusPort] Erro ao sincronizar status automático das cargas:', err);
+    }
+    if (requestRevision !== cargasLoadRevision) return;
     renderTable();
   }
+
+  function agendarAtualizacaoCargas() {
+    const revision = ++cargasLoadRevision;
+    if (cargasRefreshTimer !== null) clearTimeout(cargasRefreshTimer);
+    cargasRefreshTimer = setTimeout(() => {
+      cargasRefreshTimer = null;
+      carregarCargasSupabase(revision);
+    }, 100);
+  }
+
+  window.addEventListener('pagehide', () => {
+    cargasLoadRevision += 1;
+    if (cargasRefreshTimer !== null) {
+      clearTimeout(cargasRefreshTimer);
+      cargasRefreshTimer = null;
+    }
+    if (window.NexusRepository && typeof window.NexusRepository.invalidarLeiturasCargas === 'function') {
+      window.NexusRepository.invalidarLeiturasCargas();
+    }
+  });
 
   // Renderização de cargas canceladas na Tabela de Cargas Canceladas (cinza)
   function renderCargasCanceladasTable(cargasCanceladas = []) {
@@ -280,9 +459,9 @@ document.addEventListener('DOMContentLoaded', () => {
         alterado = true;
       }
     });
-    if (alterado) {
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
-    }
+    // O navio herdado é uma projeção de apresentação. Não sobrescrevemos o cache
+    // canônico de cargas aqui: outras abas poderiam reler a versão do banco sem a
+    // projeção e entrar em um ciclo de storage → reload → projeção.
     return alterado;
   }
 
@@ -345,10 +524,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderTable() {
     if (!cargasTableBody) return;
 
-    cargasFluxoList = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    // A lista é atualizada pelo carregador e pelos handlers de ação; renderizar
+    // não a relê do localStorage nem dispara operações de rede.
 
     // Herança pós-vinculação: contêiner que ganhou navio atualiza as cargas
     sincronizarNaviosHerdados();
+    const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
 
     const filterNavioVal = (document.getElementById('filterNavio')?.value || '').trim().toLowerCase();
     const filterContVal = (document.getElementById('filterContainer')?.value || '').trim().toLowerCase();
@@ -358,32 +539,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterDataInicioVal = (document.getElementById('filterDataInicio')?.value || '').trim();
     const filterDataFimVal = (document.getElementById('filterDataFim')?.value || '').trim();
     const filterBuscaVal = (document.getElementById('filterBusca')?.value || '').trim().toLowerCase();
-
-    // Transições AUTOMÁTICAS pelo navio vinculado (sem botão "Liberar"):
-    // navio liberado (FORA_DO_PORTO) → carga EM_TRANSITO;
-    // navio no destino → carga ENTREGUE.
-    const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
-    let statusAutoAlterado = false;
-
-    cargasFluxoList.forEach(c => {
-      if (!c.navio || c.status === 'CANCELADA' || c.status === 'RECUSADA') return;
-      const navObj = naviosLocais.find(n => n.nome && n.nome.toLowerCase() === c.navio.toLowerCase());
-      if (!navObj) return;
-      const loc = navObj.localizacao || navObj.estado;
-      if ((loc === 'NO_PORTO_DE_DESTINO') && c.status !== 'ENTREGUE') {
-        c.status = 'ENTREGUE';
-        statusAutoAlterado = true;
-      } else if (loc === 'FORA_DO_PORTO' && !['EM_TRANSITO', 'ENTREGUE'].includes(c.status)) {
-        c.status = 'EM_TRANSITO';
-        statusAutoAlterado = true;
-      }
-    });
-    if (statusAutoAlterado) {
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
-      if (window.NexusRepository && window.NexusRepository.notifyChange) {
-        window.NexusRepository.notifyChange('cargas');
-      }
-    }
 
     // A tabela principal exibe apenas cargas pendentes no fluxo; canceladas e
     // recusadas ficam nas tabelas próprias (cinza e vermelha).
@@ -1548,9 +1703,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Carregamento inicial ao abrir a página
   carregarCargasSupabase();
 
-  // Sincronização viva em tempo real (Item 2)
-  window.addEventListener('nexus_data_changed', () => {
-    carregarCargasSupabase();
+  // Sincronização viva: somente entidades que afetam a carga disparam uma leitura.
+  // A rajada de eventos é consolidada em um timer único; cada evento invalida a
+  // resposta anterior antes de agendar a leitura mais recente.
+  const ENTIDADES_QUE_AFETAM_CARGAS = new Set([
+    'cargas', 'navios', 'containers', 'estivador_cargas', 'funcionarios',
+    'nexus_cargas_fluxo', 'nexus_navios_list', 'nexus_containers_list', 'nexus_func_list',
+    'periodic_sync', 'window_focus'
+  ]);
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    if (entity && !ENTIDADES_QUE_AFETAM_CARGAS.has(entity)) return;
+    agendarAtualizacaoCargas();
     renderBercosPanel();
   });
 });

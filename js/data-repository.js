@@ -8,9 +8,65 @@
   'use strict';
 
   const ENABLE_MOCKS = false;
+  const EVENTOS_QUE_INVALIDAM_CARGAS = new Set([
+    'cargas',
+    'navios',
+    'containers',
+    'estivador_cargas',
+    'funcionarios',
+    'nexus_cargas_fluxo',
+    'nexus_navios_list',
+    'nexus_containers_list',
+    'nexus_func_list',
+    'periodic_sync',
+    'window_focus'
+  ]);
+
+  function ehErroDaRelacaoEstivador(error) {
+    if (!error) return false;
+    const code = String(error.code || '');
+    const message = [error.message, error.details, error.hint].filter(Boolean).join(' ');
+    const erroDeSchema = ['PGRST200', 'PGRST201', 'PGRST204', '42703'].includes(code);
+    const mencionaRelacaoOpcional = /estivador_cargas|funcionarios/i.test(message);
+    const descricaoDeRelacaoAusente = /relationship|schema cache|column|could not find|does not exist|ambiguous/i.test(message);
+
+    // A consulta simples só é um fallback válido se o erro vier do join opcional.
+    // Erros de rede, autenticação ou da relação obrigatória com navios não devem
+    // causar uma segunda requisição imediata.
+    return (erroDeSchema && (!message || mencionaRelacaoOpcional)) ||
+      (mencionaRelacaoOpcional && descricaoDeRelacaoAusente);
+  }
+
+  function lerCacheCargas() {
+    try {
+      const lista = JSON.parse(window.localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      return Array.isArray(lista) ? lista : [];
+    } catch (error) {
+      console.warn('[NexusRepository] Cache local de cargas inválido:', error);
+      return [];
+    }
+  }
+
+  function clonarCargas(lista) {
+    return Array.isArray(lista) ? lista.map((carga) => Object.assign({}, carga)) : [];
+  }
 
   const NexusRepository = {
     ENABLE_MOCKS: ENABLE_MOCKS,
+    _cargasRevision: 0,
+    _cargasInFlight: new Map(),
+
+    /**
+     * Invalida leituras em andamento após uma alteração canônica de cargas/navios.
+     * As respostas antigas continuam podendo resolver para os seus chamadores, mas
+     * não podem sobrescrever o cache mais recente.
+     */
+    invalidarLeiturasCargas: function () {
+      this._cargasRevision += 1;
+      this._cargasInFlight.clear();
+      return this._cargasRevision;
+    },
+
 
     /**
      * Retorna o cliente Supabase se disponível
@@ -101,33 +157,51 @@
 
     /**
      * BUSCAR CARGAS
+     * Leituras idênticas em andamento compartilham uma única operação lógica.
+     * A deduplicação dura somente enquanto a requisição está em voo: não há cache
+     * de resposta concluída, e uma invalidação abre uma nova revisão.
      */
-    getCargas: async function () {
+    getCargas: function () {
       const client = this.getSupabase();
-      if (client) {
+      if (!client) return Promise.resolve(clonarCargas(lerCacheCargas()));
+
+      const repository = this;
+      const revision = this._cargasRevision;
+      const existing = this._cargasInFlight.get(revision);
+      if (existing) return existing.then(clonarCargas);
+
+      const request = (async function () {
         try {
-          // Tenta trazer também a atribuição do funcionário responsável
-          // (Backlog 3 — estivador_cargas); se a relação não estiver
-          // disponível no schema cache, repete a consulta sem o join.
-          let data = null;
-          let count = null;
-          {
-            const rJoined = await client.from('cargas').select('*, navios(id, nome), estivador_cargas(estivador_id, funcionarios(nome, matricula))', { count: 'exact' });
-            if (!rJoined.error && Array.isArray(rJoined.data)) {
-              data = rJoined.data;
-              count = rJoined.count;
-            } else {
-              const rPlain = await client.from('cargas').select('*, navios(id, nome)', { count: 'exact' });
-              if (!rPlain.error && Array.isArray(rPlain.data)) {
-                data = rPlain.data;
-                count = rPlain.count;
-              }
+          let result = await client
+            .from('cargas')
+            .select('*, navios(id, nome), estivador_cargas(estivador_id, funcionarios(nome, matricula))');
+
+          if (result && result.error) {
+            if (!ehErroDaRelacaoEstivador(result.error)) {
+              repository.tratarErroTabela('cargas', result.error);
+              return clonarCargas(lerCacheCargas());
+            }
+
+            // Fallback limitado ao erro de schema do join opcional. Erros de rede,
+            // autenticação e autorização retornam ao cache sem retry instantâneo.
+            result = await client
+              .from('cargas')
+              .select('*, navios(id, nome)');
+            if (result && result.error) {
+              repository.tratarErroTabela('cargas', result.error);
+              return clonarCargas(lerCacheCargas());
             }
           }
-          if (Array.isArray(data)) {
-            const mapped = data.map((c) => {
-              const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0 ? c.estivador_cargas[0] : null;
-              return {
+
+          if (!result || !Array.isArray(result.data)) {
+            return clonarCargas(lerCacheCargas());
+          }
+
+          const mapped = result.data.map((c) => {
+            const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0
+              ? c.estivador_cargas[0]
+              : null;
+            return {
               id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
               tipo: c.natureza || 'Carga Geral',
               peso: `${c.peso || 0} t`,
@@ -148,16 +222,29 @@
               estivador_id: vinculo ? vinculo.estivador_id : null,
               estivadorMatricula: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.matricula : null,
               estivador: (vinculo && vinculo.funcionarios) ? vinculo.funcionarios.nome : null
-              };
-            });
-            localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
-            return mapped;
+            };
+          });
+
+          // Uma resposta de geração antiga pode resolver para o chamador, mas não
+          // pode retroceder o cache após uma alteração mais recente.
+          if (repository._cargasRevision === revision) {
+            window.localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
           }
-        } catch (err) {
-          console.warn('[NexusRepository] Erro ao buscar cargas do Supabase:', err);
+          return mapped;
+        } catch (error) {
+          console.warn('[NexusRepository] Erro ao buscar cargas do Supabase:', error);
+          return clonarCargas(lerCacheCargas());
         }
-      }
-      return JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      })();
+
+      let trackedRequest;
+      trackedRequest = request.finally(() => {
+        if (repository._cargasInFlight.get(revision) === trackedRequest) {
+          repository._cargasInFlight.delete(revision);
+        }
+      });
+      this._cargasInFlight.set(revision, trackedRequest);
+      return trackedRequest.then(clonarCargas);
     },
 
     /**
@@ -771,6 +858,15 @@
       };
     } catch (e) {}
   }
+
+  // O listener está na fase de captura para invalidar as respostas antigas antes
+  // que os módulos de página iniciem uma nova leitura no mesmo evento.
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    if (!entity || EVENTOS_QUE_INVALIDAM_CARGAS.has(entity)) {
+      NexusRepository.invalidarLeiturasCargas();
+    }
+  }, true);
 
   window.addEventListener('storage', (e) => {
     if (e.key && e.key.startsWith('nexus_')) {
