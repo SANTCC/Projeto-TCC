@@ -156,51 +156,21 @@
           <p id="hapticsFeedback" class="text-[11px] font-bold text-nexus-500 dark:text-nexus-300"></p>
         </div>
 
-        <!-- Configuração do Webhook de Emergência (OPCIONAL — DESATIVADO POR PADRÃO) -->
-        <div id="panicWebhookPanel" class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-3">
-          <div class="flex items-start justify-between gap-4">
-            <div class="flex items-start gap-3">
-              <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">webhook</span>
-              <div>
-                <span class="font-bold text-sm text-nexus-900 dark:text-white block">Webhook de Emergência (opcional)</span>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Quando ativado, a Edge Function <code class="font-mono">panic-alert</code> envia um POST JSON para a URL configurada a cada acionamento/desativação do botão de pânico. <strong class="text-red-600 dark:text-red-400">Desativado por padrão.</strong></p>
-              </div>
+        <!-- Diagnóstico das tabelas do pânico: o que explica o HTTP 404
+             (PGRST205) em /rest/v1/emergencias antes de aplicar a migração -->
+        <div id="panicDbPanel" class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-3">
+          <div class="flex items-start gap-3">
+            <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">database</span>
+            <div class="min-w-0 flex-1">
+              <span class="font-bold text-sm text-nexus-900 dark:text-white block">Banco de dados (tabelas do pânico)</span>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Confere se a tabela <code class="font-mono">emergencias</code> e o valor de auditoria <code class="font-mono">EMERGENCIA</code> já foram provisionados no Supabase. Sem eles, a consulta de estado responde HTTP 404 (PGRST205) e o aviso abaixo indica a migração SQL a aplicar.</p>
             </div>
-            <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1" title="Ativar/desativar webhook de emergência">
-              <input type="checkbox" id="panicWebhookEnabled" class="sr-only peer" />
-              <div class="w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:bg-red-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-            </label>
+            <button id="panicTablesCheckBtn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] transition-colors flex items-center gap-1 shrink-0">
+              <span class="material-symbols-outlined text-[15px]">sync</span>
+              <span>Verificar</span>
+            </button>
           </div>
-          <div class="flex flex-col sm:flex-row gap-2">
-            <input id="panicWebhookUrl" type="url" placeholder="https://exemplo.com/hooks/nexusport-emergency" class="flex-1 px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono font-medium text-nexus-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:outline-none" />
-            <div class="flex gap-2">
-              <button id="panicWebhookSaveBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">save</span>
-                <span>Salvar</span>
-              </button>
-              <button id="panicWebhookTestBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">sensors</span>
-                <span>Testar</span>
-              </button>
-            </div>
-          </div>
-          <p id="panicWebhookStatus" class="text-[11px] font-mono text-slate-500 dark:text-slate-400">Carregando configuração...</p>
-
-          <!-- Diagnóstico das tabelas do pânico: o que explica o HTTP 404
-               (PGRST205) em /rest/v1/emergencias antes de aplicar a migração -->
-          <div class="pt-3 border-t border-nexus-border dark:border-slate-700 flex flex-col gap-2">
-            <div class="flex items-center justify-between gap-3">
-              <span class="text-[11px] font-bold text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-[16px]">database</span>
-                <span>Banco de dados (tabelas do pânico)</span>
-              </span>
-              <button id="panicTablesCheckBtn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] transition-colors flex items-center gap-1">
-                <span class="material-symbols-outlined text-[15px]">sync</span>
-                <span>Verificar</span>
-              </button>
-            </div>
-            <p id="panicTablesStatus" class="text-[11px] font-mono text-slate-500 dark:text-slate-400"></p>
-          </div>
+          <p id="panicTablesStatus" class="text-[11px] font-mono text-slate-500 dark:text-slate-400"></p>
         </div>
 
         <!-- Alerta de Manutenção Preventiva Sugerida (> 3 Anos) -->

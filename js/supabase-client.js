@@ -174,7 +174,8 @@
   const MIGRACOES_CONHECIDAS = {
     bercos: 'SPECs/migrations/001_create_bercos.sql',
     emergencias: 'supabase/migrations/20261008000000_emergencias_fix_404.sql',
-    panic_webhook_config: 'supabase/migrations/20261008000000_emergencias_fix_404.sql',
+    // `panic_webhook_config` não entra aqui: o front-end não usa webhook
+    // (nenhuma consulta do cliente toca essa tabela).
     // Auditoria (seção 8 do schema completo — não há migração incremental):
     logs_alteracoes: 'SPECs/schema.sql',
     trail_decisoes: 'SPECs/schema.sql'

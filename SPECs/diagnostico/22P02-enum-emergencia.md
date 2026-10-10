@@ -134,7 +134,7 @@ returning id, data_hora, entidade_tipo;
 delete from public.logs_alteracoes where entidade_id = 'TESTE_MIGRACAO';
 ```
 
-No app: **Manutenção → Webhook de Emergência → Banco de dados → Verificar**
+No app: **Manutenção → Banco de dados (tabelas do pânico) → Verificar**
 (a partir desta correção o painel também sonda o valor do enum e diz qual
 arquivo aplicar) ou, no console:
 

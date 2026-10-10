@@ -807,7 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Botão de Pânico — GLOBAL (js/panic-realtime.js → Edge Function "panic-alert"
-  // → broadcast WebSocket para todos os clientes + webhook opcional)
+  // → broadcast WebSocket para todos os clientes)
   // Reflete o estado da emergência no botão e no banner da página.
   function aplicarEstadoEmergencia(ativa) {
     if (emergencyBanner) emergencyBanner.classList.toggle('hidden', !ativa);
@@ -838,7 +838,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (window.NexusPanic) {
-        // Fluxo global: confirmação, RBAC, Edge Function, broadcast e webhook
+        // Fluxo global: confirmação, RBAC, Edge Function e broadcast
         // são tratados pelo módulo NexusPanic.triggerPanic().
         const resultado = await window.NexusPanic.triggerPanic({ confirmar: true });
         if (resultado && resultado.ok) {
