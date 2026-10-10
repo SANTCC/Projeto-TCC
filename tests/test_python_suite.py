@@ -50,11 +50,13 @@ class TestNexusPortPythonSuite(unittest.TestCase):
 
     # 3. CARGAS
     def test_cargas_lifecycle(self):
+        import uuid
         func_info = self.app.login("SUP-2001")
+        cid = f"CRG-TEST-{uuid.uuid4().hex[:6].upper()}"
 
         # Agendamento
         carga = self.app.cargas.agendar_carga({
-            "id": "CRG-TEST-001",
+            "id": cid,
             "natureza": "Carga de Teste",
             "peso": "15 t",
             "volume": "30 m³",
@@ -63,28 +65,28 @@ class TestNexusPortPythonSuite(unittest.TestCase):
         self.assertIsNotNone(carga)
 
         # Recebimento
-        rec = self.app.cargas.receber_carga("CRG-TEST-001", funcionario_info=func_info)
-        c_rec = self.app.cargas.get_carga("CRG-TEST-001")
+        rec = self.app.cargas.receber_carga(cid, funcionario_info=func_info)
+        c_rec = self.app.cargas.get_carga(cid)
         self.assertEqual(c_rec["status"], "RECEBIMENTO_INSPECAO")
 
         # Movimentação
-        self.app.cargas.movimentar_carga("CRG-TEST-001", guindaste_id="GND-01", local="Baia 4", funcionario_info=func_info)
-        c_mov = self.app.cargas.get_carga("CRG-TEST-001")
+        self.app.cargas.movimentar_carga(cid, guindaste_id="GND-01", local="Baia 4", funcionario_info=func_info)
+        c_mov = self.app.cargas.get_carga(cid)
         self.assertEqual(c_mov["status"], "ARMAZENAGEM")
 
         # Pronta para Entrega
-        self.app.cargas.marcar_pronta_entrega("CRG-TEST-001", funcionario_info=func_info)
-        c_pronta = self.app.cargas.get_carga("CRG-TEST-001")
+        self.app.cargas.marcar_pronta_entrega(cid, funcionario_info=func_info)
+        c_pronta = self.app.cargas.get_carga(cid)
         self.assertEqual(c_pronta["status"], "PRONTA_PARA_ENTREGA")
 
         # Liberação
-        self.app.cargas.liberar_carga_saida("CRG-TEST-001", motivo="Liberado via Python API", funcionario_info=func_info)
-        c_lib = self.app.cargas.get_carga("CRG-TEST-001")
+        self.app.cargas.liberar_carga_saida(cid, motivo="Liberado via Python API", funcionario_info=func_info)
+        c_lib = self.app.cargas.get_carga(cid)
         self.assertEqual(c_lib["status"], "EM_TRANSITO")
 
         # Cancelamento
-        self.app.cargas.cancelar_carga("CRG-TEST-001", motivo="Avaria grave no pátio", funcionario_info=func_info)
-        c_canc = self.app.cargas.get_carga("CRG-TEST-001")
+        self.app.cargas.cancelar_carga(cid, motivo="Avaria grave no pátio", funcionario_info=func_info)
+        c_canc = self.app.cargas.get_carga(cid)
         self.assertEqual(c_canc["status"], "CANCELADA")
         self.assertEqual(c_canc["motivoCancelamento"], "Avaria grave no pátio")
 
@@ -135,19 +137,21 @@ class TestNexusPortPythonSuite(unittest.TestCase):
 
     # 5. INSPEÇÕES & HISTÓRICO
     def test_inspecoes_active_history(self):
+        import uuid
         func_info = self.app.login("SUP-2001")
+        cid = f"CRG-INSP-{uuid.uuid4().hex[:6].upper()}"
         # Cria carga para inspeção
-        self.app.cargas.agendar_carga({"id": "CRG-INSP-01", "natureza": "Granel Solido"})
-        self.app.cargas.receber_carga("CRG-INSP-01")
+        self.app.cargas.agendar_carga({"id": cid, "natureza": "Granel Solido"})
+        self.app.cargas.receber_carga(cid)
 
         # Primeira inspeção (Aprovada)
-        self.app.inspecoes.inspecionar_carga("CRG-INSP-01", "APROVADA", "Tudo ok", funcionario_info=func_info)
-        c1 = self.app.cargas.get_carga("CRG-INSP-01")
+        self.app.inspecoes.inspecionar_carga(cid, "APROVADA", "Tudo ok", funcionario_info=func_info)
+        c1 = self.app.cargas.get_carga(cid)
         self.assertEqual(c1["status"], "ARMAZENAGEM")
 
         # Re-inspeção (Recusada): a anterior vira ativa = False e a nova vira ativa = True
-        self.app.inspecoes.recusar_carga("CRG-INSP-01", "Embalagem danificada no reteste", funcionario_info=func_info)
-        c2 = self.app.cargas.get_carga("CRG-INSP-01")
+        self.app.inspecoes.recusar_carga(cid, "Embalagem danificada no reteste", funcionario_info=func_info)
+        c2 = self.app.cargas.get_carga(cid)
         self.assertEqual(c2["status"], "RECUSADA")
 
     # 6. MANUTENÇÃO & PREVENTIVA SUGERIDA
