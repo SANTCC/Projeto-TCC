@@ -1,52 +1,27 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
-  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NexusPort — Inspeção & Checklist</title>
+  <meta name="description" content="Inspeção e checklist no NexusPort: vistoria técnica com evidências e leitura de QR Code na mesma tela." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <!-- Google Fonts & Material Symbols -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'nexus-900': '#1E293B',
-            'nexus-500': '#445987',
-            'nexus-bg': '#F5F7FA',
-            'nexus-text': '#222222',
-            'nexus-border': '#E1E5ED',
-            'nexus-dark-bg': '#0F172A',
-            'nexus-dark-card': '#1E293B',
-            'nexus-dark-border': '#334155',
-            'success': '#2E7D32',
-            'warning': '#D97706',
-            'danger': '#C62828',
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            display: ['Montserrat', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    };
-  </script>
-
+  <!-- Tipografia e ícones locais (tools/assets.js) e CSS do Tailwind compilado (css/nexus.css):
+       substituem o CDN do Tailwind (~400 KiB de JavaScript) e o Google Fonts, sem terceiros no caminho. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/nexus.css" />
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <!-- Bibliotecas locais sob demanda (vendor/) -->
+  <script src="js/asset-loader.js"></script>
   <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
@@ -57,12 +32,12 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- Topbar Superior -->
-  <header id="appTopbar"></header>
+  <header id="appTopbar" class="w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm"></header>
 
   <!-- Layout Principal -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex overflow-hidden pt-16 md:h-[calc(100vh-4rem)] md:overflow-hidden">
     <!-- Sidebar Navegação -->
-    <aside id="appSidebar"></aside>
+    <aside id="appSidebar" class="w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0"></aside>
 
     <!-- Conteúdo da Página -->
     <main class="flex-1 p-6 overflow-y-auto">
@@ -76,7 +51,7 @@
               <span>Inspeção Técnica Formal</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Checklist Técnico de Carga</h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Validação de conformidade técnica para liberação e armazenagem (RF 9 / RN 14).</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Validação de conformidade técnica para liberação e armazenagem (RF 9 / RN 14).</p>
           </div>
           <div class="p-3 rounded-xl bg-nexus-50 dark:bg-slate-800 text-nexus-500 font-mono font-bold text-xs">
             Exclusivo Inspetor
@@ -87,13 +62,13 @@
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div>
-              <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+              <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
                 <span class="material-symbols-outlined text-nexus-500">qr_code_scanner</span>
                 Leitura de QR Code no Pátio (RN 17)
-              </h3>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Escaneie a etiqueta diretamente na área de checklist para carregar a carga instantaneamente.</p>
+              </h2>
+              <p class="text-xs text-slate-600 dark:text-slate-400">Escaneie a etiqueta diretamente na área de checklist para carregar a carga instantaneamente.</p>
             </div>
-            <button id="scanChecklistBtn" type="button" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1">
+            <button id="scanChecklistBtn" type="button" class="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1">
               <span class="material-symbols-outlined text-[16px]">photo_camera</span>
               <span>Escanear QR Code</span>
             </button>
@@ -101,13 +76,13 @@
 
           <div id="checklistQrViewport" class="hidden p-4 rounded-xl bg-slate-900 text-white flex flex-col items-center gap-2">
             <div id="inspecaoQrReader" class="w-full max-w-sm h-48 bg-black rounded-lg border border-slate-700"></div>
-            <span class="text-[11px] text-slate-400">Aponte a câmera para a etiqueta da carga.</span>
+            <span class="text-[11px] text-slate-600">Aponte a câmera para a etiqueta da carga.</span>
           </div>
 
           <div>
-            <label class="block font-bold text-xs uppercase text-slate-500 mb-2">Ou Selecione Manualmente a Carga para Vistoria Técnico-Operacional</label>
+            <label class="block font-bold text-xs uppercase text-slate-600 mb-2">Ou Selecione Manualmente a Carga para Vistoria Técnico-Operacional</label>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <select id="inspecaoCargaSelect" class="sm:col-span-2 px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-sm font-bold">
+              <select id="inspecaoCargaSelect" aria-label="Carga a inspecionar" class="sm:col-span-2 px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-sm font-bold">
                 <option value="">Selecione uma Carga...</option>
               </select>
               <button id="carregarChecklistBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs transition-colors">
@@ -131,7 +106,7 @@
 
           <!-- Notice de Regra de Negócio RN 14 -->
           <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
-            <span class="material-symbols-outlined text-[20px] text-amber-600 shrink-0 mt-0.5">warning</span>
+            <span class="material-symbols-outlined text-[20px] text-amber-700 shrink-0 mt-0.5">warning</span>
             <span>
               <strong>Trava de Segurança RN 14:</strong> A aprovação da carga só é liberada se <strong>100% dos itens críticos</strong> do checklist forem avaliados como "Conforme". Caso contrário, a carga será recusada.
             </span>
@@ -165,6 +140,7 @@
     </main>
   </div>
 
+  <script src="vendor/supabase-js.min.js"></script>
   <!-- Rodapé Institucional -->
   <footer class="w-full py-4 text-center text-xs text-slate-500 dark:text-slate-400 border-t border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900">
     <div class="flex flex-wrap items-center justify-center gap-3">
@@ -203,11 +179,31 @@
       <div class="vw-plugin-top-wrapper"></div>
     </div>
   </div>
-  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <!-- Tradutor de Libras (VLibras, serviço público): o plugin é um recurso de acessibilidade, mas o
+       script vem de um servidor de terceiros. Ele é baixado na primeira interação do visitante — ou
+       pelo atalho de acessibilidade —, então a página abre sem depender de rede externa. -->
   <script>
-    if (window.VLibras && window.VLibras.Widget) {
-      new window.VLibras.Widget('https://vlibras.gov.br/app');
-    }
+    (function () {
+      var url = 'https://vlibras.gov.br/app/vlibras-plugin.js';
+      var pedido = false;
+      function carregar() {
+        if (pedido) return;
+        pedido = true;
+        var script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.onload = function () {
+          if (window.VLibras && window.VLibras.Widget) {
+            new window.VLibras.Widget('https://vlibras.gov.br/app');
+          }
+        };
+        document.body.appendChild(script);
+      }
+      ['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(function (evento) {
+        window.addEventListener(evento, carregar, { once: true, passive: true });
+      });
+      window.nexusCarregarVLibras = carregar;
+    })();
   </script>
 </body>
 </html>

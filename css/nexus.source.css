@@ -1,0 +1,39 @@
+/*
+ * CSS DE ORIGEM DO NEXUSPORT — este é o arquivo escrito à mão; `css/nexus.css` é o resultado
+ * compilado (Tailwind + estas regras) por `npm run assets` (tools/assets.js).
+ *
+ * Só entra aqui o que é global e não depende de classe utilitária: reserva de espaço da barra de
+ * rolagem (evita deslocamento de layout quando a página passa a rolar — CLS), foco visível e
+ * preferências de movimento reduzido.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* A barra de rolagem ocupa o mesmo espaço desde o primeiro quadro: sem isso, a página "pula"
+   para o lado quando o conteúdo cresce e passa a rolar (deslocamento de layout). */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Foco sempre visível no teclado (o app usa muitos botões com ícone). */
+:focus-visible {
+  outline: 2px solid #445987;
+  outline-offset: 2px;
+}
+html.dark :focus-visible {
+  outline-color: #a5b4fc;
+}
+
+/* Quem prefere menos movimento recebe transições e animações reduzidas. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

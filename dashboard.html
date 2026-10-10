@@ -1,53 +1,28 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
-  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NexusPort — Painel Geral</title>
+  <meta name="description" content="Painel de comando do NexusPort: indicadores operacionais do Terminal STS-01 em tempo real." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <!-- Google Fonts & Material Symbols -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'nexus-900': '#1E293B',
-            'nexus-500': '#445987',
-            'nexus-bg': '#F5F7FA',
-            'nexus-text': '#222222',
-            'nexus-border': '#E1E5ED',
-            'nexus-dark-bg': '#0F172A',
-            'nexus-dark-card': '#1E293B',
-            'nexus-dark-border': '#334155',
-            'success': '#2E7D32',
-            'warning': '#D97706',
-            'danger': '#C62828',
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            display: ['Montserrat', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    };
-  </script>
-
+  <!-- Tipografia e ícones locais (tools/assets.js) e CSS do Tailwind compilado (css/nexus.css):
+       substituem o CDN do Tailwind (~400 KiB de JavaScript) e o Google Fonts, sem terceiros no caminho. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/nexus.css" />
   <!-- Auth Guard & Layout Client-Side Scripts -->
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <!-- Bibliotecas locais sob demanda (vendor/) -->
+  <script src="js/asset-loader.js"></script>
   <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
@@ -57,13 +32,13 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- Topbar Superior Padronizada -->
-  <header id="appTopbar"></header>
+  <header id="appTopbar" class="w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm"></header>
 
   <!-- Layout Principal (Sidebar Persistente + Conteúdo) -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex overflow-hidden pt-16 md:h-[calc(100vh-4rem)] md:overflow-hidden">
 
     <!-- Sidebar Persistente -->
-    <aside id="appSidebar"></aside>
+    <aside id="appSidebar" class="w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0"></aside>
 
     <!-- Conteúdo do Painel Geral -->
     <main class="flex-1 p-6 overflow-y-auto">
@@ -80,14 +55,14 @@
                 <h1 id="welcomeName" class="font-display text-xl font-bold text-nexus-900 dark:text-white">--</h1>
                 <span id="welcomeRoleBadge" class="px-2 py-0.5 rounded bg-nexus-500 text-white font-mono text-[10px] font-bold uppercase">--</span>
               </div>
-              <p id="welcomeContext" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">--</p>
+              <p id="welcomeContext" class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">--</p>
             </div>
           </div>
 
           <div class="flex items-center gap-2 self-stretch sm:self-auto bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
             <span class="material-symbols-outlined text-nexus-500 dark:text-indigo-400 text-[24px]">verified</span>
             <div class="flex flex-col">
-              <span class="font-mono text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Código Individual</span>
+              <span class="font-mono text-[10px] text-slate-600 dark:text-slate-400 uppercase font-bold">Código Individual</span>
               <span id="welcomeCode" class="font-mono text-xs font-bold text-nexus-900 dark:text-white">--</span>
             </div>
           </div>
@@ -96,41 +71,41 @@
         <!-- Cards de Visão Geral & RLS Active Layer -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-5 flex flex-col gap-2">
-            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span class="text-xs font-bold uppercase tracking-wider">Cargo Registrado</span>
               <span class="material-symbols-outlined text-[20px] text-nexus-500">badge</span>
             </div>
             <span id="cardRoleName" class="font-display font-bold text-base text-nexus-900 dark:text-white mt-1">--</span>
-            <span id="cardRoleLevel" class="text-xs text-slate-500 dark:text-slate-400">--</span>
+            <span id="cardRoleLevel" class="text-xs text-slate-600 dark:text-slate-400">--</span>
           </div>
 
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-5 flex flex-col gap-2">
-            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span class="text-xs font-bold uppercase tracking-wider">Camada de Visão (RLS)</span>
               <span class="material-symbols-outlined text-[20px] text-nexus-500">visibility</span>
             </div>
             <span id="cardVisionLayer" class="font-display font-bold text-base text-nexus-900 dark:text-white mt-1">--</span>
-            <span id="cardVisionStatus" class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Filtro Automático Ativo</span>
+            <span id="cardVisionStatus" class="text-xs text-emerald-700 dark:text-emerald-400 font-semibold">Filtro Automático Ativo</span>
           </div>
 
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-5 flex flex-col gap-2">
-            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span class="text-xs font-bold uppercase tracking-wider">Estado da Sessão</span>
               <span class="material-symbols-outlined text-[20px] text-success">lock</span>
             </div>
             <span class="font-display font-bold text-base text-nexus-900 dark:text-white mt-1">Sessão Autenticada</span>
-            <span class="text-xs text-slate-500 dark:text-slate-400">Guarda T1.3 em Execução</span>
+            <span class="text-xs text-slate-600 dark:text-slate-400">Guarda T1.3 em Execução</span>
           </div>
         </div>
 
         <!-- Indicadores operacionais no terminal (A1 / RF 7) -->
         <div id="cardsOperacionaisPanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500">grid_view</span>
               Indicadores operacionais no terminal
-            </h3>
-            <span id="cardsLastUpdate" class="text-[11px] font-mono text-slate-400" title="Horário da última atualização dos indicadores">Atualizando...</span>
+            </h2>
+            <span id="cardsLastUpdate" class="text-[11px] font-mono text-slate-600" title="Horário da última atualização dos indicadores">Atualizando...</span>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
@@ -140,7 +115,7 @@
                 <span class="material-symbols-outlined text-xl">build</span>
               </div>
               <div>
-                <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Máquinas em manutenção</span>
+                <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Máquinas em manutenção</span>
                 <span id="cardNaviosManutencaoVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
             </button>
@@ -151,7 +126,7 @@
                 <span class="material-symbols-outlined text-xl">sailing</span>
               </div>
               <div>
-                <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Navios Fora do Porto</span>
+                <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Navios Fora do Porto</span>
                 <span id="cardNaviosForaVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
             </button>
@@ -162,7 +137,7 @@
                 <span class="material-symbols-outlined text-xl">inventory_2</span>
               </div>
               <div>
-                <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Cargas em Armazenagem</span>
+                <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Cargas em Armazenagem</span>
                 <span id="cardCargasArmazenagemVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
             </button>
@@ -173,7 +148,7 @@
                 <span class="material-symbols-outlined text-xl">verified</span>
               </div>
               <div>
-                <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Prontas p/ Liberação</span>
+                <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Prontas p/ Liberação</span>
                 <span id="cardCargasProntasVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
             </button>
@@ -184,7 +159,7 @@
                 <span class="material-symbols-outlined text-xl">cancel</span>
               </div>
               <div>
-                <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Cargas Recusadas</span>
+                <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Cargas Recusadas</span>
                 <span id="cardCargasRecusadasVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
             </button>
@@ -195,7 +170,7 @@
                 <span class="material-symbols-outlined text-xl">pie_chart</span>
               </div>
               <div>
-                <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Ocupação do Pátio</span>
+                <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Ocupação do Pátio</span>
                 <span id="cardOcupacaoPatioVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
             </button>
@@ -206,7 +181,7 @@
                 <span class="material-symbols-outlined text-xl">warning</span>
               </div>
               <div>
-                <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Preventiva Sugerida (>3 Anos de Uso)</span>
+                <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Preventiva Sugerida (>3 Anos de Uso)</span>
                 <span id="cardPreventivaVal" class="font-display font-bold text-xl text-nexus-900 dark:text-white">--</span>
               </div>
             </button>
@@ -216,25 +191,25 @@
         <!-- Tabela do Log Geral de Alterações (RF 12 / T7.1, T7.2) -->
         <div id="auditLogPanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500">history</span>
               Tabela de Log Geral de Alterações do Sistema (RF 12)
-            </h3>
-            <span class="text-[11px] font-mono text-slate-400">Auditoria Automática</span>
+            </h2>
+            <span class="text-[11px] font-mono text-slate-600">Auditoria Automática</span>
           </div>
 
           <!-- Busca local no log de auditoria + contador (Backlog 3 - 7b) -->
           <div class="flex flex-col sm:flex-row sm:items-center gap-2">
             <div class="relative flex-1">
-              <span class="material-symbols-outlined text-[18px] text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <span class="material-symbols-outlined text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
               <input type="search" id="buscarAuditLogInput" placeholder="Buscar no log por funcionário, cargo, código ou entidade..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
             </div>
-            <span id="auditLogCounter" class="text-[11px] font-mono text-slate-400 whitespace-nowrap">Exibindo 0 de 0 registros</span>
+            <span id="auditLogCounter" class="text-[11px] font-mono text-slate-600 whitespace-nowrap">Exibindo 0 de 0 registros</span>
           </div>
 
           <div class="overflow-x-auto max-h-60 overflow-y-auto">
             <table class="w-full text-left border-collapse text-xs min-w-[650px]">
-              <thead class="sticky top-0 bg-slate-100 dark:bg-slate-800 text-slate-500 uppercase font-mono font-bold text-[10px]">
+              <thead class="sticky top-0 bg-slate-100 dark:bg-slate-800 text-slate-600 uppercase font-mono font-bold text-[10px]">
                 <tr>
                   <th class="p-2.5">Data / Hora</th>
                   <th class="p-2.5">Nome do Funcionário</th>
@@ -255,18 +230,18 @@
         <div id="trailDecisoesPanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div>
-              <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+              <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
                 <span class="material-symbols-outlined text-nexus-500">gavel</span>
                 Trail de Decisões Críticas Imutável (RF 13)
-              </h3>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Histórico hierárquico de decisões operacionais estratégicas e retificações anexadas.</p>
+              </h2>
+              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Histórico hierárquico de decisões operacionais estratégicas e retificações anexadas.</p>
             </div>
             <div class="flex items-center gap-2">
               <button id="toggleRegistrarTrailBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
                 <span class="material-symbols-outlined text-[16px]">add</span>
                 <span>+ Registrar Decisão / Trail</span>
               </button>
-              <span class="text-[11px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Auditoria RLS Ativa</span>
+              <span class="text-[11px] font-mono text-slate-600 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Auditoria RLS Ativa</span>
             </div>
           </div>
 
@@ -282,12 +257,12 @@
           <!-- Planilha Consolidada de Desempenho Operacional por Categoria (A3) -->
           <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
             <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-              <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+              <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
                 <span class="material-symbols-outlined text-nexus-500">table_chart</span>
                 Planilha Consolidada de Desempenho Operacional por Categoria
-              </h3>
+              </h2>
               <div class="flex items-center gap-2">
-                <span class="text-[11px] font-mono text-slate-400 hidden sm:inline">Valores Atualizados em Tempo Real</span>
+                <span class="text-[11px] font-mono text-slate-600 hidden sm:inline">Valores Atualizados em Tempo Real</span>
                 <!-- Backlog 3 (7f): exportação CSV da planilha de desempenho -->
                 <button type="button" id="exportIndicadoresCsvBtn" title="Exportar planilha de desempenho em CSV"
                         class="px-3 py-1.5 min-h-[32px] rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-nexus-500 hover:text-white text-nexus-900 dark:text-slate-200 font-bold text-[11px] flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">
@@ -339,11 +314,11 @@
   <div id="registrarTrailModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-        <h3 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
           <span class="material-symbols-outlined text-nexus-500">gavel</span>
           Registrar Decisão Crítica / Trail
-        </h3>
-        <button type="button" id="closeRegistrarTrailModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+        </h2>
+        <button type="button" id="closeRegistrarTrailModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
           <span class="material-symbols-outlined text-xl">close</span>
         </button>
       </div>
@@ -398,11 +373,11 @@
             <span id="modalCardIcon" class="material-symbols-outlined text-[24px]">info</span>
           </div>
           <div>
-            <h3 id="modalCardTitle" class="font-display text-base font-bold text-nexus-900 dark:text-white">Detalhamento Indicador</h3>
-            <span class="text-[11px] font-mono text-slate-400">NexusPort Terminal STS-01</span>
+            <h2 id="modalCardTitle" class="font-display text-base font-bold text-nexus-900 dark:text-white">Detalhamento Indicador</h2>
+            <span class="text-[11px] font-mono text-slate-600">NexusPort Terminal STS-01</span>
           </div>
         </div>
-        <button type="button" id="closeCardDetailModalBtn" class="text-slate-400 hover:text-nexus-900 dark:hover:text-white p-1 rounded-lg transition-colors">
+        <button type="button" id="closeCardDetailModalBtn" class="text-slate-600 hover:text-nexus-900 dark:hover:text-white p-1 rounded-lg transition-colors">
           <span class="material-symbols-outlined text-[20px]">close</span>
         </button>
       </div>
@@ -423,7 +398,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="vendor/supabase-js.min.js"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>
@@ -447,11 +422,31 @@
       <div class="vw-plugin-top-wrapper"></div>
     </div>
   </div>
-  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <!-- Tradutor de Libras (VLibras, serviço público): o plugin é um recurso de acessibilidade, mas o
+       script vem de um servidor de terceiros. Ele é baixado na primeira interação do visitante — ou
+       pelo atalho de acessibilidade —, então a página abre sem depender de rede externa. -->
   <script>
-    if (window.VLibras && window.VLibras.Widget) {
-      new window.VLibras.Widget('https://vlibras.gov.br/app');
-    }
+    (function () {
+      var url = 'https://vlibras.gov.br/app/vlibras-plugin.js';
+      var pedido = false;
+      function carregar() {
+        if (pedido) return;
+        pedido = true;
+        var script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.onload = function () {
+          if (window.VLibras && window.VLibras.Widget) {
+            new window.VLibras.Widget('https://vlibras.gov.br/app');
+          }
+        };
+        document.body.appendChild(script);
+      }
+      ['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(function (evento) {
+        window.addEventListener(evento, carregar, { once: true, passive: true });
+      });
+      window.nexusCarregarVLibras = carregar;
+    })();
   </script>
 </body>
 </html>

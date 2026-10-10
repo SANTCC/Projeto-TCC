@@ -39,8 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function iniciarCamera() {
-    if (typeof Html5Qrcode !== 'undefined') {
+  async function iniciarCamera() {
+    // A biblioteca de leitura é local (vendor/) e só é baixada ao ligar a câmera (js/asset-loader.js).
+    const disponivel = window.NexusAssets
+      ? await window.NexusAssets.carregar('html5-qrcode')
+      : typeof Html5Qrcode !== 'undefined';
+    if (disponivel && typeof Html5Qrcode !== 'undefined') {
       const elem = document.getElementById('qrReader');
       if (elem) elem.innerHTML = '';
 

@@ -246,6 +246,8 @@ html.dark #nxmBotao{background:#1e1b4b;color:#c7d2fe;border-color:#3730a3}
     const liberadas = ferramentas.filter((f) => f.liberada).length;
     refs.contador.textContent = String(liberadas);
     refs.contador.setAttribute('aria-label', `${liberadas} ferramentas disponíveis nesta página`);
+    // O nome acessível precisa conter o texto visível do botão (contador incluído).
+    refs.botao.setAttribute('aria-label', `Agentes IA ${liberadas} — abrir painel`);
 
     refs.lista.replaceChildren();
     if (!ferramentas.length) {
@@ -296,10 +298,12 @@ html.dark #nxmBotao{background:#1e1b4b;color:#c7d2fe;border-color:#3730a3}
     instalarEstilos();
     const botao = criar('button', {
       type: 'button', id: 'nxmBotao', 'aria-expanded': 'false', 'aria-controls': 'nxmPainel',
-      'aria-label': 'Abrir painel de agentes de IA'
+      'aria-label': 'Agentes IA 0 — abrir painel'
     }, [
       criar('span', { class: 'material-symbols-outlined', 'aria-hidden': 'true', text: 'smart_toy', style: 'font-size:16px' }),
-      criar('span', { text: 'Agentes IA' }),
+      // O espaço no fim do rótulo é intencional: o texto visível lido pelas ferramentas de auditoria
+      // vira "Agentes IA 14" (mesmos termos do aria-label) em vez de "Agentes IA14".
+      criar('span', { text: 'Agentes IA ' }),
       criar('span', { class: 'nxm-n', id: 'nxmContador', text: '0' })
     ]);
     const chave = criar('input', { type: 'checkbox', role: 'switch', id: 'nxmAtivo' });

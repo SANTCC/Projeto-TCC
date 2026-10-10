@@ -28,7 +28,8 @@ const DIRETORIOS_EXCLUIDOS = new Set([
 ]);
 // Arquivos da raiz que não são servidos. Documentação (.md) e Python (.py) são excluídos em qualquer pasta.
 const ARQUIVOS_EXCLUIDOS = new Set([
-  'package.json', 'package-lock.json', 'vercel.json', '.gitignore', '.vercelignore'
+  'package.json', 'package-lock.json', 'vercel.json', '.gitignore', '.vercelignore',
+  'tailwind.config.js', 'nexus_cli.py'
 ]);
 
 // keep_fnames: nomes de função são preservados (stack traces legíveis).
@@ -56,6 +57,8 @@ function listarArquivos(dir = RAIZ, base = '') {
     if (!base && ARQUIVOS_EXCLUIDOS.has(entrada.name)) return;
     // Documentação (.md) e ferramentas Python (CLI e testes da API) não vão para produção.
     if (['.md', '.py'].includes(path.extname(entrada.name).toLowerCase())) return;
+    // CSS de origem do Tailwind (css/nexus.source.css): a saída é o compilado css/nexus.css.
+    if (/\.source\.css$/.test(entrada.name)) return;
     resultado.push(rel);
   });
   return resultado.sort();
@@ -110,6 +113,72 @@ async function minificarJsArquivo(origem, destino, registro, rel) {
 }
 
 /**
+ * Cabeçalhos de cache da saída — usados por `_headers` (Netlify, Cloudflare Pages) e declarados em
+ * `vercel.json` para a Vercel. O gate Lighthouse lê este mesmo arquivo para medir a política de
+ * cache real que vai para produção.
+ *
+ * Regra: tudo que é versionado por conteúdo (css/, fonts/, vendor/, imagens) fica imutável por um
+ * ano; as páginas HTML revalidam sempre (`no-cache` = sempre revalidar, sem impedir o 304), porque
+ * referenciam módulos que mudam sem troca de nome de arquivo.
+ */
+const _cacheHtml = 'public, max-age=0, must-revalidate';
+const _cacheEstatico = 'public, max-age=31536000, immutable';
+
+/**
+ * Política de segurança de conteúdo (Backlog 4, item 3.1). As páginas usam scripts em linha e
+ * manipuladores `onclick`, então `script-src` precisa de 'unsafe-inline' — a CSP aqui barra origem
+ * externa desconhecida (scripts, estilos, frames, conexões) e é o que o Lighthouse lê no cabeçalho
+ * `Content-Security-Policy`. Origens permitidas: Google Analytics (medição) e VLibras (acessibilidade).
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://vlibras.gov.br",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.google-analytics.com https://region1.google-analytics.com",
+  'frame-src https://vlibras.gov.br',
+  'media-src https://vlibras.gov.br',
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'"
+].join('; ');
+
+/** Linhas do arquivo `_headers` (formato: caminho e cabeçalhos indentados). */
+function linhasDeHeaders() {
+  const linhas = [
+    '# Cabeçalhos de cache e segurança — gerado por tools/build.js (npm run build). Não editar à mão.',
+    '# As regras são globs de caminho; a última regra que casa é a que vale no Netlify, então as',
+    '# exceções (HTML) vêm depois das regras abrangentes. O gate Lighthouse lê este arquivo para',
+    '# medir a política que vai para produção (ver tools/lighthouse-check.js).',
+    '',
+    '/*',
+    `  Cache-Control: ${_cacheEstatico}`,
+    '  Strict-Transport-Security: max-age=31536000; includeSubDomains',
+    '  X-Content-Type-Options: nosniff',
+    '  Referrer-Policy: strict-origin-when-cross-origin',
+    '  Cross-Origin-Opener-Policy: same-origin',
+    '  X-Frame-Options: SAMEORIGIN',
+    '',
+    '/*.html',
+    `  Cache-Control: ${_cacheHtml}`,
+    `  Content-Security-Policy: ${CSP}`,
+    '',
+    '/*/',
+    `  Cache-Control: ${_cacheHtml}`,
+    `  Content-Security-Policy: ${CSP}`,
+    ''
+  ];
+  return linhas;
+}
+
+/** Escreve o `_headers` da saída. */
+function escreverHeaders(saida) {
+  fs.writeFileSync(path.join(saida, '_headers'), `${linhasDeHeaders().join('\n')}\n`, 'utf-8');
+}
+
+/**
  * Gera a saída de produção. Retorna o registro de tamanhos (antes/depois) por tipo de arquivo.
  * Opções: saida (padrão: dist/). A saída é apagada e recriada.
  */
@@ -149,6 +218,28 @@ async function build(opcoes) {
       registro.copiados.push(rel);
     }
   }
+
+  // Recursos locais (css/, fonts/, vendor/): gerados aqui para o dist/ nunca sair com CSS ou
+  // bibliotecas desatualizados em relação às dependências instaladas.
+  await require('./assets').gerarRecursosNoDisco(saida);
+  fs.mkdirSync(path.join(saida, 'css'), { recursive: true });
+  fs.mkdirSync(path.join(saida, 'fonts'), { recursive: true });
+  fs.mkdirSync(path.join(saida, 'vendor'), { recursive: true });
+  for (const rel of ['css/nexus.css', 'css/fonts.css']) {
+    const conteudo = fs.readFileSync(path.join(RAIZ, rel), 'utf-8');
+    fs.writeFileSync(path.join(saida, rel), conteudo, 'utf-8');
+    registro.copiados.push(rel);
+  }
+  fs.readdirSync(path.join(RAIZ, 'fonts')).forEach((nome) => {
+    fs.copyFileSync(path.join(RAIZ, 'fonts', nome), path.join(saida, 'fonts', nome));
+    registro.copiados.push(`fonts/${nome}`);
+  });
+  fs.readdirSync(path.join(RAIZ, 'vendor')).forEach((nome) => {
+    fs.copyFileSync(path.join(RAIZ, 'vendor', nome), path.join(saida, 'vendor', nome));
+    registro.copiados.push(`vendor/${nome}`);
+  });
+
+  escreverHeaders(saida);
   return registro;
 }
 
@@ -168,7 +259,7 @@ function resumo(registro) {
   return linhas.join('\n');
 }
 
-module.exports = { build, listarArquivos, SAIDA_PADRAO, RAIZ };
+module.exports = { build, listarArquivos, linhasDeHeaders, SAIDA_PADRAO, RAIZ };
 
 if (require.main === module) {
   build()

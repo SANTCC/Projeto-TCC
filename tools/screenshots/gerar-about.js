@@ -195,7 +195,7 @@ function blocoCabecalho() {
   return `  <!-- Topbar -->
   <header class="topo">
     <div class="topo-marca">
-      <img src="design/logo_porto.png" alt="Logotipo do NexusPort" width="40" height="40" />
+      <picture><source srcset="design/logo_porto.webp" type="image/webp" /><img src="design/logo_porto.png" alt="Logotipo do NexusPort" width="40" height="40" /></picture>
       <div>
         <strong>NexusPort</strong>
         <span>Terminal STS-01 • Como funciona o sistema</span>
@@ -390,7 +390,7 @@ function blocoContas(manifest) {
         <p class="conta-texto">${esc(conta.descricao || '')}</p>
         <p class="conta-resumo">${primarias.length} telas capturadas nesta conta.</p>
         ${capa ? `<a class="miniatura" href="docs/screenshots/${esc(capa)}" data-ampliar="${esc(capa)}">
-          <img src="docs/screenshots/${esc(capa)}" alt="Painel do sistema aberto com a conta ${esc(conta.matricula)} (${esc(conta.cargoNome)})" loading="lazy" />
+          <img src="docs/screenshots/${esc(capa)}" alt="Painel do sistema aberto com a conta ${esc(conta.matricula)} (${esc(conta.cargoNome)})" ${atributosTamanho(capa)}loading="lazy" />
           <span class="miniatura-rotulo">Ver as capturas desta conta</span>
         </a>` : ''}
         <a class="botao" href="#galeria-${esc(conta.matricula.toLowerCase())}">Ir para a galeria desta conta</a>
@@ -457,7 +457,7 @@ ${destaques}
         </ul>
 
         ${primeira.imagem ? `<a class="miniatura miniatura-principal" href="docs/screenshots/${esc(primeira.imagem)}" data-ampliar="${esc(primeira.imagem)}">
-          <img src="docs/screenshots/${esc(primeira.imagem)}" alt="Captura da tela ${esc(pagina.titulo)}" loading="lazy" />
+          <img src="docs/screenshots/${esc(primeira.imagem)}" alt="Captura da tela ${esc(pagina.titulo)}" ${atributosTamanho(primeira.imagem)}loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>` : ''}
 
@@ -479,6 +479,23 @@ ${extras.map((c) => linhaCaptura(c, c.contaFixa || 'público', c.descricao)).joi
     : 'Tela pública (não exige sessão)'}
         </p>
       </article>`;
+}
+
+/** Dimensões reais de um PNG (cabeçalho IHDR) — a caixa da imagem é reservada no HTML. */
+const cacheDimensoes = new Map();
+function dimensoesImagem(arquivo) {
+  if (cacheDimensoes.has(arquivo)) return cacheDimensoes.get(arquivo);
+  const caminho = path.join(RAIZ, 'docs', 'screenshots', arquivo);
+  const buf = fs.readFileSync(caminho);
+  const medidas = { largura: buf.readUInt32BE(16), altura: buf.readUInt32BE(20) };
+  cacheDimensoes.set(arquivo, medidas);
+  return medidas;
+}
+
+/** Atributos width/height de uma captura (evita "imagem sem tamanho explícito" no Lighthouse). */
+function atributosTamanho(arquivo) {
+  const { largura, altura } = dimensoesImagem(arquivo);
+  return `width="${largura}" height="${altura}" `;
 }
 
 function linhaCaptura(captura, rotulo, detalhe) {
@@ -953,10 +970,11 @@ function gerarHtml(manifest) {
   <meta name="color-scheme" content="light dark" />
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <!-- Tipografia e ícones locais (css/fonts.css, gerado por tools/assets.js): sem Google Fonts, a
+       página não depende de terceiros para renderizar e fica igual às demais telas. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
   <style>${CSS}  </style>
 </head>
 <body>

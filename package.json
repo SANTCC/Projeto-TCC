@@ -5,6 +5,8 @@
   "main": "index.html",
   "scripts": {
     "build": "node tools/build.js",
+    "assets": "node tools/assets.js",
+    "assets:icones": "python3 tools/subset-material-symbols.py",
     "start": "npx serve -l 3000 .",
     "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
     "test:vlibras": "node tests/test_vlibras.js",
@@ -55,12 +57,22 @@
   "author": "NexusPort Team",
   "license": "MIT",
   "devDependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/montserrat": "^5.3.0",
+    "@supabase/supabase-js": "^2.117.3",
+    "chart.js": "^4.5.1",
     "chrome-launcher": "^1.2.2",
     "clean-css": "^5.3.3",
+    "html5-qrcode": "^2.3.8",
     "jsdom": "^30.1.2",
+    "jspdf": "^2.5.1",
     "lighthouse": "^13.5.0",
+    "material-symbols": "^0.39.4",
     "pdf-lib": "^1.17.1",
     "puppeteer-core": "^25.13.0",
+    "qrcode": "^1.5.1",
+    "tailwindcss": "^3.4.19",
     "terser": "^5.51.2"
   }
 }

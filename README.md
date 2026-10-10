@@ -138,6 +138,7 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 ## 📈 Medição de Uso (Google Analytics 4)
 
 - **Configuração:** `js/analytics.js` (comum a todas as páginas). O identificador do aparelho é o cookie `_ga` do próprio GA4; não há fingerprinting.
+- **Carregamento:** o `gtag.js` (terceiro) só é baixado na primeira interação do visitante (ou no primeiro evento registrado), então a página abre sem depender de rede externa.
 - **Eventos:** `NexusAnalytics.track(evento, parametros)`. Nunca envie nome, código ou matrícula: esses campos são descartados.
 - **Pendência:** consentimento de cookies (LGPD) não implementado.
 - **Testes:** `npm run test:analytics`.
@@ -153,11 +154,23 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 ---
 
-## 🚦 Gate Lighthouse (Pull Requests)
+## 🎨 Recursos Locais (fontes, CSS e bibliotecas)
+
+- **Comando:** `npm run assets` gera `css/nexus.css` (Tailwind compilado a partir de `tailwind.config.js`), `css/fonts.css`, as fontes `fonts/*.woff2` e copia as bibliotecas para `vendor/`.
+- **Sem CDN:** as páginas não carregam Tailwind, Google Fonts, Chart.js, QRCode, jsPDF ou Supabase de terceiros. Os ícones usam um subconjunto da Material Symbols (`npm run assets:icones`, que exige `pip install fonttools brotli`).
+- **Bibliotecas sob demanda:** `js/asset-loader.js` (`NexusAssets.carregar`) baixa Chart.js, QRCode, html5-qrcode, jsPDF e o cliente do Supabase só quando a tela precisa delas.
+- **Terceiros fora do caminho crítico:** o `gtag.js` (Analytics) e o plugin do VLibras entram na primeira interação do visitante.
+- **Cabeçalhos:** `dist/_headers` (gerado pelo build) e `vercel.json` publicam cache longo para estáticos, `no-cache` para HTML e a política de segurança (CSP). O gate Lighthouse mede a mesma política.
+- **Verificação:** `node tools/assets.js --check` acusa arquivos gerados fora de sincronia.
+
+---
+
+## 📦 Build de Produção (minificação)
 
 - **CI:** `.github/workflows/lighthouse.yml` roda em todo PR. Os relatórios vão como artefato.
 - **Local:** `npm run lighthouse` (precisa de Google Chrome ou Chromium; use `CHROME_PATH` se não estiver no PATH). Gera `lighthouse-report/`.
-- **Limiares e exceções:** `lighthouse/limiares.json`. Cada página é medida em 3 rodadas (mediana). Exceções são dívida conhecida por página e devem ser removidas quando corrigidas. O `about.html` é medido como página pública (documentação ilustrada).
+- **Limiares:** `lighthouse/limiares.json`. Cada página é medida em 3 rodadas (mediana). Não há mais exceções de dívida conhecida: `meta-viewport`, `color-contrast`, `label`, `select-name` e `aria-dialog-name` passam em todas as páginas. O `about.html` é medido como página pública (documentação ilustrada).
+- **Rede:** o gate bloqueia o host do backend (`lighthouse.rede.bloquearHosts`) para não ler nem escrever dados reais. Falhas de rede desse host são do ambiente de medição, não da aplicação: só elas (e as já ignoradas pelo Lighthouse) entram em `lighthouse.rede.ignorarErrosDeConsole`. Erros de JavaScript continuam reprovando o gate.
 - **Testes:** `npm run test:lighthouse`.
 
 ---

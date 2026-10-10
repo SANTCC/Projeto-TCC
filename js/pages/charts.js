@@ -41,7 +41,9 @@
 (function (window) {
   'use strict';
 
-  const CDN_CHARTJS = 'https://cdn.jsdelivr.net/npm/chart.js';
+  // Biblioteca local (vendor/, gerada por tools/assets.js): só é baixada quando o painel de gráficos
+  // precisa dela — nenhuma página carrega o Chart.js na abertura.
+  const ARQUIVO_CHARTJS = 'vendor/chart-js.min.js';
   const TTL_CACHE_MS = 4000;
 
   /**
@@ -1537,6 +1539,11 @@
     chartJsPromessa = new Promise((resolve) => {
       const doc = window.document;
       if (!doc || !doc.createElement) return resolve(false);
+      // Carregador comum das bibliotecas locais (js/asset-loader.js), quando presente.
+      if (window.NexusAssets && typeof window.NexusAssets.carregar === 'function') {
+        window.NexusAssets.carregar('chartjs').then(resolve);
+        return;
+      }
       const existente = doc.querySelector ? doc.querySelector('script[src*="chart.js"]') : null;
       if (existente) {
         existente.addEventListener('load', () => resolve(typeof window.Chart !== 'undefined'));
@@ -1545,7 +1552,7 @@
         return;
       }
       const script = doc.createElement('script');
-      script.src = CDN_CHARTJS;
+      script.src = ARQUIVO_CHARTJS;
       script.async = true;
       script.setAttribute('data-nexus-chartjs', 'true');
       script.addEventListener('load', () => resolve(typeof window.Chart !== 'undefined'));
@@ -1676,11 +1683,11 @@
           <div class="flex items-start gap-2 min-w-0">
             <span class="material-symbols-outlined text-[20px] text-nexus-500 dark:text-indigo-400 shrink-0">${esc(definicao.icone || 'insights')}</span>
             <div class="min-w-0">
-              <h4 class="font-display font-bold text-xs text-nexus-900 dark:text-white leading-snug">${esc(definicao.titulo)}</h4>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
+              <h3 class="font-display font-bold text-xs text-nexus-900 dark:text-white leading-snug">${esc(definicao.titulo)}</h3>
+              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
             </div>
           </div>
-          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-500 dark:text-slate-400 shrink-0">${esc(definicao.badge || 'RF 7')}</span>
+          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-600 dark:text-slate-400 shrink-0">${esc(definicao.badge || 'RF 7')}</span>
         </div>
         <div class="relative w-full h-56">
           <canvas id="${esc(canvasId)}" role="img" aria-label="${esc(definicao.titulo)}"></canvas>
@@ -1695,17 +1702,17 @@
       <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3" data-chart-card="${esc(definicao.id)}" data-empty="true">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-start gap-2 min-w-0">
-            <span class="material-symbols-outlined text-[20px] text-slate-400 shrink-0">${esc(definicao.icone || 'insights')}</span>
+            <span class="material-symbols-outlined text-[20px] text-slate-600 shrink-0">${esc(definicao.icone || 'insights')}</span>
             <div class="min-w-0">
-              <h4 class="font-display font-bold text-xs text-slate-500 dark:text-slate-400 leading-snug">${esc(definicao.titulo)}</h4>
-              <p class="text-[11px] text-slate-400 dark:text-slate-500 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
+              <h3 class="font-display font-bold text-xs text-slate-600 dark:text-slate-400 leading-snug">${esc(definicao.titulo)}</h3>
+              <p class="text-[11px] text-slate-600 dark:text-slate-500 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
             </div>
           </div>
-          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-400 shrink-0">${esc(definicao.badge || 'RF 7')}</span>
+          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-600 shrink-0">${esc(definicao.badge || 'RF 7')}</span>
         </div>
         <div class="flex flex-col items-center justify-center gap-2 h-56 text-center">
           <span class="material-symbols-outlined text-[36px] text-slate-300 dark:text-slate-600">bar_chart</span>
-          <p class="text-[11px] text-slate-400 dark:text-slate-500 max-w-[240px]">${esc(mensagem)}</p>
+          <p class="text-[11px] text-slate-600 dark:text-slate-500 max-w-[240px]">${esc(mensagem)}</p>
         </div>
       </div>
     `;
@@ -1714,7 +1721,7 @@
   function cartaoCarregando(definicao) {
     return `
       <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3">
-        <h4 class="font-display font-bold text-xs text-slate-400 dark:text-slate-500">${esc(definicao.titulo)}</h4>
+        <h3 class="font-display font-bold text-xs text-slate-600 dark:text-slate-400">${esc(definicao.titulo)}</h3>
         <div class="h-56 rounded-xl bg-slate-200/70 dark:bg-slate-700/40 animate-pulse"></div>
       </div>
     `;
@@ -1824,7 +1831,7 @@
         if (pai) {
           pai.innerHTML = `<div class="flex flex-col items-center justify-center gap-2 h-full text-center">
             <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600">cloud_off</span>
-            <p class="text-[11px] text-slate-400">Chart.js indisponível no momento. Verifique a conexão com a CDN para exibir este gráfico.</p>
+            <p class="text-[11px] text-slate-600">Chart.js indisponível no momento. Verifique a conexão com a CDN para exibir este gráfico.</p>
           </div>`;
         }
       });

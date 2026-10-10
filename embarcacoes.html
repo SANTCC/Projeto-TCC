@@ -1,52 +1,27 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
-  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NexusPort — Embarcações & GPS</title>
+  <meta name="description" content="Embarcações, contêineres e GPS no NexusPort: posicionamento, status e ETA dos navios no Porto de Santos." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <!-- Google Fonts & Material Symbols -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'nexus-900': '#1E293B',
-            'nexus-500': '#445987',
-            'nexus-bg': '#F5F7FA',
-            'nexus-text': '#222222',
-            'nexus-border': '#E1E5ED',
-            'nexus-dark-bg': '#0F172A',
-            'nexus-dark-card': '#1E293B',
-            'nexus-dark-border': '#334155',
-            'success': '#2E7D32',
-            'warning': '#D97706',
-            'danger': '#C62828',
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            display: ['Montserrat', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    };
-  </script>
-
+  <!-- Tipografia e ícones locais (tools/assets.js) e CSS do Tailwind compilado (css/nexus.css):
+       substituem o CDN do Tailwind (~400 KiB de JavaScript) e o Google Fonts, sem terceiros no caminho. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/nexus.css" />
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <!-- Bibliotecas locais sob demanda (vendor/) -->
+  <script src="js/asset-loader.js"></script>
   <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
@@ -56,12 +31,12 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- Topbar Superior -->
-  <header id="appTopbar"></header>
+  <header id="appTopbar" class="w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm"></header>
 
   <!-- Layout Principal -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex overflow-hidden pt-16 md:h-[calc(100vh-4rem)] md:overflow-hidden">
     <!-- Sidebar Navegação -->
-    <aside id="appSidebar"></aside>
+    <aside id="appSidebar" class="w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0"></aside>
 
     <!-- Conteúdo da Página -->
     <main class="flex-1 p-6 overflow-y-auto">
@@ -75,7 +50,7 @@
               <span>Rastreamento & Equipamentos</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Gestão de Embarcações, Contêineres & GPS</h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Monitoramento marítimo GPS, cálculo de ETA a 33 km/h e cadastro de frotas (RF 2, 4, 5, 8).</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Monitoramento marítimo GPS, cálculo de ETA a 33 km/h e cadastro de frotas (RF 2, 4, 5, 8).</p>
           </div>
         </div>
 
@@ -86,7 +61,7 @@
               <span class="material-symbols-outlined text-2xl">sailing</span>
             </div>
             <div>
-              <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Sinal GPS Satelital</span>
+              <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Sinal GPS Satelital</span>
               <span class="font-display font-bold text-base text-nexus-900 dark:text-white">AIS Ativo • 100% Online</span>
             </div>
           </div>
@@ -96,7 +71,7 @@
               <span class="material-symbols-outlined text-2xl">speed</span>
             </div>
             <div>
-              <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Velocidade Marítima Padrão</span>
+              <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Velocidade Marítima Padrão</span>
               <span class="font-display font-bold text-base text-nexus-900 dark:text-white">33 km/h (Fixa RN 8)</span>
             </div>
           </div>
@@ -106,7 +81,7 @@
               <span class="material-symbols-outlined text-2xl">anchor</span>
             </div>
             <div>
-              <span class="text-slate-500 dark:text-slate-400 font-bold block text-[11px] uppercase">Terminal de Operação</span>
+              <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Terminal de Operação</span>
               <span class="font-display font-bold text-base text-nexus-900 dark:text-white">STS-01 Santos</span>
             </div>
           </div>
@@ -118,8 +93,8 @@
             <div class="flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500 text-[22px]">dock</span>
               <div>
-                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Painel de Berços de Descarga do Terminal STS-01</h3>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400">Total de 15 berços disponíveis para atracação exclusiva de navios (1 navio por berço)</p>
+                <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Painel de Berços de Descarga do Terminal STS-01</h2>
+                <p class="text-[11px] text-slate-600 dark:text-slate-400">Total de 15 berços disponíveis para atracação exclusiva de navios (1 navio por berço)</p>
               </div>
             </div>
             <span id="bercosLivresCountTag" class="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-mono text-xs font-bold">
@@ -136,11 +111,11 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between pb-3 border-b border-nexus-border dark:border-nexus-dark-border">
             <div>
-              <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+              <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
                 <span class="material-symbols-outlined text-nexus-500">explore</span>
                 Localização GPS Marítima & Cadastro de Navios
-              </h3>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Cadastro inicial por Inspetores/Supervisores e sincronização automática com a tabela navios no Supabase.</p>
+              </h2>
+              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Cadastro inicial por Inspetores/Supervisores e sincronização automática com a tabela navios no Supabase.</p>
             </div>
             <button id="toggleNavioFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs">
               + Cadastrar Novo Navio
@@ -150,23 +125,23 @@
           <!-- Form Novo Navio -->
           <form id="navioForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Nome do Navio</label>
+              <label class="block font-bold text-slate-600 mb-1">Nome do Navio</label>
               <input type="text" id="navioNome" required placeholder="Ex: MV Santos Star" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Número IMO</label>
+              <label class="block font-bold text-slate-600 mb-1">Número IMO</label>
               <input type="text" id="navioImo" required placeholder="Ex: IMO-9821034" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div class="sm:col-span-2">
-              <label class="block font-bold text-slate-500 mb-1">Rota Marítima (cadastrada pelo Supervisor)</label>
+              <label class="block font-bold text-slate-600 mb-1">Rota Marítima (cadastrada pelo Supervisor)</label>
               <select id="navioRotaSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <!-- Preenchido via JS com as rotas registradas no Supabase (rotas_maritimas) -->
                 <option value="">Carregando rotas cadastradas...</option>
               </select>
-              <p class="text-[11px] text-slate-400 mt-1">A embarcação herda origem, destino e distância da rota selecionada. Novas rotas são registradas por níveis superiores na seção "Gestão de Rotas Marítimas".</p>
+              <p class="text-[11px] text-slate-600 mt-1">A embarcação herda origem, destino e distância da rota selecionada. Novas rotas são registradas por níveis superiores na seção "Gestão de Rotas Marítimas".</p>
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Localização Operacional</label>
+              <label class="block font-bold text-slate-600 mb-1">Localização Operacional</label>
               <select id="navioLocalizacao" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="DENTRO_DO_PORTO">DENTRO_DO_PORTO</option>
                 <option value="FORA_DO_PORTO">FORA_DO_PORTO</option>
@@ -174,14 +149,14 @@
               </select>
             </div>
             <div id="navioBercoWrap">
-              <label class="block font-bold text-slate-500 mb-1">Berço de Atracação <span class="text-red-500">*</span></label>
+              <label class="block font-bold text-slate-600 mb-1">Berço de Atracação <span class="text-red-500">*</span></label>
               <select id="navioBercoSelect" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="">Selecione o berço...</option>
               </select>
-              <p class="text-[11px] text-slate-400 mt-1">Obrigatório e imediato para navios DENTRO_DO_PORTO: um navio não pode estar dentro do porto sem ocupar um berço.</p>
+              <p class="text-[11px] text-slate-600 mt-1">Obrigatório e imediato para navios DENTRO_DO_PORTO: um navio não pode estar dentro do porto sem ocupar um berço.</p>
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Coordenadas GPS</label>
+              <label class="block font-bold text-slate-600 mb-1">Coordenadas GPS</label>
               <input type="text" id="navioGps" placeholder="Ex: 23.9608° S, 46.3022° W" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div class="flex justify-end gap-2 items-end">
@@ -195,15 +170,15 @@
           <!-- Busca local na tabela de embarcações + contador (Backlog 3 - 7b) -->
           <div class="flex flex-col sm:flex-row sm:items-center gap-2">
             <div class="relative flex-1">
-              <span class="material-symbols-outlined text-[18px] text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <span class="material-symbols-outlined text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
               <input type="search" id="buscarNavioInput" placeholder="Buscar embarcação por nome, IMO, GPS ou destino..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
             </div>
-            <span id="embarcacoesCounter" class="text-[11px] font-mono text-slate-400 whitespace-nowrap">Exibindo 0 de 0 embarcações</span>
+            <span id="embarcacoesCounter" class="text-[11px] font-mono text-slate-600 whitespace-nowrap">Exibindo 0 de 0 embarcações</span>
           </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs min-w-[700px]">
-              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
                 <tr>
                   <th class="p-3">Navio (IMO)</th>
                   <th class="p-3">Berço da Carga / Cargas Alocadas</th>
@@ -225,10 +200,10 @@
         <!-- CRUD de Contêineres com Seletor de Referência de Tempo (RN 7 / T2.6) -->
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500">inventory_2</span>
               Gestão de Contêineres & Tempo de Uso (RN 7: Referência de Tempo de Uso)
-            </h3>
+            </h2>
             <button id="toggleContainerFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs">
               + Novo Contêiner
             </button>
@@ -237,21 +212,21 @@
           <!-- Form Novo Contêiner -->
           <form id="containerForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Identificação Contêiner</label>
+              <label class="block font-bold text-slate-600 mb-1">Identificação Contêiner</label>
               <input type="text" id="contIdentificacao" required placeholder="Ex: MSCU1234567" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Tipo de Carga</label>
+              <label class="block font-bold text-slate-600 mb-1">Tipo de Carga</label>
               <input type="text" id="contTipo" required placeholder="Ex: Eletrônicos" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Data Fabricação</label>
+              <label class="block font-bold text-slate-600 mb-1">Data Fabricação</label>
               <input type="date" id="contFabricacao" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
               <div class="flex items-center justify-between mb-1">
-                <label class="block font-bold text-slate-500">Data Última Manut.</label>
-                <label class="flex items-center gap-1 text-[11px] text-slate-500 font-normal cursor-pointer">
+                <label class="block font-bold text-slate-600">Data Última Manut.</label>
+                <label class="flex items-center gap-1 text-[11px] text-slate-600 font-normal cursor-pointer">
                   <input type="checkbox" id="contSemManutencaoCheckbox" class="rounded border-slate-300" />
                   Sem Manutenção
                 </label>
@@ -259,7 +234,7 @@
               <input type="date" id="contManutencao" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Ref. Tempo de Uso (Supervisor - RN 7)</label>
+              <label class="block font-bold text-slate-600 mb-1">Ref. Tempo de Uso (Supervisor - RN 7)</label>
               <select id="contRefTempo" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="DATA_FABRICACAO">Data de Fabricação</option>
                 <option value="DATA_ULTIMA_MANUTENCAO">Data da Última Manutenção</option>
@@ -275,7 +250,7 @@
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
                 <tr>
                   <th class="p-3">Identificação</th>
                   <th class="p-3">Tipo / Material</th>
@@ -300,8 +275,8 @@
             <div class="flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500 text-[22px]">precision_manufacturing</span>
               <div>
-                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Cadastro de Guindastes e Pórticos de Pátio (Ship-to-Shore)</h3>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400">Cadastro oficial de equipamentos e maquinários portuários (Inspetor) - Tarefa 10</p>
+                <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Cadastro de Guindastes e Pórticos de Pátio (Ship-to-Shore)</h2>
+                <p class="text-[11px] text-slate-600 dark:text-slate-400">Cadastro oficial de equipamentos e maquinários portuários (Inspetor) - Tarefa 10</p>
               </div>
             </div>
             <button id="toggleGuindasteFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
@@ -312,15 +287,15 @@
 
           <form id="guindasteForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Número de Identificação</label>
+              <label class="block font-bold text-slate-600 mb-1">Número de Identificação</label>
               <input type="text" id="gndNumero" required placeholder="Ex: ABC123DEF" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Data da Última Manutenção</label>
+              <label class="block font-bold text-slate-600 mb-1">Data da Última Manutenção</label>
               <input type="date" id="gndDataManut" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Estado Inicial</label>
+              <label class="block font-bold text-slate-600 mb-1">Estado Inicial</label>
               <select id="gndEstado" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="OPERANTE">OPERANTE</option>
                 <option value="EM_MANUTENCAO">EM MANUTENÇÃO</option>
@@ -336,7 +311,7 @@
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
                 <tr>
                   <th class="p-3">Identificação</th>
                   <th class="p-3">Estado</th>
@@ -357,8 +332,8 @@
             <div class="flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500 text-[22px]">alt_route</span>
               <div>
-                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Gestão de Rotas Marítimas (Supervisor - RN 9 / RF 2.4)</h3>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400">Cadastre a distância oficial das rotas. Navios sem rota cadastrada têm liberação bloqueada (RN 9).</p>
+                <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Gestão de Rotas Marítimas (Supervisor - RN 9 / RF 2.4)</h2>
+                <p class="text-[11px] text-slate-600 dark:text-slate-400">Cadastre a distância oficial das rotas. Navios sem rota cadastrada têm liberação bloqueada (RN 9).</p>
               </div>
             </div>
             <button id="toggleRotaFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
@@ -369,15 +344,15 @@
 
           <form id="rotaForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Porto Origem</label>
+              <label class="block font-bold text-slate-600 mb-1">Porto Origem</label>
               <input type="text" id="rotaOrigem" required placeholder="Ex: Porto de Santos" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Porto Destino</label>
+              <label class="block font-bold text-slate-600 mb-1">Porto Destino</label>
               <input type="text" id="rotaDestino" required placeholder="Ex.: porto de destino" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Distância (km)</label>
+              <label class="block font-bold text-slate-600 mb-1">Distância (km)</label>
               <input type="number" id="rotaDistancia" required min="1" placeholder="Ex.: distância em km" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div class="sm:col-span-3 flex justify-end">
@@ -390,7 +365,7 @@
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
                 <tr>
                   <th class="p-3">Porto Origem</th>
                   <th class="p-3">Porto Destino</th>
@@ -426,11 +401,11 @@
   <div id="tarefasGuindasteModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-2xl w-full p-6 shadow-xl flex flex-col gap-4 max-h-[90vh]">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-        <h3 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-amber-600">task</span>
+        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-amber-700">task</span>
           Tarefas do Guindaste <span id="tarefasGuindasteIdLabel" class="font-mono text-nexus-500">--</span>
-        </h3>
-        <button type="button" id="closeTarefasGuindasteModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+        </h2>
+        <button type="button" id="closeTarefasGuindasteModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
           <span class="material-symbols-outlined text-xl">close</span>
         </button>
       </div>
@@ -447,7 +422,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="vendor/supabase-js.min.js"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>
@@ -471,11 +446,31 @@
       <div class="vw-plugin-top-wrapper"></div>
     </div>
   </div>
-  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <!-- Tradutor de Libras (VLibras, serviço público): o plugin é um recurso de acessibilidade, mas o
+       script vem de um servidor de terceiros. Ele é baixado na primeira interação do visitante — ou
+       pelo atalho de acessibilidade —, então a página abre sem depender de rede externa. -->
   <script>
-    if (window.VLibras && window.VLibras.Widget) {
-      new window.VLibras.Widget('https://vlibras.gov.br/app');
-    }
+    (function () {
+      var url = 'https://vlibras.gov.br/app/vlibras-plugin.js';
+      var pedido = false;
+      function carregar() {
+        if (pedido) return;
+        pedido = true;
+        var script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.onload = function () {
+          if (window.VLibras && window.VLibras.Widget) {
+            new window.VLibras.Widget('https://vlibras.gov.br/app');
+          }
+        };
+        document.body.appendChild(script);
+      }
+      ['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(function (evento) {
+        window.addEventListener(evento, carregar, { once: true, passive: true });
+      });
+      window.nexusCarregarVLibras = carregar;
+    })();
   </script>
 </body>
 </html>

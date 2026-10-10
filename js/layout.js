@@ -79,16 +79,16 @@
           <button id="mobileMenuToggle" type="button" class="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
             <span class="material-symbols-outlined text-[24px]">menu</span>
           </button>
-          <img src="design/logo_porto.png" alt="NexusPort Logo" class="h-9 w-auto object-contain rounded-lg" />
+          <picture class="w-9 h-9 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img src="design/logo_porto.png" alt="NexusPort Logo" width="36" height="36" class="w-9 h-9 object-contain rounded-lg" /></picture>
           <div class="flex flex-col min-w-0">
             <span class="font-display font-bold text-base text-nexus-900 dark:text-white leading-tight truncate">NexusPort</span>
-            <span class="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate">Terminal STS-01</span>
+            <span class="font-mono text-[11px] text-slate-600 dark:text-slate-400 truncate">Terminal STS-01</span>
           </div>
         </div>
 
         <div class="flex items-center gap-3">
           <div id="headerOnline" data-estado="indisponivel" title="Contagem indisponível: sem conexão com o Supabase." class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60">
-            <span class="material-symbols-outlined text-[16px] text-emerald-600 dark:text-emerald-400" aria-hidden="true">group</span>
+            <span class="material-symbols-outlined text-[16px] text-emerald-700 dark:text-emerald-400" aria-hidden="true">group</span>
             <span class="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 whitespace-nowrap"><span id="headerOnlineCount" aria-live="polite">—</span><span class="hidden md:inline"> on-line</span></span>
           </div>
           <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
@@ -98,7 +98,7 @@
             <div class="hidden sm:flex flex-col min-w-0">
               <span id="headerUserName" class="text-xs font-bold text-nexus-900 dark:text-white truncate">${esc(userName)}</span>
               <div class="flex items-center gap-1.5">
-                <span id="headerUserRole" class="text-[10px] text-slate-500 dark:text-slate-400 truncate">${esc(userRoleName)}</span>
+                <span id="headerUserRole" class="text-[10px] text-slate-600 dark:text-slate-400 truncate">${esc(userRoleName)}</span>
                 <span class="text-[10px] text-slate-300 dark:text-slate-600">•</span>
                 <span id="headerUserCode" class="font-mono text-[10px] font-semibold text-nexus-500 dark:text-indigo-400">${esc(userCode)}</span>
               </div>
@@ -109,7 +109,7 @@
             <span class="material-symbols-outlined text-[18px]" id="themeToggleIcon">dark_mode</span>
           </button>
 
-          <button id="logoutBtn" type="button" aria-label="Encerrar Sessão" class="p-2 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors flex items-center gap-1 text-xs font-semibold">
+          <button id="logoutBtn" type="button" aria-label="Sair da sessão" class="p-2 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors flex items-center gap-1 text-xs font-semibold">
             <span class="material-symbols-outlined text-[18px]">logout</span>
             <span class="hidden md:inline">Sair</span>
           </button>
@@ -137,7 +137,7 @@
             <!-- Cabeçalho Mobile com Fechamento -->
             <div class="flex md:hidden items-center justify-between pb-3 border-b border-slate-800">
               <div class="flex items-center gap-2">
-                <img src="design/logo_porto.png" alt="Logo" class="h-7 w-auto object-contain rounded" />
+                <picture class="w-7 h-7 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img src="design/logo_porto.png" alt="Logo" width="28" height="28" class="w-7 h-7 object-contain rounded" /></picture>
                 <span class="font-display font-bold text-sm text-white">NexusPort</span>
               </div>
               <button id="closeMobileSidebarBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
@@ -300,13 +300,14 @@
       feedbackModal.setAttribute('role', 'alertdialog');
       feedbackModal.setAttribute('aria-modal', 'true');
       feedbackModal.setAttribute('aria-live', 'polite');
+      feedbackModal.setAttribute('aria-labelledby', 'globalFeedbackTitle');
       feedbackModal.innerHTML = `
         <div class="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-5 flex flex-col items-center text-center gap-3 transform transition-all scale-100">
           <div id="globalFeedbackIconBox" class="w-12 h-12 rounded-2xl flex items-center justify-center bg-indigo-100 dark:bg-indigo-950/60 text-nexus-500 shrink-0">
             <span id="globalFeedbackIcon" class="material-symbols-outlined text-[28px]">info</span>
           </div>
           <div class="flex flex-col gap-1">
-            <h4 id="globalFeedbackTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Mensagem do Sistema</h4>
+            <h3 id="globalFeedbackTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Mensagem do Sistema</h3>
             <p id="globalFeedbackMsg" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">--</p>
           </div>
           <button type="button" id="globalFeedbackBtn" aria-label="Fechar mensagem de feedback" class="w-full mt-2 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">
@@ -333,14 +334,15 @@
       confirmModal.className = 'fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-nexus-900/60 backdrop-blur-sm transition-all duration-200';
       confirmModal.setAttribute('role', 'dialog');
       confirmModal.setAttribute('aria-modal', 'true');
+      confirmModal.setAttribute('aria-labelledby', 'nexusConfirmTitle');
       confirmModal.innerHTML = `
         <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-6 flex flex-col gap-4 transform transition-all scale-100">
           <div class="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
-            <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center shrink-0">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 flex items-center justify-center shrink-0">
               <span class="material-symbols-outlined text-[24px]">help_outline</span>
             </div>
             <div>
-              <h4 id="nexusConfirmTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Confirmação Operacional</h4>
+              <h3 id="nexusConfirmTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Confirmação Operacional</h3>
               <span class="text-[11px] font-mono text-slate-400">Terminal STS-01</span>
             </div>
           </div>
@@ -363,6 +365,9 @@
       promptModal = document.createElement('div');
       promptModal.id = 'nexusPromptModal';
       promptModal.className = 'fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-nexus-900/60 backdrop-blur-sm transition-all duration-200';
+      promptModal.setAttribute('role', 'dialog');
+      promptModal.setAttribute('aria-modal', 'true');
+      promptModal.setAttribute('aria-labelledby', 'nexusPromptTitle');
       promptModal.innerHTML = `
         <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-6 flex flex-col gap-4 transform transition-all scale-100">
           <div class="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
@@ -370,7 +375,7 @@
               <span class="material-symbols-outlined text-[24px]">edit_note</span>
             </div>
             <div>
-              <h4 id="nexusPromptTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Solicitação de Informação</h4>
+              <h3 id="nexusPromptTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Solicitação de Informação</h3>
               <span class="text-[11px] font-mono text-slate-400">Terminal STS-01</span>
             </div>
           </div>
@@ -413,8 +418,8 @@
               <span class="material-symbols-outlined text-[26px]">e911_emergency</span>
             </div>
             <div>
-              <h4 class="font-display font-bold text-base text-red-700 dark:text-red-400">RELATAR EMERGÊNCIA — Terminal STS-01</h4>
-              <span class="text-[11px] font-mono text-slate-500 dark:text-slate-400">O alerta sonoro e visual chega a TODOS os funcionários conectados</span>
+              <h3 class="font-display font-bold text-base text-red-700 dark:text-red-400">RELATAR EMERGÊNCIA — Terminal STS-01</h3>
+              <span class="text-[11px] font-mono text-slate-600 dark:text-slate-400">O alerta sonoro e visual chega a TODOS os funcionários conectados</span>
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -567,6 +572,9 @@
     // A altura é limitada à viewport no desktop (md+) para que apenas o <main>
     // role: assim a barra lateral permanece fixa na tela durante a rolagem do
     // conteúdo (antes o documento inteiro rolava e o menu "subia" com a página).
+    // As mesmas classes já vêm no HTML de cada página: aqui a chamada é idempotente e serve
+    // para páginas antigas que ainda não as tragam. Sem elas no HTML o conteúdo pula 64 px no
+    // primeiro quadro (deslocamento de layout), por isso não podem depender só do JavaScript.
     const mainWrapper = document.querySelector('.flex-1.flex');
     if (mainWrapper) {
       mainWrapper.classList.add('pt-16', 'md:h-[calc(100vh-4rem)]', 'md:overflow-hidden');
@@ -666,13 +674,13 @@
     if (msgElem) msgElem.textContent = mensagem;
 
     if (tipo === 'sucesso' || tipo === 'success') {
-      if (iconBox) iconBox.className = 'w-12 h-12 rounded-2xl flex items-center justify-center bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 shrink-0';
+      if (iconBox) iconBox.className = 'w-12 h-12 rounded-2xl flex items-center justify-center bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 shrink-0';
       if (icon) icon.textContent = 'check_circle';
     } else if (tipo === 'erro' || tipo === 'error' || tipo === 'danger') {
       if (iconBox) iconBox.className = 'w-12 h-12 rounded-2xl flex items-center justify-center bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 shrink-0';
       if (icon) icon.textContent = 'error';
     } else if (tipo === 'alerta' || tipo === 'warning') {
-      if (iconBox) iconBox.className = 'w-12 h-12 rounded-2xl flex items-center justify-center bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 shrink-0';
+      if (iconBox) iconBox.className = 'w-12 h-12 rounded-2xl flex items-center justify-center bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 shrink-0';
       if (icon) icon.textContent = 'warning';
     } else {
       if (iconBox) iconBox.className = 'w-12 h-12 rounded-2xl flex items-center justify-center bg-indigo-100 dark:bg-indigo-950/60 text-nexus-500 shrink-0';

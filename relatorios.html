@@ -1,56 +1,30 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
-  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NexusPort — Relatórios & PDF</title>
+  <meta name="description" content="Relatórios e PDF no NexusPort: busca operacional com filtros e emissão de relatório A4 com logotipo." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <!-- Google Fonts & Material Symbols -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'nexus-900': '#1E293B',
-            'nexus-500': '#445987',
-            'nexus-bg': '#F5F7FA',
-            'nexus-text': '#222222',
-            'nexus-border': '#E1E5ED',
-            'nexus-dark-bg': '#0F172A',
-            'nexus-dark-card': '#1E293B',
-            'nexus-dark-border': '#334155',
-            'success': '#2E7D32',
-            'warning': '#D97706',
-            'danger': '#C62828',
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            display: ['Montserrat', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    };
-  </script>
-
+  <!-- Tipografia e ícones locais (tools/assets.js) e CSS do Tailwind compilado (css/nexus.css):
+       substituem o CDN do Tailwind (~400 KiB de JavaScript) e o Google Fonts, sem terceiros no caminho. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/nexus.css" />
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <!-- Bibliotecas locais sob demanda (vendor/) -->
+  <script src="js/asset-loader.js"></script>
   <script src="js/session-cookies.js"></script>
 
   <!-- Chart.js via CDN para os gráficos de produtividade por camada de visão -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
   <script src="js/vision-layer.js"></script>
@@ -59,12 +33,12 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- Topbar Superior -->
-  <header id="appTopbar"></header>
+  <header id="appTopbar" class="w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm"></header>
 
   <!-- Layout Principal -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex overflow-hidden pt-16 md:h-[calc(100vh-4rem)] md:overflow-hidden">
     <!-- Sidebar Navegação -->
-    <aside id="appSidebar"></aside>
+    <aside id="appSidebar" class="w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0"></aside>
 
     <!-- Conteúdo da Página -->
     <main class="flex-1 p-6 overflow-y-auto">
@@ -78,25 +52,25 @@
               <span>Auditoria & Documentação Formal</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Gerador de Relatórios PDF & Produtividade</h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Emissão de Relatório PDF A4 em 4 seções sequenciais e painel de produtividade por cargo (RF 11 & 16).</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Emissão de Relatório PDF A4 em 4 seções sequenciais e painel de produtividade por cargo (RF 11 & 16).</p>
           </div>
         </div>
 
         <!-- Seção 1: Gerador de Relatório PDF A4 Organizado (RF 11 & 16 / Tarefa 10) -->
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-5">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h3 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+            <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500">picture_as_pdf</span>
               Emissão do Relatório PDF A4 Estruturado
-            </h3>
-            <span class="font-mono text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Padrão A4 • ABNT Portuário</span>
+            </h2>
+            <span class="font-mono text-xs text-slate-600 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Padrão A4 • ABNT Portuário</span>
           </div>
 
           <!-- Filtros e Seletores Organizados -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="flex flex-col gap-1">
-              <label class="block text-xs font-bold uppercase text-slate-500">Período de Referência</label>
-              <select id="relatorioPeriodoSelect" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-bold">
+              <label class="block text-xs font-bold uppercase text-slate-600">Período de Referência</label>
+              <select id="relatorioPeriodoSelect" aria-label="Período do relatório" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-bold">
                 <option value="HOJE">Hoje</option>
                 <option value="7D">Últimos 7 dias</option>
                 <option value="30D" selected>Últimos 30 dias</option>
@@ -114,8 +88,8 @@
             </div>
 
             <div class="flex flex-col gap-1 md:col-span-2">
-              <label class="block text-xs font-bold uppercase text-slate-500">Seleção da Carga para Emissão</label>
-              <select id="relatorioCargaSelect" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-xs font-bold">
+              <label class="block text-xs font-bold uppercase text-slate-600">Seleção da Carga para Emissão</label>
+              <select id="relatorioCargaSelect" aria-label="Carga do relatório" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-xs font-bold">
                 <option value="">Selecione a Carga Operacional...</option>
               </select>
             </div>
@@ -127,19 +101,19 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono">
               <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm">
                 <span class="font-bold text-nexus-500 block mb-0.5">1. Dados da Carga</span>
-                <span class="text-[10px] text-slate-400">Peso, Volume, Natureza, Valor</span>
+                <span class="text-[10px] text-slate-600">Peso, Volume, Natureza, Valor</span>
               </div>
               <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm">
                 <span class="font-bold text-nexus-500 block mb-0.5">2. Dados do Navio</span>
-                <span class="text-[10px] text-slate-400">Nome, IMO, Porto Destino</span>
+                <span class="text-[10px] text-slate-600">Nome, IMO, Porto Destino</span>
               </div>
               <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm">
                 <span class="font-bold text-nexus-500 block mb-0.5">3. Dados do Contêiner</span>
-                <span class="text-[10px] text-slate-400">Identificação, Ref. Tempo Uso</span>
+                <span class="text-[10px] text-slate-600">Identificação, Ref. Tempo Uso</span>
               </div>
               <div class="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm">
                 <span class="font-bold text-nexus-500 block mb-0.5">4. Resumo do Fluxo</span>
-                <span class="text-[10px] text-slate-400">Status, Entrada/Saída, Motivo</span>
+                <span class="text-[10px] text-slate-600">Status, Entrada/Saída, Motivo</span>
               </div>
             </div>
           </div>
@@ -150,7 +124,7 @@
               <span class="material-symbols-outlined text-[18px] animate-spin">sync</span>
               <span>Gerando Relatório PDF A4... Por favor, aguarde.</span>
             </div>
-            <div id="pdfIdleStatus" class="text-xs text-slate-500">
+            <div id="pdfIdleStatus" class="text-xs text-slate-600">
               Pronto para geração do documento A4.
             </div>
 
@@ -171,12 +145,12 @@
                 <span class="material-symbols-outlined text-[22px]">monitoring</span>
               </div>
               <div>
-                <h3 id="chartsRoleTitle" class="font-display font-bold text-sm text-nexus-900 dark:text-white">Análise Gráfica de Produtividade (RF 16)</h3>
-                <p id="chartsRoleSubtitle" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Gráficos adaptados à camada de visão: Direção e Inspetor veem o consolidado; os demais cargos veem apenas os próprios dados.</p>
+                <h2 id="chartsRoleTitle" class="font-display font-bold text-sm text-nexus-900 dark:text-white">Análise Gráfica de Produtividade (RF 16)</h2>
+                <p id="chartsRoleSubtitle" class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Gráficos adaptados à camada de visão: Direção e Inspetor veem o consolidado; os demais cargos veem apenas os próprios dados.</p>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <span id="chartsSyncStatus" role="status" aria-live="polite" class="text-[10px] font-mono text-slate-400 dark:text-slate-500 max-w-[220px] truncate"></span>
+              <span id="chartsSyncStatus" role="status" aria-live="polite" class="text-[10px] font-mono text-slate-600 dark:text-slate-500 max-w-[220px] truncate"></span>
               <span id="chartsRoleBadge" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[10px] font-bold uppercase">RLS</span>
               <button id="chartsRefreshBtn" type="button" title="Consulta o servidor e redesenha os gráficos com os dados mais recentes" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 disabled:opacity-60 disabled:cursor-wait text-white font-bold text-xs flex items-center gap-1 transition-colors">
                 <span class="material-symbols-outlined text-[16px]">refresh</span>
@@ -185,12 +159,12 @@
             </div>
           </div>
 
-          <p class="text-[11px] text-slate-400 dark:text-slate-500 -mt-1">Esta é a página central de gráficos do sistema: todos os conjuntos por camada de visão (incluindo os antes exibidos no Dashboard) foram consolidados aqui.</p>
+          <p class="text-[11px] text-slate-600 dark:text-slate-500 -mt-1">Esta é a página central de gráficos do sistema: todos os conjuntos por camada de visão (incluindo os antes exibidos no Dashboard) foram consolidados aqui.</p>
 
           <!-- Filtros REAIS dos gráficos: recortam os dados antes da construção de cada gráfico -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
             <div class="flex flex-col gap-1">
-              <label for="chartsFiltroStatus" class="block text-[11px] font-bold uppercase text-slate-500">Status da carga</label>
+              <label for="chartsFiltroStatus" class="block text-[11px] font-bold uppercase text-slate-600">Status da carga</label>
               <select id="chartsFiltroStatus" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold">
                 <option value="GERAL" selected>Geral (todos os status)</option>
                 <option value="AGENDAMENTO">Agendamento</option>
@@ -204,13 +178,13 @@
               </select>
             </div>
             <div class="flex flex-col gap-1">
-              <label for="chartsFiltroNavio" class="block text-[11px] font-bold uppercase text-slate-500">Navio</label>
+              <label for="chartsFiltroNavio" class="block text-[11px] font-bold uppercase text-slate-600">Navio</label>
               <select id="chartsFiltroNavio" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold font-mono">
                 <option value="GERAL" selected>Geral (todos os navios)</option>
               </select>
             </div>
             <div class="flex flex-col gap-1">
-              <label for="chartsFiltroContainer" class="block text-[11px] font-bold uppercase text-slate-500">Contêiner</label>
+              <label for="chartsFiltroContainer" class="block text-[11px] font-bold uppercase text-slate-600">Contêiner</label>
               <select id="chartsFiltroContainer" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold font-mono">
                 <option value="GERAL" selected>Geral (todos os contêineres)</option>
               </select>
@@ -222,26 +196,26 @@
               </button>
             </div>
           </div>
-          <p class="text-[11px] text-slate-400 dark:text-slate-500 -mt-2">O <strong>Período de Referência</strong> (topo da página) também filtra os gráficos. Os filtros ativos aparecem no rodapé do painel.</p>
+          <p class="text-[11px] text-slate-600 dark:text-slate-500 -mt-2">O <strong>Período de Referência</strong> (topo da página) também filtra os gráficos. Os filtros ativos aparecem no rodapé do painel.</p>
 
           <div id="relatoriosChartsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
 
-          <p id="chartsRoleFooter" class="text-[11px] font-mono text-slate-400 dark:text-slate-500"></p>
+          <p id="chartsRoleFooter" class="text-[11px] font-mono text-slate-600 dark:text-slate-500"></p>
         </div>
 
         <!-- Seção 3: Relatório de Produtividade Operacional por Cargo (T6.9, T6.10) -->
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500">monitoring</span>
               Relatório de Produtividade por Cargo e Funcionário (T6.9, T6.10)
-            </h3>
-            <span class="font-mono text-xs text-slate-400">Acesso Restrito</span>
+            </h2>
+            <span class="font-mono text-xs text-slate-600">Acesso Restrito</span>
           </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
                 <tr>
                   <th class="p-3">Matrícula</th>
                   <th class="p-3">Funcionário</th>
@@ -261,6 +235,7 @@
     </main>
   </div>
 
+  <script src="vendor/supabase-js.min.js"></script>
   <!-- Rodapé Institucional -->
   <footer class="w-full py-4 text-center text-xs text-slate-500 dark:text-slate-400 border-t border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900">
     <div class="flex flex-wrap items-center justify-center gap-3">
@@ -299,11 +274,31 @@
       <div class="vw-plugin-top-wrapper"></div>
     </div>
   </div>
-  <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
+  <!-- Tradutor de Libras (VLibras, serviço público): o plugin é um recurso de acessibilidade, mas o
+       script vem de um servidor de terceiros. Ele é baixado na primeira interação do visitante — ou
+       pelo atalho de acessibilidade —, então a página abre sem depender de rede externa. -->
   <script>
-    if (window.VLibras && window.VLibras.Widget) {
-      new window.VLibras.Widget('https://vlibras.gov.br/app');
-    }
+    (function () {
+      var url = 'https://vlibras.gov.br/app/vlibras-plugin.js';
+      var pedido = false;
+      function carregar() {
+        if (pedido) return;
+        pedido = true;
+        var script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.onload = function () {
+          if (window.VLibras && window.VLibras.Widget) {
+            new window.VLibras.Widget('https://vlibras.gov.br/app');
+          }
+        };
+        document.body.appendChild(script);
+      }
+      ['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(function (evento) {
+        window.addEventListener(evento, carregar, { once: true, passive: true });
+      });
+      window.nexusCarregarVLibras = carregar;
+    })();
   </script>
 </body>
 </html>
