@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
               'bg-slate-200 text-slate-800'
             }">${esc(b.estado)}</span>
           </div>
-          <span class="text-[11px] text-slate-500 font-mono">
+          <span class="text-[11px] text-slate-600 font-mono">
             ${b.estado === 'OCUPADO' ? `Navio: <strong class="text-nexus-500">${esc(b.navio_nome || b.carga_id || 'Navio Alocado')}</strong>` : 'Pronto para atracação'}
           </span>
         </div>
@@ -392,8 +392,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr>
           <td colspan="8" class="p-8 text-center">
             <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">sailing</span>
-            <span class="block font-bold text-slate-400 text-xs">Nenhuma embarcação cadastrada ainda.</span>
-            <span class="block text-[11px] text-slate-400 mt-1">Navios são cadastrados pelo Inspetor em "Gerenciar Embarcações". Assim que o primeiro cadastro for salvo, o GPS, o ETA e as ações aparecem aqui automaticamente.</span>
+            <span class="block font-bold text-slate-600 text-xs">Nenhuma embarcação cadastrada ainda.</span>
+            <span class="block text-[11px] text-slate-600 mt-1">Navios são cadastrados pelo Inspetor em "Gerenciar Embarcações". Assim que o primeiro cadastro for salvo, o GPS, o ETA e as ações aparecem aqui automaticamente.</span>
           </td>
         </tr>
       `;
@@ -446,8 +446,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr>
           <td colspan="8" class="p-8 text-center">
             <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">search_off</span>
-            <span class="block font-bold text-slate-400 text-xs">Nenhuma embarcação corresponde à busca.</span>
-            <span class="block text-[11px] text-slate-400 mt-1">Ajuste o termo pesquisado (nome, IMO, GPS ou destino) para listar novamente.</span>
+            <span class="block font-bold text-slate-600 text-xs">Nenhuma embarcação corresponde à busca.</span>
+            <span class="block text-[11px] text-slate-600 mt-1">Ajuste o termo pesquisado (nome, IMO, GPS ou destino) para listar novamente.</span>
           </td>
         </tr>
       `;
@@ -520,12 +520,12 @@ document.addEventListener('DOMContentLoaded', () => {
           if (progressoPct !== null) {
             etaExtraHtml = `
               <div class="mt-1.5">
-                <div class="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase mb-0.5">
+                <div class="flex items-center justify-between text-[9px] font-bold text-slate-600 uppercase mb-0.5">
                   <span>Progresso da viagem</span>
                   <span class="text-indigo-600 dark:text-indigo-400">${esc(String(progressoPct))}%</span>
                 </div>
                 <div class="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden" role="progressbar" aria-valuenow="${esc(String(progressoPct))}" aria-valuemin="0" aria-valuemax="100" title="Progresso da viagem: ${esc(String(progressoPct))}% do tempo previsto decorrido">
-                  <div class="h-1.5 rounded-full ${progressoPct >= 100 ? 'bg-emerald-500' : 'bg-nexus-500'}" style="width:${esc(String(progressoPct))}%"></div>
+                  <div class="h-1.5 rounded-full ${progressoPct >= 100 ? 'bg-emerald-700' : 'bg-nexus-500'}" style="width:${esc(String(progressoPct))}%"></div>
                 </div>
               </div>`;
           }
@@ -535,12 +535,12 @@ document.addEventListener('DOMContentLoaded', () => {
       // Busca cargas do localstorage ou Supabase associadas a este navio (C2, C3)
       const cargasDoNavio = cargasFluxo.filter(c => c.navio && c.navio.toLowerCase() === n.nome.toLowerCase());
 
-      let bercosInfoHtml = '<span class="text-slate-400 italic text-[11px]">Sem carga vinculada</span>';
+      let bercosInfoHtml = '<span class="text-slate-600 italic text-[11px]">Sem carga vinculada</span>';
       if (cargasDoNavio.length > 0) {
         bercosInfoHtml = cargasDoNavio.map(c => `
           <div class="text-[11px] leading-tight">
             <strong class="text-nexus-500">${esc(c.id)}</strong>: <span class="font-bold text-slate-700 dark:text-slate-200">${esc(c.portoDescarga || 'Berço não atrelado')}</span>
-            <span class="block text-[10px] text-slate-400">Contêiner: ${esc(c.container || 'Não vinculado')}</span>
+            <span class="block text-[10px] text-slate-600">Contêiner: ${esc(c.container || 'Não vinculado')}</span>
           </div>
         `).join('');
       }
@@ -558,20 +558,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
           if (emergenciaAtiva) {
-            acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed opacity-70" title="Emergência ativa: operações do pátio bloqueadas temporariamente">Liberar Saída</button>`;
+            acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 font-bold cursor-not-allowed opacity-70" title="Emergência ativa: operações do pátio bloqueadas temporariamente">Liberar Saída</button>`;
           } else {
             acoesHtml += `<button type="button" onclick="window.liberarNavioPeloDiretor(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold">Liberar Saída</button>`;
           }
         } else if (n.localizacao === 'NO_PORTO_DE_DESTINO') {
           if (emergenciaAtiva) {
-            acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed opacity-70" title="Emergência ativa: operações do pátio bloqueadas temporariamente">Autorizar Retorno</button>`;
+            acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 font-bold cursor-not-allowed opacity-70" title="Emergência ativa: operações do pátio bloqueadas temporariamente">Autorizar Retorno</button>`;
           } else {
             acoesHtml += `<button type="button" onclick="window.autorizarRetornoNavio(${jsArg(n.imo)})" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Autorizar Retorno</button>`;
           }
         } else if (n.localizacao === 'FORA_DO_PORTO') {
           // Botão realmente desabilitado: o navio precisa chegar ao porto de destino
           acoesHtml += `<button type="button" disabled aria-disabled="true"
-            class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed opacity-70"
+            class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 font-bold cursor-not-allowed opacity-70"
             title="O navio precisa chegar ao porto de destino antes de autorizar o retorno">Autorizar Retorno</button>`;
         }
       }
@@ -601,7 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3">${localizacaoHtml}</td>
           <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino || 'Destino não informado')}</strong></td>
           <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}${etaExtraHtml}</td>
-          <td class="p-3 font-mono text-xs font-bold ${n.localizacao === 'NO_PORTO_DE_DESTINO' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">${esc(tempoForaText)}</td>
+          <td class="p-3 font-mono text-xs font-bold ${n.localizacao === 'NO_PORTO_DE_DESTINO' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600'}">${esc(tempoForaText)}</td>
           <td class="p-3 text-right whitespace-nowrap">${acoesHtml}</td>
         </tr>
       `;
@@ -692,7 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
         : 'Nenhuma rota marítima cadastrada no sistema.';
       rotasTableBody.innerHTML = `
         <tr>
-          <td colspan="4" class="p-4 text-center text-slate-400 italic">${esc(texto)}</td>
+          <td colspan="4" class="p-4 text-center text-slate-600 italic">${esc(texto)}</td>
         </tr>
       `;
       return;
@@ -705,7 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 font-mono text-xs">
           <td class="p-3 font-bold">${esc(r.origem)}</td>
           <td class="p-3 text-nexus-900 dark:text-white font-bold">${esc(r.destino)}</td>
-          <td class="p-3 text-emerald-600 font-bold">${temDistancia ? `${esc(dist.toLocaleString('pt-BR'))} km` : '—'}</td>
+          <td class="p-3 text-emerald-700 font-bold">${temDistancia ? `${esc(dist.toLocaleString('pt-BR'))} km` : '—'}</td>
           <td class="p-3 text-indigo-600 font-bold">${esc(eta)}</td>
         </tr>
       `;
@@ -1536,7 +1536,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (containersList.length === 0) {
       containersTableBody.innerHTML = `
         <tr>
-          <td colspan="7" class="p-4 text-center text-slate-400 italic">Nenhum contêiner cadastrado no banco de dados.</td>
+          <td colspan="7" class="p-4 text-center text-slate-600 italic">Nenhum contêiner cadastrado no banco de dados.</td>
         </tr>
       `;
       return;
@@ -1547,7 +1547,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       const cargasDoCont = cargasFluxo.filter(crg => crg.container && (crg.container.toLowerCase() === c.identificacao.toLowerCase() || crg.container.toLowerCase() === c.id.toLowerCase()));
 
-      let cargasVinculadasHtml = '<span class="text-slate-400 italic text-[11px]">Nenhuma carga</span>';
+      let cargasVinculadasHtml = '<span class="text-slate-600 italic text-[11px]">Nenhuma carga</span>';
       if (cargasDoCont.length > 0) {
         cargasVinculadasHtml = cargasDoCont.map(crg => `
           <span class="inline-block px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] text-nexus-500 font-bold">${esc(crg.id)} (${esc(crg.volume)})</span>
@@ -1922,7 +1922,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (guindastesList.length === 0) {
       guindastesTableBody.innerHTML = `
         <tr>
-          <td colspan="4" class="p-4 text-center text-slate-400 italic">Nenhum guindaste cadastrado no banco de dados.</td>
+          <td colspan="4" class="p-4 text-center text-slate-600 italic">Nenhum guindaste cadastrado no banco de dados.</td>
         </tr>
       `;
       return;
@@ -2022,7 +2022,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const pendentes = tarefasGnd.filter(t => t.guindasteId === tarefasGndAtual && (!t.status || t.status === 'PENDENTE'));
     if (pendentes.length === 0) {
       tarefasListEl.innerHTML = `
-        <div class="p-6 text-center text-slate-400 italic">
+        <div class="p-6 text-center text-slate-600 italic">
           <span class="material-symbols-outlined text-[32px] block mb-1 text-slate-300 dark:text-slate-600">task_alt</span>
           Nenhuma tarefa pendente para este guindaste.
         </div>`;
@@ -2033,14 +2033,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return `
         <div class="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 flex flex-col gap-2">
           <div class="flex items-center justify-between gap-2">
-            <span class="font-mono font-bold text-nexus-900 dark:text-white">Carga ${esc(t.cargaId || '?')} <span class="text-slate-400 font-normal">(${esc(t.tipoCarga || 'Geral')})</span></span>
+            <span class="font-mono font-bold text-nexus-900 dark:text-white">Carga ${esc(t.cargaId || '?')} <span class="text-slate-600 font-normal">(${esc(t.tipoCarga || 'Geral')})</span></span>
             <span class="px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-mono text-[10px] font-bold uppercase">Pendente</span>
           </div>
           <div class="text-slate-600 dark:text-slate-300 leading-relaxed">
-            <span class="font-bold block text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Instruções da tarefa</span>
+            <span class="font-bold block text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-400">Instruções da tarefa</span>
             ${esc(instrucoes)}
           </div>
-          <div class="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+          <div class="flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400 font-mono">
             <span>${esc(t.origem || 'Origem ?')} ➔ <strong class="text-nexus-900 dark:text-white">${esc(t.destino || '?')}</strong></span>
             <span>${esc(t.dataCriacao || '')}</span>
           </div>

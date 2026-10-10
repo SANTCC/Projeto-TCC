@@ -621,7 +621,7 @@
     } else {
       totals.networkErrors++;
       hints = networkHints();
-      say('error', '[NexusNet]', COLOR.error, stamp + ' #' + ctx.id + ' ✖ NETWORK ERROR after ' + fmtMs(total) + ' · ' + name +
+      say('warn', '[NexusNet]', COLOR.warn, stamp + ' #' + ctx.id + ' ✖ NETWORK ERROR after ' + fmtMs(total) + ' · ' + name +
         ': ' + message + ' · ' + clip(ctx.display, 100));
     }
     remember({
@@ -637,7 +637,7 @@
       error: name,
       caller: ctx.caller
     });
-    group('[NexusNet]', aborted ? COLOR.warn : COLOR.error, stamp + ' #' + ctx.id + ' ' + ctx.kind + ' ' + ctx.method + ' ' +
+    group('[NexusNet]', COLOR.warn, stamp + ' #' + ctx.id + ' ' + ctx.kind + ' ' + ctx.method + ' ' +
       clip(ctx.display, 120) + (aborted ? ' aborted' : ' failed'), [
       ['request', ctx.method + ' ' + ctx.fullUrl],
       ['elapsed', fmtMs(total)],
@@ -721,7 +721,7 @@
         });
         this.addEventListener('error', function () {
           safe(function () {
-            say('error', '[NexusNet WS]', COLOR.error, '#' + id +
+            say('warn', '[NexusNet WS]', COLOR.warn, '#' + id +
               ' ✖ socket error (browsers hide the details; the close event that follows has the code)');
           });
         });
@@ -772,7 +772,7 @@
       } else if (status === 'disconnected') {
         say('warn', '[NexusNet WS]', COLOR.warn, '♥ heartbeat skipped: the socket is disconnected');
       } else if (status === 'error') {
-        say('error', '[NexusNet WS]', COLOR.error, '✖ heartbeat error' + (latency !== undefined ? ' · ' + fmtMs(latency) : ''));
+        say('warn', '[NexusNet WS]', COLOR.warn, '✖ heartbeat error' + (latency !== undefined ? ' · ' + fmtMs(latency) : ''));
       } else {
         say('log', '[NexusNet WS]', COLOR.quiet, '♥ heartbeat ' + status);
       }
@@ -861,7 +861,7 @@
   }
   function note(level, text, details) {
     safe(function () {
-      var color = level === 'error' ? COLOR.error : level === 'warn' ? COLOR.warn : COLOR.info;
+      var color = (level === 'error' || level === 'warn') ? COLOR.error : COLOR.info;
       say(level === 'error' || level === 'warn' ? level : 'log', '[NexusNet]', color, text,
         details === undefined ? undefined : [sanitizeForLog(details)]);
     });

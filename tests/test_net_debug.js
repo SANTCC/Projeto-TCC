@@ -406,7 +406,9 @@ async function testNetworkErrorsAndAborts() {
     caught = err;
   }
   check('network error: the original error object is rethrown', caught === netErr);
-  check('network error: logged at error level with NETWORK ERROR', env.logs.some((l) => l.level === 'error' && /NETWORK ERROR/.test(l.text)));
+  // Falha de transporte (sem resposta do servidor) é aviso: o problema é de rede/ambiente e não
+  // defeito da aplicação. Erros com resposta do servidor (4xx/5xx) continuam em nível de erro.
+  check('network error: logged at warn level with NETWORK ERROR', env.logs.some((l) => l.level === 'warn' && /NETWORK ERROR/.test(l.text)));
   check('network error: CORS / DNS / ad-blocker hint present', find(env.logs, /CORS .*ad-blockers/).length === 1);
   check('network error: summary counts it', nd.summary().networkErrors === 1);
 

@@ -391,8 +391,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <tr class="${idx % 2 === 0 ? 'bg-slate-50/60 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'} hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
         <td class="p-3 text-left font-bold text-nexus-900 dark:text-white">${esc(i.categoria)}</td>
         <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">${esc(i.volume.toLocaleString('pt-BR'))}</td>
-        <td class="p-3 text-right font-mono text-slate-500">${esc(i.meta.toLocaleString('pt-BR'))}</td>
-        <td class="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">${esc(i.atingimento)}%</td>
+        <td class="p-3 text-right font-mono text-slate-600">${esc(i.meta.toLocaleString('pt-BR'))}</td>
+        <td class="p-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">${esc(i.atingimento)}%</td>
         <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${esc(i.tempo)} h</td>
         <td class="p-3 text-center">
           <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
@@ -651,7 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logsVisiveis.length === 0) {
       auditTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="p-4 text-center text-slate-400 italic">${totalAuditRegistros === 0 ? 'Nenhum log de alteração registrado no momento.' : 'Nenhum log corresponde à busca aplicada. Ajuste o termo para listar novamente.'}</td>
+          <td colspan="6" class="p-4 text-center text-slate-600 italic">${totalAuditRegistros === 0 ? 'Nenhum log de alteração registrado no momento.' : 'Nenhum log corresponde à busca aplicada. Ajuste o termo para listar novamente.'}</td>
         </tr>
       `;
       return;
@@ -659,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     auditTableBody.innerHTML = logsVisiveis.map(l => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-        <td class="p-2.5 text-slate-500 whitespace-nowrap">${l.data_hora ? esc(new Date(l.data_hora).toLocaleString('pt-BR')) : 'N/A'}</td>
+        <td class="p-2.5 text-slate-600 whitespace-nowrap">${l.data_hora ? esc(new Date(l.data_hora).toLocaleString('pt-BR')) : 'N/A'}</td>
         <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${esc(l.nome_funcionario || l.nome || (l.codigo_usuario && l.codigo_usuario !== '--' ? `Sem cadastro (${l.codigo_usuario})` : 'Não identificado'))}</td>
         <td class="p-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">${esc(l.cargo || 'OPERACIONAL')}</td>
         <td class="p-2.5 text-nexus-500 font-bold whitespace-nowrap">${esc(l.codigo_usuario || l.codigo_individual || '--')}</td>
@@ -795,7 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (trail.length === 0) {
       trailContainer.innerHTML = `
-        <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 italic text-xs">
+        <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-center text-slate-600 italic text-xs">
           Nenhum registro no trail de decisões críticas até o momento.
         </div>
       `;
@@ -811,16 +811,16 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="px-2 py-0.5 rounded text-xs font-bold uppercase bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">${esc(t.decisao)}</span>
             <span class="font-mono text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">${esc(t.entidade)}</span>
           </div>
-          <span class="text-slate-400 font-mono text-[11px]">${esc(new Date(t.data_hora).toLocaleString('pt-BR'))}</span>
+          <span class="text-slate-600 font-mono text-[11px]">${esc(new Date(t.data_hora).toLocaleString('pt-BR'))}</span>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
           <div>
-            <span class="font-bold text-slate-500 block text-[10px] uppercase">Responsável Operacional</span>
+            <span class="font-bold text-slate-600 block text-[10px] uppercase">Responsável Operacional</span>
             <span class="font-bold text-nexus-900 dark:text-white">${esc(t.responsavel)}</span>
           </div>
           <div>
-            <span class="font-bold text-slate-500 block text-[10px] uppercase">Justificativa / Motivo Formal</span>
+            <span class="font-bold text-slate-600 block text-[10px] uppercase">Justificativa / Motivo Formal</span>
             <span class="text-slate-700 dark:text-slate-300">${esc(t.motivo)}</span>
           </div>
         </div>
@@ -829,7 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="flex items-start gap-1.5 min-w-0">
             <span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0 mt-0.5">edit_note</span>
             <span class="font-mono text-[11px] italic text-amber-700 dark:text-amber-400 leading-snug">
-              ${t.retificacao ? esc(t.retificacao) : '<span class="text-slate-400 not-italic">Nenhuma retificação vinculada.</span>'}
+              ${t.retificacao ? esc(t.retificacao) : '<span class="text-slate-600 not-italic">Nenhuma retificação vinculada.</span>'}
             </span>
           </div>
           <button type="button" onclick="window.anexarRetificacaoTrail(${jsArg(t.id)}, ${jsArg(t.dbId || '')})" class="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] shrink-0 transition-colors">

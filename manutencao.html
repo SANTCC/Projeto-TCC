@@ -1,52 +1,27 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
-  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NexusPort — Manutenção & OS</title>
+  <meta name="description" content="Manutenção e ordens de serviço no NexusPort: chamados, guindastes e botão de pânico global." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <!-- Google Fonts & Material Symbols -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'nexus-900': '#1E293B',
-            'nexus-500': '#445987',
-            'nexus-bg': '#F5F7FA',
-            'nexus-text': '#222222',
-            'nexus-border': '#E1E5ED',
-            'nexus-dark-bg': '#0F172A',
-            'nexus-dark-card': '#1E293B',
-            'nexus-dark-border': '#334155',
-            'success': '#2E7D32',
-            'warning': '#D97706',
-            'danger': '#C62828',
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            display: ['Montserrat', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    };
-  </script>
-
+  <!-- Tipografia e ícones locais (tools/assets.js) e CSS do Tailwind compilado (css/nexus.css):
+       substituem o CDN do Tailwind (~400 KiB de JavaScript) e o Google Fonts, sem terceiros no caminho. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/nexus.css" />
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <!-- Bibliotecas locais sob demanda (vendor/) -->
+  <script src="js/asset-loader.js"></script>
   <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
@@ -56,12 +31,12 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- Topbar Superior -->
-  <header id="appTopbar"></header>
+  <header id="appTopbar" class="w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm"></header>
 
   <!-- Layout Principal -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex overflow-hidden pt-16 md:h-[calc(100vh-4rem)] md:overflow-hidden">
     <!-- Sidebar Navegação -->
-    <aside id="appSidebar"></aside>
+    <aside id="appSidebar" class="w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0"></aside>
 
     <!-- Conteúdo da Página -->
     <main class="flex-1 p-6 overflow-y-auto">
@@ -75,7 +50,7 @@
               <span>Engenharia & Ativos</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Gestão de Manutenções & Ordens de Serviço (OS)</h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Histórico operacional de manutenções, controle de ciclo preventivo e protocolos de emergência (RF 2, 3, 7 / T4.1 - T4.6).</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Histórico operacional de manutenções, controle de ciclo preventivo e protocolos de emergência (RF 2, 3, 7 / T4.1 - T4.6).</p>
           </div>
         </div>
 
@@ -117,7 +92,7 @@
             <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">vibration</span>
             <div class="min-w-0">
               <span class="font-bold text-sm text-nexus-900 dark:text-white block">Alerta no Aparelho (vibração / som)</span>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Enquanto a emergência estiver ativa, navegadores compatíveis vibram a cada 3s quando a página está visível e já recebeu uma interação do usuário. O Safari no iPhone/iPad não expõe a Vibration API; nesses aparelhos, em contexto HTTP inseguro ou em navegadores sem suporte, tentamos o alerta sonoro (quando permitido) e mostramos o banner. O painel abaixo mostra o diagnóstico deste aparelho.</p>
+              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Enquanto a emergência estiver ativa, navegadores compatíveis vibram a cada 3s quando a página está visível e já recebeu uma interação do usuário. O Safari no iPhone/iPad não expõe a Vibration API; nesses aparelhos, em contexto HTTP inseguro ou em navegadores sem suporte, tentamos o alerta sonoro (quando permitido) e mostramos o banner. O painel abaixo mostra o diagnóstico deste aparelho.</p>
             </div>
           </div>
           <div class="grid sm:grid-cols-2 gap-3">
@@ -152,7 +127,7 @@
               <span>Abrir teste no celular</span>
             </a>
           </div>
-          <p id="hapticsStatus" class="text-[11px] font-mono whitespace-pre-line text-slate-500 dark:text-slate-400">Verificando suporte do aparelho...</p>
+          <p id="hapticsStatus" class="text-[11px] font-mono whitespace-pre-line text-slate-600 dark:text-slate-400">Verificando suporte do aparelho...</p>
           <p id="hapticsFeedback" class="text-[11px] font-bold text-nexus-500 dark:text-nexus-300"></p>
         </div>
 
@@ -163,19 +138,19 @@
             <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">database</span>
             <div class="min-w-0 flex-1">
               <span class="font-bold text-sm text-nexus-900 dark:text-white block">Banco de dados (tabelas do pânico)</span>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Confere se a tabela <code class="font-mono">emergencias</code> e o valor de auditoria <code class="font-mono">EMERGENCIA</code> já foram provisionados no Supabase. Sem eles, a consulta de estado responde HTTP 404 (PGRST205) e o aviso abaixo indica a migração SQL a aplicar.</p>
+              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Confere se a tabela <code class="font-mono">emergencias</code> e o valor de auditoria <code class="font-mono">EMERGENCIA</code> já foram provisionados no Supabase. Sem eles, a consulta de estado responde HTTP 404 (PGRST205) e o aviso abaixo indica a migração SQL a aplicar.</p>
             </div>
             <button id="panicTablesCheckBtn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] transition-colors flex items-center gap-1 shrink-0">
               <span class="material-symbols-outlined text-[15px]">sync</span>
               <span>Verificar</span>
             </button>
           </div>
-          <p id="panicTablesStatus" class="text-[11px] font-mono text-slate-500 dark:text-slate-400"></p>
+          <p id="panicTablesStatus" class="text-[11px] font-mono text-slate-600 dark:text-slate-400"></p>
         </div>
 
         <!-- Alerta de Manutenção Preventiva Sugerida (> 3 Anos) -->
         <div id="alertaPreventivaBox" class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
-          <span class="material-symbols-outlined text-2xl text-amber-600 shrink-0 mt-0.5">warning</span>
+          <span class="material-symbols-outlined text-2xl text-amber-700 shrink-0 mt-0.5">warning</span>
           <div>
             <span class="font-bold text-sm block">Alerta de Manutenção Preventiva Sugerida (Ciclo > 3 Anos):</span>
             <div id="alertaPreventivaList" class="mt-0.5 leading-relaxed">
@@ -190,8 +165,8 @@
             <div class="flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500 text-[22px]">directions_boat</span>
               <div>
-                <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Solicitação de Manutenção de Embarcações (Navios)</h3>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400">Solicitação de manutenção técnica preventiva, corretiva, preditiva e geral (Item 17)</p>
+                <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Solicitação de Manutenção de Embarcações (Navios)</h2>
+                <p class="text-[11px] text-slate-600 dark:text-slate-400">Solicitação de manutenção técnica preventiva, corretiva, preditiva e geral (Item 17)</p>
               </div>
             </div>
             <button id="toggleNavioManutFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
@@ -202,13 +177,13 @@
 
           <form id="navioManutForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Selecione o Navio</label>
+              <label class="block font-bold text-slate-600 mb-1">Selecione o Navio</label>
               <select id="navioManutSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <!-- Populado via JS -->
               </select>
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Tipo de Manutenção</label>
+              <label class="block font-bold text-slate-600 mb-1">Tipo de Manutenção</label>
               <select id="navioTipoManutSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="PREVENTIVA">Manutenção Preventiva</option>
                 <option value="CORRETIVA">Manutenção Corretiva</option>
@@ -217,7 +192,7 @@
               </select>
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Justificativa / Descrição</label>
+              <label class="block font-bold text-slate-600 mb-1">Justificativa / Descrição</label>
               <input type="text" id="navioDescManut" required placeholder="Ex: Revisão completa de casco e motores principais" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div class="sm:col-span-3 flex justify-end">
@@ -233,10 +208,10 @@
         <!-- Tabela de Ordens de Serviço (OS) -->
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500">assignment</span>
               Ordens de Serviço de Manutenção (OS)
-            </h3>
+            </h2>
             <button id="toggleOsFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs">
               + Nova Ordem de Serviço
             </button>
@@ -244,13 +219,13 @@
 
           <form id="osForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Equipamento / Ativo</label>
+              <label class="block font-bold text-slate-600 mb-1">Equipamento / Ativo</label>
               <select id="osEquipamento" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="">Selecione o Equipamento / Ativo...</option>
               </select>
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Prioridade</label>
+              <label class="block font-bold text-slate-600 mb-1">Prioridade</label>
               <select id="osPrioridade" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="ALTA">Alta</option>
                 <option value="MEDIA">Média</option>
@@ -258,7 +233,7 @@
               </select>
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Descrição da Falha</label>
+              <label class="block font-bold text-slate-600 mb-1">Descrição da Falha</label>
               <input type="text" id="osDescricao" required placeholder="Ex: Substituição das roldanas de elevação" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div class="sm:col-span-3 flex justify-end">
@@ -272,22 +247,22 @@
           <!-- Busca + filtros por status das OS (Backlog 3 - 7b/7h) -->
           <div class="flex flex-col gap-2">
             <div class="relative">
-              <span class="material-symbols-outlined text-[18px] text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <span class="material-symbols-outlined text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
               <input type="search" id="buscarOsInput" placeholder="Buscar OS por número, equipamento ou descrição..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
             </div>
             <div id="osStatusChips" class="flex flex-wrap items-center gap-1.5">
-              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Status:</span>
+              <span class="text-[11px] font-bold text-slate-600 uppercase tracking-wider mr-1">Status:</span>
               <button type="button" data-status="PENDENTE_APROVACAO" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-blue-300 text-blue-600 dark:text-blue-400 font-bold text-[11px]">Aguardando aprovação</button>
-              <button type="button" data-status="EM_MANUTENCAO" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-amber-300 text-amber-600 dark:text-amber-400 font-bold text-[11px]">Em manutenção</button>
-              <button type="button" data-status="CONCLUIDA" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">Concluída</button>
+              <button type="button" data-status="EM_MANUTENCAO" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-amber-300 text-amber-700 dark:text-amber-400 font-bold text-[11px]">Em manutenção</button>
+              <button type="button" data-status="CONCLUIDA" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 text-emerald-700 dark:text-emerald-400 font-bold text-[11px]">Concluída</button>
               <button type="button" data-status="REPROVADA" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-red-300 text-red-600 dark:text-red-400 font-bold text-[11px]">Reprovada</button>
-              <span id="osCounter" class="ml-auto text-[11px] font-mono text-slate-400">Exibindo 0 de 0 OS</span>
+              <span id="osCounter" class="ml-auto text-[11px] font-mono text-slate-600">Exibindo 0 de 0 OS</span>
             </div>
           </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
                 <tr>
                   <th class="p-3">Nº OS</th>
                   <th class="p-3">Equipamento</th>
@@ -309,7 +284,7 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="vendor/supabase-js.min.js"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>

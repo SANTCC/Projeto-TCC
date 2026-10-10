@@ -1,52 +1,27 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
-  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NexusPort — Delegação de Supervisor</title>
+  <meta name="description" content="Delegação de supervisor no NexusPort: designação de substituto ativo e trilha de decisões." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <!-- Google Fonts & Material Symbols -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'nexus-900': '#1E293B',
-            'nexus-500': '#445987',
-            'nexus-bg': '#F5F7FA',
-            'nexus-text': '#222222',
-            'nexus-border': '#E1E5ED',
-            'nexus-dark-bg': '#0F172A',
-            'nexus-dark-card': '#1E293B',
-            'nexus-dark-border': '#334155',
-            'success': '#2E7D32',
-            'warning': '#D97706',
-            'danger': '#C62828',
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            display: ['Montserrat', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    };
-  </script>
-
+  <!-- Tipografia e ícones locais (tools/assets.js) e CSS do Tailwind compilado (css/nexus.css):
+       substituem o CDN do Tailwind (~400 KiB de JavaScript) e o Google Fonts, sem terceiros no caminho. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/nexus.css" />
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <!-- Bibliotecas locais sob demanda (vendor/) -->
+  <script src="js/asset-loader.js"></script>
   <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
@@ -56,12 +31,12 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- Topbar Superior -->
-  <header id="appTopbar"></header>
+  <header id="appTopbar" class="w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm"></header>
 
   <!-- Layout Principal -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex overflow-hidden pt-16 md:h-[calc(100vh-4rem)] md:overflow-hidden">
     <!-- Sidebar Navegação -->
-    <aside id="appSidebar"></aside>
+    <aside id="appSidebar" class="w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0"></aside>
 
     <!-- Conteúdo da Página -->
     <main class="flex-1 p-6 overflow-y-auto">
@@ -75,7 +50,7 @@
               <span>Governança & Poderes de Liberação</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Delegação de Supervisor Titular</h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Designação e revogação de substituto temporário ativo com poderes de liberação (RF 14 / T7.6 - T7.9).</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Designação e revogação de substituto temporário ativo com poderes de liberação (RF 14 / T7.6 - T7.9).</p>
           </div>
           <span class="px-3 py-1 rounded-full bg-nexus-500 text-white font-mono text-xs font-bold">
             Supervisor
@@ -90,7 +65,7 @@
             </div>
             <div>
               <span class="font-bold text-xs text-nexus-900 dark:text-white block">Atribuição de Poderes</span>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">O colaborador designado assume temporariamente as permissões de liberação de carga e autorizações do Supervisor Titular.</p>
+              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">O colaborador designado assume temporariamente as permissões de liberação de carga e autorizações do Supervisor Titular.</p>
             </div>
           </div>
 
@@ -100,7 +75,7 @@
             </div>
             <div>
               <span class="font-bold text-xs text-nexus-900 dark:text-white block">Trava Operacional Rígida</span>
-              <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">É permitido no máximo 1 substituto ativo por Supervisor. Uma nova designação exige a revogação prévia.</p>
+              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">É permitido no máximo 1 substituto ativo por Supervisor. Uma nova designação exige a revogação prévia.</p>
             </div>
           </div>
         </div>
@@ -108,11 +83,11 @@
         <!-- Card de Substituto Ativo e Regra Única (T7.8) -->
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500">badge</span>
               Status do Substituto Temporário Ativo
-            </h3>
-            <span class="font-mono text-xs text-slate-400">Limite Rígido: Máximo 1 Ativo por Vez</span>
+            </h2>
+            <span class="font-mono text-xs text-slate-600">Limite Rígido: Máximo 1 Ativo por Vez</span>
           </div>
 
           <div id="delegacaoStatusBox" class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -120,7 +95,7 @@
               <span class="material-symbols-outlined text-nexus-500 text-3xl">how_to_reg</span>
               <div>
                 <span class="font-bold text-nexus-900 dark:text-white block text-sm" id="substitutoNome">Nenhum Substituto Ativo</span>
-                <span class="text-xs text-slate-500 dark:text-slate-400" id="substitutoVigencia">Cada Supervisor Titular pode ter no máximo 1 substituto ativo por vez (RF 14).</span>
+                <span class="text-xs text-slate-600 dark:text-slate-400" id="substitutoVigencia">Cada Supervisor Titular pode ter no máximo 1 substituto ativo por vez (RF 14).</span>
               </div>
             </div>
             <button id="revogarDelegacaoBtn" type="button" class="hidden px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs transition-colors shrink-0">
@@ -131,28 +106,28 @@
           <!-- Formulário de Designação de Substituto -->
           <form id="delegacaoForm" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs pt-2">
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Matrícula do Funcionário Substituído</label>
+              <label class="block font-bold text-slate-600 mb-1">Matrícula do Funcionário Substituído</label>
               <input type="text" id="delegSubstituidoMatricula" required placeholder="Ex: MAT-2001 (Supervisor)" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Nome do Funcionário Substituto <span class="font-normal text-nexus-500">(digite para buscar e autopreencher CPF e nascimento)</span></label>
+              <label class="block font-bold text-slate-600 mb-1">Nome do Funcionário Substituto <span class="font-normal text-nexus-500">(digite para buscar e autopreencher CPF e nascimento)</span></label>
               <input type="text" id="delegSubstitutoNome" required placeholder="Ex: Carlos Eduardo Silva" autocomplete="off" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">CPF do Funcionário Substituto</label>
+              <label class="block font-bold text-slate-600 mb-1">CPF do Funcionário Substituto</label>
               <input type="text" id="delegSubstitutoCpf" required placeholder="Ex: 000.000.000-00" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Data de Nasc. do Substituto</label>
-              <input type="date" id="delegSubstitutoDataNasc" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+              <label class="block font-bold text-slate-600 mb-1">Data de Nasc. do Substituto</label>
+              <input type="date" id="delegSubstitutoDataNasc" aria-label="Data de nascimento do substituto" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Início da Vigência</label>
-              <input type="datetime-local" id="delegDataInicio" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+              <label class="block font-bold text-slate-600 mb-1">Início da Vigência</label>
+              <input type="datetime-local" id="delegDataInicio" aria-label="Início da delegação" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Fim da Vigência</label>
-              <input type="datetime-local" id="delegDataFim" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+              <label class="block font-bold text-slate-600 mb-1">Fim da Vigência</label>
+              <input type="datetime-local" id="delegDataFim" aria-label="Fim da delegação" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
             </div>
             <div class="sm:col-span-2 md:col-span-3 flex justify-end pt-2">
               <button type="submit" class="px-5 py-2.5 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm">
@@ -167,7 +142,7 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="vendor/supabase-js.min.js"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>

@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="pt-BR" class="light">
 <head>
-  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
-  <script src="js/analytics.js"></script>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#dc2626" />
   <title>Teste de Vibração — NexusPort STS-01</title>
+  <meta name="description" content="Teste de vibração do alerta de pânico do NexusPort no aparelho do operador (página pública de diagnóstico)." />
   <!--
     Página PÚBLICA de diagnóstico do alerta no aparelho do Botão de Pânico.
     Não exige login e não grava nada: serve para o operador abrir no próprio

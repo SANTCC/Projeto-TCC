@@ -91,9 +91,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Leitura de QR Code na mesma página de checklist (RN 17)
   if (scanChecklistBtn && checklistQrViewport) {
-    scanChecklistBtn.addEventListener('click', () => {
+    scanChecklistBtn.addEventListener('click', async () => {
       checklistQrViewport.classList.toggle('hidden');
-      if (!checklistQrViewport.classList.contains('hidden') && typeof Html5Qrcode !== 'undefined') {
+      if (checklistQrViewport.classList.contains('hidden')) return;
+      // A biblioteca de leitura é local (vendor/) e só é baixada ao abrir a câmera (js/asset-loader.js).
+      const disponivel = window.NexusAssets
+        ? await window.NexusAssets.carregar('html5-qrcode')
+        : typeof Html5Qrcode !== 'undefined';
+      if (disponivel && typeof Html5Qrcode !== 'undefined') {
         const scanner = new Html5Qrcode("inspecaoQrReader");
         scanner.start(
           { facingMode: "environment" },
@@ -156,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="font-bold text-xs text-nexus-900 dark:text-white block">${esc(item.desc)}</span>
                 ${item.categoria ? `<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[9px] font-semibold">${esc(item.categoria)}</span>` : ''}
               </div>
-              ${item.critico ? '<span class="px-2 py-0.5 rounded bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300 font-mono text-[10px] font-bold uppercase mt-1 inline-block">Item Crítico (100% Requerido)</span>' : '<span class="text-[10px] text-slate-400 font-mono mt-0.5 inline-block">Item Operacional Secundário</span>'}
+              ${item.critico ? '<span class="px-2 py-0.5 rounded bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300 font-mono text-[10px] font-bold uppercase mt-1 inline-block">Item Crítico (100% Requerido)</span>' : '<span class="text-[10px] text-slate-600 font-mono mt-0.5 inline-block">Item Operacional Secundário</span>'}
             </div>
           </div>
 
@@ -178,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="material-symbols-outlined text-nexus-500">draw</span>
           <span><strong>Inspetor Responsável:</strong> ${esc(session.nome || 'Inspetor')} (${esc(session.codigo_individual || session.codigo || 'INS-6090')})</span>
         </div>
-        <div class="font-mono text-slate-500">
+        <div class="font-mono text-slate-600">
           <span>Data/Hora: ${esc(new Date().toLocaleString('pt-BR'))}</span>
         </div>
       </div>

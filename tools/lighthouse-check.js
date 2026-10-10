@@ -184,8 +184,51 @@ function resolverArquivoDist(pasta, caminhoUrl) {
   return arquivo;
 }
 
+/**
+ * Regras de cabeçalho do arquivo `_headers` do build (formato do Netlify/Cloudflare Pages):
+ * linha de caminho (glob) e, indentado, `Nome: valor`. Serve para o servidor local do gate medir
+ * exatamente a política de cache que vai para produção.
+ */
+function carregarHeaders(pasta) {
+  const arquivo = path.join(pasta, '_headers');
+  if (!fs.existsSync(arquivo)) return [];
+  const regras = [];
+  let atual = null;
+  fs.readFileSync(arquivo, 'utf-8').split('\n').forEach((linha) => {
+    if (/^\s*#/.test(linha) || linha.trim() === '') return;
+    const cabecalho = linha.match(/^\s+([A-Za-z0-9-]+)\s*:\s*(.+)$/);
+    if (cabecalho && atual) {
+      atual.cabecalhos.push([cabecalho[1], cabecalho[2]]);
+      return;
+    }
+    if (!/^\s/.test(linha)) {
+      atual = { padrao: linha.trim(), cabecalhos: [] };
+      regras.push(atual);
+    }
+  });
+  return regras;
+}
+
+/** Um caminho de URL casa com o glob do `_headers`? (* = qualquer coisa; /$ = diretório) */
+function caminhoCasa(padrao, caminho) {
+  const escapado = padrao.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${escapado}$`).test(caminho);
+}
+
+/** Cabeçalhos que se aplicam a um caminho (a última regra que casa vence, como no Netlify). */
+function headersPara(regras, caminho) {
+  const resultado = new Map();
+  regras.forEach((regra) => {
+    if (caminhoCasa(regra.padrao, caminho)) {
+      regra.cabecalhos.forEach(([nome, valor]) => resultado.set(nome, valor));
+    }
+  });
+  return resultado;
+}
+
 /** Servidor estático local para dist/. Porta livre, só em 127.0.0.1. */
 function iniciarServidor(pasta) {
+  const regras = carregarHeaders(pasta);
   const servidor = http.createServer((req, res) => {
     const arquivo = resolverArquivoDist(pasta, req.url);
     if (!arquivo) {
@@ -193,7 +236,10 @@ function iniciarServidor(pasta) {
       res.end('Não encontrado');
       return;
     }
-    res.writeHead(200, { 'Content-Type': TIPOS_MIME[path.extname(arquivo)] || 'application/octet-stream' });
+    const caminho = decodeURIComponent(String(req.url || '/').split('?')[0]);
+    const cabecalhos = { 'Content-Type': TIPOS_MIME[path.extname(arquivo)] || 'application/octet-stream' };
+    headersPara(regras, caminho).forEach((valor, nome) => { cabecalhos[nome] = valor; });
+    res.writeHead(200, cabecalhos);
     fs.createReadStream(arquivo).pipe(res);
   });
   return new Promise((resolve, reject) => {
@@ -296,6 +342,9 @@ async function executar(opcoes) {
 module.exports = {
   executar,
   avaliarLhr,
+  carregarHeaders,
+  headersPara,
+  caminhoCasa,
   consolidarRodadas,
   mediana,
   carregarLimiares,

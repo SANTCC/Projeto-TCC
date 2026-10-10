@@ -327,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (prodData.length === 0) {
       prodTableBody.innerHTML = `
-        <tr><td colspan="5" class="p-4 text-center text-slate-400 italic">Nenhum registro de produtividade localizado.</td></tr>
+        <tr><td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhum registro de produtividade localizado.</td></tr>
       `;
       return;
     }
@@ -336,9 +336,9 @@ document.addEventListener('DOMContentLoaded', () => {
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <td class="p-3 font-mono font-bold text-nexus-500">${esc(item.matricula)}</td>
         <td class="p-3 font-bold">${esc(item.nome)}</td>
-        <td class="p-3 text-slate-500">${esc(item.cargo)}</td>
-        <td class="p-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">${esc(item.volume)}</td>
-        <td class="p-3 text-slate-400 font-mono text-[11px]">${esc(item.ultima)}</td>
+        <td class="p-3 text-slate-600">${esc(item.cargo)}</td>
+        <td class="p-3 font-mono font-bold text-emerald-700 dark:text-emerald-400">${esc(item.volume)}</td>
+        <td class="p-3 text-slate-600 font-mono text-[11px]">${esc(item.ultima)}</td>
       </tr>
     `).join('');
   }

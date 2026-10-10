@@ -1,52 +1,27 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js -->
-  <script src="js/analytics.js"></script>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NexusPort — Cargas & Pátio</title>
+  <meta name="description" content="Cargas e operações de pátio no NexusPort: agendamento, checklist de avarias, armazenamento em baia e vinculação de contêineres." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <!-- Google Fonts & Material Symbols -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            'nexus-900': '#1E293B',
-            'nexus-500': '#445987',
-            'nexus-bg': '#F5F7FA',
-            'nexus-text': '#222222',
-            'nexus-border': '#E1E5ED',
-            'nexus-dark-bg': '#0F172A',
-            'nexus-dark-card': '#1E293B',
-            'nexus-dark-border': '#334155',
-            'success': '#2E7D32',
-            'warning': '#D97706',
-            'danger': '#C62828',
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            display: ['Montserrat', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    };
-  </script>
-
+  <!-- Tipografia e ícones locais (tools/assets.js) e CSS do Tailwind compilado (css/nexus.css):
+       substituem o CDN do Tailwind (~400 KiB de JavaScript) e o Google Fonts, sem terceiros no caminho. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/nexus.css" />
   <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
   <script src="js/security.js"></script>
+  <!-- Bibliotecas locais sob demanda (vendor/) -->
+  <script src="js/asset-loader.js"></script>
   <script src="js/session-cookies.js"></script>
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
@@ -57,12 +32,12 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- Topbar Superior -->
-  <header id="appTopbar"></header>
+  <header id="appTopbar" class="w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm"></header>
 
   <!-- Layout Principal -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex overflow-hidden pt-16 md:h-[calc(100vh-4rem)] md:overflow-hidden">
     <!-- Sidebar Navegação -->
-    <aside id="appSidebar"></aside>
+    <aside id="appSidebar" class="w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0"></aside>
 
     <!-- Conteúdo da Página -->
     <main class="flex-1 p-6 overflow-y-auto">
@@ -76,7 +51,7 @@
               <span>Módulo de Gestão Operacional</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Cargas & Operações de Pátio</h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Acompanhamento do fluxo em 8 etapas e controle de ações restritas por cargo (RF 1 / RF 6).</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Acompanhamento do fluxo em 8 etapas e controle de ações restritas por cargo (RF 1 / RF 6).</p>
           </div>
 
           <button id="toggleAgendamentoFormBtn" type="button" class="px-4 py-2.5 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-2 transition-all shadow-md">
@@ -89,44 +64,44 @@
         <!-- Formulário de Agendamento de Nova Carga -->
         <form id="agendamentoCargaForm" class="hidden bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div class="sm:col-span-2 md:col-span-4 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
               <span class="material-symbols-outlined text-nexus-500">event_available</span>
               Agendamento de Nova Carga
-            </h3>
+            </h2>
           </div>
 
           <fieldset class="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
-            <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-400 px-1">Dados da carga</legend>
+            <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-600 px-1">Dados da carga</legend>
 
           <div>
-            <label class="block font-bold text-slate-500 mb-1">Tipo de Carga</label>
+            <label class="block font-bold text-slate-600 mb-1">Tipo de Carga</label>
             <select id="agTipoCarga" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold">
               <option value="">Selecione o Tipo...</option>
             </select>
           </div>
           <div>
-            <label class="block font-bold text-slate-500 mb-1">Peso (toneladas)</label>
+            <label class="block font-bold text-slate-600 mb-1">Peso (toneladas)</label>
             <input type="number" step="any" min="0.01" id="agPeso" required placeholder="Ex: 25.5" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
           </div>
           <div>
-            <label class="block font-bold text-slate-500 mb-1">Volume (m³)</label>
+            <label class="block font-bold text-slate-600 mb-1">Volume (m³)</label>
             <input type="number" step="any" min="0.01" id="agVolume" required placeholder="Ex: 40.0" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
           </div>
           <div>
-            <label class="block font-bold text-slate-500 mb-1">Valor Declarado (R$)</label>
+            <label class="block font-bold text-slate-600 mb-1">Valor Declarado (R$)</label>
             <input type="number" step="any" min="0.01" id="agValor" required placeholder="Ex: 150000" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
           </div>
           <div>
-            <label class="block font-bold text-slate-500 mb-1">Natureza da Mercadoria</label>
+            <label class="block font-bold text-slate-600 mb-1">Natureza da Mercadoria</label>
             <input type="text" id="agNatureza" required placeholder="Ex: Agrícola / Perecível" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
           </div>
           </fieldset>
 
           <fieldset class="sm:col-span-2 md:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-4 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
-            <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-400 px-1">Destino e prazo</legend>
+            <legend class="text-[11px] font-bold uppercase tracking-wide text-slate-600 px-1">Destino e prazo</legend>
 
           <div>
-            <label class="block font-bold text-slate-500 mb-1">Setor do Pátio (Ponto de Descarga)</label>
+            <label class="block font-bold text-slate-600 mb-1">Setor do Pátio (Ponto de Descarga)</label>
             <select id="agPortoDescarga" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-nexus-900 dark:text-white">
               <option value="Pátio Principal (Setor A)">Pátio Principal (Setor A)</option>
               <option value="Pátio STS-01 (Setor B)">Pátio STS-01 (Setor B)</option>
@@ -135,18 +110,18 @@
             </select>
           </div>
           <div class="sm:col-span-2">
-            <label class="block font-bold text-slate-500 mb-1">Destino Final (Rota Marítima Cadastrada)</label>
+            <label class="block font-bold text-slate-600 mb-1">Destino Final (Rota Marítima Cadastrada)</label>
             <select id="agDestino" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold">
               <option value="">Carregando rotas marítimas cadastradas...</option>
             </select>
-            <p class="text-[11px] text-slate-400 mt-1">O destino é escolhido entre as rotas marítimas cadastradas no sistema (Gestão de Rotas em Embarcações &amp; GPS) — digitação manual não é permitida, para evitar falhas. A estimativa de chegada (ETA) é calculada automaticamente pelo navio vinculado (@ 33 km/h).</p>
+            <p class="text-[11px] text-slate-600 mt-1">O destino é escolhido entre as rotas marítimas cadastradas no sistema (Gestão de Rotas em Embarcações &amp; GPS) — digitação manual não é permitida, para evitar falhas. A estimativa de chegada (ETA) é calculada automaticamente pelo navio vinculado (@ 33 km/h).</p>
           </div>
           <div class="sm:col-span-3">
-            <label class="block font-bold text-slate-500 mb-1">Funcionário Responsável pela Carga</label>
+            <label class="block font-bold text-slate-600 mb-1">Funcionário Responsável pela Carga</label>
             <select id="agEstivadorResponsavel" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold">
               <option value="">Carregando funcionários em escala...</option>
             </select>
-            <p id="agEstivadorResponsavelHint" class="text-[11px] text-slate-400 mt-1">
+            <p id="agEstivadorResponsavelHint" class="text-[11px] text-slate-600 mt-1">
               Gestão: selecione um funcionário em escala para assumir a carga. Funcionário operacional: a carga é automaticamente atribuída a você.
             </p>
           </div>
@@ -178,36 +153,36 @@
           <!-- Painel de Pesquisa e Filtros em 5 Campos (RF 10.1) -->
           <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
             <div class="sm:col-span-2">
-              <label class="block font-bold text-slate-500 mb-1">Busca Rápida</label>
+              <label class="block font-bold text-slate-600 mb-1">Busca Rápida</label>
               <input type="search" id="filterBusca" placeholder="Buscar por código, tipo, natureza, contêiner ou navio..." class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">Código da Carga</label>
+              <label class="block font-bold text-slate-600 mb-1">Código da Carga</label>
               <input type="text" id="filterCodigo" placeholder="Ex: CRG-2026-001" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">1. Nome do Navio</label>
+              <label class="block font-bold text-slate-600 mb-1">1. Nome do Navio</label>
               <input type="text" id="filterNavio" placeholder="Ex: Santos Star" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">2. Contêiner</label>
+              <label class="block font-bold text-slate-600 mb-1">2. Contêiner</label>
               <input type="text" id="filterContainer" placeholder="Ex: CONT-991" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">3. Tipo de Carga</label>
+              <label class="block font-bold text-slate-600 mb-1">3. Tipo de Carga</label>
               <input type="text" id="filterTipo" placeholder="Ex: Grãos, Eletrônicos" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">4. Período (De / Até)</label>
+              <label class="block font-bold text-slate-600 mb-1">4. Período (De / Até)</label>
               <div class="flex items-center gap-1">
                 <input type="date" id="filterDataInicio" title="Data Inicial" class="w-1/2 px-1.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono text-[11px]" />
-                <span class="text-slate-400 font-bold">-</span>
+                <span class="text-slate-600 font-bold">-</span>
                 <input type="date" id="filterDataFim" title="Data Final" class="w-1/2 px-1.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono text-[11px]" />
               </div>
             </div>
             <div>
-              <label class="block font-bold text-slate-500 mb-1">5. Status do Fluxo</label>
-              <select id="filterStatus" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
+              <label class="block font-bold text-slate-600 mb-1">5. Status do Fluxo</label>
+              <select id="filterStatus" aria-label="Filtrar por status da carga" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="">Todos os Status</option>
                 <option value="AGENDAMENTO">AGENDAMENTO</option>
                 <option value="RECEBIMENTO_INSPECAO">RECEBIMENTO_INSPECAO</option>
@@ -226,20 +201,20 @@
 
             <!-- Chips rápidos de status do fluxo (Backlog 3 - filtragem visual direta) -->
             <div id="cargasStatusChips" class="sm:col-span-2 md:col-span-3 lg:col-span-6 flex flex-wrap items-center gap-1.5 pt-1">
-              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Atalhos de Status:</span>
+              <span class="text-[11px] font-bold text-slate-600 uppercase tracking-wider mr-1">Atalhos de Status:</span>
               <button type="button" data-status="AGENDAMENTO" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-amber-400">Agendamento</button>
               <button type="button" data-status="RECEBIMENTO_INSPECAO" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-indigo-400">Inspeção</button>
               <button type="button" data-status="ARMAZENAGEM" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-indigo-400">Armazenagem</button>
               <button type="button" data-status="PRONTA_PARA_ENTREGA" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-emerald-400">Pronta p/ Entrega</button>
               <button type="button" data-status="EM_TRANSITO" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-blue-400">Em Trânsito</button>
               <button type="button" data-status="ENTREGUE" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-green-400">Entregue</button>
-              <span id="cargasCounter" class="ml-auto text-[11px] font-mono text-slate-400">Exibindo 0 de 0 cargas</span>
+              <span id="cargasCounter" class="ml-auto text-[11px] font-mono text-slate-600">Exibindo 0 de 0 cargas</span>
             </div>
           </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
                 <tr>
                   <th class="p-3">Código / QR</th>
                   <th class="p-3">Tipo / Natureza</th>
@@ -261,10 +236,10 @@
         <div class="bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-300 dark:border-slate-700 p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between pb-3 border-b border-slate-300 dark:border-slate-700">
             <span class="font-display font-bold text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
-              <span class="material-symbols-outlined text-slate-500">block</span>
+              <span class="material-symbols-outlined text-slate-600">block</span>
               Tabela de Cargas Canceladas (C9)
             </span>
-            <span class="text-xs font-mono text-slate-400">
+            <span class="text-xs font-mono text-slate-600">
               Histórico de Cancelamentos
             </span>
           </div>
@@ -294,7 +269,7 @@
               <span class="material-symbols-outlined text-red-600">cancel</span>
               Tabela de Cargas Recusadas
             </span>
-            <span class="text-xs font-mono text-red-400 dark:text-red-500">
+            <span class="text-xs font-mono text-red-700 dark:text-red-500">
               Recusadas na Inspeção
             </span>
           </div>
@@ -322,17 +297,15 @@
   </div>
 
   <!-- QR Code Modal de Confirmação em Tempo Real -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <div id="qrModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-        <h3 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
           <span class="material-symbols-outlined text-nexus-500">qr_code_2</span>
           Etiqueta de QR Code Gerado
-        </h3>
-        <button type="button" id="closeQrModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+        </h2>
+        <button type="button" id="closeQrModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
           <span class="material-symbols-outlined text-xl">close</span>
         </button>
       </div>
@@ -341,8 +314,8 @@
         <canvas id="qrCanvas" class="w-48 h-48 bg-white p-2 rounded border border-slate-300 shadow-sm"></canvas>
         <div class="flex flex-col gap-0.5 text-xs">
           <span id="qrModalEntityId" class="font-mono font-bold text-nexus-900 dark:text-white text-sm">--</span>
-          <span id="qrModalEntityType" class="text-slate-500 dark:text-slate-400 font-semibold">--</span>
-          <span id="qrModalEntitySub" class="text-slate-400 dark:text-slate-500 text-[11px] font-mono">--</span>
+          <span id="qrModalEntityType" class="text-slate-600 dark:text-slate-400 font-semibold">--</span>
+          <span id="qrModalEntitySub" class="text-slate-600 dark:text-slate-500 text-[11px] font-mono">--</span>
         </div>
       </div>
 
@@ -378,17 +351,17 @@
   <div id="vincularModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-xl w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-        <h3 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
           <span class="material-symbols-outlined text-nexus-500">link</span>
           Vincular Carga a Contêiner
-        </h3>
-        <button type="button" id="closeVincularModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+        </h2>
+        <button type="button" id="closeVincularModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
           <span class="material-symbols-outlined text-xl">close</span>
         </button>
       </div>
 
       <div class="flex flex-col gap-3 text-xs">
-        <p class="text-slate-500 dark:text-slate-400">
+        <p class="text-slate-600 dark:text-slate-400">
           Carga selecionada: <strong id="vincularCargaIdLabel" class="text-nexus-500">--</strong>
           (Volume: <span id="vincularCargaVolumeLabel" class="font-mono font-bold text-nexus-900 dark:text-white">--</span>)
         </p>
@@ -398,7 +371,7 @@
           <select id="vincularNavioSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-xs">
             <!-- Preenchido via JS: apenas navios aptos para receber carga -->
           </select>
-          <p id="vincularNavioAviso" class="hidden mt-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400"></p>
+          <p id="vincularNavioAviso" class="hidden mt-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400"></p>
         </div>
 
         <div>
@@ -425,17 +398,17 @@
   <div id="movimentarModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-xl w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-        <h3 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-amber-600">forklift</span>
+        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-amber-700">forklift</span>
           Movimentar Carga entre Setores do Pátio
-        </h3>
-        <button type="button" id="closeMovimentarModalBtn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+        </h2>
+        <button type="button" id="closeMovimentarModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
           <span class="material-symbols-outlined text-xl">close</span>
         </button>
       </div>
 
       <div class="flex flex-col gap-3 text-xs">
-        <p class="text-slate-500 dark:text-slate-400">
+        <p class="text-slate-600 dark:text-slate-400">
           Carga selecionada: <strong id="movimentarCargaIdLabel" class="text-nexus-500">--</strong>
           (Setor atual: <span id="movimentarSetorAtualLabel" class="font-mono font-bold text-nexus-900 dark:text-white">--</span>)
         </p>
@@ -456,7 +429,7 @@
           <select id="movimentarGuindasteSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono text-xs">
             <option value="">Selecione o guindaste...</option>
           </select>
-          <p class="text-[11px] text-slate-400 mt-1">A tarefa aparece como pendente na seção de guindastes (Embarcações &amp; GPS). O setor da carga só é alterado quando a tarefa for concluída por lá.</p>
+          <p class="text-[11px] text-slate-600 mt-1">A tarefa aparece como pendente na seção de guindastes (Embarcações &amp; GPS). O setor da carga só é alterado quando a tarefa for concluída por lá.</p>
         </div>
 
         <div id="movimentarInstrucaoBox" class="hidden p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs leading-relaxed">
@@ -477,7 +450,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="vendor/supabase-js.min.js"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>
   <script src="js/net-debug.js"></script>

@@ -224,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cargo = String(f.cargo_nome || f.cargo || '');
         return `<button type="button" data-matricula="${esc(mat)}" class="w-full text-left px-3 py-2 hover:bg-nexus-bg dark:hover:bg-slate-800 flex flex-col gap-0.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
           <span class="font-mono font-bold text-nexus-900 dark:text-white">${esc(nome)}</span>
-          <span class="font-mono text-slate-500 dark:text-slate-400">${esc(mat)} • ${esc(cargo)}</span>
+          <span class="font-mono text-slate-600 dark:text-slate-400">${esc(mat)} • ${esc(cargo)}</span>
         </button>`;
       }).join('');
       suggestBox.classList.remove('hidden');
@@ -360,12 +360,12 @@ document.addEventListener('DOMContentLoaded', () => {
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
         <td class="p-3 font-mono font-bold text-nexus-500">${esc(f.matricula)}</td>
         <td class="p-3 font-bold">${esc(f.nome)}</td>
-        <td class="p-3 text-slate-500 font-semibold">${esc(f.cargo)}</td>
+        <td class="p-3 text-slate-600 font-semibold">${esc(f.cargo)}</td>
         <td class="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">${esc(f.codigo)}</td>
         <td class="p-3 font-mono text-slate-600 dark:text-slate-300">${esc(formatarCpfExibicao(f.cpf))}</td>
-        <td class="p-3 font-mono text-slate-500">${esc(formatarDataNascExibicao(f.data_nascimento))}</td>
-        <td class="p-3 text-slate-400 font-mono text-xs flex items-center justify-between">
-          <span class="${f.ativo ? 'text-emerald-600 font-bold' : 'text-slate-400'}">${esc(f.doc || 'Cadastrado')}</span>
+        <td class="p-3 font-mono text-slate-600">${esc(formatarDataNascExibicao(f.data_nascimento))}</td>
+        <td class="p-3 text-slate-600 font-mono text-xs flex items-center justify-between">
+          <span class="${f.ativo ? 'text-emerald-700 font-bold' : 'text-slate-600'}">${esc(f.doc || 'Cadastrado')}</span>
           <button type="button" onclick="window.excluirFuncionarioReal(${jsArg(f.matricula)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
         </td>
       </tr>
@@ -672,7 +672,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ativos.length === 0) {
         visTableBody.innerHTML = `
           <tr>
-            <td colspan="7" class="p-4 text-center text-slate-400 italic">Nenhum visitante ativo no porto no momento.</td>
+            <td colspan="7" class="p-4 text-center text-slate-600 italic">Nenhum visitante ativo no porto no momento.</td>
           </tr>
         `;
       } else {
@@ -683,7 +683,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
               <td class="p-3 font-bold">${esc(v.nome)}</td>
               <td class="p-3 font-mono text-xs">${esc(v.documento)}</td>
-              <td class="p-3 text-slate-500">${esc(v.motivo)}</td>
+              <td class="p-3 text-slate-600">${esc(v.motivo)}</td>
               <td class="p-3">
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
                   isAguardando ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
@@ -691,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                   ${esc(v.status || 'EM_VISITA')}
                 </span>
               </td>
-              <td class="p-3 font-mono text-xs text-slate-400">${esc(v.data)}</td>
+              <td class="p-3 font-mono text-xs text-slate-600">${esc(v.data)}</td>
               <td class="p-3 font-mono text-xs font-bold text-nexus-500">${esc(v.por || session.matricula)}</td>
               <td class="p-3 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-2">
@@ -718,7 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (historico.length === 0) {
         visHistoricoTableBody.innerHTML = `
           <tr>
-            <td colspan="7" class="p-4 text-center text-slate-400 italic">Nenhuma visita concluída registrada no histórico do ano.</td>
+            <td colspan="7" class="p-4 text-center text-slate-600 italic">Nenhuma visita concluída registrada no histórico do ano.</td>
           </tr>
         `;
       } else {
@@ -726,15 +726,15 @@ document.addEventListener('DOMContentLoaded', () => {
           <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
             <td class="p-3 font-bold text-slate-700 dark:text-slate-200">${esc(v.nome)}</td>
             <td class="p-3 font-mono text-xs">${esc(v.documento)}</td>
-            <td class="p-3 text-slate-500">${esc(v.motivo)}</td>
-            <td class="p-3 font-mono text-xs text-slate-400">${esc(v.data)}</td>
+            <td class="p-3 text-slate-600">${esc(v.motivo)}</td>
+            <td class="p-3 font-mono text-xs text-slate-600">${esc(v.data)}</td>
             <td class="p-3 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">${esc(v.data_saida || 'Concluída')}</td>
             <td class="p-3">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                 ${esc(v.vistoria || 'Vistoria em Ordem - Sem Anormalidades')}
               </span>
             </td>
-            <td class="p-3 font-mono text-xs text-slate-400">${esc(v.por || session.matricula)}</td>
+            <td class="p-3 font-mono text-xs text-slate-600">${esc(v.por || session.matricula)}</td>
           </tr>
         `).join('');
       }

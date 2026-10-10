@@ -458,8 +458,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr>
           <td colspan="7" class="p-8 text-center">
             <span class="material-symbols-outlined text-[32px] block mb-1 text-slate-300 dark:text-slate-600">build_circle</span>
-            <span class="block font-bold text-slate-400 text-xs">Nenhuma OS cadastrada ainda.</span>
-            <span class="block text-[11px] text-slate-400 mt-1">Use "+ Nova Ordem de Serviço" para registrar a primeira ordem, ou solicite uma manutenção de embarcação no painel acima.</span>
+            <span class="block font-bold text-slate-600 text-xs">Nenhuma OS cadastrada ainda.</span>
+            <span class="block text-[11px] text-slate-600 mt-1">Use "+ Nova Ordem de Serviço" para registrar a primeira ordem, ou solicite uma manutenção de embarcação no painel acima.</span>
           </td>
         </tr>
       `;
@@ -487,8 +487,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr>
           <td colspan="7" class="p-8 text-center">
             <span class="material-symbols-outlined text-[32px] block mb-1 text-slate-300 dark:text-slate-600">search_off</span>
-            <span class="block font-bold text-slate-400 text-xs">Nenhuma OS corresponde à busca/filtro${esc(statusTxt)}.</span>
-            <span class="block text-[11px] text-slate-400 mt-1">Ajuste o texto pesquisado ou limpe o filtro de status ativo para listar novamente.</span>
+            <span class="block font-bold text-slate-600 text-xs">Nenhuma OS corresponde à busca/filtro${esc(statusTxt)}.</span>
+            <span class="block text-[11px] text-slate-600 mt-1">Ajuste o texto pesquisado ou limpe o filtro de status ativo para listar novamente.</span>
           </td>
         </tr>
       `;
@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'REPROVAR')" class="px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold">Reprovar</button>
           ` : os.status === 'EM_MANUTENCAO' ? `
             <button type="button" title="Concluir manutenção" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'CONCLUIR')" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">task_alt</span><span>Concluir</span></button>
-          ` : `<span class="text-slate-400 font-sans italic">Finalizada</span>`}
+          ` : `<span class="text-slate-600 font-sans italic">Finalizada</span>`}
           </div>
         </td>
       </tr>
@@ -624,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>`).join('');
       } else {
-        alertaList.innerHTML = '<span class="text-slate-400 italic">Nenhum equipamento com ciclo de preventiva vencido (> 3 anos) no momento. Todos os ativos operam dentro do ciclo recomendado.</span>';
+        alertaList.innerHTML = '<span class="text-slate-600 italic">Nenhum equipamento com ciclo de preventiva vencido (> 3 anos) no momento. Todos os ativos operam dentro do ciclo recomendado.</span>';
       }
     }
   }

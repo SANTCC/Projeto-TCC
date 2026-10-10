@@ -367,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!cargasCanceladas || cargasCanceladas.length === 0) {
       canceladasTableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="p-4 text-center text-slate-400 italic">Nenhuma carga cancelada no sistema.</td>
+          <td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhuma carga cancelada no sistema.</td>
         </tr>
       `;
       return;
@@ -394,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!cargasRecusadas || cargasRecusadas.length === 0) {
       recusadasTableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="p-4 text-center text-slate-400 italic">Nenhuma carga recusada no sistema.</td>
+          <td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhuma carga recusada no sistema.</td>
         </tr>
       `;
       return;
@@ -595,7 +595,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (userItems.length === 0) {
       cargasTableBody.innerHTML = `
         <tr>
-          <td colspan="7" class="p-4 text-center text-slate-400 italic">Nenhuma carga encontrada para os filtros aplicados.</td>
+          <td colspan="7" class="p-4 text-center text-slate-600 italic">Nenhuma carga encontrada para os filtros aplicados.</td>
         </tr>
       `;
       return;
@@ -617,9 +617,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isEstivador) {
         if (cargaEmTransito) {
           // Carga em trânsito não pode ser movimentada pelo sistema
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else if (emergenciaAtiva) {
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else {
           actionButtonsHtml += `<button type="button" title="Movimentar carga no pátio" aria-label="Movimentar carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         }
@@ -648,7 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const navioInfoHtml = c.navio
           ? `aguardando liberação do navio ${esc(c.navio)}`
           : 'sem navio vinculado — use "Vincular"';
-        actionButtonsHtml += `<span title="A saída ocorre automaticamente quando o navio vinculado for liberado (${navioInfoHtml})" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-semibold text-[11px] flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span><span class="hidden sm:inline">Aguarda navio</span></span>`;
+        actionButtonsHtml += `<span title="A saída ocorre automaticamente quando o navio vinculado for liberado (${navioInfoHtml})" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-[11px] flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span><span class="hidden sm:inline">Aguarda navio</span></span>`;
       }
 
       // C10: Botão manual de "Entregar" REMOVIDO — a entrega ocorre automaticamente quando o navio chega ao destino
@@ -658,7 +658,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (!actionButtonsHtml) {
-        actionButtonsHtml = `<span class="text-slate-400 font-mono italic text-[11px]">Leitura (${esc(session.cargo_nome || userCargo)})</span>`;
+        actionButtonsHtml = `<span class="text-slate-600 font-mono italic text-[11px]">Leitura (${esc(session.cargo_nome || userCargo)})</span>`;
       }
 
       const etaLinha = etaCargaTexto(c, naviosLocais);
@@ -666,14 +666,14 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
           <td class="p-3 font-mono font-bold text-nexus-500 whitespace-nowrap">
             ${esc(c.id)}
-            <span class="block text-[10px] text-slate-400 font-normal">${esc(c.qrCode || '')}</span>
+            <span class="block text-[10px] text-slate-600 font-normal">${esc(c.qrCode || '')}</span>
           </td>
-          <td class="p-3 whitespace-nowrap">${esc(c.tipo)} <span class="block text-[10px] text-slate-400">${esc(c.natureza || '')}</span></td>
+          <td class="p-3 whitespace-nowrap">${esc(c.tipo)} <span class="block text-[10px] text-slate-600">${esc(c.natureza || '')}</span></td>
           <td class="p-3 font-mono whitespace-nowrap">${esc(c.peso)} / ${esc(c.volume)}</td>
           <td class="p-3 font-bold whitespace-nowrap">${esc(c.portoDescarga)}</td>
           <td class="p-3 text-xs whitespace-nowrap">
-            <span class="block font-mono ${c.container ? '' : 'text-slate-400 italic'}">${c.container ? esc(c.container) : 'Contêiner: não vinculado'}</span>
-            <span class="block text-[10px] ${c.navio ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
+            <span class="block font-mono ${c.container ? '' : 'text-slate-600 italic'}">${c.container ? esc(c.container) : 'Contêiner: não vinculado'}</span>
+            <span class="block text-[10px] ${c.navio ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
             ${etaLinha ? `<span class="block text-[10px] font-mono text-indigo-600 dark:text-indigo-400" title="Estimativa calculada pelo navio vinculado (@ 33 km/h)">${esc(etaLinha)}</span>` : ''}
           </td>
           <td class="p-3 whitespace-nowrap">
@@ -1016,7 +1016,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (qrModalEntityType) qrModalEntityType.textContent = entityData.tipo || 'Carga Geral';
     if (qrModalEntitySub) qrModalEntitySub.textContent = `Natureza: ${entityData.natureza || 'Pátio STS-01'}`;
 
-    if (typeof QRCode !== 'undefined') {
+    // A biblioteca de QR Code é local (vendor/) e só é baixada ao abrir a etiqueta (js/asset-loader.js).
+    if (window.NexusAssets) {
+      window.NexusAssets.carregar('qrcode').then((disponivel) => {
+        if (disponivel && typeof QRCode !== 'undefined') {
+          QRCode.toCanvas(qrCanvas, qrPayload, { width: 180, margin: 1 });
+        }
+      });
+    } else if (typeof QRCode !== 'undefined') {
       QRCode.toCanvas(qrCanvas, qrPayload, { width: 180, margin: 1 });
     }
 
@@ -1357,7 +1364,11 @@ document.addEventListener('DOMContentLoaded', () => {
         await window.registrarLogAlteracao(entityId, 'REIMPRESSAO_ETIQUETA', `Reimpressão de etiqueta física gerada para ${entityId}`);
       }
 
-      if (window.jspdf && window.jspdf.jsPDF) {
+      // O jsPDF é local (vendor/) e só é baixado na primeira impressão de etiqueta.
+      const temPdf = window.NexusAssets
+        ? await window.NexusAssets.carregar('jspdf')
+        : !!(window.jspdf && window.jspdf.jsPDF);
+      if (temPdf && window.jspdf && window.jspdf.jsPDF) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ unit: 'mm', format: [100, 100] });
         doc.setFont('helvetica', 'bold');

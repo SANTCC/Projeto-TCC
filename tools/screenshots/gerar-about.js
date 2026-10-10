@@ -169,7 +169,7 @@ function blocoCabecalho() {
   return `  <!-- Topbar -->
   <header class="topo">
     <div class="topo-marca">
-      <img src="design/logo_porto.png" alt="Logotipo do NexusPort" width="40" height="40" />
+      <picture><source srcset="design/logo_porto.webp" type="image/webp" /><img src="design/logo_porto.png" alt="Logotipo do NexusPort" width="40" height="40" /></picture>
       <div>
         <strong>NexusPort</strong>
         <span>Terminal STS-01 • Como funciona o sistema</span>

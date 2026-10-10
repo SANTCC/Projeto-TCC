@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const detalhe = [f.matricula, f.cargo].filter(Boolean).join(' • ') || 'Funcionário cadastrado';
         return `<button type="button" data-idx="${idx}" class="w-full text-left px-3 py-2 hover:bg-nexus-bg dark:hover:bg-slate-800 flex flex-col gap-0.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
           <span class="font-bold text-nexus-900 dark:text-white">${esc(f.nome)}</span>
-          <span class="font-mono text-slate-500 dark:text-slate-400">${esc(detalhe)}</span>
+          <span class="font-mono text-slate-600 dark:text-slate-400">${esc(detalhe)}</span>
         </button>`;
       }).join('');
       sugBox.classList.remove('hidden');
