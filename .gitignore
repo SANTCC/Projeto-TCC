@@ -19,3 +19,6 @@ lighthouse-report/
 __pycache__/
 *.pyc
 *.pyo
+
+# Dependências das capturas de tela (npm install --prefix tools/screenshots).
+tools/screenshots/node_modules/

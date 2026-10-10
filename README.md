@@ -64,10 +64,12 @@ Acesse `http://localhost:3000` no seu navegador.
 
 ### 4. Executar Testes Automatizados
 ```bash
-npm test              # Executa toda a suíte de testes (Node.js/jsdom)
-npm run audit:xss    # Análise estática e regressão Anti-XSS
-npm run test:panic   # Testes do módulo de pânico e resiliência de migração
-npm run test:webmcp  # Testes de integração com agentes de IA (WebMCP)
+npm test                    # Executa toda a suíte de testes (Node.js/jsdom)
+npm run audit:xss          # Análise estática e regressão Anti-XSS
+npm run test:panic         # Testes do módulo de pânico e resiliência de migração
+npm run test:webmcp        # Testes de integração com agentes de IA (WebMCP)
+npm run test:screenshots   # Dados de demonstração, PostgREST simulado e catálogo de telas
+npm run test:about         # Conteúdo, imagens e links do about.html
 ```
 
 ---
@@ -154,7 +156,7 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 - **CI:** `.github/workflows/lighthouse.yml` roda em todo PR. Os relatórios vão como artefato.
 - **Local:** `npm run lighthouse` (precisa de Google Chrome ou Chromium; use `CHROME_PATH` se não estiver no PATH). Gera `lighthouse-report/`.
-- **Limiares e exceções:** `lighthouse/limiares.json`. Cada página é medida em 3 rodadas (mediana). Exceções são dívida conhecida por página e devem ser removidas quando corrigidas.
+- **Limiares e exceções:** `lighthouse/limiares.json`. Cada página é medida em 3 rodadas (mediana). Exceções são dívida conhecida por página e devem ser removidas quando corrigidas. O `about.html` é medido como página pública (documentação ilustrada).
 - **Testes:** `npm run test:lighthouse`.
 
 ---
@@ -165,6 +167,22 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 - **Cache:** bucket privado `relatorios-pdf`. O nome do arquivo é o SHA-256 do conteúdo, então dados iguais reaproveitam o PDF.
 - **Implantação:** `supabase db push` (migrações `20261009010000` e `20261009020000`) e `supabase functions deploy relatorio-pdf --no-verify-jwt`.
 - **Testes:** `npm run test:relatorio-pdf`.
+
+---
+
+## 🖼️ Documentação Ilustrada (about.html)
+
+- **Página:** `about.html` explica como o sistema funciona — fluxo operacional, arquitetura, perfis/camadas de visão, regras de negócio e o passo a passo de implantação — com **capturas de tela de todas as páginas**, abertas pelas contas de demonstração.
+- **Contas usadas nas capturas:** `MAT-0000` (Diretor-Presidente/Superintendente — Visão Estratégica), `MAT-2011` (Supervisor/Gerente de Operações — Visão Operacional) e `MAT-9999` (Técnico em Portos — Visão Própria). Cada conta entra pelo fluxo real (login → confirmação de cargo) e navega apenas pelas telas liberadas ao seu cargo.
+- **Imagens e manifesto:** `docs/screenshots/` (PNG de página inteira + `manifest.json` com a origem de cada captura).
+- **Gerar novamente:**
+  ```bash
+  npm install --prefix tools/screenshots   # Tailwind, fontes e bibliotecas vendorizadas
+  CHROME_PATH=/usr/bin/chromium npm run screenshots   # capturas → docs/screenshots/
+  npm run about                                       # regenera o about.html
+  ```
+- **Como funciona:** o Chromium é dirigido por `tools/screenshots/capturar.js`, que sobe um **PostgREST simulado** (`tools/screenshots/mock-postgrest.js`) com os dados de `tools/screenshots/demo-data.js`, substitui os CDNs por arquivos locais (`tools/screenshots/vendor.js`) e percorre `tools/screenshots/paginas.js`. Nada é gravado no banco e nenhuma credencial real é usada.
+- **Testes:** `npm run test:screenshots` (dados, PostgREST simulado e matriz de permissões) e `npm run test:about` (estrutura, conteúdo e imagens do `about.html`).
 
 ---
 

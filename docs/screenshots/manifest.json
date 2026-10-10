@@ -1,0 +1,529 @@
+{
+  "geradoEm": "2026-10-10T21:37:31.770Z",
+  "descricao": "Capturas de tela do NexusPort por conta de demonstração (ambiente local com PostgREST simulado e dados fictícios).",
+  "ambiente": {
+    "url": "https://nexusport-tcc.vercel.app",
+    "observacao": "Capturas geradas por tools/screenshots/capturar.js com Tailwind, fontes e bibliotecas vendorizados; o widget VLibras não é carregado offline."
+  },
+  "tamanho": {
+    "largura": 1440,
+    "altura": 900,
+    "tema": "claro"
+  },
+  "publicas": [
+    {
+      "pagina": "login",
+      "arquivoHtml": "index.html",
+      "titulo": "Autenticação de Funcionário",
+      "subtitulo": "Código individual único (matrícula)",
+      "resumo": "Porta de entrada do sistema. O operador informa o código individual vinculado à matrícula; o sistema valida no cadastro do terminal e encaminha para a confirmação de cargo.",
+      "destaques": [
+        "Validação por código individual ou matrícula (nexus_code_overrides cobre códigos reemitidos).",
+        "Contingência RN 15: pedido de reemissão de credencial com o procedimento presencial na Guarita Central.",
+        "Tema claro/escuro e feedback inline (credencial reconhecida, código invalidado, credencial inexistente)."
+      ],
+      "imagem": "publico-login.png",
+      "bytes": 89261,
+      "descricao": "Tela de autenticação de funcionário."
+    },
+    {
+      "pagina": "login",
+      "arquivoHtml": "index.html",
+      "titulo": "Autenticação de Funcionário",
+      "subtitulo": "Código individual único (matrícula)",
+      "resumo": "Porta de entrada do sistema. O operador informa o código individual vinculado à matrícula; o sistema valida no cadastro do terminal e encaminha para a confirmação de cargo.",
+      "destaques": [
+        "Validação por código individual ou matrícula (nexus_code_overrides cobre códigos reemitidos).",
+        "Contingência RN 15: pedido de reemissão de credencial com o procedimento presencial na Guarita Central.",
+        "Tema claro/escuro e feedback inline (credencial reconhecida, código invalidado, credencial inexistente)."
+      ],
+      "imagem": "publico-login-reemissao.png",
+      "bytes": 94560,
+      "descricao": "Contingência RN 15: pedido de reemissão do código individual."
+    },
+    {
+      "pagina": "login",
+      "arquivoHtml": "index.html",
+      "titulo": "Autenticação de Funcionário",
+      "subtitulo": "Código individual único (matrícula)",
+      "resumo": "Porta de entrada do sistema. O operador informa o código individual vinculado à matrícula; o sistema valida no cadastro do terminal e encaminha para a confirmação de cargo.",
+      "destaques": [
+        "Validação por código individual ou matrícula (nexus_code_overrides cobre códigos reemitidos).",
+        "Contingência RN 15: pedido de reemissão de credencial com o procedimento presencial na Guarita Central.",
+        "Tema claro/escuro e feedback inline (credencial reconhecida, código invalidado, credencial inexistente)."
+      ],
+      "imagem": "publico-login-reconhecida.png",
+      "bytes": 95677,
+      "descricao": "Credencial reconhecida: o sistema confirma o vínculo antes da confirmação de cargo."
+    },
+    {
+      "pagina": "teste-vibracao",
+      "arquivoHtml": "teste-vibracao.html",
+      "titulo": "Teste de Vibração do Pânico",
+      "subtitulo": "Diagnóstico do alerta tátil",
+      "resumo": "Página de diagnóstico que testa a vibração e o áudio do alerta de emergência no dispositivo do operador.",
+      "destaques": [
+        "Verifica suporte a navigator.vibrate e reprodução de áudio no navegador.",
+        "Útil no credenciamento de aparelhos antes do turno.",
+        "Não altera dados: é apenas um teste local."
+      ],
+      "imagem": "publico-teste-vibracao.png",
+      "bytes": 100980,
+      "descricao": "Diagnóstico do alerta tátil do botão de pânico."
+    }
+  ],
+  "contas": [
+    {
+      "matricula": "MAT-0000",
+      "codigo": "NX-0000-SP",
+      "nome": "Helena Prado",
+      "descricao": "Conta de diretoria: enxerga todos os indicadores, inclusive valor declarado e produtividade, além da trilha completa de decisões e da gestão de pessoas.",
+      "cargo": "DIRETOR_PRESIDENTE_SUPERINTENDENTE",
+      "cargoNome": "Diretor-Presidente/Superintendente",
+      "nivel": "Nível Estratégico",
+      "camada": "Visão Estratégica",
+      "paginas": [
+        {
+          "pagina": "confirmacao-cargo",
+          "arquivoHtml": "confirm-role.html",
+          "titulo": "Confirmação de Cargo",
+          "subtitulo": "Etapa obrigatória antes do painel",
+          "resumo": "Mostra o cargo, o nível de acesso e a camada de visão que a sessão receberá. O cargo não é editável: vem do cadastro funcional, conforme o RF 1.",
+          "destaques": [
+            "Sessão gravada em cookie de 12 h (turno operacional) somente após a confirmação.",
+            "Metadados por cargo definem a camada de visão: Própria, Operacional ou Estratégica.",
+            "Tentativa de troca manual de cargo é bloqueada pela guarda de autenticação."
+          ],
+          "imagem": "MAT-0000-confirmacao-cargo.png",
+          "bytes": 100772,
+          "descricao": "Identificação reconhecida como Diretor-Presidente/Superintendente.",
+          "sufixo": null
+        },
+        {
+          "pagina": "dashboard",
+          "arquivoHtml": "dashboard.html",
+          "titulo": "Painel de Comando",
+          "subtitulo": "KPIs, gráficos por camada de visão e trilha de decisões",
+          "resumo": "Visão geral do terminal: indicadores, gráficos recortados pela camada de visão do cargo, atividade recente da auditoria e trilha imutável de decisões.",
+          "destaques": [
+            "Indicadores calculados a partir das cargas, contêineres, navios e manutenções reais.",
+            "Gráficos (Chart.js) mudam conforme o cargo: própria, operacional ou estratégica.",
+            "Valor declarado é restrito à Visão Estratégica; dados pessoais não aparecem para cargos táticos."
+          ],
+          "imagem": "mat-0000-dashboard.png",
+          "bytes": 442598,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        },
+        {
+          "pagina": "dashboard",
+          "arquivoHtml": "dashboard.html",
+          "titulo": "Painel de Comando",
+          "subtitulo": "KPIs, gráficos por camada de visão e trilha de decisões",
+          "resumo": "Visão geral do terminal: indicadores, gráficos recortados pela camada de visão do cargo, atividade recente da auditoria e trilha imutável de decisões.",
+          "destaques": [
+            "Indicadores calculados a partir das cargas, contêineres, navios e manutenções reais.",
+            "Gráficos (Chart.js) mudam conforme o cargo: própria, operacional ou estratégica.",
+            "Valor declarado é restrito à Visão Estratégica; dados pessoais não aparecem para cargos táticos."
+          ],
+          "imagem": "mat-0000-dashboard-tema-escuro.png",
+          "bytes": 443264,
+          "descricao": "O mesmo painel no tema escuro (preferência salva por operador).",
+          "sufixo": "tema-escuro"
+        },
+        {
+          "pagina": "cargas",
+          "arquivoHtml": "cargas.html",
+          "titulo": "Cargas & Operações de Pátio",
+          "subtitulo": "Agendamento, recebimento, armazenagem e vínculo com navio/contêiner",
+          "resumo": "Coração do fluxo operacional: cadastro e acompanhamento das cargas nos 9 status, do agendamento à entrega, com checklist de avarias, QR Code e etiqueta A4.",
+          "destaques": [
+            "Esteira de status: AGENDAMENTO → RECEBIMENTO_INSPECAO → ARMAZENAGEM → PRONTA_PARA_ENTREGA → SAIDA → EM_TRANSITO → ENTREGUE (e CANCELADA/RECUSADA).",
+            "Vínculo com contêiner, navio e estivador responsável; QR Code gerado em canvas e etiqueta 10×10 cm para impressão.",
+            "Busca com filtros combinados e contadores por status."
+          ],
+          "imagem": "mat-0000-cargas.png",
+          "bytes": 376663,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        },
+        {
+          "pagina": "inspecao",
+          "arquivoHtml": "inspecao.html",
+          "titulo": "Inspeção & Checklist",
+          "subtitulo": "Conformidade técnica com resultado auditável",
+          "resumo": "Execução do checklist técnico de recebimento: cada item é marcado como conforme ou não conforme e a inspeção é concluída como aprovada ou recusada.",
+          "destaques": [
+            "Checklist por tipo de carga (checklist_modelos/checklist_itens) com itens críticos.",
+            "Inspeção ativa única por carga: as anteriores permanecem como histórico.",
+            "Leitura do QR Code da carga direto na tela para abrir a inspeção correspondente."
+          ],
+          "imagem": "mat-0000-inspecao.png",
+          "bytes": 112524,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        },
+        {
+          "pagina": "scanner",
+          "arquivoHtml": "scanner.html",
+          "titulo": "Scanner QR Code",
+          "subtitulo": "Leitura móvel por câmera ou entrada manual",
+          "resumo": "Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.",
+          "destaques": [
+            "Aceita o código impresso (QR-DEMO-CRG-003), o identificador (DEMO-CRG-003) e o QR da etiqueta.",
+            "Fallback de digitação manual para ambientes sem câmera.",
+            "Cada leitura é registrada em leituras_qr_code para rastreabilidade."
+          ],
+          "imagem": "mat-0000-scanner.png",
+          "bytes": 105861,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        },
+        {
+          "pagina": "embarcacoes",
+          "arquivoHtml": "embarcacoes.html",
+          "titulo": "Embarcações, Contêineres & GPS",
+          "subtitulo": "Atracação, berços, rotas e posição dos navios",
+          "resumo": "Gestão das embarcações e do pátio: cadastro de navios e contêineres, estado operacional, berços do terminal, rotas marítimas e posicionamento GPS com ETA.",
+          "destaques": [
+            "15 berços do STS-01 com estado LIVRE / OCUPADO / MANUTENCAO e vínculo com o navio atracado.",
+            "Localização (dentro do porto, fora do porto, no porto de destino) atualiza o status das cargas vinculadas por gatilho no banco.",
+            "Distância da rota e tempo de trânsito alimentam o cálculo de ETA."
+          ],
+          "imagem": "mat-0000-embarcacoes.png",
+          "bytes": 626037,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        },
+        {
+          "pagina": "manutencao",
+          "arquivoHtml": "manutencao.html",
+          "titulo": "Manutenção & Ordens de Serviço",
+          "subtitulo": "Abertura, aprovação e conclusão de OS",
+          "resumo": "Ciclo de manutenção de navios, contêineres e guindastes: solicitação, aprovação ou recusa e conclusão, com histórico de serviços e o botão de pânico global no cabeçalho.",
+          "destaques": [
+            "Ordens de serviço por entidade (NAVIO, CONTAINER, GUINDASTE) com trilha de solicitação e aprovação.",
+            "Conclusão de OS devolve o equipamento ao estado OPERANTE e grava o histórico.",
+            "🚨 Botão de pânico global disponível em todas as telas autenticadas."
+          ],
+          "imagem": "mat-0000-manutencao.png",
+          "bytes": 322172,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        },
+        {
+          "pagina": "delegacao",
+          "arquivoHtml": "delegacao.html",
+          "titulo": "Delegação de Supervisor",
+          "subtitulo": "Substituto temporário com vigência e revogação",
+          "resumo": "Designa um substituto para o supervisor titular durante uma ausência, com janela de vigência, requalificação do cargo do substituto e revogação registrada na trilha.",
+          "destaques": [
+            "Enquanto a delegação está ativa, o substituto recebe as permissões do cargo de supervisor.",
+            "Revogação imediata devolve o acesso original e grava a decisão na trilha imutável.",
+            "Exige identificação do substituto (nome, CPF e data de nascimento) para auditoria."
+          ],
+          "imagem": "mat-0000-delegacao.png",
+          "bytes": 164767,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        },
+        {
+          "pagina": "tecnico_portos",
+          "arquivoHtml": "tecnico_portos.html",
+          "titulo": "Gestão de Pessoas (Técnico em Portos)",
+          "subtitulo": "Funcionários, visitantes, documentos e reemissão de credencial",
+          "resumo": "Cadastro e manutenção do quadro funcional e dos visitantes, emissão de códigos individuais, controle de documentos e reemissão de credenciais (RN 15).",
+          "destaques": [
+            "Cadastro no padrão MAT-4 dígitos com CPF validado e bloqueio de duplicidade.",
+            "Registro de entrada e saída de visitantes com motivo da visita.",
+            "Reemissão de código invalida o anterior e mantém a mesma matrícula."
+          ],
+          "imagem": "mat-0000-tecnico_portos.png",
+          "bytes": 439926,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        },
+        {
+          "pagina": "relatorios",
+          "arquivoHtml": "relatorios.html",
+          "titulo": "Relatórios & PDF",
+          "subtitulo": "Busca operacional com 5 filtros e emissão de PDF A4",
+          "resumo": "Busca operacional sobre as cargas com cinco filtros combinados, exportação de histórico e geração de relatório PDF A4 com o logotipo do terminal.",
+          "destaques": [
+            "Cinco filtros: identificador, status, natureza, período e porto de descarga.",
+            "Relatório PDF A4 gerado no servidor (Edge Function relatorio-pdf) com cache por hash do conteúdo.",
+            "Exportação de histórico com registro de auditoria da operação."
+          ],
+          "imagem": "mat-0000-relatorios.png",
+          "bytes": 486849,
+          "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
+          "sufixo": null
+        }
+      ]
+    },
+    {
+      "matricula": "MAT-2011",
+      "codigo": "NX-2011-SP",
+      "nome": "Marcos Tavares",
+      "descricao": "Conta de gestão operacional: libera saídas de carga, aprova manutenções, delega substituto com vigência e responde pela trilha de decisões do turno.",
+      "cargo": "SUPERVISOR_GERENTE_OPERACOES",
+      "cargoNome": "Supervisor / Gerente de Operações",
+      "nivel": "Nível Gestão",
+      "camada": "Visão Operacional",
+      "paginas": [
+        {
+          "pagina": "confirmacao-cargo",
+          "arquivoHtml": "confirm-role.html",
+          "titulo": "Confirmação de Cargo",
+          "subtitulo": "Etapa obrigatória antes do painel",
+          "resumo": "Mostra o cargo, o nível de acesso e a camada de visão que a sessão receberá. O cargo não é editável: vem do cadastro funcional, conforme o RF 1.",
+          "destaques": [
+            "Sessão gravada em cookie de 12 h (turno operacional) somente após a confirmação.",
+            "Metadados por cargo definem a camada de visão: Própria, Operacional ou Estratégica.",
+            "Tentativa de troca manual de cargo é bloqueada pela guarda de autenticação."
+          ],
+          "imagem": "MAT-2011-confirmacao-cargo.png",
+          "bytes": 103435,
+          "descricao": "Identificação reconhecida como Supervisor / Gerente de Operações.",
+          "sufixo": null
+        },
+        {
+          "pagina": "dashboard",
+          "arquivoHtml": "dashboard.html",
+          "titulo": "Painel de Comando",
+          "subtitulo": "KPIs, gráficos por camada de visão e trilha de decisões",
+          "resumo": "Visão geral do terminal: indicadores, gráficos recortados pela camada de visão do cargo, atividade recente da auditoria e trilha imutável de decisões.",
+          "destaques": [
+            "Indicadores calculados a partir das cargas, contêineres, navios e manutenções reais.",
+            "Gráficos (Chart.js) mudam conforme o cargo: própria, operacional ou estratégica.",
+            "Valor declarado é restrito à Visão Estratégica; dados pessoais não aparecem para cargos táticos."
+          ],
+          "imagem": "mat-2011-dashboard.png",
+          "bytes": 395559,
+          "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
+          "sufixo": null
+        },
+        {
+          "pagina": "cargas",
+          "arquivoHtml": "cargas.html",
+          "titulo": "Cargas & Operações de Pátio",
+          "subtitulo": "Agendamento, recebimento, armazenagem e vínculo com navio/contêiner",
+          "resumo": "Coração do fluxo operacional: cadastro e acompanhamento das cargas nos 9 status, do agendamento à entrega, com checklist de avarias, QR Code e etiqueta A4.",
+          "destaques": [
+            "Esteira de status: AGENDAMENTO → RECEBIMENTO_INSPECAO → ARMAZENAGEM → PRONTA_PARA_ENTREGA → SAIDA → EM_TRANSITO → ENTREGUE (e CANCELADA/RECUSADA).",
+            "Vínculo com contêiner, navio e estivador responsável; QR Code gerado em canvas e etiqueta 10×10 cm para impressão.",
+            "Busca com filtros combinados e contadores por status."
+          ],
+          "imagem": "mat-2011-cargas.png",
+          "bytes": 373197,
+          "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
+          "sufixo": null
+        },
+        {
+          "pagina": "inspecao",
+          "arquivoHtml": "inspecao.html",
+          "titulo": "Inspeção & Checklist",
+          "subtitulo": "Conformidade técnica com resultado auditável",
+          "resumo": "Execução do checklist técnico de recebimento: cada item é marcado como conforme ou não conforme e a inspeção é concluída como aprovada ou recusada.",
+          "destaques": [
+            "Checklist por tipo de carga (checklist_modelos/checklist_itens) com itens críticos.",
+            "Inspeção ativa única por carga: as anteriores permanecem como histórico.",
+            "Leitura do QR Code da carga direto na tela para abrir a inspeção correspondente."
+          ],
+          "imagem": "mat-2011-inspecao.png",
+          "bytes": 110587,
+          "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
+          "sufixo": null
+        },
+        {
+          "pagina": "inspecao",
+          "arquivoHtml": "inspecao.html",
+          "titulo": "Inspeção & Checklist",
+          "subtitulo": "Conformidade técnica com resultado auditável",
+          "resumo": "Execução do checklist técnico de recebimento: cada item é marcado como conforme ou não conforme e a inspeção é concluída como aprovada ou recusada.",
+          "destaques": [
+            "Checklist por tipo de carga (checklist_modelos/checklist_itens) com itens críticos.",
+            "Inspeção ativa única por carga: as anteriores permanecem como histórico.",
+            "Leitura do QR Code da carga direto na tela para abrir a inspeção correspondente."
+          ],
+          "imagem": "mat-2011-inspecao-checklist-carregado.png",
+          "bytes": 221271,
+          "descricao": "Checklist de uma carga carregado: itens críticos e ações de aprovação/recusa.",
+          "sufixo": "checklist-carregado"
+        },
+        {
+          "pagina": "scanner",
+          "arquivoHtml": "scanner.html",
+          "titulo": "Scanner QR Code",
+          "subtitulo": "Leitura móvel por câmera ou entrada manual",
+          "resumo": "Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.",
+          "destaques": [
+            "Aceita o código impresso (QR-DEMO-CRG-003), o identificador (DEMO-CRG-003) e o QR da etiqueta.",
+            "Fallback de digitação manual para ambientes sem câmera.",
+            "Cada leitura é registrada em leituras_qr_code para rastreabilidade."
+          ],
+          "imagem": "mat-2011-scanner.png",
+          "bytes": 103794,
+          "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
+          "sufixo": null
+        },
+        {
+          "pagina": "embarcacoes",
+          "arquivoHtml": "embarcacoes.html",
+          "titulo": "Embarcações, Contêineres & GPS",
+          "subtitulo": "Atracação, berços, rotas e posição dos navios",
+          "resumo": "Gestão das embarcações e do pátio: cadastro de navios e contêineres, estado operacional, berços do terminal, rotas marítimas e posicionamento GPS com ETA.",
+          "destaques": [
+            "15 berços do STS-01 com estado LIVRE / OCUPADO / MANUTENCAO e vínculo com o navio atracado.",
+            "Localização (dentro do porto, fora do porto, no porto de destino) atualiza o status das cargas vinculadas por gatilho no banco.",
+            "Distância da rota e tempo de trânsito alimentam o cálculo de ETA."
+          ],
+          "imagem": "mat-2011-embarcacoes.png",
+          "bytes": 616340,
+          "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
+          "sufixo": null
+        },
+        {
+          "pagina": "manutencao",
+          "arquivoHtml": "manutencao.html",
+          "titulo": "Manutenção & Ordens de Serviço",
+          "subtitulo": "Abertura, aprovação e conclusão de OS",
+          "resumo": "Ciclo de manutenção de navios, contêineres e guindastes: solicitação, aprovação ou recusa e conclusão, com histórico de serviços e o botão de pânico global no cabeçalho.",
+          "destaques": [
+            "Ordens de serviço por entidade (NAVIO, CONTAINER, GUINDASTE) com trilha de solicitação e aprovação.",
+            "Conclusão de OS devolve o equipamento ao estado OPERANTE e grava o histórico.",
+            "🚨 Botão de pânico global disponível em todas as telas autenticadas."
+          ],
+          "imagem": "mat-2011-manutencao.png",
+          "bytes": 320152,
+          "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
+          "sufixo": null
+        },
+        {
+          "pagina": "delegacao",
+          "arquivoHtml": "delegacao.html",
+          "titulo": "Delegação de Supervisor",
+          "subtitulo": "Substituto temporário com vigência e revogação",
+          "resumo": "Designa um substituto para o supervisor titular durante uma ausência, com janela de vigência, requalificação do cargo do substituto e revogação registrada na trilha.",
+          "destaques": [
+            "Enquanto a delegação está ativa, o substituto recebe as permissões do cargo de supervisor.",
+            "Revogação imediata devolve o acesso original e grava a decisão na trilha imutável.",
+            "Exige identificação do substituto (nome, CPF e data de nascimento) para auditoria."
+          ],
+          "imagem": "mat-2011-delegacao.png",
+          "bytes": 162989,
+          "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
+          "sufixo": null
+        },
+        {
+          "pagina": "relatorios",
+          "arquivoHtml": "relatorios.html",
+          "titulo": "Relatórios & PDF",
+          "subtitulo": "Busca operacional com 5 filtros e emissão de PDF A4",
+          "resumo": "Busca operacional sobre as cargas com cinco filtros combinados, exportação de histórico e geração de relatório PDF A4 com o logotipo do terminal.",
+          "destaques": [
+            "Cinco filtros: identificador, status, natureza, período e porto de descarga.",
+            "Relatório PDF A4 gerado no servidor (Edge Function relatorio-pdf) com cache por hash do conteúdo.",
+            "Exportação de histórico com registro de auditoria da operação."
+          ],
+          "imagem": "mat-2011-relatorios.png",
+          "bytes": 348431,
+          "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
+          "sufixo": null
+        }
+      ]
+    },
+    {
+      "matricula": "MAT-9999",
+      "codigo": "NX-9999-SP",
+      "nome": "Juliana Reis",
+      "descricao": "Conta da guarita: cadastra funcionários e visitantes, valida documentos e reemite credenciais (RN 15), com acesso apenas à própria operação.",
+      "cargo": "TECNICO_PORTOS",
+      "cargoNome": "Técnico em Portos",
+      "nivel": "Nível Operacional",
+      "camada": "Visão Própria",
+      "paginas": [
+        {
+          "pagina": "confirmacao-cargo",
+          "arquivoHtml": "confirm-role.html",
+          "titulo": "Confirmação de Cargo",
+          "subtitulo": "Etapa obrigatória antes do painel",
+          "resumo": "Mostra o cargo, o nível de acesso e a camada de visão que a sessão receberá. O cargo não é editável: vem do cadastro funcional, conforme o RF 1.",
+          "destaques": [
+            "Sessão gravada em cookie de 12 h (turno operacional) somente após a confirmação.",
+            "Metadados por cargo definem a camada de visão: Própria, Operacional ou Estratégica.",
+            "Tentativa de troca manual de cargo é bloqueada pela guarda de autenticação."
+          ],
+          "imagem": "MAT-9999-confirmacao-cargo.png",
+          "bytes": 97512,
+          "descricao": "Identificação reconhecida como Técnico em Portos.",
+          "sufixo": null
+        },
+        {
+          "pagina": "dashboard",
+          "arquivoHtml": "dashboard.html",
+          "titulo": "Painel de Comando",
+          "subtitulo": "KPIs, gráficos por camada de visão e trilha de decisões",
+          "resumo": "Visão geral do terminal: indicadores, gráficos recortados pela camada de visão do cargo, atividade recente da auditoria e trilha imutável de decisões.",
+          "destaques": [
+            "Indicadores calculados a partir das cargas, contêineres, navios e manutenções reais.",
+            "Gráficos (Chart.js) mudam conforme o cargo: própria, operacional ou estratégica.",
+            "Valor declarado é restrito à Visão Estratégica; dados pessoais não aparecem para cargos táticos."
+          ],
+          "imagem": "mat-9999-dashboard.png",
+          "bytes": 375520,
+          "descricao": "Acesso liberado para Técnico em Portos (Visão Própria).",
+          "sufixo": null
+        },
+        {
+          "pagina": "scanner",
+          "arquivoHtml": "scanner.html",
+          "titulo": "Scanner QR Code",
+          "subtitulo": "Leitura móvel por câmera ou entrada manual",
+          "resumo": "Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.",
+          "destaques": [
+            "Aceita o código impresso (QR-DEMO-CRG-003), o identificador (DEMO-CRG-003) e o QR da etiqueta.",
+            "Fallback de digitação manual para ambientes sem câmera.",
+            "Cada leitura é registrada em leituras_qr_code para rastreabilidade."
+          ],
+          "imagem": "mat-9999-scanner.png",
+          "bytes": 88697,
+          "descricao": "Acesso liberado para Técnico em Portos (Visão Própria).",
+          "sufixo": null
+        },
+        {
+          "pagina": "tecnico_portos",
+          "arquivoHtml": "tecnico_portos.html",
+          "titulo": "Gestão de Pessoas (Técnico em Portos)",
+          "subtitulo": "Funcionários, visitantes, documentos e reemissão de credencial",
+          "resumo": "Cadastro e manutenção do quadro funcional e dos visitantes, emissão de códigos individuais, controle de documentos e reemissão de credenciais (RN 15).",
+          "destaques": [
+            "Cadastro no padrão MAT-4 dígitos com CPF validado e bloqueio de duplicidade.",
+            "Registro de entrada e saída de visitantes com motivo da visita.",
+            "Reemissão de código invalida o anterior e mantém a mesma matrícula."
+          ],
+          "imagem": "mat-9999-tecnico_portos.png",
+          "bytes": 423623,
+          "descricao": "Acesso liberado para Técnico em Portos (Visão Própria).",
+          "sufixo": null
+        },
+        {
+          "pagina": "relatorios",
+          "arquivoHtml": "relatorios.html",
+          "titulo": "Relatórios & PDF",
+          "subtitulo": "Busca operacional com 5 filtros e emissão de PDF A4",
+          "resumo": "Busca operacional sobre as cargas com cinco filtros combinados, exportação de histórico e geração de relatório PDF A4 com o logotipo do terminal.",
+          "destaques": [
+            "Cinco filtros: identificador, status, natureza, período e porto de descarga.",
+            "Relatório PDF A4 gerado no servidor (Edge Function relatorio-pdf) com cache por hash do conteúdo.",
+            "Exportação de histórico com registro de auditoria da operação."
+          ],
+          "imagem": "mat-9999-relatorios.png",
+          "bytes": 238455,
+          "descricao": "Acesso liberado para Técnico em Portos (Visão Própria).",
+          "sufixo": null
+        }
+      ]
+    }
+  ]
+}
