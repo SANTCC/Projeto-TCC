@@ -71,23 +71,15 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${m[3]}/${m[2]}/${m[1]}`;
   }
 
-  // Validação de CPF: 11 dígitos + dígitos verificadores (módulo 11).
-  // Os dois últimos dígitos são calculados a partir dos 9 primeiros, por isso
-  // sequências genéricas de documentação não passam na checagem e não podem ser
-  // sugeridas como placeholder: a interface orienta apenas sobre a regra.
+  // Validação de CPF do funcionário: a regra do produto aceita CPF fictício.
+  // Exige apenas 11 dígitos e recusa sequências com todos os dígitos iguais
+  // (ex.: 111.111.111-11). Os dígitos verificadores (módulo 11) NÃO são
+  // conferidos de propósito. A unicidade é garantida à parte (cache local e
+  // Supabase, na gravação do cadastro).
   function validarCpf(cpf) {
     const d = fatiarCpfSomenteDigitos(cpf);
     if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
-    let soma = 0;
-    for (let i = 0; i < 9; i++) soma += parseInt(d[i], 10) * (10 - i);
-    let resto = (soma * 10) % 11;
-    if (resto === 10) resto = 0;
-    if (resto !== parseInt(d[9], 10)) return false;
-    soma = 0;
-    for (let i = 0; i < 10; i++) soma += parseInt(d[i], 10) * (11 - i);
-    resto = (soma * 10) % 11;
-    if (resto === 10) resto = 0;
-    return resto === parseInt(d[10], 10);
+    return true;
   }
 
   // Busca por matrícula (usada pela interface e pelas ferramentas WebMCP).
@@ -469,9 +461,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const cpfDigits = fatiarCpfSomenteDigitos(cpfRaw);
       const dataNasc = document.getElementById('funcDataNasc').value;
 
-      // CPF obrigatório e válido (11 dígitos + dígitos verificadores)
+      // CPF obrigatório: 11 dígitos, sem todos iguais. CPF fictício é aceito;
+      // a unicidade é conferida logo abaixo.
       if (!validarCpf(cpfRaw)) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', 'Informe um CPF válido com 11 dígitos. Os dois últimos números são os dígitos verificadores, calculados a partir dos 9 primeiros, e precisam conferir: o cadastro é recusado quando eles são inventados.');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', 'Informe um CPF com 11 dígitos, não todos iguais. O CPF pode ser fictício, mas não pode se repetir: cada CPF pode estar em apenas um cadastro.');
         return;
       }
 
