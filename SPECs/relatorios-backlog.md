@@ -5,6 +5,7 @@
 1. Relatório Backlog 001
 2. Relatório Backlog 002
 3. Relatório Backlog 003
+4. Relatório Backlog 004
 
 ---
 
@@ -739,3 +740,39 @@ Relatório consolidado de execução e correções do NexusPort (STS-01), organi
 - `js/data-repository.js`
 - `SPECs/schema.sql`
 - `test_fase_1.js`, `test_fase_2.js`
+
+
+---
+
+<!-- ===================== SESSÃO: BACKLOG 004 ===================== -->
+
+# SESSÃO 4 — RELATÓRIO BACKLOG 004
+
+# Relatório Backlog 004 — Performance, Acessibilidade e SEO (Lighthouse Audit)
+
+**Data de Conclusão:** 10 de Outubro de 2026
+**Sistema:** NexusPort — Sistema de Automação Portuária (Terminal STS-01)
+**Escopo:** Mapeamento e auditoria de requisitos de Desempenho, Acessibilidade (a11y), Segurança/Boas Práticas e SEO.
+
+---
+
+## 📊 1. Resumo Executivo das Seções do Backlog 004
+
+| Seção | Requisito Principal | Escopo | Status |
+| :--- | :--- | :--- | :--- |
+| **1.1** | Otimização de Imagens (`logo_porto.png`) | Redimensionamento e formatos modernos | 🔴 Mapeado no Backlog |
+| **1.2** | Atributos `width` e `height` | Prevenção de Cumulative Layout Shift (CLS) | 🔴 Mapeado no Backlog |
+| **1.3** | Eliminação de Render-Blocking | Carregamento assíncrono de CSS/JS | 🔴 Mapeado no Backlog |
+| **1.4** | Minificação / JS Não Utilizado | Otimização de bundle e Tailwind CDN | 🔴 Mapeado no Backlog |
+| **1.5** | Estratégia de Cache | Cabeçalhos `Cache-Control` TTL longo | 🔴 Mapeado no Backlog |
+| **2.1** | Liberação do Zoom (`viewport`) | Remoção de `maximum-scale=1.0` e `user-scalable=no` | 🟡 Mapeado no Backlog |
+| **2.2** | Contraste de Cores (WCAG) | Ajuste de pequenos textos e badges de status | 🟡 Mapeado no Backlog |
+| **2.3** | Hierarquia de Títulos | Ordem sequencial de `<h1>` a `<h6>` | 🟡 Mapeado no Backlog |
+| **3.1** | Content Security Policy (CSP) | Prevenção de XSS e injeção de scripts | 🔴 Mapeado no Backlog |
+| **3.2** | Cabeçalhos HTTP de Proteção | HSTS, COOP, X-Frame-Options | 🔴 Mapeado no Backlog |
+| **4.1** | Meta Description | Inclusão de resumo SEO em todas as páginas | 🔴 Mapeado no Backlog |
+
+---
+
+## 📑 2. Conclusão e Próximos Passos
+O Backlog 004 foi incorporado aos documentos oficiais de especificações do projeto (`SPECs/backlog.md`), garantindo o rastreamento das métricas e diretrizes do Google Chrome Lighthouse no pipeline de desenvolvimento do NexusPort.
