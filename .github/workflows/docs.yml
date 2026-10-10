@@ -1,0 +1,108 @@
+# Publicação da documentação técnica (Docusaurus) no GitHub Pages.
+#
+# Este workflow é EXCLUSIVO da pasta `website/` (fonte) e da saída `docs/`.
+# Ele NÃO altera, substitui nem interfere nos workflows e configurações existentes:
+#   - .github/workflows/lighthouse.yml  (gate de PR do app)  → intocado
+#   - vercel.json                       (deploy do app)      → intocado
+#   - qualquer publicação anterior de branch (gh-pages)      → intocado
+#
+# Como o app vive na raiz do repositório e a documentação em `docs/`, o artefato publicado
+# contém `_site/docs/**` (o site) mais um `_site/index.html` que apenas redireciona para
+# `./docs/`. O resultado é uma URL estável no formato https://<org>.github.io/<repo>/docs/.
+#
+# Para que o site funcione sob esse caminho, o build recebe DOCS_BASE_URL calculado a partir
+# do nome real do repositório — nada fica chumbado no docusaurus.config.js.
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'about/screenshots/**'
+      - 'about.html'
+      - 'design/logo_porto.png'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build da documentação
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Código
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Dependências da documentação
+        run: npm ci --prefix website
+
+      # DOCS_URL/DOCS_BASE_URL deixam o build independente do nome do repositório:
+      # em um project page o site fica em https://<org>.github.io/<repo>/docs/
+      - name: Build (saída em docs/)
+        env:
+          DOCS_URL: https://${{ github.repository_owner }}.github.io
+          DOCS_BASE_URL: /${{ github.event.repository.name }}/docs/
+        run: npm run docs:build
+
+      - name: Monta o artefato com o app na raiz e a documentação em /docs/
+        run: |
+          mkdir -p _site
+          cp -r docs _site/docs
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="pt-BR">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>NexusPort — documentação</title>
+              <meta http-equiv="refresh" content="0; url=./docs/">
+              <link rel="canonical" href="./docs/">
+              <style>
+                body { font-family: Inter, system-ui, sans-serif; background: #1E293B; color: #F5F7FA;
+                       display: grid; place-items: center; min-height: 100vh; margin: 0; }
+                a { color: #A8B6D3; }
+              </style>
+            </head>
+            <body>
+              <p>Redirecionando para <a href="./docs/">a documentação técnica do NexusPort</a>…</p>
+            </body>
+          </html>
+          HTML
+
+      - name: Configuração do Pages
+        uses: actions/configure-pages@v5
+
+      - name: Artefato do Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Publicar no GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

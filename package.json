@@ -43,7 +43,12 @@
     "test:relatorio-pdf": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_relatorio_pdf.js",
     "test:seed": "node tests/test_seed_demo.js",
     "test:python": "python3 -m unittest discover -s tests -p \"test_python_suite.py\"",
-    "test:log-acesso": "node tests/test_log_acesso.js"
+    "test:log-acesso": "node tests/test_log_acesso.js",
+    "docs:install": "npm --prefix website ci",
+    "docs:start": "npm --prefix website run start",
+    "docs:build": "npm --prefix website run build",
+    "docs:serve": "npm --prefix website run serve",
+    "docs:clear": "npm --prefix website run clear"
   },
   "keywords": [
     "nexusport",
