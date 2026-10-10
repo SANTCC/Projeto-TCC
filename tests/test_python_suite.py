@@ -156,7 +156,11 @@ class TestNexusPortPythonSuite(unittest.TestCase):
 
     # 6. MANUTENÇÃO & PREVENTIVA SUGERIDA
     def test_manutencao_os_and_preventive(self):
-        os_rec = self.app.manutencao.solicitar_manutencao("NAVIO", "navio-uuid-1", "Serviço no casco")
+        # Chaves de navio são uuid no banco: usa um navio real criado pelo teste
+        navio_os = self.app.embarcacoes.save_navio({"nome": "MV Casco OS", "imo": "IMO-9998888"})
+        navio_os_id = navio_os.get("id") if isinstance(navio_os, dict) else None
+        self.assertTrue(navio_os_id, "save_navio deve retornar o id (uuid) do navio")
+        os_rec = self.app.manutencao.solicitar_manutencao("NAVIO", navio_os_id, "Serviço no casco")
         self.assertIsNotNone(os_rec)
         os_id = os_rec.get("id") if isinstance(os_rec, dict) else os_rec
         if not os_id and isinstance(os_rec, list) and len(os_rec) > 0:
@@ -177,6 +181,49 @@ class TestNexusPortPythonSuite(unittest.TestCase):
         preventiva = self.app.manutencao.buscar_equipamentos_preventiva_sugerida()
         self.assertIn("equipamentos", preventiva)
         self.assertIn("total", preventiva)
+
+    # 6b. REGRESSÃO: IDs inválidos (22P02) e chaves únicas (23505) vistos nos logs do Supabase
+    def test_ids_nao_uuid_nao_chegam_ao_banco(self):
+        # Login sem cadastro no banco não pode usar id textual (ex.: "func-default-id")
+        sessao = self.app.login("INSP-9999")
+        self.assertIsNone(sessao["id"])
+
+        # Entidade de manutenção com id que não é UUID é recusada antes da requisição
+        with self.assertRaises(ValueError):
+            self.app.manutencao.solicitar_manutencao("NAVIO", "navio-uuid-1", "Teste")
+
+        # Operações por id ausente (None -> "None") não devem gerar PATCH/DELETE
+        self.assertIsNone(self.app.manutencao.aprovar_manutencao(None))
+        self.assertIsNone(self.app.manutencao.concluir_manutencao("None"))
+        self.assertIsNone(self.app.panic.resolve_panic(None))
+        self.assertIsNone(self.app.delegacao.revogar_delegacao(None))
+        self.assertIsNone(self.app.embarcacoes.delete_container(None))
+
+        # Chaves estrangeiras opcionais inválidas viram NULL (não string)
+        payload = self.app.cargas.save_carga({"id": "CRG-UUID-SAFE", "navioId": "navio-uuid-1", "container": "None"})
+        self.assertIsNotNone(payload)
+
+    def test_upsert_por_chave_unica_nao_duplica(self):
+        # numero_imo UNIQUE: salvar duas vezes o mesmo IMO atualiza o mesmo navio
+        self.app.embarcacoes.save_navio({"nome": "MV Dup A", "imo": "IMO-9997771"})
+        self.app.embarcacoes.save_navio({"nome": "MV Dup B", "imo": "IMO-9997771"})
+        navios = [n for n in self.app.embarcacoes.get_navios() if n["imo"] == "IMO-9997771"]
+        self.assertEqual(len(navios), 1)
+        self.assertEqual(navios[0]["nome"], "MV Dup B")
+
+        # matricula UNIQUE: cadastrar duas vezes a mesma matrícula não duplica
+        self.app.tecnico.save_funcionario({"matricula": "777123", "nome": "Dup A", "cargo": "ESTIVADOR"})
+        self.app.tecnico.save_funcionario({"matricula": "777123", "nome": "Dup B", "cargo": "ESTIVADOR"})
+        funcs = [f for f in self.app.tecnico.get_funcionarios() if f.get("matricula") == "777123"]
+        self.assertEqual(len(funcs), 1)
+        self.assertEqual(funcs[0]["nome"], "Dup B")
+
+        # qr_code_url UNIQUE: agendar a mesma carga duas vezes atualiza a existente
+        self.app.cargas.save_carga({"id": "CRG-DUP-777", "natureza": "A", "qrCode": "QR-CRG-DUP-777"})
+        self.app.cargas.save_carga({"id": "CRG-DUP-777", "natureza": "B", "qrCode": "QR-CRG-DUP-777"})
+        cargas = [c for c in self.app.cargas.get_cargas() if c["qrCode"] == "QR-CRG-DUP-777"]
+        self.assertEqual(len(cargas), 1)
+        self.assertEqual(cargas[0]["natureza"], "B")
 
     # 7. TÉCNICO EM PORTOS & VISITANTES
     def test_tecnico_funcionarios_e_visitantes(self):

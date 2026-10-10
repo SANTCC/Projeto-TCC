@@ -5,6 +5,8 @@ Acessa a Edge Function panic-alert ou realiza fallback direto na tabela public.e
 
 from datetime import datetime
 
+from .uuid_utils import is_valid_uuid
+
 class PanicAPI:
     def __init__(self, client):
         self.client = client
@@ -51,6 +53,8 @@ class PanicAPI:
         return res
 
     def resolve_panic(self, emergencia_id, resolvido_por_nome=None, resolvido_por_cargo=None):
+        if not is_valid_uuid(emergencia_id):
+            return None
         payload = {
             "estado": "RESOLVIDA",
             "resolvido_por_nome": resolvido_por_nome or "Supervisor Responsável",

@@ -135,7 +135,11 @@ def main(args=None):
         if parsed.action == "list":
             res = app.manutencao.get_manutencoes()
         elif parsed.action == "request":
-            res = app.manutencao.solicitar_manutencao(parsed.entidade_tipo, parsed.entidade_id, parsed.descricao or "Solicitação via CLI")
+            try:
+                res = app.manutencao.solicitar_manutencao(parsed.entidade_tipo, parsed.entidade_id, parsed.descricao or "Solicitação via CLI")
+            except ValueError as err:
+                print(json.dumps({"erro": str(err)}, ensure_ascii=False), file=sys.stderr)
+                sys.exit(2)
         elif parsed.action == "approve":
             res = app.manutencao.aprovar_manutencao(parsed.os_id)
         elif parsed.action == "reject":
