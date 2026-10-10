@@ -25,7 +25,7 @@
         "Tema claro/escuro e feedback inline (credencial reconhecida, código invalidado, credencial inexistente)."
       ],
       "imagem": "publico-login.png",
-      "bytes": 89261,
+      "bytes": 79329,
       "descricao": "Tela de autenticação de funcionário."
     },
     {
@@ -40,7 +40,7 @@
         "Tema claro/escuro e feedback inline (credencial reconhecida, código invalidado, credencial inexistente)."
       ],
       "imagem": "publico-login-reemissao.png",
-      "bytes": 94575,
+      "bytes": 92855,
       "descricao": "Contingência RN 15: pedido de reemissão do código individual."
     },
     {
@@ -55,7 +55,7 @@
         "Tema claro/escuro e feedback inline (credencial reconhecida, código invalidado, credencial inexistente)."
       ],
       "imagem": "publico-login-reconhecida.png",
-      "bytes": 95677,
+      "bytes": 86169,
       "descricao": "Credencial reconhecida: o sistema confirma o vínculo antes da confirmação de cargo."
     },
     {
@@ -70,7 +70,7 @@
         "Não altera dados: é apenas um teste local."
       ],
       "imagem": "publico-teste-vibracao.png",
-      "bytes": 100980,
+      "bytes": 85077,
       "descricao": "Diagnóstico do alerta tátil do botão de pânico."
     }
   ],
@@ -97,7 +97,7 @@
             "Tentativa de troca manual de cargo é bloqueada pela guarda de autenticação."
           ],
           "imagem": "MAT-0000-confirmacao-cargo.png",
-          "bytes": 100772,
+          "bytes": 88991,
           "descricao": "Identificação reconhecida como Diretor-Presidente/Superintendente.",
           "sufixo": null
         },
@@ -113,7 +113,7 @@
             "Valor declarado é restrito à Visão Estratégica; dados pessoais não aparecem para cargos táticos."
           ],
           "imagem": "mat-0000-dashboard.png",
-          "bytes": 444070,
+          "bytes": 384071,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         },
@@ -129,7 +129,7 @@
             "Valor declarado é restrito à Visão Estratégica; dados pessoais não aparecem para cargos táticos."
           ],
           "imagem": "mat-0000-dashboard-tema-escuro.png",
-          "bytes": 444805,
+          "bytes": 382506,
           "descricao": "O mesmo painel no tema escuro (preferência salva por operador).",
           "sufixo": "tema-escuro"
         },
@@ -145,7 +145,7 @@
             "Busca com filtros combinados e contadores por status."
           ],
           "imagem": "mat-0000-cargas.png",
-          "bytes": 376665,
+          "bytes": 333828,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         },
@@ -161,7 +161,7 @@
             "Leitura do QR Code da carga direto na tela para abrir a inspeção correspondente."
           ],
           "imagem": "mat-0000-inspecao.png",
-          "bytes": 112526,
+          "bytes": 96915,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         },
@@ -177,7 +177,7 @@
             "Cada leitura é registrada em leituras_qr_code para rastreabilidade."
           ],
           "imagem": "mat-0000-scanner.png",
-          "bytes": 105859,
+          "bytes": 94157,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         },
@@ -193,7 +193,7 @@
             "Distância da rota e tempo de trânsito alimentam o cálculo de ETA."
           ],
           "imagem": "mat-0000-embarcacoes.png",
-          "bytes": 626037,
+          "bytes": 541299,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         },
@@ -209,7 +209,7 @@
             "🚨 Botão de pânico global disponível em todas as telas autenticadas."
           ],
           "imagem": "mat-0000-manutencao.png",
-          "bytes": 322172,
+          "bytes": 279481,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         },
@@ -225,7 +225,7 @@
             "Exige identificação do substituto (nome, CPF e data de nascimento) para auditoria."
           ],
           "imagem": "mat-0000-delegacao.png",
-          "bytes": 164514,
+          "bytes": 141307,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         },
@@ -241,7 +241,7 @@
             "Reemissão de código invalida o anterior e mantém a mesma matrícula."
           ],
           "imagem": "mat-0000-tecnico_portos.png",
-          "bytes": 439951,
+          "bytes": 383676,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         },
@@ -257,7 +257,7 @@
             "Exportação de histórico com registro de auditoria da operação."
           ],
           "imagem": "mat-0000-relatorios.png",
-          "bytes": 504684,
+          "bytes": 440584,
           "descricao": "Acesso liberado para Diretor-Presidente/Superintendente (Visão Estratégica).",
           "sufixo": null
         }
@@ -285,7 +285,7 @@
             "Tentativa de troca manual de cargo é bloqueada pela guarda de autenticação."
           ],
           "imagem": "MAT-2011-confirmacao-cargo.png",
-          "bytes": 103435,
+          "bytes": 91175,
           "descricao": "Identificação reconhecida como Supervisor / Gerente de Operações.",
           "sufixo": null
         },
@@ -301,7 +301,7 @@
             "Valor declarado é restrito à Visão Estratégica; dados pessoais não aparecem para cargos táticos."
           ],
           "imagem": "mat-2011-dashboard.png",
-          "bytes": 397155,
+          "bytes": 343009,
           "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
           "sufixo": null
         },
@@ -317,7 +317,7 @@
             "Busca com filtros combinados e contadores por status."
           ],
           "imagem": "mat-2011-cargas.png",
-          "bytes": 373197,
+          "bytes": 330924,
           "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
           "sufixo": null
         },
@@ -333,7 +333,7 @@
             "Leitura do QR Code da carga direto na tela para abrir a inspeção correspondente."
           ],
           "imagem": "mat-2011-inspecao.png",
-          "bytes": 110587,
+          "bytes": 95356,
           "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
           "sufixo": null
         },
@@ -349,7 +349,7 @@
             "Leitura do QR Code da carga direto na tela para abrir a inspeção correspondente."
           ],
           "imagem": "mat-2011-inspecao-checklist-carregado.png",
-          "bytes": 221322,
+          "bytes": 192671,
           "descricao": "Checklist de uma carga carregado: itens críticos e ações de aprovação/recusa.",
           "sufixo": "checklist-carregado"
         },
@@ -365,7 +365,7 @@
             "Cada leitura é registrada em leituras_qr_code para rastreabilidade."
           ],
           "imagem": "mat-2011-scanner.png",
-          "bytes": 103794,
+          "bytes": 92917,
           "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
           "sufixo": null
         },
@@ -381,7 +381,7 @@
             "Distância da rota e tempo de trânsito alimentam o cálculo de ETA."
           ],
           "imagem": "mat-2011-embarcacoes.png",
-          "bytes": 616246,
+          "bytes": 533874,
           "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
           "sufixo": null
         },
@@ -397,7 +397,7 @@
             "🚨 Botão de pânico global disponível em todas as telas autenticadas."
           ],
           "imagem": "mat-2011-manutencao.png",
-          "bytes": 320152,
+          "bytes": 278310,
           "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
           "sufixo": null
         },
@@ -413,7 +413,7 @@
             "Exige identificação do substituto (nome, CPF e data de nascimento) para auditoria."
           ],
           "imagem": "mat-2011-delegacao.png",
-          "bytes": 162757,
+          "bytes": 140040,
           "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
           "sufixo": null
         },
@@ -429,7 +429,7 @@
             "Exportação de histórico com registro de auditoria da operação."
           ],
           "imagem": "mat-2011-relatorios.png",
-          "bytes": 348498,
+          "bytes": 305244,
           "descricao": "Acesso liberado para Supervisor / Gerente de Operações (Visão Operacional).",
           "sufixo": null
         }
@@ -457,7 +457,7 @@
             "Tentativa de troca manual de cargo é bloqueada pela guarda de autenticação."
           ],
           "imagem": "MAT-9999-confirmacao-cargo.png",
-          "bytes": 97512,
+          "bytes": 85931,
           "descricao": "Identificação reconhecida como Técnico em Portos.",
           "sufixo": null
         },
@@ -473,7 +473,7 @@
             "Valor declarado é restrito à Visão Estratégica; dados pessoais não aparecem para cargos táticos."
           ],
           "imagem": "mat-9999-dashboard.png",
-          "bytes": 377080,
+          "bytes": 326801,
           "descricao": "Acesso liberado para Técnico em Portos (Visão Própria).",
           "sufixo": null
         },
@@ -489,7 +489,7 @@
             "Cada leitura é registrada em leituras_qr_code para rastreabilidade."
           ],
           "imagem": "mat-9999-scanner.png",
-          "bytes": 88697,
+          "bytes": 80983,
           "descricao": "Acesso liberado para Técnico em Portos (Visão Própria).",
           "sufixo": null
         },
@@ -505,7 +505,7 @@
             "Reemissão de código invalida o anterior e mantém a mesma matrícula."
           ],
           "imagem": "mat-9999-tecnico_portos.png",
-          "bytes": 423648,
+          "bytes": 370407,
           "descricao": "Acesso liberado para Técnico em Portos (Visão Própria).",
           "sufixo": null
         },
@@ -521,7 +521,7 @@
             "Exportação de histórico com registro de auditoria da operação."
           ],
           "imagem": "mat-9999-relatorios.png",
-          "bytes": 238640,
+          "bytes": 210427,
           "descricao": "Acesso liberado para Técnico em Portos (Visão Própria).",
           "sufixo": null
         }

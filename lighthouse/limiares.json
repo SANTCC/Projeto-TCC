@@ -1,10 +1,15 @@
 {
-  "descricao": "Gate Lighthouse para pull requests (Backlog 3, item H). Categorias: pontuação mínima de 0 a 1. Auditorias críticas precisam passar, exceto nas exceções por página, que são dívida conhecida e devem ser removidas ao serem corrigidas. Calibrado com as páginas estilizadas (Tailwind carregado): sem os estilos, a auditoria de contraste não é medida. Cada página é medida em 3 rodadas: a pontuação de categoria é a mediana, e uma auditoria crítica só reprova se falhar na maioria das rodadas (o CI compartilhado é ruidoso). Os mínimos são piso de regressão. about.html (documentação ilustrada) é pública e autocontida: mede a página como ela é publicada.",
+  "descricao": "Gate Lighthouse para pull requests (Backlog 3, item H). Categorias: pontuação mínima de 0 a 1. Auditorias críticas precisam passar em todas as páginas — as exceções de dívida conhecida foram zeradas depois de corrigir meta-viewport, color-contrast, label, select-name e aria-dialog-name. Cada página é medida em 3 rodadas: a pontuação de categoria é a mediana, e uma auditoria crítica só reprova se falhar na maioria das rodadas (o CI compartilhado é ruidoso). Os mínimos são piso de regressão. about.html (documentação ilustrada) é pública e autocontida: mede a página como ela é publicada.",
   "rede": {
     "bloquearHosts": [
       "*supabase.co*"
     ],
-    "motivo": "A medição não lê nem escreve dados reais e não entra na contagem de usuários on-line (item E)."
+    "motivo": "A medição não lê nem escreve dados reais e não entra na contagem de usuários on-line (item E).",
+    "ignorarErrosDeConsole": [
+      "ERR_BLOCKED_BY_CLIENT.Inspector",
+      "WebSocket connection to 'wss://[^']*supabase\\.co[^']*'"
+    ],
+    "motivoIgnorarErrosDeConsole": "O ambiente de medição (CI/sandbox) não tem saída para a internet e o próprio gate bloqueia o host do backend de propósito: falhas de rede dessas requisições são do ambiente, não da aplicação. O console continua auditado — nenhum erro de JavaScript, CSS ou imagem é ignorado, e falhas de outros hosts continuam reprovando."
   },
   "categorias": {
     "performance": 0.6,
@@ -92,59 +97,5 @@
     "is-on-https",
     "geolocation-on-start"
   ],
-  "excecoes": {
-    "meta-viewport": {
-      "paginas": [
-        "index.html",
-        "confirm-role.html",
-        "dashboard.html",
-        "cargas.html",
-        "delegacao.html",
-        "embarcacoes.html",
-        "inspecao.html",
-        "manutencao.html",
-        "relatorios.html",
-        "scanner.html",
-        "tecnico_portos.html"
-      ],
-      "motivo": "viewport com user-scalable=no e maximum-scale=1.0 impede o zoom (WCAG 1.4.4). Decisão de UX pendente: remover o bloqueio de zoom."
-    },
-    "label": {
-      "paginas": [
-        "delegacao.html",
-        "manutencao.html"
-      ],
-      "motivo": "campos de formulário sem rótulo acessível. Corrigir e remover a exceção."
-    },
-    "select-name": {
-      "paginas": [
-        "cargas.html",
-        "inspecao.html",
-        "relatorios.html"
-      ],
-      "motivo": "select sem nome acessível. Corrigir e remover a exceção."
-    },
-    "aria-dialog-name": {
-      "paginas": [
-        "manutencao.html"
-      ],
-      "motivo": "diálogo sem nome acessível (aria-labelledby ou aria-label). Corrigir e remover a exceção."
-    },
-    "color-contrast": {
-      "paginas": [
-        "index.html",
-        "confirm-role.html",
-        "dashboard.html",
-        "cargas.html",
-        "delegacao.html",
-        "embarcacoes.html",
-        "inspecao.html",
-        "manutencao.html",
-        "relatorios.html",
-        "scanner.html",
-        "tecnico_portos.html"
-      ],
-      "motivo": "texto secundário (rótulos e textos em cinza/slate) abaixo de 4,5:1 sobre o fundo claro, medido com os estilos do Tailwind carregados. Dívida conhecida: revisar as cores de texto secundário e remover a exceção."
-    }
-  }
+  "excecoes": {}
 }

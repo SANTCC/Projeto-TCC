@@ -8,10 +8,11 @@
   <meta name="color-scheme" content="light dark" />
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <!-- Tipografia e ícones locais (css/fonts.css, gerado por tools/assets.js): sem Google Fonts, a
+       página não depende de terceiros para renderizar e fica igual às demais telas. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css" />
   <style>
     :root {
       --nexus-900: #1E293B;
@@ -676,7 +677,7 @@
         <p class="conta-texto">Conta de diretoria: enxerga todos os indicadores, inclusive valor declarado e produtividade, além da trilha completa de decisões e da gestão de pessoas.</p>
         <p class="conta-resumo">10 telas capturadas nesta conta.</p>
         <a class="miniatura" href="docs/screenshots/mat-0000-dashboard.png" data-ampliar="mat-0000-dashboard.png">
-          <img width="1440" height="2633" src="docs/screenshots/mat-0000-dashboard.png" alt="Painel do sistema aberto com a conta MAT-0000 (Diretor-Presidente/Superintendente)" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-dashboard.png" alt="Painel do sistema aberto com a conta MAT-0000 (Diretor-Presidente/Superintendente)" width="1440" height="2633" loading="lazy" />
           <span class="miniatura-rotulo">Ver as capturas desta conta</span>
         </a>
         <a class="botao" href="#galeria-mat-0000">Ir para a galeria desta conta</a>
@@ -698,7 +699,7 @@
         <p class="conta-texto">Conta de gestão operacional: libera saídas de carga, aprova manutenções, delega substituto com vigência e responde pela trilha de decisões do turno.</p>
         <p class="conta-resumo">9 telas capturadas nesta conta.</p>
         <a class="miniatura" href="docs/screenshots/mat-2011-dashboard.png" data-ampliar="mat-2011-dashboard.png">
-          <img width="1440" height="2290" src="docs/screenshots/mat-2011-dashboard.png" alt="Painel do sistema aberto com a conta MAT-2011 (Supervisor / Gerente de Operações)" loading="lazy" />
+          <img src="docs/screenshots/mat-2011-dashboard.png" alt="Painel do sistema aberto com a conta MAT-2011 (Supervisor / Gerente de Operações)" width="1440" height="2290" loading="lazy" />
           <span class="miniatura-rotulo">Ver as capturas desta conta</span>
         </a>
         <a class="botao" href="#galeria-mat-2011">Ir para a galeria desta conta</a>
@@ -720,7 +721,7 @@
         <p class="conta-texto">Conta da guarita: cadastra funcionários e visitantes, valida documentos e reemite credenciais (RN 15), com acesso apenas à própria operação.</p>
         <p class="conta-resumo">5 telas capturadas nesta conta.</p>
         <a class="miniatura" href="docs/screenshots/mat-9999-dashboard.png" data-ampliar="mat-9999-dashboard.png">
-          <img width="1440" height="2266" src="docs/screenshots/mat-9999-dashboard.png" alt="Painel do sistema aberto com a conta MAT-9999 (Técnico em Portos)" loading="lazy" />
+          <img src="docs/screenshots/mat-9999-dashboard.png" alt="Painel do sistema aberto com a conta MAT-9999 (Técnico em Portos)" width="1440" height="2266" loading="lazy" />
           <span class="miniatura-rotulo">Ver as capturas desta conta</span>
         </a>
         <a class="botao" href="#galeria-mat-9999">Ir para a galeria desta conta</a>
@@ -769,7 +770,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/publico-login.png" data-ampliar="publico-login.png">
-          <img width="1440" height="900" src="docs/screenshots/publico-login.png" alt="Captura da tela Autenticação de Funcionário" loading="lazy" />
+          <img src="docs/screenshots/publico-login.png" alt="Captura da tela Autenticação de Funcionário" width="1440" height="900" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -779,19 +780,19 @@
             <li>
               <a href="docs/screenshots/publico-login.png" data-ampliar="publico-login.png">
                 <span class="captura-rotulo"><code>Acesso público</code> <span class="captura-detalhe">sem sessão</span></span>
-                <span class="captura-meta">Autenticação de Funcionário • 87 kB</span>
+                <span class="captura-meta">Autenticação de Funcionário • 77 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/publico-login-reemissao.png" data-ampliar="publico-login-reemissao.png">
                 <span class="captura-rotulo"><code>Acesso público</code> <span class="captura-detalhe">sem sessão</span></span>
-                <span class="captura-meta">Autenticação de Funcionário • 92 kB</span>
+                <span class="captura-meta">Autenticação de Funcionário • 91 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/publico-login-reconhecida.png" data-ampliar="publico-login-reconhecida.png">
                 <span class="captura-rotulo"><code>Acesso público</code> <span class="captura-detalhe">sem sessão</span></span>
-                <span class="captura-meta">Autenticação de Funcionário • 93 kB</span>
+                <span class="captura-meta">Autenticação de Funcionário • 84 kB</span>
               </a>
             </li>
           </ul>
@@ -828,7 +829,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/MAT-0000-confirmacao-cargo.png" data-ampliar="MAT-0000-confirmacao-cargo.png">
-          <img width="1440" height="900" src="docs/screenshots/MAT-0000-confirmacao-cargo.png" alt="Captura da tela Confirmação de Cargo" loading="lazy" />
+          <img src="docs/screenshots/MAT-0000-confirmacao-cargo.png" alt="Captura da tela Confirmação de Cargo" width="1440" height="900" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -838,19 +839,19 @@
             <li>
               <a href="docs/screenshots/MAT-0000-confirmacao-cargo.png" data-ampliar="MAT-0000-confirmacao-cargo.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Confirmação de Cargo • 98 kB</span>
+                <span class="captura-meta">Confirmação de Cargo • 87 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/MAT-2011-confirmacao-cargo.png" data-ampliar="MAT-2011-confirmacao-cargo.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Confirmação de Cargo • 101 kB</span>
+                <span class="captura-meta">Confirmação de Cargo • 89 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/MAT-9999-confirmacao-cargo.png" data-ampliar="MAT-9999-confirmacao-cargo.png">
                 <span class="captura-rotulo"><code>MAT-9999</code> <span class="captura-detalhe">Juliana Reis — Técnico em Portos</span></span>
-                <span class="captura-meta">Confirmação de Cargo • 95 kB</span>
+                <span class="captura-meta">Confirmação de Cargo • 84 kB</span>
               </a>
             </li>
           </ul>
@@ -887,7 +888,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-dashboard.png" data-ampliar="mat-0000-dashboard.png">
-          <img width="1440" height="2633" src="docs/screenshots/mat-0000-dashboard.png" alt="Captura da tela Painel de Comando" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-dashboard.png" alt="Captura da tela Painel de Comando" width="1440" height="2633" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -897,19 +898,19 @@
             <li>
               <a href="docs/screenshots/mat-0000-dashboard.png" data-ampliar="mat-0000-dashboard.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Painel de Comando • 434 kB</span>
+                <span class="captura-meta">Painel de Comando • 375 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-2011-dashboard.png" data-ampliar="mat-2011-dashboard.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Painel de Comando • 388 kB</span>
+                <span class="captura-meta">Painel de Comando • 335 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-9999-dashboard.png" data-ampliar="mat-9999-dashboard.png">
                 <span class="captura-rotulo"><code>MAT-9999</code> <span class="captura-detalhe">Juliana Reis — Técnico em Portos</span></span>
-                <span class="captura-meta">Painel de Comando • 368 kB</span>
+                <span class="captura-meta">Painel de Comando • 319 kB</span>
               </a>
             </li>
           </ul>
@@ -918,7 +919,7 @@
             <li>
               <a href="docs/screenshots/mat-0000-dashboard-tema-escuro.png" data-ampliar="mat-0000-dashboard-tema-escuro.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">O mesmo painel no tema escuro (preferência salva por operador).</span></span>
-                <span class="captura-meta">Painel de Comando • 434 kB</span>
+                <span class="captura-meta">Painel de Comando • 374 kB</span>
               </a>
             </li>
           </ul>
@@ -954,7 +955,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-cargas.png" data-ampliar="mat-0000-cargas.png">
-          <img width="1440" height="2862" src="docs/screenshots/mat-0000-cargas.png" alt="Captura da tela Cargas &amp; Operações de Pátio" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-cargas.png" alt="Captura da tela Cargas &amp; Operações de Pátio" width="1440" height="2862" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -964,13 +965,13 @@
             <li>
               <a href="docs/screenshots/mat-0000-cargas.png" data-ampliar="mat-0000-cargas.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Cargas &amp; Operações de Pátio • 368 kB</span>
+                <span class="captura-meta">Cargas &amp; Operações de Pátio • 326 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-2011-cargas.png" data-ampliar="mat-2011-cargas.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Cargas &amp; Operações de Pátio • 364 kB</span>
+                <span class="captura-meta">Cargas &amp; Operações de Pátio • 323 kB</span>
               </a>
             </li>
           </ul>
@@ -1007,7 +1008,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-inspecao.png" data-ampliar="mat-0000-inspecao.png">
-          <img width="1440" height="900" src="docs/screenshots/mat-0000-inspecao.png" alt="Captura da tela Inspeção &amp; Checklist" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-inspecao.png" alt="Captura da tela Inspeção &amp; Checklist" width="1440" height="900" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -1017,13 +1018,13 @@
             <li>
               <a href="docs/screenshots/mat-0000-inspecao.png" data-ampliar="mat-0000-inspecao.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Inspeção &amp; Checklist • 110 kB</span>
+                <span class="captura-meta">Inspeção &amp; Checklist • 95 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-2011-inspecao.png" data-ampliar="mat-2011-inspecao.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Inspeção &amp; Checklist • 108 kB</span>
+                <span class="captura-meta">Inspeção &amp; Checklist • 93 kB</span>
               </a>
             </li>
           </ul>
@@ -1032,7 +1033,7 @@
             <li>
               <a href="docs/screenshots/mat-2011-inspecao-checklist-carregado.png" data-ampliar="mat-2011-inspecao-checklist-carregado.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Checklist de uma carga carregado: itens críticos e ações de aprovação/recusa.</span></span>
-                <span class="captura-meta">Inspeção &amp; Checklist • 216 kB</span>
+                <span class="captura-meta">Inspeção &amp; Checklist • 188 kB</span>
               </a>
             </li>
           </ul>
@@ -1068,7 +1069,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-scanner.png" data-ampliar="mat-0000-scanner.png">
-          <img width="1440" height="900" src="docs/screenshots/mat-0000-scanner.png" alt="Captura da tela Scanner QR Code" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-scanner.png" alt="Captura da tela Scanner QR Code" width="1440" height="900" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -1078,19 +1079,19 @@
             <li>
               <a href="docs/screenshots/mat-0000-scanner.png" data-ampliar="mat-0000-scanner.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Scanner QR Code • 103 kB</span>
+                <span class="captura-meta">Scanner QR Code • 92 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-2011-scanner.png" data-ampliar="mat-2011-scanner.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Scanner QR Code • 101 kB</span>
+                <span class="captura-meta">Scanner QR Code • 91 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-9999-scanner.png" data-ampliar="mat-9999-scanner.png">
                 <span class="captura-rotulo"><code>MAT-9999</code> <span class="captura-detalhe">Juliana Reis — Técnico em Portos</span></span>
-                <span class="captura-meta">Scanner QR Code • 87 kB</span>
+                <span class="captura-meta">Scanner QR Code • 79 kB</span>
               </a>
             </li>
           </ul>
@@ -1127,7 +1128,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-embarcacoes.png" data-ampliar="mat-0000-embarcacoes.png">
-          <img width="1440" height="3637" src="docs/screenshots/mat-0000-embarcacoes.png" alt="Captura da tela Embarcações, Contêineres &amp; GPS" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-embarcacoes.png" alt="Captura da tela Embarcações, Contêineres &amp; GPS" width="1440" height="3637" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -1137,13 +1138,13 @@
             <li>
               <a href="docs/screenshots/mat-0000-embarcacoes.png" data-ampliar="mat-0000-embarcacoes.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Embarcações, Contêineres &amp; GPS • 611 kB</span>
+                <span class="captura-meta">Embarcações, Contêineres &amp; GPS • 529 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-2011-embarcacoes.png" data-ampliar="mat-2011-embarcacoes.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Embarcações, Contêineres &amp; GPS • 602 kB</span>
+                <span class="captura-meta">Embarcações, Contêineres &amp; GPS • 521 kB</span>
               </a>
             </li>
           </ul>
@@ -1180,7 +1181,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-manutencao.png" data-ampliar="mat-0000-manutencao.png">
-          <img width="1440" height="1687" src="docs/screenshots/mat-0000-manutencao.png" alt="Captura da tela Manutenção &amp; Ordens de Serviço" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-manutencao.png" alt="Captura da tela Manutenção &amp; Ordens de Serviço" width="1440" height="1687" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -1190,13 +1191,13 @@
             <li>
               <a href="docs/screenshots/mat-0000-manutencao.png" data-ampliar="mat-0000-manutencao.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Manutenção &amp; Ordens de Serviço • 315 kB</span>
+                <span class="captura-meta">Manutenção &amp; Ordens de Serviço • 273 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-2011-manutencao.png" data-ampliar="mat-2011-manutencao.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Manutenção &amp; Ordens de Serviço • 313 kB</span>
+                <span class="captura-meta">Manutenção &amp; Ordens de Serviço • 272 kB</span>
               </a>
             </li>
           </ul>
@@ -1233,7 +1234,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-delegacao.png" data-ampliar="mat-0000-delegacao.png">
-          <img width="1440" height="900" src="docs/screenshots/mat-0000-delegacao.png" alt="Captura da tela Delegação de Supervisor" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-delegacao.png" alt="Captura da tela Delegação de Supervisor" width="1440" height="900" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -1243,13 +1244,13 @@
             <li>
               <a href="docs/screenshots/mat-0000-delegacao.png" data-ampliar="mat-0000-delegacao.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Delegação de Supervisor • 161 kB</span>
+                <span class="captura-meta">Delegação de Supervisor • 138 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-2011-delegacao.png" data-ampliar="mat-2011-delegacao.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Delegação de Supervisor • 159 kB</span>
+                <span class="captura-meta">Delegação de Supervisor • 137 kB</span>
               </a>
             </li>
           </ul>
@@ -1286,7 +1287,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-tecnico_portos.png" data-ampliar="mat-0000-tecnico_portos.png">
-          <img width="1440" height="1998" src="docs/screenshots/mat-0000-tecnico_portos.png" alt="Captura da tela Gestão de Pessoas (Técnico em Portos)" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-tecnico_portos.png" alt="Captura da tela Gestão de Pessoas (Técnico em Portos)" width="1440" height="1998" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -1296,13 +1297,13 @@
             <li>
               <a href="docs/screenshots/mat-0000-tecnico_portos.png" data-ampliar="mat-0000-tecnico_portos.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Gestão de Pessoas (Técnico em Portos) • 430 kB</span>
+                <span class="captura-meta">Gestão de Pessoas (Técnico em Portos) • 375 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-9999-tecnico_portos.png" data-ampliar="mat-9999-tecnico_portos.png">
                 <span class="captura-rotulo"><code>MAT-9999</code> <span class="captura-detalhe">Juliana Reis — Técnico em Portos</span></span>
-                <span class="captura-meta">Gestão de Pessoas (Técnico em Portos) • 414 kB</span>
+                <span class="captura-meta">Gestão de Pessoas (Técnico em Portos) • 362 kB</span>
               </a>
             </li>
           </ul>
@@ -1339,7 +1340,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/mat-0000-relatorios.png" data-ampliar="mat-0000-relatorios.png">
-          <img width="1440" height="2919" src="docs/screenshots/mat-0000-relatorios.png" alt="Captura da tela Relatórios &amp; PDF" loading="lazy" />
+          <img src="docs/screenshots/mat-0000-relatorios.png" alt="Captura da tela Relatórios &amp; PDF" width="1440" height="2919" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -1349,19 +1350,19 @@
             <li>
               <a href="docs/screenshots/mat-0000-relatorios.png" data-ampliar="mat-0000-relatorios.png">
                 <span class="captura-rotulo"><code>MAT-0000</code> <span class="captura-detalhe">Helena Prado — Diretor-Presidente/Superintendente</span></span>
-                <span class="captura-meta">Relatórios &amp; PDF • 493 kB</span>
+                <span class="captura-meta">Relatórios &amp; PDF • 430 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-2011-relatorios.png" data-ampliar="mat-2011-relatorios.png">
                 <span class="captura-rotulo"><code>MAT-2011</code> <span class="captura-detalhe">Marcos Tavares — Supervisor / Gerente de Operações</span></span>
-                <span class="captura-meta">Relatórios &amp; PDF • 340 kB</span>
+                <span class="captura-meta">Relatórios &amp; PDF • 298 kB</span>
               </a>
             </li>
             <li>
               <a href="docs/screenshots/mat-9999-relatorios.png" data-ampliar="mat-9999-relatorios.png">
                 <span class="captura-rotulo"><code>MAT-9999</code> <span class="captura-detalhe">Juliana Reis — Técnico em Portos</span></span>
-                <span class="captura-meta">Relatórios &amp; PDF • 233 kB</span>
+                <span class="captura-meta">Relatórios &amp; PDF • 205 kB</span>
               </a>
             </li>
           </ul>
@@ -1398,7 +1399,7 @@
         </ul>
 
         <a class="miniatura miniatura-principal" href="docs/screenshots/publico-teste-vibracao.png" data-ampliar="publico-teste-vibracao.png">
-          <img width="1440" height="1011" src="docs/screenshots/publico-teste-vibracao.png" alt="Captura da tela Teste de Vibração do Pânico" loading="lazy" />
+          <img src="docs/screenshots/publico-teste-vibracao.png" alt="Captura da tela Teste de Vibração do Pânico" width="1440" height="1011" loading="lazy" />
           <span class="miniatura-rotulo">Ampliar imagem</span>
         </a>
 
@@ -1408,7 +1409,7 @@
             <li>
               <a href="docs/screenshots/publico-teste-vibracao.png" data-ampliar="publico-teste-vibracao.png">
                 <span class="captura-rotulo"><code>Acesso público</code> <span class="captura-detalhe">sem sessão</span></span>
-                <span class="captura-meta">Teste de Vibração do Pânico • 99 kB</span>
+                <span class="captura-meta">Teste de Vibração do Pânico • 83 kB</span>
               </a>
             </li>
           </ul>

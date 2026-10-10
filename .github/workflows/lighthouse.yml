@@ -1,6 +1,7 @@
 # Gate Lighthouse para pull requests (Backlog 3, item H).
 # Roda em todo PR aberto ou atualizado. Reprova se uma categoria estiver abaixo do mínimo ou se uma
-# auditoria crítica falhar fora das exceções de lighthouse/limiares.json.
+# auditoria crítica falhar. Não há exceções de dívida conhecida em lighthouse/limiares.json: só as
+# falhas de rede do host que o próprio gate bloqueia deixam de contar como erro de console.
 # Para bloquear o merge, marque o check "Lighthouse (PR)" como obrigatório na proteção da branch main
 # (Settings → Branches → Require status checks).
 name: Lighthouse
@@ -33,6 +34,11 @@ jobs:
 
       - name: Dependências
         run: npm ci
+
+      # Impede que css/nexus.css, css/fonts.css, fonts/ ou vendor/ fiquem fora de sincronia com as
+      # dependências instaladas (as páginas não usam CDN).
+      - name: Recursos locais em dia
+        run: node tools/assets.js --check
 
       # O Chrome já vem instalado nas imagens ubuntu-latest; o gate o localiza no PATH.
       - name: Build de produção e gate Lighthouse

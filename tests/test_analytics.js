@@ -48,8 +48,17 @@ function testarModulo() {
   check('validade do cookie de 2 anos (63072000 s)', cfg.cookie_expires === 63072000, String(cfg.cookie_expires));
   check('sem Google Signals', cfg.allow_google_signals === false);
   check('sem personalização de anúncios', cfg.allow_ad_personalization_signals === false);
+  // O gtag.js (terceiro) só é baixado na primeira interação: a página não espera rede externa para
+  // aparecer. O comando `config` já está no dataLayer e é processado quando o script chega.
+  check('antes da interação: nenhum script do Google é baixado',
+    !w.document.querySelector('script[src*="googletagmanager.com"]'));
+  w.dispatchEvent(new w.Event('pointerdown'));
   const carregador = w.document.querySelector(`script[src="https://www.googletagmanager.com/gtag/js?id=${ID}"]`);
-  check('gtag.js é carregado de forma assíncrona', !!carregador && carregador.async === true);
+  check('na primeira interação, gtag.js é carregado de forma assíncrona',
+    !!carregador && carregador.async === true);
+  w.dispatchEvent(new w.Event('pointerdown'));
+  check('duas interações não duplicam o carregamento',
+    w.document.querySelectorAll('script[src*="googletagmanager.com"]').length === 1);
 
   log('\n[2] Cookies sem Secure em HTTP local (desenvolvimento)');
   const local = criarJanela({ url: 'http://localhost:3000/index.html', scripts: ['js/analytics.js'] });

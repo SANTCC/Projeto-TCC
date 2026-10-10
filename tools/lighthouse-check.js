@@ -285,9 +285,25 @@ async function executar(opcoes) {
   const paginas = limiares.paginas.filter((p) => !o.filtro || o.filtro.includes(p.arquivo));
   if (paginas.length === 0) throw new Error('nenhuma página selecionada pelo filtro');
 
-  const { default: lighthouse, desktopConfig } = await import('lighthouse');
+  const { default: lighthouse, desktopConfig, defaultConfig } = await import('lighthouse');
   const chromeLauncher = await import('chrome-launcher');
   const puppeteer = await import('puppeteer-core');
+
+  // A auditoria "sem erros no console" roda com os padrões declarados em limiares.rede: o host do
+  // backend é bloqueado de propósito pelo gate e o ambiente de CI não alcança a internet, então as
+  // falhas de rede dessas requisições são do ambiente de medição e não da aplicação. O resto do
+  // console continua sendo auditado normalmente.
+  // A configuração parte do preset de desktop e acrescenta as opções da auditoria de console.
+  const configuracao = {
+    ...desktopConfig,
+    audits: [
+      ...defaultConfig.audits,
+      {
+        path: 'errors-in-console',
+        options: { ignoredPatterns: (limiares.rede.ignorarErrosDeConsole || []).map((d) => new RegExp(d)) }
+      }
+    ]
+  };
 
   process.stdout.write('Gerando build de produção (dist/)...\n');
   await build();
@@ -320,7 +336,7 @@ async function executar(opcoes) {
           onlyCategories: CATEGORIAS_PERMITIDAS,
           disableStorageReset: true,
           blockedUrlPatterns: limiares.rede.bloquearHosts
-        }, desktopConfig);
+        }, configuracao);
         lhrs.push(resultado.lhr);
         const base = pagina.arquivo.replace(/\.html$/, '');
         fs.writeFileSync(path.join(PASTA_RELATORIOS, `${base}-rodada-${i}.json`), JSON.stringify(resultado.lhr, null, 2));

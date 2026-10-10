@@ -30,14 +30,23 @@
     };
   }
 
-  // gtag.js (carregamento assíncrono, como no snippet oficial do GA4).
-  if (typeof document !== 'undefined' && document.head
-    && !document.querySelector('script[src*="googletagmanager.com/gtag/js"]')) {
+  // gtag.js entra na primeira interação do visitante (ou no primeiro evento registrado), e não no
+  // carregamento da página: o script do Google (terceiro) fica fora do caminho crítico, a página
+  // abre sem depender de rede externa e quem só lê não baixa nada. Os eventos são enfileirados em
+  // `dataLayer` e o gtag.js os processa assim que chega — o mesmo comportamento do snippet oficial.
+  let requisitado = false;
+  function carregarGtag() {
+    if (requisitado || typeof document === 'undefined' || !document.head) return;
+    requisitado = true;
+    if (document.querySelector('script[src*="googletagmanager.com/gtag/js"]')) return;
     const carregador = document.createElement('script');
     carregador.async = true;
     carregador.src = `https://www.googletagmanager.com/gtag/js?id=${MEDICAO_ID}`;
     document.head.appendChild(carregador);
   }
+  ['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach((evento) => {
+    window.addEventListener(evento, carregarGtag, { once: true, passive: true });
+  });
 
   const seguro = Boolean(window.location && window.location.protocol === 'https:');
   window.gtag('js', new Date());
@@ -69,6 +78,7 @@
   function track(nome, params) {
     if (typeof nome !== 'string' || !NOME_EVENTO.test(nome)) return false;
     if (typeof window.gtag !== 'function') return false;
+    carregarGtag();
     try {
       window.gtag('event', nome, sanitizarParametros(params));
       return true;
@@ -80,6 +90,7 @@
   window.NexusAnalytics = {
     MEDICAO_ID,
     track,
-    sanitizarParametros
+    sanitizarParametros,
+    carregarGtag
   };
 })(window);
