@@ -754,12 +754,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
       }
-      const csvEscape = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-      const linhas = [
-        ['Categoria / Operação', 'Volume Processado', 'Meta Mensal', 'Atingimento (%)', 'Tempo Médio (Horas)', 'Status Operacional'].map(csvEscape).join(';'),
-        ...dados.map(i => [i.categoria, i.volume, i.meta, `${i.atingimento}%`, String(i.tempo).replace('.', ','), i.status].map(csvEscape).join(';')),
-      ];
-      const blob = new Blob(['\uFEFF' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      // Codificação de saída do CSV (RFC 4180 + anti injeção de fórmula) é a mesma
+      // de todo o projeto: js/security.js, carregado antes dos módulos de página.
+      const csvTexto = window.nexusCsvTexto || (window.NexusSecurity && window.NexusSecurity.csvTexto);
+      const conteudo = csvTexto([
+        ['Categoria / Operação', 'Volume Processado', 'Meta Mensal', 'Atingimento (%)', 'Tempo Médio (Horas)', 'Status Operacional'],
+        ...dados.map(i => [i.categoria, i.volume, i.meta, `${i.atingimento}%`, String(i.tempo).replace('.', ','), i.status])
+      ], ';');
+      const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const agora = new Date();

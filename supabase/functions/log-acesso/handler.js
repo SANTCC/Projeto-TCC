@@ -11,7 +11,16 @@
  *  4. Persistência: insere em `log_acessos_usuarios` com a service role.
  *
  * Corpo (JSON): { codigo_individual: string, pagina?: string }
+ *
+ * O parse/normalização de IP vem de `ipaddr.js` (mesmo utilitário compartilhado
+ * do gate de VPN), injetado por `criarHandler`. A validação anterior aceitava
+ * `::::` como IPv6 válido e gravava o valor no log.
  */
+
+import { criarUtilitariosIp } from '../_shared/ip.js';
+
+// Reexportado para os testes montarem os utilitários com a mesma biblioteca.
+export { criarUtilitariosIp };
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -29,37 +38,7 @@ function json(body, status = 200) {
   });
 }
 
-/** Aceita apenas IPv4 ou IPv6 com formato plausível; caso contrário, null. */
-export function normalizarIp(valor) {
-  if (typeof valor !== 'string') return null;
-  const ip = valor.trim();
-  if (!ip || ip.length > 45) return null;
-  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-  const m = ip.match(ipv4);
-  if (m) {
-    return m.slice(1).every((o) => Number(o) <= 255) ? ip : null;
-  }
-  // IPv6 (inclui forma comprimida e IPv4 embutido). Validação de formato, não de rota.
-  if (/^[0-9a-fA-F:.]+$/.test(ip) && ip.includes(':')) return ip;
-  return null;
-}
-
-/** Descobre o IP de origem a partir dos cabeçalhos de proxy, na ordem de confiabilidade. */
-export function extrairIp(headers) {
-  const get = (nome) => (headers && typeof headers.get === 'function' ? headers.get(nome) : null);
-  const cf = normalizarIp(get('cf-connecting-ip'));
-  if (cf) return cf;
-  const real = normalizarIp(get('x-real-ip'));
-  if (real) return real;
-  const xff = get('x-forwarded-for');
-  if (typeof xff === 'string' && xff.length) {
-    // Pega o primeiro item da lista (cliente original).
-    const primeiro = normalizarIp(xff.split(',')[0]);
-    if (primeiro) return primeiro;
-  }
-  return null;
-}
-
+/** Trunca o user agent no tamanho aceito pela coluna. */
 export function extrairUserAgent(headers) {
   const ua = headers && typeof headers.get === 'function' ? headers.get('user-agent') : null;
   if (typeof ua !== 'string') return null;
@@ -67,7 +46,8 @@ export function extrairUserAgent(headers) {
   return limpo ? limpo.slice(0, MAX_USER_AGENT) : null;
 }
 
-export function criarHandler({ criarCliente, env }) {
+export function criarHandler({ criarCliente, env, ipaddr }) {
+  const { extrairIp: ipDoCabecalho } = criarUtilitariosIp(ipaddr);
   return async function handler(req) {
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -114,7 +94,7 @@ export function criarHandler({ criarCliente, env }) {
 
     const { error: erroInsert } = await admin.from('log_acessos_usuarios').insert({
       funcionario_id: funcionario.id,
-      ip: extrairIp(req.headers),
+      ip: ipDoCabecalho(req.headers),
       user_agent: extrairUserAgent(req.headers),
       pagina,
     });

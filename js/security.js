@@ -158,6 +158,42 @@
   }
 
   /**
+   * Codifica um valor como célula CSV (RFC 4180) e neutraliza injeção de
+   * fórmula.
+   *
+   * Planilhas (Excel, LibreOffice, Google Sheets) interpretam uma célula que
+   * começa com `=`, `+`, `-`, `@`, TAB ou CR como FÓRMULA — um valor vindo do
+   * banco ou digitado por um operador pode então executar comandos na máquina
+   * de quem abrir o arquivo (CSV injection / DDE). O apóstrofo inicial faz a
+   * planilha tratar o conteúdo como texto.
+   *
+   * Quebras de linha viram espaço (senão a célula quebraria a linha do CSV) e
+   * as aspas são duplicadas, como manda a RFC.
+   */
+  function csvCell(value) {
+    let texto = (value === null || value === undefined) ? '' : String(value);
+    texto = texto.replace(/[\r\n]+/g, ' ').trim();
+    if (/^[=+\-@\t\r]/.test(texto)) texto = "'" + texto;
+    return '"' + texto.replace(/"/g, '""') + '"';
+  }
+
+  /**
+   * Monta o conteúdo de um arquivo CSV a partir de linhas de valores crus.
+   * Inclui o BOM UTF-8 (o Excel pt-BR só detecta acentuação com ele) e usa
+   * CRLF, como pede a RFC 4180.
+   *
+   * @param {Array<Array<*>>} linhas linhas de valores (a primeira é o cabeçalho)
+   * @param {string} [delimitador] ';' (padrão pt-BR/Excel) ou ','
+   */
+  function csvTexto(linhas, delimitador) {
+    const separador = delimitador || ';';
+    const texto = (Array.isArray(linhas) ? linhas : [])
+      .map((celulas) => (Array.isArray(celulas) ? celulas : []).map(csvCell).join(separador))
+      .join('\r\n');
+    return '﻿' + texto;
+  }
+
+  /**
    * Remove caracteres de controle de textos livres que serão gravados em
    * logs/trail, evitando poluição de registros de auditoria.
    */
@@ -176,7 +212,9 @@
     safeUrl: safeUrl,
     safeId: safeId,
     setText: setText,
-    sanitizeText: sanitizeText
+    sanitizeText: sanitizeText,
+    csvCell: csvCell,
+    csvTexto: csvTexto
   };
 
   window.NexusSecurity = NexusSecurity;
@@ -185,4 +223,6 @@
   window.nexusEsc = escapeHtml;
   window.nexusJsArg = jsArg;
   window.nexusSafeUrl = safeUrl;
+  window.nexusCsvCell = csvCell;
+  window.nexusCsvTexto = csvTexto;
 })(window);

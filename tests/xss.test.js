@@ -568,8 +568,35 @@ async function runUnitChecks(collected) {
   });
   dom.window.eval(readFile('js/security.js'));
   const safeUrl = dom.window.NexusSecurity && dom.window.NexusSecurity.safeUrl;
+  const csvTexto = dom.window.NexusSecurity && dom.window.NexusSecurity.csvTexto;
+  const csvCell = dom.window.NexusSecurity && dom.window.NexusSecurity.csvCell;
   if (typeof safeUrl !== 'function') {
     fail(collected, 'safeUrl', 'js/security.js não expõe NexusSecurity.safeUrl');
+  }
+
+  // --- js/security.js :: codificação de saída CSV (RFC 4180 + injeção de fórmula) ---
+  if (typeof csvTexto !== 'function' || typeof csvCell !== 'function') {
+    fail(collected, 'csv', 'js/security.js não expõe NexusSecurity.csvCell/csvTexto');
+  } else {
+    // Uma planilha executa a célula quando ela começa com =, +, -, @, TAB ou CR.
+    for (const perigoso of ['=cmd|\' /C calc\'!A0', '+1+1', '-2+3+cmd|\' /C calc\'!A0', '@SUM(1+1)', '\t=1+1', '\r=1+1']) {
+      const saida = csvCell(perigoso);
+      if (!saida.startsWith('"\'')) {
+        fail(collected, 'csv', `injeção de fórmula não neutralizada: ${JSON.stringify(perigoso)} => ${saida}`);
+      }
+    }
+    if (csvCell('a"b') !== '"a""b"') fail(collected, 'csv', `aspas não escapadas: ${csvCell('a"b')}`);
+    if (csvCell('linha1\r\nlinha2') !== '"linha1 linha2"') {
+      fail(collected, 'csv', `quebra de linha não neutralizada: ${csvCell('linha1\r\nlinha2')}`);
+    }
+    if (csvCell('texto') !== '"texto"') fail(collected, 'csv', `célula comum deveria só ser citada: ${csvCell('texto')}`);
+    if (csvCell(null) !== '""' || csvCell(undefined) !== '""') fail(collected, 'csv', 'nulo deveria virar célula vazia');
+    if (!csvTexto([['a', 'b'], ['c', 'd']], ';').startsWith('\uFEFF')) {
+      fail(collected, 'csv', 'o CSV precisa sair com BOM UTF-8 (Excel pt-BR)');
+    }
+    if (csvTexto([['a', 'b'], ['c', 'd']], ';') !== '\uFEFF"a";"b"\r\n"c";"d"') {
+      fail(collected, 'csv', `delimitador/CRLF incorretos: ${JSON.stringify(csvTexto([['a', 'b'], ['c', 'd']], ';'))}`);
+    }
   }
 
   const bloqueados = [

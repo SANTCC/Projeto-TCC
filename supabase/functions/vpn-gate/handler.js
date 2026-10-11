@@ -15,7 +15,16 @@
  *   3. listas públicas de VPN (X4BNet, tn3w e antonme).
  * As camadas 1 e 3 falham fechadas (HTTP 503 com a mensagem de bloqueio); a
  * camada 2 é um reforço e, sem dados, não derruba a decisão das outras.
+ *
+ * O parse de IP/CIDR vem de `ipaddr.js`, injetado por `criarHandler` (o Deno
+ * resolve `npm:ipaddr.js` em index.ts; os testes Node passam o pacote instalado).
  */
+
+import { criarUtilitariosIp } from '../_shared/ip.js';
+
+// Reexportado para os testes e o CLI montarem os utilitários com a mesma
+// biblioteca (no Node, o pacote `ipaddr.js` do node_modules).
+export { criarUtilitariosIp };
 
 export const MENSAGEM_BLOQUEIO = 'AQUI NÃO!! TICO-TICO!!!!!!!!';
 
@@ -141,219 +150,7 @@ function respostaTexto(texto, status, motivo) {
   return new Response(texto, { status, headers });
 }
 
-/** Tira brackets e portas que alguns proxies acrescentam ao IP. */
-function limparIp(valor) {
-  if (typeof valor !== 'string') return null;
-  let ip = valor.trim();
-  if (!ip || ip.length > 80) return null;
-
-  const entreColchetes = ip.match(/^\[([^\]]+)\](?::\d+)?$/);
-  if (entreColchetes) ip = entreColchetes[1];
-  else if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(ip)) ip = ip.slice(0, ip.lastIndexOf(':'));
-
-  if (ip.includes('%')) return null; // IPv6 com zone-id não é endereço público canônico.
-  return ip;
-}
-
-function ipv4ParaBigInt(valor) {
-  const octetos = valor.split('.');
-  if (octetos.length !== 4) return null;
-  let numero = 0n;
-  for (const octeto of octetos) {
-    if (!/^\d{1,3}$/.test(octeto)) return null;
-    const parte = Number(octeto);
-    if (parte < 0 || parte > 255) return null;
-    numero = (numero << 8n) | BigInt(parte);
-  }
-  return numero;
-}
-
-function ipv6ParaBigInt(valor) {
-  let ip = valor.toLowerCase();
-  if (!ip.includes(':')) return null;
-
-  // Converte a cauda IPv4 da forma IPv4-mapped (::ffff:192.0.2.1) em dois hextets.
-  if (ip.includes('.')) {
-    const separador = ip.lastIndexOf(':');
-    if (separador < 0) return null;
-    const ipv4 = ipv4ParaBigInt(ip.slice(separador + 1));
-    if (ipv4 === null) return null;
-    const hextetAlto = Number((ipv4 >> 16n) & 0xffffn).toString(16);
-    const hextetBaixo = Number(ipv4 & 0xffffn).toString(16);
-    ip = `${ip.slice(0, separador + 1)}${hextetAlto}:${hextetBaixo}`;
-  }
-
-  const partes = ip.split('::');
-  if (partes.length > 2) return null;
-  const esquerda = partes[0] ? partes[0].split(':') : [];
-  const direita = partes.length === 2 && partes[1] ? partes[1].split(':') : [];
-  const quantidadeZeros = partes.length === 2 ? 8 - esquerda.length - direita.length : 0;
-  if ((partes.length === 1 && esquerda.length !== 8) || (partes.length === 2 && quantidadeZeros < 1)) return null;
-
-  const hextets = partes.length === 2
-    ? [...esquerda, ...Array(quantidadeZeros).fill('0'), ...direita]
-    : esquerda;
-  if (hextets.length !== 8 || hextets.some((parte) => !/^[0-9a-f]{1,4}$/.test(parte))) return null;
-
-  let numero = 0n;
-  for (const hextet of hextets) numero = (numero << 16n) | BigInt(`0x${hextet}`);
-
-  // Um cliente pode aparecer como IPv4-mapped IPv6, mas as listas VPN usam IPv4.
-  if ((numero >> 32n) === 0xffffn) return { familia: 4, valor: numero & 0xffffffffn };
-  return { familia: 6, valor: numero };
-}
-
-/** Converte IPv4 ou IPv6 para uma representação numérica validada. */
-export function parseIPAddress(valor) {
-  const ip = limparIp(valor);
-  if (!ip) return null;
-  const ipv4 = ipv4ParaBigInt(ip);
-  if (ipv4 !== null) return { familia: 4, bits: 32, valor: ipv4 };
-  const ipv6 = ipv6ParaBigInt(ip);
-  if (ipv6 === null) return null;
-  return { ...ipv6, bits: ipv6.familia === 4 ? 32 : 128 };
-}
-
-/** Normaliza/valida um IP vindo do cabeçalho de proxy. */
-export function normalizarIp(valor) {
-  const ip = limparIp(valor);
-  return ip && parseIPAddress(ip) ? ip : null;
-}
-
-/** Interpreta um IP ou CIDR IPv4/IPv6. Retorna null se inválido. */
-export function parseCIDR(valor) {
-  if (typeof valor !== 'string') return null;
-  const texto = valor.trim();
-  if (!texto) return null;
-  const separador = texto.indexOf('/');
-  if (separador !== texto.lastIndexOf('/')) return null;
-
-  const enderecoTexto = separador < 0 ? texto : texto.slice(0, separador);
-  const endereco = parseIPAddress(enderecoTexto);
-  if (!endereco) return null;
-
-  const prefixoTexto = separador < 0 ? String(endereco.bits) : texto.slice(separador + 1);
-  if (!/^\d{1,3}$/.test(prefixoTexto)) return null;
-  const prefixo = Number(prefixoTexto);
-  if (prefixo < 0 || prefixo > endereco.bits) return null;
-
-  const deslocamento = BigInt(endereco.bits - prefixo);
-  return {
-    familia: endereco.familia,
-    bits: endereco.bits,
-    prefixo,
-    valor: endereco.valor >> deslocamento
-  };
-}
-
-/** Lê linhas de CIDR/IP simples, ignorando comentários e conteúdo inválido. */
-export function parseListaCIDR(texto, maximo = MAXIMO_CIDRS_POR_FONTE) {
-  if (typeof texto !== 'string') return [];
-  const redes = [];
-  const vistos = new Set();
-  for (const linhaOriginal of texto.split(/\r?\n/)) {
-    const linha = linhaOriginal.split('#', 1)[0].trim();
-    if (!linha) continue;
-    const entrada = linha.split(/[\s,;|]/, 1)[0];
-    const rede = parseCIDR(entrada);
-    if (!rede) continue;
-    const chave = `${rede.familia}/${rede.prefixo}/${rede.valor}`;
-    if (vistos.has(chave)) continue;
-    vistos.add(chave);
-    redes.push(rede);
-    if (redes.length > maximo) throw new Error('Lista excedeu o limite de redes aceito.');
-  }
-  return redes;
-}
-
-const REDES_PROTON_IPV6_OBSERVADAS = Object.freeze(
-  parseListaCIDR(BLOCOS_PROTON_IPV6_OBSERVADOS.join('\n'))
-);
-
-const indicesRedes = new WeakMap();
-
-function indexarRedes(redes) {
-  const indice = new Map([[4, new Map()], [6, new Map()]]);
-  for (const rede of redes) {
-    if (!rede || (rede.familia !== 4 && rede.familia !== 6)) continue;
-    let prefixos = indice.get(rede.familia);
-    let valores = prefixos.get(rede.prefixo);
-    if (!valores) {
-      valores = new Map();
-      prefixos.set(rede.prefixo, valores);
-    }
-    valores.set(rede.valor, rede);
-  }
-  return indice;
-}
-
-function obterIndice(redes) {
-  let indice = indicesRedes.get(redes);
-  if (!indice) {
-    indice = indexarRedes(redes);
-    indicesRedes.set(redes, indice);
-  }
-  return indice;
-}
-
-/** Retorna true se o IP pertence a qualquer rede do conjunto informado. */
-export function ipPertenceALista(ipTexto, redes) {
-  const ip = typeof ipTexto === 'string' ? parseIPAddress(ipTexto) : ipTexto;
-  if (!ip || !Array.isArray(redes)) return false;
-  const indice = obterIndice(redes);
-
-  const prefixos = indice.get(ip.familia);
-  if (!prefixos) return false;
-  for (let prefixo = 0; prefixo <= ip.bits; prefixo++) {
-    const valores = prefixos.get(prefixo);
-    const deslocamento = BigInt(ip.bits - prefixo);
-    if (valores && valores.has(ip.valor >> deslocamento)) return true;
-  }
-  return false;
-}
-
-/**
- * Retorna o prefixo mais específico da lista que contém o IP informado, ou null.
- * Usado para expandir um IP anunciado até o bloco BGP anunciado que o abriga,
- * sem nunca devolver blocos maiores que `prefixoMinimo`.
- */
-export function menorBlocoContido(ipTexto, redes, prefixoMinimo = 0) {
-  const ip = typeof ipTexto === 'string' ? parseIPAddress(ipTexto) : ipTexto;
-  if (!ip || !Array.isArray(redes)) return null;
-  const indice = obterIndice(redes);
-  const prefixos = indice.get(ip.familia);
-  if (!prefixos) return null;
-
-  const limite = Math.max(0, Math.min(ip.bits, prefixoMinimo));
-  for (let prefixo = ip.bits; prefixo >= limite; prefixo--) {
-    const valores = prefixos.get(prefixo);
-    if (!valores) continue;
-    const deslocamento = BigInt(ip.bits - prefixo);
-    const rede = valores.get(ip.valor >> deslocamento);
-    if (rede) return rede;
-  }
-  return null;
-}
-
-/** Extrai o IP de origem dos cabeçalhos normalmente definidos pelo gateway/proxy. */
-export function extrairIp(headers) {
-  const obter = (nome) => headers && typeof headers.get === 'function' ? headers.get(nome) : null;
-  for (const nome of ['cf-connecting-ip', 'x-real-ip']) {
-    const ip = normalizarIp(obter(nome));
-    if (ip) return ip;
-  }
-
-  const encaminhados = obter('x-forwarded-for');
-  if (typeof encaminhados === 'string') {
-    for (const candidato of encaminhados.split(',')) {
-      const ip = normalizarIp(candidato);
-      if (ip) return ip;
-    }
-  }
-  return null;
-}
-
-async function carregarFonte(fonte, fetchFn) {
+async function carregarFonte(fonte, fetchFn, ip) {
   const controlador = new AbortController();
   const temporizador = setTimeout(() => controlador.abort(), TIMEOUT_FONTE_MS);
   try {
@@ -375,7 +172,7 @@ async function carregarFonte(fonte, fetchFn) {
     if (new TextEncoder().encode(texto).byteLength > TAMANHO_MAXIMO_FONTE_BYTES) {
       throw new Error(`Fonte grande demais: ${fonte.nome}`);
     }
-    const redes = parseListaCIDR(texto);
+    const redes = ip.parseListaCIDR(texto, MAXIMO_CIDRS_POR_FONTE);
     if (redes.length < fonte.minimo) throw new Error(`Fonte vazia ou incompleta: ${fonte.nome}`);
     return redes;
   } finally {
@@ -427,10 +224,10 @@ function criarCarregadorComCache(carregar, { now, ttlMs }) {
   };
 }
 
-function criarCarregadorRedes({ fetchFn, now, ttlMs, fontes }) {
+function criarCarregadorRedes({ fetchFn, now, ttlMs, fontes, ip }) {
   return criarCarregadorComCache(async () => {
     if (!Array.isArray(fontes) || fontes.length === 0) throw new Error('Nenhuma fonte de IP configurada.');
-    const listas = await Promise.all(fontes.map((fonte) => carregarFonte(fonte, fetchFn)));
+    const listas = await Promise.all(fontes.map((fonte) => carregarFonte(fonte, fetchFn, ip)));
     return listas.flat();
   }, { now, ttlMs });
 }
@@ -453,10 +250,10 @@ async function mapearComLimite(itens, limite, tarefa) {
  * Baixa várias fontes tolerando falhas individuais: uma lista fora do ar não
  * derruba a camada inteira, apenas deixa de contribuir com aquele ASN.
  */
-async function carregarFontesTolerantes(fontes, fetchFn) {
+async function carregarFontesTolerantes(fontes, fetchFn, ip) {
   const listas = await mapearComLimite(fontes, CONCORRENCIA_FONTES, async (fonte) => {
     try {
-      return await carregarFonte(fonte, fetchFn);
+      return await carregarFonte(fonte, fetchFn, ip);
     } catch (_erro) {
       return null;
     }
@@ -465,7 +262,7 @@ async function carregarFontesTolerantes(fontes, fetchFn) {
 }
 
 /** Monta a camada Proton: ASNs próprias da Proton AG + blocos BGP anunciados. */
-async function montarBlocosProton({ fetchFn, asnsProprias, asnsHospedagem, fonteIpsProton, prefixoMinimoBloco, nivel }) {
+async function montarBlocosProton({ fetchFn, asnsProprias, asnsHospedagem, fonteIpsProton, prefixoMinimoBloco, nivel, ip }) {
   const fontesProprias = [];
   for (const asn of asnsProprias) {
     fontesProprias.push({ nome: `AS${asn} IPv4`, url: urlBlocosAsn(asn, 'ipv4'), minimo: 1 });
@@ -477,9 +274,9 @@ async function montarBlocosProton({ fetchFn, asnsProprias, asnsHospedagem, fonte
 
   const agressivo = nivel === 'agressivo';
   const [redesProprias, redesHospedagem, ipsAnunciados] = await Promise.all([
-    carregarFontesTolerantes(fontesProprias, fetchFn),
-    agressivo ? carregarFontesTolerantes(fontesHospedagem, fetchFn) : Promise.resolve([]),
-    agressivo ? Promise.resolve(null) : carregarFonte(fonteIpsProton, fetchFn).catch(() => null)
+    carregarFontesTolerantes(fontesProprias, fetchFn, ip),
+    agressivo ? carregarFontesTolerantes(fontesHospedagem, fetchFn, ip) : Promise.resolve([]),
+    agressivo ? Promise.resolve(null) : carregarFonte(fonteIpsProton, fetchFn, ip).catch(() => null)
   ]);
 
   if (!agressivo && !ipsAnunciados && redesProprias.length === 0) {
@@ -497,22 +294,24 @@ async function montarBlocosProton({ fetchFn, asnsProprias, asnsHospedagem, fonte
     // Modo agressivo: bloqueia tudo que os provedores de hospedagem anunciam.
     for (const rede of redesHospedagem) adicionar(rede);
   } else {
-    const prefixosHospedagem = await carregarFontesTolerantes(fontesHospedagem, fetchFn);
-    for (const ip of ipsAnunciados || []) {
+    const prefixosHospedagem = await carregarFontesTolerantes(fontesHospedagem, fetchFn, ip);
+    for (const anunciado of ipsAnunciados || []) {
       // O endereço que o site vê é uma saída NAT diferente do IP anunciado, mas
       // dentro do mesmo bloco que a operadora anuncia para a Proton.
-      const contido = menorBlocoContido(ip, prefixosHospedagem, prefixoMinimoBloco);
+      const contido = ip.menorBlocoContido(anunciado, prefixosHospedagem, prefixoMinimoBloco);
       if (contido) adicionar(contido);
-      else if (ip.familia === 4) adicionar({ familia: 4, bits: 32, prefixo: 24, valor: ip.valor >> 8n });
+      else if (anunciado.familia === 4) {
+        adicionar({ familia: 4, bits: 32, prefixo: 24, valor: anunciado.valor >> 8n });
+      }
     }
   }
 
   return [...blocos.values()];
 }
 
-function criarCarregadorBlocosProton({ fetchFn, now, ttlMs, asnsProprias, asnsHospedagem, fonteIpsProton, prefixoMinimoBloco, nivel }) {
+function criarCarregadorBlocosProton({ fetchFn, now, ttlMs, asnsProprias, asnsHospedagem, fonteIpsProton, prefixoMinimoBloco, nivel, ip }) {
   return criarCarregadorComCache(
-    () => montarBlocosProton({ fetchFn, asnsProprias, asnsHospedagem, fonteIpsProton, prefixoMinimoBloco, nivel }),
+    () => montarBlocosProton({ fetchFn, asnsProprias, asnsHospedagem, fonteIpsProton, prefixoMinimoBloco, nivel, ip }),
     { now, ttlMs }
   );
 }
@@ -541,6 +340,7 @@ function geoEuaHabilitado(getEnv) {
 
 /** Cria o handler com dependências injetáveis para testes Node, sem Deno/Supabase. */
 export function criarHandler({
+  ipaddr,
   fetchFn = globalThis.fetch,
   now = () => Date.now(),
   ttlMs = CACHE_TTL_MS,
@@ -554,7 +354,9 @@ export function criarHandler({
   prefixoMinimoBloco = PREFIXO_MINIMO_BLOCO_PROTON,
   getEnv = () => undefined
 } = {}) {
-  const obterRedesVpn = criarCarregadorRedes({ fetchFn, now, ttlMs, fontes });
+  const ip = criarUtilitariosIp(ipaddr);
+  const redesProtonIpv6Observadas = ip.parseListaCIDR(BLOCOS_PROTON_IPV6_OBSERVADOS.join('\n'));
+  const obterRedesVpn = criarCarregadorRedes({ fetchFn, now, ttlMs, fontes, ip });
   const carregadoresGeoEua = new Map([4, 6].map((familia) => [
     familia,
     criarCarregadorRedes({
@@ -563,7 +365,8 @@ export function criarHandler({
       ttlMs: ttlGeoEuaMs,
       fontes: Array.isArray(fontesGeoEua)
         ? fontesGeoEua.filter((fonte) => fonte.familia === familia)
-        : []
+        : [],
+      ip
     })
   ]));
   const obterBlocosProton = criarCarregadorBlocosProton({
@@ -574,7 +377,8 @@ export function criarHandler({
     asnsHospedagem,
     fonteIpsProton,
     prefixoMinimoBloco,
-    nivel: nivelProton(getEnv)
+    nivel: nivelProton(getEnv),
+    ip
   });
   const bloquearEua = geoEuaHabilitado(getEnv);
 
@@ -582,9 +386,9 @@ export function criarHandler({
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
     if (req.method !== 'GET') return respostaTexto('Método não permitido.', 405, 'metodo');
 
-    const ip = extrairIp(req.headers);
-    if (!ip) return respostaTexto(MENSAGEM_BLOQUEIO, 503, 'sem-ip');
-    const ipValidado = parseIPAddress(ip);
+    const ipCliente = ip.extrairIp(req.headers);
+    if (!ipCliente) return respostaTexto(MENSAGEM_BLOQUEIO, 503, 'sem-ip');
+    const ipValidado = ip.parseIPAddress(ipCliente);
     if (!ipValidado) return respostaTexto(MENSAGEM_BLOQUEIO, 503, 'ip-invalido');
 
     // A geografia é verificada primeiro; um IP dos EUA nem precisa carregar as outras camadas.
@@ -593,7 +397,7 @@ export function criarHandler({
         const obterRedesEua = carregadoresGeoEua.get(ipValidado.familia);
         if (!obterRedesEua) throw new Error('Família IP sem fonte geográfica configurada.');
         const redesEua = await obterRedesEua();
-        if (ipPertenceALista(ipValidado, redesEua)) return respostaTexto(MENSAGEM_BLOQUEIO, 403, 'geo-eua');
+        if (ip.ipPertenceALista(ipValidado, redesEua)) return respostaTexto(MENSAGEM_BLOQUEIO, 403, 'geo-eua');
       } catch (_erro) {
         // Sem uma base geográfica validada e sem snapshot, mantém o fail-closed.
         return respostaTexto(MENSAGEM_BLOQUEIO, 503, 'geo-indisponivel');
@@ -602,7 +406,7 @@ export function criarHandler({
 
     // Os /64s confirmados são locais e podem ser negados sem esperar downloads
     // das listas dinâmicas (ou depender de uma conexão com o GitHub).
-    if (ipPertenceALista(ipValidado, REDES_PROTON_IPV6_OBSERVADAS)) {
+    if (ip.ipPertenceALista(ipValidado, redesProtonIpv6Observadas)) {
       return respostaTexto(MENSAGEM_BLOQUEIO, 403, 'proton');
     }
 
@@ -613,7 +417,7 @@ export function criarHandler({
       obterRedesVpn().then((redes) => ({ redes })).catch(() => null)
     ]);
 
-    if (blocosProton && ipPertenceALista(ipValidado, blocosProton)) {
+    if (blocosProton && ip.ipPertenceALista(ipValidado, blocosProton)) {
       return respostaTexto(MENSAGEM_BLOQUEIO, 403, 'proton');
     }
     if (!listasVpn) {
@@ -621,7 +425,7 @@ export function criarHandler({
       // app não deve ser liberado por engano.
       return respostaTexto(MENSAGEM_BLOQUEIO, 503, 'vpn-indisponivel');
     }
-    if (ipPertenceALista(ipValidado, listasVpn.redes)) {
+    if (ip.ipPertenceALista(ipValidado, listasVpn.redes)) {
       return respostaTexto(MENSAGEM_BLOQUEIO, 403, 'vpn');
     }
     return new Response(null, { status: 204, headers: CORS_HEADERS });
