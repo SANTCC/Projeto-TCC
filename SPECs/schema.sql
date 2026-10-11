@@ -260,6 +260,7 @@ create table cargas (
   porto_descarga text not null,
   status_fluxo status_carga_enum not null default 'AGENDAMENTO',
   container_id uuid references containers(id) on delete set null,
+  navio_id uuid references navios(id) on delete set null,
   checklist_modelo_id uuid references checklist_modelos(id) on delete restrict,
   resultado_inspecao resultado_inspecao_enum not null default 'PENDENTE',
   motivo_recusa text,

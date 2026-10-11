@@ -143,13 +143,57 @@
      */
     deleteFuncionario: async function (matricula) {
       const client = this.getSupabase();
-      if (client) {
-        try {
-          await client.from('funcionarios').delete().eq('matricula', matricula);
-        } catch (err) {
-          console.warn('[NexusRepository] Erro ao excluir funcionario do Supabase:', err);
-        }
+      if (!client) {
+        return { ok: false, erro: 'Sem conexão com o banco de dados. O funcionário não foi excluído.' };
       }
+      try {
+        const busca = await client.from('funcionarios').select('id').eq('matricula', matricula);
+        if (busca.error) return { ok: false, erro: 'não foi possível consultar o funcionário (' + (busca.error.message || 'erro') + ').' };
+        const id = busca.data && busca.data[0] && busca.data[0].id;
+        if (!id) {
+          // Não existe no banco: só o cache local precisa ser limpo.
+          this._removerFuncionarioLocal(matricula);
+          return { ok: true, removido: 0 };
+        }
+
+        // Vínculos que o banco apagaria em cascata (dados operacionais de cargas e de supervisão).
+        // Excluir o funcionário com esses vínculos é bloqueado, com justificativa.
+        const estivador = await client.from('estivador_cargas').select('id').eq('estivador_id', id);
+        if (estivador.error) return { ok: false, erro: 'não foi possível verificar os vínculos de carga (' + (estivador.error.message || 'erro') + ').' };
+        if (estivador.data && estivador.data.length > 0) {
+          return { ok: false, bloqueio: true, erro: 'o funcionário está vinculado a ' + estivador.data.length + ' carga(s) como estivador. Desvincule-o das cargas antes de excluí-lo.' };
+        }
+        const delegTitular = await client.from('delegacoes_supervisor').select('id').eq('supervisor_titular_id', id);
+        const delegSubst = await client.from('delegacoes_supervisor').select('id').eq('substituto_id', id);
+        if (delegTitular.error || delegSubst.error) {
+          const e = delegTitular.error || delegSubst.error;
+          return { ok: false, erro: 'não foi possível verificar as delegações de supervisão (' + (e.message || 'erro') + ').' };
+        }
+        const delegacoes = (delegTitular.data || []).length + (delegSubst.data || []).length;
+        if (delegacoes > 0) {
+          return { ok: false, bloqueio: true, erro: 'o funcionário participa de ' + delegacoes + ' delegação(ões) de supervisão. Encerre as delegações antes de excluí-lo.' };
+        }
+
+        const { error } = await client.from('funcionarios').delete().eq('id', id);
+        if (error) {
+          // Vínculos RESTRICT (agendamentos, inspeções, movimentações, logs) impedem a exclusão no banco.
+          const restrito = error.code === '23503' || /foreign key|violates/i.test(String(error.message || ''));
+          return {
+            ok: false,
+            bloqueio: restrito,
+            erro: restrito
+              ? 'o funcionário possui registros vinculados (agendamentos, inspeções, movimentações ou logs) e não pode ser excluído.'
+              : 'o banco de dados recusou a exclusão (' + (error.message || 'erro') + ').'
+          };
+        }
+        this._removerFuncionarioLocal(matricula);
+        return { ok: true, removido: 1 };
+      } catch (err) {
+        return { ok: false, erro: 'falha de comunicação com o banco de dados (' + (err && err.message ? err.message : err) + ').' };
+      }
+    },
+
+    _removerFuncionarioLocal: function (matricula) {
       let list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
       list = list.filter(f => f.matricula !== matricula);
       localStorage.setItem('nexus_func_list', JSON.stringify(list));

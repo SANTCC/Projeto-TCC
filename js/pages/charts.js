@@ -608,6 +608,8 @@
       navioId: c.navioId || c.navio_id || null,
       navioNome: c.navio || c.navioNome || null,
       containerId: c.container || c.container_id || c.containerId || null,
+      // Data de cadastro real (quando a carga foi registrada). Base do Período de Referência.
+      dataCadastro: c.data_cadastro || c.created_at || c.dataCadastro || null,
       dataEntrada: c.data_entrada || c.dataChegada || c.created_at || c.data_cadastro || c.dataEntrada || null,
       dataSaida: c.data_saida || c.dataSaida || null,
       inspecao: String(c.resultado_inspecao || c.inspecao || '').toUpperCase() || null,
@@ -809,10 +811,9 @@
       if (usarContainer) {
         if (textoFiltro(c.containerId) !== contFiltro) return false;
       }
-      // Cargas sem qualquer data de referência passam (não há como julgá-las
-      // pelo período); as datadas precisam estar dentro do período.
-      const referencia = c.dataEntrada || c.dataSaida;
-      if (!dataDentroDoPeriodo(referencia, inicio, true)) return false;
+      // O Período de Referência filtra pela data de CADASTRO da carga. Carga sem
+      // data de cadastro não pode ser julgada pelo período e sai do recorte.
+      if (!dataDentroDoPeriodo(c.dataCadastro, inicio, false)) return false;
       return true;
     });
 
@@ -2047,6 +2048,7 @@
       ordenarMapa: ordenarMapa,
       percentual: percentual,
       normalizarCargo: normalizarCargo,
+      normalizarCarga: normalizarCarga,
       normalizarTipoCarga: normalizarTipoCarga,
       nomeCargo: nomeCargo,
       chaveMes: chaveMes,

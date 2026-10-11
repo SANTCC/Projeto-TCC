@@ -96,7 +96,6 @@ async def run_tests():
         await page.fill("#navioImo", "12345") # Formato incorreto (requer 3 letras + 7 números)
         await page.fill("#navioOrigem", "Santos")
         await page.fill("#navioDestino", "Roterdã")
-        await page.fill("#navioGps", "23.9608° S, 46.3022° W")
         await page.fill("#navioDistancia", "10200")
 
         await page.click("#navioForm button[type='submit']")

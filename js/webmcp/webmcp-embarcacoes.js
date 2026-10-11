@@ -4,7 +4,7 @@
  * Navios, contêineres, guindastes, berços e rotas marítimas. Ações consequentes
  * validam o estado e a regra de negócio antes de pedir confirmação, pedem confirmação
  * do operador e verificam o resultado salvo antes de responder "ok".
- * Cadastros usam o próprio formulário da página (mesmas validações de IMO, GPS e padrões).
+ * Cadastros usam o próprio formulário da página (mesmas validações de IMO e padrões).
  *
  * Carregamento: depois de webmcp-core, webmcp-ui, webmcp-dados e webmcp-global.
  */
@@ -20,19 +20,19 @@
   const CARGOS_PAGINA = ['PLANEJADOR_PATIO_NAVIOS'].concat(G.gestaoOperacional);
   const LOCALIZACOES = ['DENTRO_DO_PORTO', 'FORA_DO_PORTO', 'NO_PORTO_DE_DESTINO'];
   const ESQUEMA_IMO = {
-    type: 'string', minLength: 9, maxLength: 12, pattern: '^\\s*[A-Za-z]{3}\\s?\\d{7}\\s*$',
-    mensagemPadrao: 'deve ter 3 letras e 7 números (ex.: ABC1234567).',
-    rotulo: 'IMO', description: 'Número IMO: 3 letras e 7 números, por exemplo ABC1234567.'
+    type: 'string', minLength: 9, maxLength: 12, pattern: '^\\s*(IMO)?[-\\s]?\\d{7}\\s*$|^\\s*[A-Za-z]{3}\\s?\\d{7}\\s*$',
+    mensagemPadrao: 'deve seguir o padrão IMO-1234567 (prefixo IMO, hífen e 7 números).',
+    rotulo: 'IMO', description: 'Número IMO no padrão IMO-1234567 (prefixo IMO, hífen e 7 números).'
   };
   const ESQUEMA_CONTAINER = {
-    type: 'string', minLength: 11, maxLength: 11, pattern: '^[A-Za-z]{4}\\d{7}$',
-    mensagemPadrao: 'deve ter 4 letras e 7 números (ex.: MSCU1234567).',
-    rotulo: 'Contêiner', description: 'Identificação ISO do contêiner: 4 letras e 7 números.'
+    type: 'string', minLength: 11, maxLength: 12, pattern: '^[A-Za-z]{4}-?\\d{7}$',
+    mensagemPadrao: 'deve ter 4 letras, hífen e 7 números (ex.: MSCU-1234567).',
+    rotulo: 'Contêiner', description: 'Identificação do contêiner no padrão MSCU-1234567 (4 letras, hífen e 7 números).'
   };
   const ESQUEMA_GUINDASTE = {
-    type: 'string', minLength: 9, maxLength: 9, pattern: '^[A-Za-z]{3}\\d{3}[A-Za-z]{3}$',
-    mensagemPadrao: 'deve seguir o padrão 3 letras, 3 números e 3 letras (ex.: ABC123DEF).',
-    rotulo: 'Guindaste', description: 'Identificação do guindaste: 3 letras, 3 números e 3 letras.'
+    type: 'string', minLength: 9, maxLength: 11, pattern: '^[A-Za-z]{3}-?\\d{3}-?[A-Za-z]{3}$',
+    mensagemPadrao: 'deve seguir o padrão ABC-123-DEF (3 letras, 3 números e 3 letras).',
+    rotulo: 'Guindaste', description: 'Identificação do guindaste no padrão ABC-123-DEF (3 letras, 3 números e 3 letras).'
   };
 
   function imoNormalizado(valor) {
@@ -218,7 +218,7 @@
   const cadastrarNavio = {
     nome: 'cadastrar_navio',
     titulo: 'Cadastrar navio',
-    descricao: 'Cadastra um navio pelo IMO único, com localização e GPS. Origem, destino e distância vêm da rota marítima cadastrada escolhida (não há distância manual). Navio DENTRO_DO_PORTO exige berço livre imediato (usa o primeiro livre se não informado). Só Inspetor ou Direção. Exige confirmação.',
+    descricao: 'Cadastra um navio pelo IMO único, com localização. Origem, destino e distância vêm da rota marítima cadastrada escolhida (não há distância manual). Navio DENTRO_DO_PORTO exige berço livre imediato (usa o primeiro livre se não informado). Só Inspetor ou Direção. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: G.inspecao,
     permissao: 'CADASTRAR_NAVIO',
@@ -230,18 +230,15 @@
         origem: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Origem', description: 'Porto de origem.' },
         destino: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Destino', description: 'Porto de destino.' },
         localizacao: { type: 'string', enum: LOCALIZACOES, rotulo: 'Localização', description: 'Situação inicial em relação ao porto.' },
-        gps: { type: 'string', minLength: 5, maxLength: 60, rotulo: 'GPS', description: 'Coordenadas, por exemplo -23.9608, -46.3022.' },
         berco: { type: 'string', minLength: 2, maxLength: 40, rotulo: 'Berço', description: 'Berço de atracação imediata (obrigatório para DENTRO_DO_PORTO; omita para usar o primeiro berço livre).' }
       },
-      required: ['nome', 'imo', 'origem', 'destino', 'localizacao', 'gps'],
+      required: ['nome', 'imo', 'origem', 'destino', 'localizacao'],
       additionalProperties: false
     },
     precondicao: async (args) => {
+      if (args.imo !== undefined) { const v = NexusCodigos.validarImo(args.imo); if (!v.ok) return { codigo: 'FORMATO_INVALIDO', mensagem: v.erro }; }
       if (args.imo !== undefined && await navioPorImo(args.imo)) {
         return { codigo: 'IMO_DUPLICADO', mensagem: `Já existe navio com o IMO ${imoNormalizado(args.imo)}.` };
-      }
-      if (args.gps !== undefined && naviosLocais().some((n) => (n.gps || '').trim() === args.gps.trim())) {
-        return { codigo: 'LOCALIZACAO_OCUPADA', mensagem: 'Outro navio já está nesta coordenada GPS.' };
       }
       if (args.localizacao === 'DENTRO_DO_PORTO') {
         const bercos = D.bercos();
@@ -265,7 +262,7 @@
       if (f.erro) return f.erro;
       const erroCampos = preencher(f.form, {
         navioNome: args.nome, navioImo: imoNormalizado(args.imo),
-        navioLocalizacao: args.localizacao, navioGps: args.gps
+        navioLocalizacao: args.localizacao
       });
       if (erroCampos) return erroCampos;
 
@@ -353,34 +350,35 @@
       additionalProperties: false
     },
     precondicao: (args) => {
-      if (args.identificacao !== undefined && D.containers().some((c) => (c.identificacao || '').toUpperCase() === args.identificacao.toUpperCase())) {
-        return { codigo: 'CONTAINER_DUPLICADO', mensagem: `O contêiner ${args.identificacao.toUpperCase()} já está cadastrado.` };
+      if (args.identificacao !== undefined) { const v = NexusCodigos.validarConteiner(args.identificacao); if (!v.ok) return { codigo: 'FORMATO_INVALIDO', mensagem: v.erro }; }
+      if (args.identificacao !== undefined && D.containers().some((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(NexusCodigos.formatarConteiner(args.identificacao)))) {
+        return { codigo: 'CONTAINER_DUPLICADO', mensagem: `O contêiner ${NexusCodigos.formatarConteiner(args.identificacao)} já está cadastrado.` };
       }
       return null;
     },
-    resumo: (args) => [`Cadastrar o contêiner ${args.identificacao.toUpperCase()} (${args.tipo}).`, `Referência de manutenção: ${args.referencia_tempo}.`],
+    resumo: (args) => [`Cadastrar o contêiner ${NexusCodigos.formatarConteiner(args.identificacao)} (${args.tipo}).`, `Referência de manutenção: ${args.referencia_tempo}.`],
     executar: async (args) => {
       const f = formularioOuErro('containerForm');
       if (f.erro) return f.erro;
       const erroCampos = preencher(f.form, {
-        contIdentificacao: args.identificacao.toUpperCase(), contTipo: args.tipo, contFabricacao: args.data_fabricacao,
+        contIdentificacao: NexusCodigos.formatarConteiner(args.identificacao), contTipo: args.tipo, contFabricacao: args.data_fabricacao,
         contManutencao: args.data_ultima_manutencao, contRefTempo: args.referencia_tempo
       });
       if (erroCampos) return erroCampos;
       const invalido = camposInvalidos(f.form);
       if (invalido) return invalido;
-      const id = args.identificacao.toUpperCase();
+      const id = NexusCodigos.formatarConteiner(args.identificacao);
       f.form.requestSubmit();
-      const ok = await D.esperar(() => D.containers().some((c) => (c.identificacao || '').toUpperCase() === id), 8000);
+      const ok = await D.esperar(() => D.containers().some((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(id)), 8000);
       if (!ok) return falhaNaoConcluida();
-      return { mensagem: `Contêiner ${id} cadastrado.`, dados: D.resumirContainer(D.containers().find((c) => c.identificacao === id)) };
+      return { mensagem: `Contêiner ${id} cadastrado.`, dados: D.resumirContainer(D.containers().find((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(id))) };
     }
   };
 
   const cadastrarGuindaste = {
     nome: 'cadastrar_guindaste',
     titulo: 'Cadastrar guindaste',
-    descricao: 'Cadastra um guindaste ou pórtico pelo padrão ABC123DEF, com estado e data da última manutenção. Só Inspetor ou Direção. Exige confirmação.',
+    descricao: 'Cadastra um guindaste ou pórtico pelo padrão ABC-123-DEF, com estado e data da última manutenção. Só Inspetor ou Direção. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: G.inspecao,
     permissao: 'CADASTRAR_GUINDASTE',
@@ -395,26 +393,27 @@
       additionalProperties: false
     },
     precondicao: (args) => {
-      if (args.identificacao !== undefined && D.guindastes().some((g) => (g.identificacao || '').toUpperCase() === args.identificacao.toUpperCase())) {
-        return { codigo: 'GUINDASTE_DUPLICADO', mensagem: `O guindaste ${args.identificacao.toUpperCase()} já está cadastrado.` };
+      if (args.identificacao !== undefined) { const v = NexusCodigos.validarGuindaste(args.identificacao); if (!v.ok) return { codigo: 'FORMATO_INVALIDO', mensagem: v.erro }; }
+      if (args.identificacao !== undefined && D.guindastes().some((g) => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(NexusCodigos.formatarGuindaste(args.identificacao)))) {
+        return { codigo: 'GUINDASTE_DUPLICADO', mensagem: `O guindaste ${NexusCodigos.formatarGuindaste(args.identificacao)} já está cadastrado.` };
       }
       return null;
     },
-    resumo: (args) => [`Cadastrar o guindaste ${args.identificacao.toUpperCase()} em estado ${args.estado}.`],
+    resumo: (args) => [`Cadastrar o guindaste ${NexusCodigos.formatarGuindaste(args.identificacao)} em estado ${args.estado}.`],
     executar: async (args) => {
       const f = formularioOuErro('guindasteForm');
       if (f.erro) return f.erro;
       const erroCampos = preencher(f.form, {
-        gndNumero: args.identificacao.toUpperCase(), gndDataManut: args.data_ultima_manutencao, gndEstado: args.estado
+        gndNumero: NexusCodigos.formatarGuindaste(args.identificacao), gndDataManut: args.data_ultima_manutencao, gndEstado: args.estado
       });
       if (erroCampos) return erroCampos;
       const invalido = camposInvalidos(f.form);
       if (invalido) return invalido;
-      const id = args.identificacao.toUpperCase();
+      const id = NexusCodigos.formatarGuindaste(args.identificacao);
       f.form.requestSubmit();
-      const ok = await D.esperar(() => D.guindastes().some((g) => (g.identificacao || '').toUpperCase() === id), 8000);
+      const ok = await D.esperar(() => D.guindastes().some((g) => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(id)), 8000);
       if (!ok) return falhaNaoConcluida();
-      return { mensagem: `Guindaste ${id} cadastrado.`, dados: D.resumirGuindaste(D.guindastes().find((g) => g.identificacao === id)) };
+      return { mensagem: `Guindaste ${id} cadastrado.`, dados: D.resumirGuindaste(D.guindastes().find((g) => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(id))) };
     }
   };
 
@@ -639,7 +638,7 @@
       const imo = imoNormalizado(args.imo);
       const navio = await navioPorImo(imo);
       await window.vincularContainerANavio(id, { confirmado: true, navioImo: imo });
-      const ok = await D.esperar(() => D.containers().some((c) => c.identificacao === id && navio && c.navio === navio.nome), 4000);
+      const ok = await D.esperar(() => D.containers().some((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(id) && navio && c.navio === navio.nome), 4000);
       if (!ok) return falhaNaoConcluida('A vinculação não foi concluída (capacidade ou dados do navio). Veja a mensagem exibida ao operador.');
       return { mensagem: `Contêiner ${id} vinculado ao navio ${navio.nome}.`, dados: { identificacao: id, navio: navio.nome } };
     }
@@ -663,7 +662,7 @@
     executar: async (args) => {
       const id = args.identificacao.toUpperCase();
       await window.excluirContainer(id, { confirmado: true });
-      const ok = await D.esperar(() => !D.containers().some((c) => c.identificacao === id), 4000);
+      const ok = await D.esperar(() => !D.containers().some((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(id)), 4000);
       if (!ok) return falhaNaoConcluida();
       return { mensagem: `Contêiner ${id} excluído.`, dados: { identificacao: id } };
     }
@@ -678,7 +677,7 @@
     permissao: 'CADASTRAR_GUINDASTE',
     esquema: { type: 'object', properties: { identificacao: ESQUEMA_GUINDASTE }, required: ['identificacao'], additionalProperties: false },
     precondicao: (args) => {
-      if (args.identificacao !== undefined && !D.guindastes().some((g) => (g.identificacao || '').toUpperCase() === args.identificacao.toUpperCase())) {
+      if (args.identificacao !== undefined && !D.guindastes().some((g) => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(args.identificacao.toUpperCase()))) {
         return { codigo: 'GUINDASTE_NAO_ENCONTRADO', mensagem: `Guindaste ${args.identificacao.toUpperCase()} não cadastrado.` };
       }
       return null;
@@ -687,7 +686,7 @@
     executar: async (args) => {
       const id = args.identificacao.toUpperCase();
       await window.excluirGuindaste(id, { confirmado: true });
-      const ok = await D.esperar(() => !D.guindastes().some((g) => (g.identificacao || '').toUpperCase() === id), 4000);
+      const ok = await D.esperar(() => !D.guindastes().some((g) => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(id)), 4000);
       if (!ok) return falhaNaoConcluida();
       return { mensagem: `Guindaste ${id} excluído.`, dados: { identificacao: id } };
     }
