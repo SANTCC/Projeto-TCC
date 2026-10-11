@@ -5,14 +5,21 @@
  */
 function criarBancoFalso(tabelas, opcoes) {
   const log = [];
-  const falhar = (opcoes && opcoes.falhar) || [];
+  // Configuração lida em tempo de execução (permite injetar falhas após o carregamento)
+  const config = opcoes || {};
 
   function executar(tabela, op, filtros, payload, opts, retorno) {
     const rows = tabelas[tabela] || (tabelas[tabela] = []);
     const casa = (r) => filtros.every(([c, v]) => r[c] !== undefined && r[c] !== null && String(r[c]) === String(v));
+    const falhar = config.falhar || [];
+    const falharOp = config.falharOp || {};
     if (falhar.indexOf(tabela) >= 0) {
       log.push({ tabela, op, falha: true });
       return { data: null, error: { message: 'falha simulada de conexão' } };
+    }
+    if ((falharOp[tabela] || []).indexOf(op) >= 0) {
+      log.push({ tabela, op, falha: true });
+      return { data: null, error: { message: 'falha simulada na operação ' + op } };
     }
     if (op === 'delete') {
       const removidas = rows.filter(casa);
@@ -72,7 +79,8 @@ function criarBancoFalso(tabelas, opcoes) {
     from: (t) => construir(t),
     channel: () => ({ on() { return this; }, subscribe() { return {}; } }),
     log,
-    tabelas
+    tabelas,
+    config
   };
 }
 

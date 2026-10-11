@@ -194,6 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /** Libera, no banco e no cache, todos os berços ocupados pelo navio (saída ou exclusão). */
   async function liberarBercosDoNavio(navio) {
     const atual = await lerBercosAtuais();
+    if (!atual.ok) return { liberados: 0, falhas: [{ berco: '(leitura dos berços)', motivo: atual.erro || 'falha ao ler os berços' }] };
     const meus = atual.lista.filter(b => b.estado === 'OCUPADO' && ((navio.imo && b.navio_imo === navio.imo) || (navio.nome && b.navio_nome === navio.nome)));
     const falhas = [];
     for (const b of meus) {
@@ -1256,96 +1257,121 @@ document.addEventListener('DOMContentLoaded', () => {
   // Excluir Navio (Tarefa 6): apaga do banco e da interface; contêineres e
   // cargas vinculados são DESVINCULADOS (não apagados) e ficam livres para
   // nova vinculação com outra embarcação.
+  // ---------- Exclusão de registros: banco primeiro; sucesso só após confirmação do banco ----------
+  // Conta registros do banco ligados ao registro. Retorna { ok, erro?, contagem }.
+  async function contarNoBanco(tabela, coluna, valor) {
+    const { data, error } = await window.nexusSupabase.from(tabela).select('id').eq(coluna, valor);
+    if (error) return { ok: false, erro: (error && error.message) || 'erro desconhecido' };
+    return { ok: true, contagem: (data || []).length };
+  }
+
+  // Localiza o id do registro no banco. Retorna { ok, erro?, id } (id null = não existe no banco).
+  async function localizarNoBanco(tabela, coluna, valor) {
+    const { data, error } = await window.nexusSupabase.from(tabela).select('id').eq(coluna, valor);
+    if (error) return { ok: false, erro: (error && error.message) || 'erro desconhecido' };
+    return { ok: true, id: (data && data[0] && data[0].id) || null };
+  }
+
+  // Histórico de manutenção ligado ao registro seria apagado em cascata (ON DELETE CASCADE).
+  // Retorna { ok, erro?, total }.
+  async function contarHistoricoManutencao(coluna, idBanco) {
+    const a = await contarNoBanco('manutencoes', coluna, idBanco);
+    if (!a.ok) return a;
+    const b = await contarNoBanco('historico_manutencoes', coluna, idBanco);
+    if (!b.ok) return b;
+    return { ok: true, total: a.contagem + b.contagem };
+  }
+
+  function avisoExclusao(tipo, titulo, mensagem) {
+    if (window.mostrarFeedback) window.mostrarFeedback(tipo, titulo, mensagem);
+  }
+
   window.excluirNavio = async function(imo, opcoes) {
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
-      ? await window.nexusConfirm('Excluir Navio', `Tem certeza que deseja EXCLUIR o navio ${navio.nome} (${navio.imo})? Essa ação desocupará berços, apagará o navio do banco de dados e desvinculará seus contêineres e cargas (que poderão ser vinculados a outro navio).`)
+      ? await window.nexusConfirm('Excluir Navio', `Tem certeza que deseja EXCLUIR o navio ${navio.nome} (${navio.imo})? Os berços dele serão liberados e os contêineres vinculados serão desvinculados. O navio sai do banco de dados.`)
       : true;
-
     if (!confirmou) return;
 
-    const isUuidNavio = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(navio.id || ''));
+    if (!window.nexusSupabase) {
+      avisoExclusao('erro', 'Exclusão Não Realizada', `Sem conexão com o banco de dados: o navio ${navio.nome} não foi excluído. Tente novamente quando a conexão for restabelecida.`);
+      return;
+    }
 
-    // 1) Tenta desvincular/apagar no BANCO primeiro (as FKs de
-    // containers/cargas impedem o delete do navio enquanto houver referência —
-    // era a falta dessa ordem que fazia o navio "voltar" para a interface após
-    // o recarregamento do Supabase). Melhor esforço: se o banco estiver fora do
-    // ar, a exclusão local prossegue e o aviso informa a pendência (o app é
-    // offline-first — o operador nunca fica bloqueado sem conexão).
-    let avisoRemoto = '';
-    if (window.nexusSupabase) {
-      try {
-        if (isUuidNavio) {
-          const { error: errCont } = await window.nexusSupabase.from('containers').update({ navio_id: null }).eq('navio_id', navio.id);
-          if (errCont) throw new Error(`contêineres: ${errCont.message}`);
-          const { error: errCargas } = await window.nexusSupabase.from('cargas').update({ navio_id: null }).eq('navio_id', navio.id);
-          if (errCargas) throw new Error(`cargas: ${errCargas.message}`);
-        }
-        let delQuery = window.nexusSupabase.from('navios').delete();
-        delQuery = isUuidNavio ? delQuery.eq('id', navio.id) : delQuery.eq('numero_imo', imo);
-        const { error: errDel, count } = await delQuery;
-        if (errDel) throw new Error(errDel.message);
-        if (count === 0 && !isUuidNavio) {
-          // Fallback: tenta pelo nome caso o IMO local divirja do banco
-          const { error: errDelNome } = await window.nexusSupabase.from('navios').delete().eq('nome', navio.nome);
-          if (errDelNome) throw new Error(errDelNome.message);
-        }
-      } catch (e) {
-        console.warn('Erro ao excluir navio no Supabase (exclusão local prossegue):', e);
-        avisoRemoto = ` Não foi possível confirmar a remoção no banco de dados agora (${(e && e.message) || e}); a exclusão foi concluída neste aparelho.`;
+    // 1) Localiza o navio no banco (pelo id; ou pelo IMO quando o registro local não tem UUID)
+    const usaId = UUID_NAVIO_RE.test(String(navio.id || ''));
+    const busca = await localizarNoBanco('navios', usaId ? 'id' : 'numero_imo', usaId ? navio.id : imo);
+    if (!busca.ok) {
+      avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível consultar o navio ${navio.nome} no banco (${busca.erro}). Nada foi excluído.`);
+      return;
+    }
+
+    let contsDesvinc = 0;
+    if (busca.id) {
+      // 2) Impede a exclusão se houver histórico de manutenção (seria apagado junto com o navio)
+      const hist = await contarHistoricoManutencao('navio_id', busca.id);
+      if (!hist.ok) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível verificar o histórico do navio ${navio.nome} (${hist.erro}). Nada foi excluído.`);
+        return;
+      }
+      if (hist.total > 0) {
+        avisoExclusao('alerta', 'Exclusão Bloqueada', `O navio ${navio.nome} possui ${hist.total} registro(s) de manutenção/histórico vinculados. Excluí-lo apagaria esse histórico; a exclusão foi cancelada.`);
+        return;
+      }
+
+      // 3) Contêineres vinculados são desvinculados pelo próprio banco (ON DELETE SET NULL)
+      const conts = await contarNoBanco('containers', 'navio_id', busca.id);
+      if (!conts.ok) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível verificar os contêineres do navio ${navio.nome} (${conts.erro}). Nada foi excluído.`);
+        return;
+      }
+      contsDesvinc = conts.contagem;
+
+      // 4) Exclui no banco. Só depois disso a interface é alterada.
+      const { error: errDel } = await window.nexusSupabase.from('navios').delete().eq('id', busca.id);
+      if (errDel) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do navio ${navio.nome} (${errDel.message}). Nada foi alterado.`);
+        return;
       }
     }
 
-    // 2) Banco OK (ou modo local): remove da lista e desvincula no cache local
+    // 5) Libera os berços ocupados pelo navio (banco e cache). Falha aqui não reabre o navio:
+    //    o berço ocupado sem navio é liberado automaticamente na próxima carga.
+    const resLib = await liberarBercosDoNavio(navio);
+    const avisoBercos = resLib.falhas.length > 0
+      ? ` Atenção: o(s) berço(s) ${resLib.falhas.map(f => f.berco).join(', ')} não puderam ser liberados agora e serão revisados na próxima carga.`
+      : '';
+
+    // 6) Remove da interface e do cache local (somente após a exclusão no banco)
     naviosList = naviosList.filter(n => n.imo !== imo);
     localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
-    // Desocupa o navio de qualquer berço, no banco e no cache
-    const resLibExclusao = await liberarBercosDoNavio(navio);
-    if (resLibExclusao.falhas.length > 0 && window.mostrarFeedback) {
-      window.mostrarFeedback('alerta', 'Berço Não Liberado', `Navio excluído, mas o(s) berço(s) ${resLibExclusao.falhas.map(f => f.berco).join(', ')} não puderam ser liberados no banco (${resLibExclusao.falhas[0].motivo}). Libere-os manualmente se necessário.`);
-    }
-
-    // 3) Desvincula contêineres e cargas do navio excluído (ficam livres)
     const nomeNavioLower = String(navio.nome || '').toLowerCase();
-    let contsDesvinc = 0;
-    let containersLocais = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+    const containersLocais = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
     containersLocais.forEach(c => {
       const peloNome = c.navio && String(c.navio).toLowerCase() === nomeNavioLower;
       const peloId = navio.id && (c.navio_id === navio.id || c.navioId === navio.id);
-      if (peloNome || peloId) {
-        c.navio = '';
-        c.navio_id = null;
-        c.navioId = null;
-        c.navio_nome = null;
-        contsDesvinc++;
-      }
+      if (peloNome || peloId) { c.navio = ''; c.navio_id = null; c.navioId = null; c.navio_nome = null; }
     });
     localStorage.setItem('nexus_containers_list', JSON.stringify(containersLocais));
     containersList = containersLocais;
 
-    let cargasDesvinc = 0;
-    let cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     cargasLocais.forEach(c => {
       const peloNome = c.navio && String(c.navio).toLowerCase() === nomeNavioLower;
       const peloId = navio.id && (c.navio_id === navio.id || c.navioId === navio.id);
       if (peloNome || peloId) {
-        c.navio = '';
-        c.navio_id = null;
-        c.navioId = null;
-        // Carga em trânsito com navio excluído volta a aguardar vinculação
+        c.navio = ''; c.navio_id = null; c.navioId = null;
         if (c.status === 'EM_TRANSITO') c.status = 'PRONTA_PARA_ENTREGA';
-        cargasDesvinc++;
       }
     });
     localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
 
     if (window.registrarLogAlteracao) {
-      await window.registrarLogAlteracao('EXCLUSAO', 'navios', navio.id || null, `Navio ${navio.nome} (${imo}) excluído do sistema; ${contsDesvinc} contêiner(es) e ${cargasDesvinc} carga(s) desvinculados e livres para nova vinculação`);
+      await window.registrarLogAlteracao('EXCLUSAO', 'navios', navio.id || null, `Navio ${navio.nome} (${imo}) excluído do sistema; ${contsDesvinc} contêiner(es) desvinculados`);
     }
-
     if (window.NexusRepository && window.NexusRepository.notifyChange) {
       window.NexusRepository.notifyChange('navios');
       window.NexusRepository.notifyChange('containers');
@@ -1356,13 +1382,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGpsTable();
     if (typeof renderContainersTable === 'function') renderContainersTable();
 
-    if (window.mostrarFeedback) {
-      if (avisoRemoto) {
-        window.mostrarFeedback('atencao', 'Navio Excluído Localmente', `Navio ${navio.nome} (${imo}) removido da interface; ${contsDesvinc} contêiner(es) e ${cargasDesvinc} carga(s) foram desvinculados.${avisoRemoto}`);
-      } else {
-        window.mostrarFeedback('sucesso', 'Navio Excluído', `Navio ${navio.nome} (${imo}) apagado do banco de dados e removido da interface. ${contsDesvinc} contêiner(es) e ${cargasDesvinc} carga(s) foram desvinculados e já podem ser vinculados a outro navio.`);
-      }
-    }
+    const mensagemBanco = busca.id
+      ? `Navio ${navio.nome} (${imo}) excluído do banco de dados. ${contsDesvinc} contêiner(es) desvinculados.`
+      : `Navio ${navio.nome} (${imo}) removido da interface; ele não existia no banco de dados.`;
+    avisoExclusao(avisoBercos ? 'alerta' : 'sucesso', avisoBercos ? 'Navio Excluído com Pendência' : 'Navio Excluído', mensagemBanco + avisoBercos);
   };
 
   carregarNaviosSupabase();
@@ -1839,32 +1862,60 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Contêiner', `Tem certeza que deseja EXCLUIR o contêiner ${cont.identificacao}? Essa ação o removerá do sistema.`)
       : true;
+    if (!confirmou) return;
 
-    if (confirmou) {
-      containersList = containersList.filter(c => (c.identificacao || '').toUpperCase() !== contIdentificacao.toUpperCase());
-      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+    if (!window.nexusSupabase) {
+      avisoExclusao('erro', 'Exclusão Não Realizada', `Sem conexão com o banco de dados: o contêiner ${cont.identificacao} não foi excluído.`);
+      return;
+    }
 
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('containers').delete().eq('numero_identificacao', contIdentificacao);
-        } catch (e) {
-          console.warn('Erro ao excluir contêiner no Supabase:', e);
-        }
+    const busca = await localizarNoBanco('containers', 'numero_identificacao', cont.identificacao);
+    if (!busca.ok) {
+      avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível consultar o contêiner ${cont.identificacao} no banco (${busca.erro}). Nada foi excluído.`);
+      return;
+    }
+
+    let cargasDesvinc = 0;
+    if (busca.id) {
+      const hist = await contarHistoricoManutencao('container_id', busca.id);
+      if (!hist.ok) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível verificar o histórico do contêiner ${cont.identificacao} (${hist.erro}). Nada foi excluído.`);
+        return;
       }
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EXCLUSAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} excluído do sistema`);
+      if (hist.total > 0) {
+        avisoExclusao('alerta', 'Exclusão Bloqueada', `O contêiner ${cont.identificacao} possui ${hist.total} registro(s) de manutenção/histórico vinculados. Excluí-lo apagaria esse histórico; a exclusão foi cancelada.`);
+        return;
       }
-
-      if (window.NexusRepository && window.NexusRepository.notifyChange) {
-        window.NexusRepository.notifyChange('containers');
+      const cargas = await contarNoBanco('cargas', 'container_id', busca.id);
+      if (!cargas.ok) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível verificar as cargas do contêiner ${cont.identificacao} (${cargas.erro}). Nada foi excluído.`);
+        return;
       }
+      cargasDesvinc = cargas.contagem;
 
-      renderContainersTable();
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Contêiner Excluído', `Contêiner ${contIdentificacao} excluído com sucesso do sistema.`);
+      // As cargas NÃO são apagadas: o banco apenas as desvincula (ON DELETE SET NULL)
+      const { error: errDel } = await window.nexusSupabase.from('containers').delete().eq('id', busca.id);
+      if (errDel) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do contêiner ${cont.identificacao} (${errDel.message}). Nada foi alterado.`);
+        return;
       }
     }
+
+    containersList = containersList.filter(c => (c.identificacao || '').toUpperCase() !== contIdentificacao.toUpperCase());
+    localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EXCLUSAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} excluído do sistema; ${cargasDesvinc} carga(s) desvinculadas`);
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('containers');
+      window.NexusRepository.notifyChange('cargas');
+    }
+
+    renderContainersTable();
+    avisoExclusao('sucesso', 'Contêiner Excluído', busca.id
+      ? `Contêiner ${cont.identificacao} excluído do banco de dados. ${cargasDesvinc} carga(s) permanecem cadastradas, sem contêiner vinculado.`
+      : `Contêiner ${cont.identificacao} removido da interface; ele não existia no banco de dados.`);
   };
 
   carregarContainersSupabase();
@@ -2067,37 +2118,55 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Guindaste', `Tem certeza que deseja EXCLUIR o guindaste ${guindaste.identificacao}? Esta ação o removerá do sistema.`)
       : true;
+    if (!confirmou) return;
 
-    if (confirmou) {
-      guindastesList = guindastesList.filter(g => (g.identificacao || '').toUpperCase() !== gndIdentificacao.toUpperCase());
-      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+    if (!window.nexusSupabase) {
+      avisoExclusao('erro', 'Exclusão Não Realizada', `Sem conexão com o banco de dados: o guindaste ${guindaste.identificacao} não foi excluído.`);
+      return;
+    }
 
-      // Remove tarefas associadas
-      let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-      tarefasGnd = tarefasGnd.filter(t => t.guindasteId !== gndIdentificacao);
-      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
+    const busca = await localizarNoBanco('guindastes', 'numero_identificacao', guindaste.identificacao);
+    if (!busca.ok) {
+      avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível consultar o guindaste ${guindaste.identificacao} no banco (${busca.erro}). Nada foi excluído.`);
+      return;
+    }
 
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('guindastes').delete().eq('numero_identificacao', gndIdentificacao);
-        } catch (e) {
-          console.warn('Erro ao excluir guindaste no Supabase:', e);
-        }
+    if (busca.id) {
+      const hist = await contarHistoricoManutencao('guindaste_id', busca.id);
+      if (!hist.ok) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível verificar o histórico do guindaste ${guindaste.identificacao} (${hist.erro}). Nada foi excluído.`);
+        return;
       }
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EXCLUSAO', 'guindastes', guindaste.id || null, `Guindaste ${guindaste.identificacao} excluído do sistema`);
+      if (hist.total > 0) {
+        avisoExclusao('alerta', 'Exclusão Bloqueada', `O guindaste ${guindaste.identificacao} possui ${hist.total} registro(s) de manutenção/histórico vinculados. Excluí-lo apagaria esse histórico; a exclusão foi cancelada.`);
+        return;
       }
-
-      if (window.NexusRepository && window.NexusRepository.notifyChange) {
-        window.NexusRepository.notifyChange('guindastes');
-      }
-
-      renderGuindastesTable();
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Guindaste Excluído', `Guindaste ${gndIdentificacao} excluído com sucesso do sistema.`);
+      const { error: errDel } = await window.nexusSupabase.from('guindastes').delete().eq('id', busca.id);
+      if (errDel) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do guindaste ${guindaste.identificacao} (${errDel.message}). Nada foi alterado.`);
+        return;
       }
     }
+
+    guindastesList = guindastesList.filter(g => (g.identificacao || '').toUpperCase() !== gndIdentificacao.toUpperCase());
+    localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+
+    // Tarefas locais do guindaste (cache de operação) também são removidas
+    let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+    tarefasGnd = tarefasGnd.filter(t => t.guindasteId !== guindaste.identificacao && t.guindasteId !== gndIdentificacao);
+    localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EXCLUSAO', 'guindastes', guindaste.id || null, `Guindaste ${guindaste.identificacao} excluído do sistema`);
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('guindastes');
+    }
+
+    renderGuindastesTable();
+    avisoExclusao('sucesso', 'Guindaste Excluído', busca.id
+      ? `Guindaste ${gndIdentificacao} excluído do banco de dados.`
+      : `Guindaste ${gndIdentificacao} removido da interface; ele não existia no banco de dados.`);
   }
 
   // Modal de tarefas do guindaste: exibe as instruções de cada movimentação

@@ -447,7 +447,7 @@ async function testesEmbarcacoes() {
   const bercosAposCadastro = JSON.parse(w.localStorage.getItem('nexus_bercos_list'));
   check('cadastrar navio: DENTRO_DO_PORTO ocupa o berço imediatamente (primeiro livre)', bercosAposCadastro.some((b) => b.nome === 'Berço 01' && b.estado === 'OCUPADO' && b.navio_imo === 'XYZ7654321'), JSON.stringify(bercosAposCadastro).slice(0, 200));
   r = await w.NexusWebMCP.executar('excluir_navio', { imo: 'XYZ7654321' });
-  check('excluir navio: inspetor exclui com confirmação', r.ok === true && !JSON.parse(w.localStorage.getItem('nexus_navios_list')).some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r));
+  check('excluir navio: sem confirmação do banco, não remove e informa erro (exclusão só após o banco)', r.ok === false && JSON.parse(w.localStorage.getItem('nexus_navios_list')).some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r));
   r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU7654321', tipo: 'Têxteis', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
   check('cadastrar contêiner: identificação ISO e formulário da página', r.ok === true && JSON.parse(w.localStorage.getItem('nexus_containers_list')).some((c) => c.identificacao === 'MSCU7654321'), JSON.stringify(r).slice(0, 200));
   r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU1-234-567', tipo: 'X', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
