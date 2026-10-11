@@ -13,6 +13,7 @@
     "test:vlibras": "node tests/test_vlibras.js",
     "test:edge-functions": "node tests/test_edge_functions.js && npm run test:vpn-gate",
     "test:vpn-gate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_vpn_gate.js",
+    "check:ip": "node tools/vpn-gate-check.js",
     "test:graficos": "node tests/test_graficos_por_cargo.js",
     "test:refresh": "node tests/test_charts_refresh.js",
     "test:autorefresh": "node tests/test_charts_autorefresh.js",

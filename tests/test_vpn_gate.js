@@ -24,10 +24,16 @@ async function main() {
     MENSAGEM_BLOQUEIO,
     FONTES_LISTAS,
     FONTES_GEO_EUA,
+    FONTE_IPS_PROTON,
+    ASNS_PROTON_AG,
+    ASNS_HOSPEDAGEM_PROTON,
+    PREFIXO_MINIMO_BLOCO_PROTON,
+    urlBlocosAsn,
     parseIPAddress,
     parseCIDR,
     parseListaCIDR,
     ipPertenceALista,
+    menorBlocoContido,
     normalizarIp,
     extrairIp,
     criarHandler
@@ -86,8 +92,8 @@ async function main() {
   ]);
   let chamadasFonte = 0;
   const fetchFonte = async (url) => {
-    chamadasFonte++;
     if (!conteudos.has(url)) throw new Error('URL de teste desconhecida');
+    chamadasFonte++;
     return new Response(conteudos.get(url), { status: 200 });
   };
   const handler = criarHandler({ fetchFn: fetchFonte, fontes: feedsTeste, getEnv: () => 'false', now: () => 1_000_000 });
@@ -270,6 +276,141 @@ async function main() {
   });
   check('configuração de exemplo mantém o modo offline e não chama a função',
     uiOffline.chamadas === 0 && !uiOffline.classes.has('nexus-vpn-gate-checking'));
+
+  console.log('\n[8] Camada Proton: ASNs próprias, blocos BGP anunciados e nível de bloqueio');
+  check('ASNs próprias da Proton AG são as registradas no RIPE/ipverse',
+    ASNS_PROTON_AG.includes('209103') && ASNS_PROTON_AG.includes('208172'));
+  check('ASNs de hospedagem incluem Datacamp, M247, WorldStream e CDN77',
+    ['212238', '9009', '49981', '60068'].every((asn) => ASNS_HOSPEDAGEM_PROTON.includes(asn)));
+  check('blocos anunciados vêm do ipverse (agregados por ASN, IPv4 e IPv6)',
+    urlBlocosAsn('209103', 'ipv4') === 'https://raw.githubusercontent.com/ipverse/as-ip-blocks/master/as/209103/ipv4-aggregated.txt'
+    && urlBlocosAsn('209103', 'ipv6').endsWith('/209103/ipv6-aggregated.txt'));
+  check('IPs anunciados vêm do tn3w/ProtonVPN-IPs',
+    /tn3w\/ProtonVPN-IPs/.test(FONTE_IPS_PROTON.url) && FONTE_IPS_PROTON.minimo >= 50);
+  check('expansão nunca herda blocos maiores que /20 (evita backbone inteiro)',
+    PREFIXO_MINIMO_BLOCO_PROTON === 20);
+
+  const redesAnunciadas = parseListaCIDR(['192.0.2.0/22', '10.20.0.0/16', '172.16.40.0/21'].join('\n'));
+  const blocoEspecifico = menorBlocoContido('192.0.2.40', redesAnunciadas, 20);
+  check('menorBlocoContido escolhe o prefixo mais específico que contém o IP',
+    !!blocoEspecifico && blocoEspecifico.prefixo === 22 && blocoEspecifico.valor === parseCIDR('192.0.2.0/22').valor);
+  check('menorBlocoContido respeita o piso /20', menorBlocoContido('10.20.30.40', redesAnunciadas, 20) === null);
+  check('menorBlocoContido devolve null para IP fora das redes', menorBlocoContido('203.0.113.9', redesAnunciadas, 20) === null);
+
+  const ASNS_PROPIAS_TESTE = ['64500'];
+  const ASNS_HOSPEDAGEM_TESTE = ['64510', '64511'];
+  // A fonte real exige um mínimo de IPs anunciados para aceitar a lista; o fixture
+  // precisa ter o mesmo tamanho mínimo para exercitar o caminho de produção.
+  const ipsAnunciadosFicticios = [
+    '192.0.2.40', '10.20.30.40', '172.16.45.10',
+    ...Array.from({ length: FONTE_IPS_PROTON.minimo }, (_, i) => `192.0.3.${(i % 200) + 1}`)
+  ];
+  const conteudosProton = new Map([
+    [urlBlocosAsn('64500', 'ipv4'), '203.0.113.0/24\n198.51.100.128/25\n'],
+    [urlBlocosAsn('64500', 'ipv6'), '2001:db8:aaaa::/48\n'],
+    [urlBlocosAsn('64510', 'ipv4'), '192.0.2.0/22\n10.20.0.0/16\n'],
+    [urlBlocosAsn('64511', 'ipv4'), '172.16.40.0/21\n'],
+    [FONTE_IPS_PROTON.url, `${ipsAnunciadosFicticios.join('\n')}\n`]
+  ]);
+  const fonteVpnProton = { nome: 'vpn-v4', url: 'https://github.test/vpn-v4.txt', minimo: 1 };
+  const conteudoVpnProton = '198.51.100.0/24\n';
+  let chamadasProton = 0;
+  const fetchProton = async (url) => {
+    if (url === fonteVpnProton.url) return new Response(conteudoVpnProton, { status: 200 });
+    if (!conteudosProton.has(url)) throw new Error(`fonte ausente: ${url}`);
+    chamadasProton++;
+    return new Response(conteudosProton.get(url), { status: 200 });
+  };
+  const reqComIp = (ip) => new Request('https://nexus.test/functions/v1/vpn-gate', {
+    method: 'GET',
+    headers: { 'cf-connecting-ip': ip }
+  });
+  const handlerProton = criarHandler({
+    fetchFn: fetchProton,
+    fontes: [fonteVpnProton],
+    asnsProprias: ASNS_PROPIAS_TESTE,
+    asnsHospedagem: ASNS_HOSPEDAGEM_TESTE,
+    getEnv: () => 'false',
+    now: () => 5_000_000
+  });
+
+  const dentroAsnPropria = await handlerProton(reqComIp('203.0.113.77'));
+  check('IP de ASN própria da Proton é bloqueado mesmo sem estar nas listas públicas',
+    dentroAsnPropria.status === 403 && await dentroAsnPropria.text() === MENSAGEM_BLOQUEIO);
+  check('cabeçalho de diagnóstico informa a camada que bloqueou',
+    dentroAsnPropria.headers.get('x-vpn-gate-motivo') === 'proton');
+  check('CORS expõe o cabeçalho de diagnóstico para o operador',
+    /x-vpn-gate-motivo/i.test(dentroAsnPropria.headers.get('access-control-expose-headers') || ''));
+  const asnPropriaIpv6 = await handlerProton(reqComIp('2001:db8:aaaa::42'));
+  check('IPv6 das ASNs próprias também é bloqueado', asnPropriaIpv6.status === 403);
+  const vizinhoDoAnunciado = await handlerProton(reqComIp('192.0.3.9'));
+  check('saída NAT em /24 vizinho do bloco anunciado é bloqueada (antes escapava)',
+    vizinhoDoAnunciado.status === 403 && vizinhoDoAnunciado.headers.get('x-vpn-gate-motivo') === 'proton');
+  const mesmoBloco24 = await handlerProton(reqComIp('10.20.30.99'));
+  check('IP no mesmo /24 de um anunciado é bloqueado', mesmoBloco24.status === 403);
+  const foraDoBlocoCapado = await handlerProton(reqComIp('10.20.31.99'));
+  check('agregado maior que /20 não é herdado inteiro', foraDoBlocoCapado.status === 204);
+  const hospedagemSecundaria = await handlerProton(reqComIp('172.16.47.5'));
+  check('bloco anunciado de outra hospedagem também é bloqueado', hospedagemSecundaria.status === 403);
+  check('camada Proton mantém cache e não repete downloads na mesma janela',
+    chamadasProton === conteudosProton.size);
+
+  const handlerAgressivo = criarHandler({
+    fetchFn: fetchProton,
+    fontes: [fonteVpnProton],
+    asnsProprias: ASNS_PROPIAS_TESTE,
+    asnsHospedagem: ASNS_HOSPEDAGEM_TESTE,
+    getEnv: (nome) => (nome === 'VPN_GATE_NIVEL' ? 'agressivo' : 'false'),
+    now: () => 6_000_000
+  });
+  const foraDeQualquerBloco = await handlerProton(reqComIp('10.20.99.99'));
+  check('modo padrão não herda o ASN inteiro do provedor de hospedagem', foraDeQualquerBloco.status === 204);
+  const hosterInteiro = await handlerAgressivo(reqComIp('10.20.99.99'));
+  check('VPN_GATE_NIVEL=agressivo bloqueia todo o espaço anunciado da hospedagem',
+    hosterInteiro.status === 403 && hosterInteiro.headers.get('x-vpn-gate-motivo') === 'proton');
+  const ipNeutroAgressivo = await handlerAgressivo(reqComIp('198.18.5.5'));
+  check('modo agressivo continua liberando IP fora de todas as fontes', ipNeutroAgressivo.status === 204);
+
+  const handlerSemCamadaProton = criarHandler({
+    fetchFn: async (url) => {
+      if (url === fonteVpnProton.url) return new Response(conteudoVpnProton, { status: 200 });
+      throw new Error('GitHub fora do ar');
+    },
+    fontes: [fonteVpnProton],
+    asnsProprias: ASNS_PROPIAS_TESTE,
+    asnsHospedagem: ASNS_HOSPEDAGEM_TESTE,
+    getEnv: () => 'false',
+    now: () => 7_000_000
+  });
+  const semReforco = await handlerSemCamadaProton(reqComIp('192.0.2.77'));
+  check('camada Proton indisponível é reforço ausente, não bloqueio geral (HTTP 204)', semReforco.status === 204);
+  const vpnSemReforco = await handlerSemCamadaProton(reqComIp('198.51.100.30'));
+  check('listas de VPN seguem decidindo quando a camada Proton falha',
+    vpnSemReforco.status === 403 && vpnSemReforco.headers.get('x-vpn-gate-motivo') === 'vpn');
+
+  const urlsSolicitadas = [];
+  const handlerFontesReais = criarHandler({
+    fetchFn: async (url) => {
+      urlsSolicitadas.push(url);
+      if (url === FONTE_IPS_PROTON.url) {
+        const ipAnunciado = ['62.169.136.40'];
+        while (ipAnunciado.length < FONTE_IPS_PROTON.minimo) ipAnunciado.push('62.169.136.41');
+        return new Response(`${ipAnunciado.join('\n')}\n`, { status: 200 });
+      }
+      if (/ipverse\/as-ip-blocks/.test(url)) return new Response('62.169.136.0/23\n', { status: 200 });
+      return new Response(conteudoVpnProton, { status: 200 });
+    },
+    fontes: [fonteVpnProton],
+    getEnv: () => 'false',
+    now: () => 8_000_000
+  });
+  const ipDaProtonReal = await handlerFontesReais(reqComIp('62.169.136.44'));
+  check('produção consulta as ASNs próprias e a lista de hospedagem da Proton',
+    ipDaProtonReal.status === 403 && ipDaProtonReal.headers.get('x-vpn-gate-motivo') === 'proton'
+    && urlsSolicitadas.some((u) => u.includes('/as/209103/ipv4-aggregated.txt'))
+    && urlsSolicitadas.some((u) => u.includes('/as/208172/ipv4-aggregated.txt'))
+    && urlsSolicitadas.some((u) => u.includes('/as/212238/ipv4-aggregated.txt'))
+    && urlsSolicitadas.some((u) => u.includes('tn3w/ProtonVPN-IPs/master/protonvpn_ips.txt')));
 
   console.log(`\nResultado: ${ok} aprovados, ${falhas} falhas.`);
   process.exit(falhas ? 1 : 0);
