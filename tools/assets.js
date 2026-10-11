@@ -52,8 +52,10 @@ const FAMILIAS = new Map([
   ['jetbrains-mono', 'JetBrains Mono']
 ]);
 
-/** Ícones: arquivo gerado por tools/subset-material-symbols.py a partir deste mesmo pacote npm. */
-const FONTE_ICONES = 'material-symbols-outlined.woff2';
+/** Fonte local com versão no nome para invalidar caches imutáveis após ampliar o subconjunto. */
+const FONTE_ICONES = 'material-symbols-outlined-v2.woff2';
+/** Nome original da fonte completa publicada pelo pacote npm material-symbols. */
+const FONTE_ICONES_COMPLETA = 'material-symbols-outlined.woff2';
 const PACOTE_ICONES = 'material-symbols';
 
 /**
@@ -171,7 +173,7 @@ async function gerarRecursos() {
 
   // O pacote npm traz a fonte completa (3,7 MB); o subconjunto com os ícones usados é gerado uma vez
   // por tools/subset-material-symbols.py e versionado em fonts/, fora do node_modules.
-  exigir(path.join(RAIZ, 'node_modules', PACOTE_ICONES, FONTE_ICONES),
+  exigir(path.join(RAIZ, 'node_modules', PACOTE_ICONES, FONTE_ICONES_COMPLETA),
     `Pacote ${PACOTE_ICONES} ausente. Rode "npm ci" antes de gerar o subconjunto dos ícones`);
   exigir(path.join(PASTA_FONTES, FONTE_ICONES),
     'Subconjunto de ícones ausente: rode python3 tools/subset-material-symbols.py');
