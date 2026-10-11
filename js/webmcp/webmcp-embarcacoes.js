@@ -4,7 +4,9 @@
  * Navios, contêineres, guindastes, berços e rotas marítimas. Ações consequentes
  * validam o estado e a regra de negócio antes de pedir confirmação, pedem confirmação
  * do operador e verificam o resultado salvo antes de responder "ok".
- * Cadastros usam o próprio formulário da página (mesmas validações de IMO, GPS e padrões).
+ * Cadastros usam o próprio formulário da página (mesmas validações de IMO e padrões).
+ * O navio não tem mais coordenadas GPS: a posição é a localização fictícia
+ * (DENTRO_DO_PORTO, FORA_DO_PORTO, NO_PORTO_DE_DESTINO) + o berço ocupado.
  *
  * Carregamento: depois de webmcp-core, webmcp-ui, webmcp-dados e webmcp-global.
  */
@@ -218,7 +220,7 @@
   const cadastrarNavio = {
     nome: 'cadastrar_navio',
     titulo: 'Cadastrar navio',
-    descricao: 'Cadastra um navio pelo IMO único, com localização e GPS. Origem, destino e distância vêm da rota marítima cadastrada escolhida (não há distância manual). Navio DENTRO_DO_PORTO exige berço livre imediato (usa o primeiro livre se não informado). Só Inspetor ou Direção. Exige confirmação.',
+    descricao: 'Cadastra um navio pelo IMO único, com a localização (situação em relação ao porto; não há coordenadas GPS). Origem, destino e distância vêm da rota marítima cadastrada escolhida (não há distância manual). Navio DENTRO_DO_PORTO exige berço livre imediato (usa o primeiro livre se não informado). Só Inspetor ou Direção. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: G.inspecao,
     permissao: 'CADASTRAR_NAVIO',
@@ -230,18 +232,14 @@
         origem: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Origem', description: 'Porto de origem.' },
         destino: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Destino', description: 'Porto de destino.' },
         localizacao: { type: 'string', enum: LOCALIZACOES, rotulo: 'Localização', description: 'Situação inicial em relação ao porto.' },
-        gps: { type: 'string', minLength: 5, maxLength: 60, rotulo: 'GPS', description: 'Coordenadas, por exemplo -23.9608, -46.3022.' },
         berco: { type: 'string', minLength: 2, maxLength: 40, rotulo: 'Berço', description: 'Berço de atracação imediata (obrigatório para DENTRO_DO_PORTO; omita para usar o primeiro berço livre).' }
       },
-      required: ['nome', 'imo', 'origem', 'destino', 'localizacao', 'gps'],
+      required: ['nome', 'imo', 'origem', 'destino', 'localizacao'],
       additionalProperties: false
     },
     precondicao: async (args) => {
       if (args.imo !== undefined && await navioPorImo(args.imo)) {
         return { codigo: 'IMO_DUPLICADO', mensagem: `Já existe navio com o IMO ${imoNormalizado(args.imo)}.` };
-      }
-      if (args.gps !== undefined && naviosLocais().some((n) => (n.gps || '').trim() === args.gps.trim())) {
-        return { codigo: 'LOCALIZACAO_OCUPADA', mensagem: 'Outro navio já está nesta coordenada GPS.' };
       }
       if (args.localizacao === 'DENTRO_DO_PORTO') {
         const bercos = D.bercos();
@@ -265,7 +263,7 @@
       if (f.erro) return f.erro;
       const erroCampos = preencher(f.form, {
         navioNome: args.nome, navioImo: imoNormalizado(args.imo),
-        navioLocalizacao: args.localizacao, navioGps: args.gps
+        navioLocalizacao: args.localizacao
       });
       if (erroCampos) return erroCampos;
 

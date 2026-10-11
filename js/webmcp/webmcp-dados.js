@@ -152,7 +152,6 @@
       origem: n.origem || null,
       destino: n.destino || null,
       distancia_km: Number.isFinite(Number(n.distancia)) ? Number(n.distancia) : null,
-      gps: n.gps || null,
       saida: dataHora(n.dataSaida || n.data_saida)
     };
   }
@@ -302,10 +301,6 @@
   const STATUS_CARGA = ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA', 'EM_TRANSITO', 'ENTREGUE', 'RECUSADA', 'CANCELADA'];
   const SETORES_PATIO = ['Pátio Principal (Setor A)', 'Pátio STS-01 (Setor B)', 'Pátio STS-01 (Setor C)', 'Pátio STS-01 (Setor Refrigeração)'];
   const CAPACIDADE_CONTAINER_M3 = 75;
-  const GUINDASTES_PADRAO = [
-    { id: 'GND-01-STS', identificacao: 'GND-01-STS', estado: 'OPERANTE', padrao: true },
-    { id: 'GND-02-STS', identificacao: 'GND-02-STS', estado: 'OPERANTE', padrao: true }
-  ];
 
   /** Espera até o predicado virar verdadeiro (polling curto). Retorna boolean. */
   function esperar(predicado, ms) {
@@ -360,10 +355,12 @@
     return Math.max(0, CAPACIDADE_CONTAINER_M3 - usado);
   }
 
-  /** Guindastes como a tela os apresenta (lista salva ou padrões da primeira movimentação). */
+  /**
+   * Guindastes como a tela os apresenta: somente os cadastrados (espelho do
+   * Supabase). Não existem mais guindastes "padrão" fictícios.
+   */
   function guindastesEfetivos() {
-    const lista = guindastes();
-    return lista.length ? lista : GUINDASTES_PADRAO.map((g) => Object.assign({}, g));
+    return guindastes();
   }
 
   // Grupos de cargos (espelham as listas de auth-guard.js e das páginas; mínimo privilégio).

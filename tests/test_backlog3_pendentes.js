@@ -106,7 +106,9 @@ function testarRotasMaritimas() {
   check('placeholders do cadastro de rota não trazem rota real como exemplo',
     !/Roterdã|10200/.test(html.slice(html.indexOf('id="rotaForm"'), html.indexOf('id="rotaForm"') + 2000)));
   check('WebMCP cadastrar_navio não aceita distância manual (required sem distancia_km)',
-    /required: \['nome', 'imo', 'origem', 'destino', 'localizacao', 'gps'\]/.test(webmcpEmb));
+    /required: \['nome', 'imo', 'origem', 'destino', 'localizacao'\]/.test(webmcpEmb));
+  check('WebMCP cadastrar_navio não tem mais coordenadas GPS (Correções Adicionais 2.5)',
+    !/navioGps|gps: \{ type/.test(webmcpEmb));
 
   if (!JSDOM) {
     console.log('  ⏭️  [SKIP] jsdom não instalado — verificação de DOM real pulada.');

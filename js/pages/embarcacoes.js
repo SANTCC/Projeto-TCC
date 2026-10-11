@@ -94,40 +94,62 @@ document.addEventListener('DOMContentLoaded', () => {
     return alterado;
   }
 
-  /** Upsert resiliente de um berço no Supabase (no-op se a tabela não existir) */
-  function upsertBercoRemoto(berco) {
-    const client = clienteBercos();
-    const resultado = normalizarBerco(berco);
-    if (!resultado.payload) {
-      console.warn(`[NexusPort] Berço não sincronizado: ${resultado.motivo}.`);
-      return Promise.resolve();
-    }
-    if (resultado.corrigido) {
-      console.warn(`[NexusPort] Berço ${resultado.payload.nome} ajustado para gravação: ${resultado.motivo || 'registro fora do padrão de public.bercos'}.`);
-    }
-    if (!client) return Promise.resolve();
-    return client.from('bercos')
-      .upsert(resultado.payload, { onConflict: 'nome' })
-      .then(({ error }) => { tratarErroBercos(error); })
-      .catch(err => { tratarErroBercos(err); });
+  /** Os 15 berços do terminal STS-01 (modelo usado para completar a tabela). */
+  function modeloBercos() {
+    return Array.from({ length: 15 }, (_, i) => {
+      const num = String(i + 1).padStart(2, '0');
+      return { id: `BERCO-${num}`, nome: `Berço ${num}`, estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null };
+    });
   }
 
+  // true quando a lista em memória veio do Supabase nesta carga da página.
+  // Sem essa confirmação a tela não grava ocupação a partir do cache.
+  let bercosConfirmadosNoBanco = false;
+
+  /**
+   * Carrega a ocupação dos berços SEMPRE do Supabase (public.bercos).
+   *
+   * Causa-raiz corrigida: antes o painel lia o localStorage, completava o
+   * banco com o cache e LIBERAVA no banco todo berço cujo navio não estivesse
+   * na lista local de navios — limpar cookies/cache (ou abrir outra máquina)
+   * desocupava os berços. Agora o cache é só um espelho de leitura do banco e
+   * nunca decide ocupação. Berços faltantes (tabela recém-criada) são
+   * inseridos como LIVRE, sem sobrescrever linhas existentes.
+   */
   async function carregarBercosSupabase() {
-    let loaded = [];
     const clientLeitura = clienteBercos();
     if (clientLeitura) {
       try {
         const { data, error } = await clientLeitura.from('bercos').select('*').order('nome', { ascending: true });
-        if (error) tratarErroBercos(error);
-        if (!error && Array.isArray(data) && data.length > 0) {
-          loaded = data.map(b => ({
-            id: b.id || `BERCO-${b.nome.replace(/\D/g, '')}`,
+        if (error) {
+          tratarErroBercos(error);
+        } else if (Array.isArray(data)) {
+          const doBanco = new Map(data.map(b => [b.nome, {
+            id: b.id || `BERCO-${String(b.nome || '').replace(/\D/g, '').padStart(2, '0')}`,
             nome: b.nome,
             estado: b.estado || 'LIVRE',
             navio_nome: b.navio_nome || null,
             navio_imo: b.navio_imo || null,
             navio_id: b.navio_id || null
-          }));
+          }]));
+          const faltantes = modeloBercos().filter(b => !doBanco.has(b.nome));
+          if (faltantes.length > 0) {
+            try {
+              const payload = faltantes.map(b => normalizarBerco(b).payload).filter(Boolean);
+              // ignoreDuplicates: nunca sobrescreve um berço que outro usuário acabou de ocupar
+              const { error: erroInsert } = await clientLeitura.from('bercos').upsert(payload, { onConflict: 'nome', ignoreDuplicates: true });
+              tratarErroBercos(erroInsert);
+            } catch (e) {
+              if (!tratarErroBercos(e)) console.warn('[NexusPort] Erro ao completar os berços no Supabase:', e);
+            }
+          }
+          bercosList = modeloBercos().map(b => doBanco.get(b.nome) || b);
+          sanearBercosLocais(bercosList);
+          bercosConfirmadosNoBanco = true;
+          localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+          renderBercosPanel();
+          Promise.resolve().then(() => renderGpsTable());
+          return;
         }
       } catch (err) {
         if (!tratarErroBercos(err)) {
@@ -136,98 +158,62 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    if (loaded.length < 15) {
-      const existingMap = new Map(loaded.map(b => [b.nome, b]));
-      const localList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-      if (Array.isArray(localList)) {
-        localList.forEach(b => { if (!existingMap.has(b.nome)) existingMap.set(b.nome, b); });
-      }
-
-      bercosList = Array.from({ length: 15 }, (_, i) => {
-        const num = String(i + 1).padStart(2, '0');
-        const nomeBerco = `Berço ${num}`;
-        return existingMap.get(nomeBerco) || {
-          id: `BERCO-${num}`,
-          nome: nomeBerco,
-          estado: 'LIVRE',
-          navio_nome: null,
-          navio_imo: null,
-          navio_id: null
-        };
-      });
-
-      const clientSync = clienteBercos();
-      if (clientSync) {
-        try {
-          // Normaliza antes de enviar: um único berço fora das constraints de
-          // public.bercos (erro 23514) aborta o lote inteiro de 15 berços.
-          sanearBercosLocais(bercosList);
-          const bercosPayload = bercosList
-            .map(b => normalizarBerco(b).payload)
-            .filter(Boolean);
-          if (bercosPayload.length > 0) {
-            const { error } = await clientSync.from('bercos').upsert(bercosPayload, { onConflict: 'nome' });
-            tratarErroBercos(error);
-          }
-        } catch (e) {
-          if (!tratarErroBercos(e)) {
-            console.warn('[NexusPort] Erro ao sincronizar berços no Supabase:', e);
-          }
-        }
-      }
-    } else {
-      bercosList = loaded;
-    }
-
+    // Modo sem banco (ou banco indisponível): exibe o último espelho conhecido.
+    bercosConfirmadosNoBanco = false;
+    const cache = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+    const porNome = new Map((Array.isArray(cache) ? cache : []).map(b => [b.nome, b]));
+    bercosList = modeloBercos().map(b => porNome.get(b.nome) || b);
     sanearBercosLocais(bercosList);
-
-    localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
     renderBercosPanel();
+    // Após o término do handler (as constantes da tabela GPS já existem)
+    Promise.resolve().then(() => renderGpsTable());
   }
 
-  function renderBercosPanel() {
-    bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-    if (bercosList.length < 15) {
-      const existingMap = new Map(bercosList.map(b => [b.nome, b]));
-      bercosList = Array.from({ length: 15 }, (_, i) => {
-        const num = String(i + 1).padStart(2, '0');
-        const nomeBerco = `Berço ${num}`;
-        return existingMap.get(nomeBerco) || { id: `BERCO-${num}`, nome: nomeBerco, estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null };
-      });
+  /** Berço ocupado pelo navio (por id do banco ou IMO), ou null. */
+  function bercoDoNavio(navio) {
+    if (!navio) return null;
+    return bercosList.find(b => b.estado === 'OCUPADO' && (
+      (b.navio_id && navio.id && String(b.navio_id) === String(navio.id)) ||
+      (b.navio_imo && navio.imo && String(b.navio_imo).toUpperCase() === String(navio.imo).toUpperCase())
+    )) || null;
+  }
+
+  /**
+   * Libera o berço do navio (saída liberada / exclusão). No banco, o gatilho
+   * trg_navios_liberar_bercos_* faz o mesmo; a chamada explícita cobre bancos
+   * ainda sem a migração. Em seguida a tela relê a ocupação do Supabase.
+   */
+  async function liberarBercoDoNavio(navio) {
+    const integ = window.NexusIntegridade;
+    if (clienteBercos() && integ) {
+      const r = await integ.liberarBercosDoNavio(navio);
+      if (!r.ok) console.warn('[NexusPort] Berço do navio não liberado no Supabase:', r.mensagem);
+      await carregarBercosSupabase();
+      return r.ok;
     }
-
-    // Corrige cache legado (OCUPADO sem navio / id fora do padrão) antes de
-    // renderizar e antes de qualquer gravação.
-    let bercosAlterados = sanearBercosLocais(bercosList);
-
-    const currentNavios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
-    const activeImoSet = new Set(currentNavios.map(n => (n.imo || '').toLowerCase()));
-    const activeNomeSet = new Set(currentNavios.map(n => (n.nome || '').toLowerCase()));
-
+    // Modo sem banco: atualiza o espelho local
+    let alterado = false;
     bercosList.forEach(b => {
-      if (b.estado === 'OCUPADO') {
-        const matchImo = b.navio_imo ? activeImoSet.has(b.navio_imo.toLowerCase()) : false;
-        const matchNome = b.navio_nome ? activeNomeSet.has(b.navio_nome.toLowerCase()) : false;
-        if (!matchImo && !matchNome) {
-          b.estado = 'LIVRE';
-          b.navio_nome = null;
-          b.navio_imo = null;
-          b.navio_id = null;
-          bercosAlterados = true;
-          upsertBercoRemoto({
-        id: b.id,
-        nome: b.nome,
-        estado: 'LIVRE',
-        navio_nome: null,
-        navio_imo: null,
-        navio_id: null
-      });
-        }
+      const mesmo = b.estado === 'OCUPADO' && (
+        (b.navio_imo && navio.imo && String(b.navio_imo).toUpperCase() === String(navio.imo).toUpperCase()) ||
+        (b.navio_id && navio.id && String(b.navio_id) === String(navio.id)) ||
+        (!b.navio_imo && b.navio_nome && navio.nome && b.navio_nome === navio.nome)
+      );
+      if (mesmo) {
+        Object.assign(b, { estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null });
+        alterado = true;
       }
     });
+    if (alterado) localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+    renderBercosPanel();
+    return true;
+  }
 
-    if (bercosAlterados || bercosList.length < 15) {
-      localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+  // Renderiza a lista em memória (carregada do banco). Não altera ocupação.
+  function renderBercosPanel() {
+    if (!Array.isArray(bercosList) || bercosList.length < 15) {
+      const porNome = new Map((bercosList || []).map(b => [b.nome, b]));
+      bercosList = modeloBercos().map(b => porNome.get(b.nome) || b);
     }
 
     const livres = bercosList.filter(b => b.estado === 'LIVRE');
@@ -252,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }">${esc(b.estado)}</span>
           </div>
           <span class="text-[11px] text-slate-500 font-mono">
-            ${b.estado === 'OCUPADO' ? `Navio: <strong class="text-nexus-500">${esc(b.navio_nome || b.carga_id || 'Navio Alocado')}</strong>` : 'Pronto para atracação'}
+            ${b.estado === 'OCUPADO' ? `Navio: <strong class="text-nexus-500">${esc(b.navio_nome || b.navio_imo || 'Navio Alocado')}</strong>` : b.estado === 'LIVRE' ? 'Pronto para atracação' : 'Indisponível'}
           </span>
         </div>
       `).join('');
@@ -362,7 +348,6 @@ document.addEventListener('DOMContentLoaded', () => {
             id: n.id,
             nome: n.nome,
             imo: n.numero_imo || n.imo,
-            gps: n.coordenadas_gps || '23.9608° S, 46.3022° W',
             localizacao: n.localizacao || 'DENTRO_DO_PORTO',
             origem: n.porto_origem || 'Porto de Santos',
             destino: n.porto_destino || '',
@@ -383,6 +368,79 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGpsTable();
   }
 
+  /** O porto de origem/base do sistema é o Porto de Santos (STS-01). */
+  function ehPortoDeSantos(porto) {
+    return String(porto || '').toLowerCase().includes('santos');
+  }
+
+  /**
+   * A carga pertence ao navio? Pelo id do navio (navio_id) quando a carga o
+   * tem; o nome é usado apenas para cargas antigas sem navio_id.
+   */
+  function cargaPertenceAoNavio(carga, navio) {
+    if (!carga || !navio) return false;
+    const idCarga = carga.navio_id || carga.navioId;
+    if (idCarga && navio.id) return String(idCarga) === String(navio.id);
+    return Boolean(carga.navio) && Boolean(navio.nome) && String(carga.navio).trim().toLowerCase() === String(navio.nome).trim().toLowerCase();
+  }
+
+  // Navios cuja entrega já foi gravada no Supabase nesta sessão (evita repetir a cada segundo)
+  const entregasSincronizadas = new Set();
+
+  /** Grava ENTREGUE no banco só para as cargas EM_TRANSITO deste navio. */
+  function sincronizarEntregaDoNavio(navio) {
+    if (!window.nexusSupabase || !navio || entregasSincronizadas.has(navio.id || navio.imo)) return;
+    const ehUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(navio.id || ''));
+    if (!ehUuid) return; // sem id do banco não há filtro seguro: nada é gravado em lote
+    entregasSincronizadas.add(navio.id);
+    window.nexusSupabase.from('cargas')
+      .update({ status_fluxo: 'ENTREGUE' })
+      .eq('navio_id', navio.id)
+      .eq('status_fluxo', 'EM_TRANSITO')
+      .then(({ error } = {}) => {
+        if (error) {
+          entregasSincronizadas.delete(navio.id);
+          console.warn('[NexusPort] Erro ao registrar entrega das cargas do navio no Supabase:', error);
+        }
+      })
+      .catch(e => {
+        entregasSincronizadas.delete(navio.id);
+        console.warn('[NexusPort] Erro ao registrar entrega das cargas do navio no Supabase:', e);
+      });
+  }
+
+  /**
+   * Chegada de volta ao Porto de Santos: o navio fica "No porto"
+   * (DENTRO_DO_PORTO) — e não "Chegou ao destino" — para poder receber novas
+   * cargas e contêineres. A rota volta ao sentido de ida
+   * (Santos → último destino), pronta para a próxima liberação de saída.
+   */
+  function registrarChegadaAoPortoDeSantos(navio) {
+    const portoSantos = navio.destino || 'Porto de Santos';
+    const proximoDestino = ehPortoDeSantos(navio.origem) ? navio.destino : navio.origem;
+    navio.localizacao = 'DENTRO_DO_PORTO';
+    navio.origem = portoSantos;
+    navio.destino = proximoDestino || '';
+    navio.dataSaida = null;
+    localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+    if (window.nexusSupabase) {
+      let q = window.nexusSupabase.from('navios').update({
+        localizacao: 'DENTRO_DO_PORTO',
+        porto_origem: navio.origem,
+        porto_destino: navio.destino || null,
+        data_chegada: new Date().toISOString(),
+        data_saida: null
+      });
+      q = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(navio.id || '')) ? q.eq('id', navio.id) : q.eq('numero_imo', navio.imo);
+      Promise.resolve(q).then(({ error } = {}) => {
+        if (error) console.warn('[NexusPort] Erro ao registrar chegada ao Porto de Santos:', error);
+      }).catch(err => console.warn('[NexusPort] Erro ao registrar chegada ao Porto de Santos:', err));
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('navios');
+    }
+  }
+
   // Renderiza Tabela de GPS com atualização viva em tempo real e entrega automática
   function renderGpsTable() {
     if (!gpsTableBody) return;
@@ -393,35 +451,43 @@ document.addEventListener('DOMContentLoaded', () => {
           <td colspan="8" class="p-8 text-center">
             <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">sailing</span>
             <span class="block font-bold text-slate-400 text-xs">Nenhuma embarcação cadastrada ainda.</span>
-            <span class="block text-[11px] text-slate-400 mt-1">Navios são cadastrados pelo Inspetor em "Gerenciar Embarcações". Assim que o primeiro cadastro for salvo, o GPS, o ETA e as ações aparecem aqui automaticamente.</span>
+            <span class="block text-[11px] text-slate-400 mt-1">Navios são cadastrados pelo Inspetor em "Gerenciar Embarcações". Assim que o primeiro cadastro for salvo, a localização, o ETA e as ações aparecem aqui automaticamente.</span>
           </td>
         </tr>
       `;
       return;
     }
 
-    // C10 & RN 12: Atualização automática do status das cargas quando o navio chega ao porto de destino
+    // Navios já parados como "Chegou ao destino" com destino = Porto de Santos
+    // (retorno autorizado antes desta correção) passam a constar "No porto".
+    naviosList.forEach(n => {
+      if (n.localizacao === 'NO_PORTO_DE_DESTINO' && ehPortoDeSantos(n.destino)) registrarChegadaAoPortoDeSantos(n);
+    });
+
+    // C10 & RN 12: quando o navio chega ao porto de destino, SOMENTE as cargas
+    // a bordo DESTE navio (EM_TRANSITO) passam a ENTREGUE.
+    // Causa-raiz corrigida: o update no Supabase não filtrava o navio
+    // (`.eq('status_fluxo','EM_TRANSITO')` apenas) e rodava a cada segundo,
+    // entregando as cargas em trânsito de TODOS os navios; no cache local,
+    // qualquer status (agendada, recusada...) do navio de mesmo nome virava ENTREGUE.
     const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     let cargasAtualizadas = false;
 
     naviosList.forEach(n => {
-      if (n.localizacao === 'NO_PORTO_DE_DESTINO') {
-        cargasFluxo.forEach(c => {
-          if (c.navio && c.navio.toLowerCase() === n.nome.toLowerCase() && c.status !== 'ENTREGUE' && c.status !== 'CANCELADA') {
-            c.status = 'ENTREGUE';
-            cargasAtualizadas = true;
-          }
-        });
-      }
+      if (n.localizacao !== 'NO_PORTO_DE_DESTINO') return;
+      cargasFluxo.forEach(c => {
+        if (c.status === 'EM_TRANSITO' && cargaPertenceAoNavio(c, n)) {
+          c.status = 'ENTREGUE';
+          cargasAtualizadas = true;
+        }
+      });
+      sincronizarEntregaDoNavio(n);
     });
 
     if (cargasAtualizadas) {
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
-      if (window.nexusSupabase) {
-        window.nexusSupabase.from('cargas')
-          .update({ status_fluxo: 'ENTREGUE' })
-          .eq('status_fluxo', 'EM_TRANSITO')
-          .then().catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('cargas');
       }
     }
 
@@ -432,7 +498,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const buscaNavioVal = (document.getElementById('buscarNavioInput')?.value || '').trim().toLowerCase();
     const naviosVisiveis = naviosList.filter(n => {
       if (!buscaNavioVal) return true;
-      const haystack = `${n.nome || ''} ${n.imo || ''} ${n.gps || ''} ${n.origem || ''} ${n.destino || ''}`.toLowerCase();
+      const bercoBusca = bercoDoNavio(n);
+      const haystack = `${n.nome || ''} ${n.imo || ''} ${bercoBusca ? `${bercoBusca.nome} ${bercoBusca.id}` : ''} ${n.origem || ''} ${n.destino || ''}`.toLowerCase();
       return haystack.includes(buscaNavioVal);
     });
 
@@ -447,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td colspan="8" class="p-8 text-center">
             <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">search_off</span>
             <span class="block font-bold text-slate-400 text-xs">Nenhuma embarcação corresponde à busca.</span>
-            <span class="block text-[11px] text-slate-400 mt-1">Ajuste o termo pesquisado (nome, IMO, GPS ou destino) para listar novamente.</span>
+            <span class="block text-[11px] text-slate-400 mt-1">Ajuste o termo pesquisado (nome, IMO, berço ou destino) para listar novamente.</span>
           </td>
         </tr>
       `;
@@ -455,6 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     gpsTableBody.innerHTML = naviosVisiveis.map(n => {
+      const bercoAtual = bercoDoNavio(n);
       let etaText = '';
       let tempoForaText = '';
       let etaExtraHtml = '';
@@ -492,8 +560,11 @@ document.addEventListener('DOMContentLoaded', () => {
           const msTotaisPrevistos = horasTotaisPrevistas * 3600 * 1000;
           const msRestantes = Math.max(0, msTotaisPrevistos - diffMs);
 
-          // Transição automática para NO_PORTO_DE_DESTINO se o ETA zerou
-          if (msRestantes <= 0 && n.localizacao === 'FORA_DO_PORTO') {
+          // Transição automática quando o ETA zerou: retorno ao Porto de
+          // Santos = "No porto"; demais portos = NO_PORTO_DE_DESTINO.
+          if (msRestantes <= 0 && n.localizacao === 'FORA_DO_PORTO' && ehPortoDeSantos(n.destino)) {
+            registrarChegadaAoPortoDeSantos(n);
+          } else if (msRestantes <= 0 && n.localizacao === 'FORA_DO_PORTO') {
             n.localizacao = 'NO_PORTO_DE_DESTINO';
             localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
             if (window.nexusSupabase) {
@@ -533,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Busca cargas do localstorage ou Supabase associadas a este navio (C2, C3)
-      const cargasDoNavio = cargasFluxo.filter(c => c.navio && c.navio.toLowerCase() === n.nome.toLowerCase());
+      const cargasDoNavio = cargasFluxo.filter(c => cargaPertenceAoNavio(c, n));
 
       let bercosInfoHtml = '<span class="text-slate-400 italic text-[11px]">Sem carga vinculada</span>';
       if (cargasDoNavio.length > 0) {
@@ -553,7 +624,12 @@ document.addEventListener('DOMContentLoaded', () => {
       let acoesHtml = '<div class="flex items-center justify-end gap-1.5 text-[11px] flex-wrap">';
 
       // Botão Vincular a Berço (Tarefa 6)
-      acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+      // Somente navio no Porto de Santos ocupa berço (o modal lista os berços do banco).
+      if (n.localizacao === 'DENTRO_DO_PORTO') {
+        acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1" title="${bercoAtual ? 'Transferir para outro berço' : 'Vincular a um berço livre'}"><span class="material-symbols-outlined text-[13px]">dock</span><span>${bercoAtual ? 'Transferir' : 'Vincular'}</span></button>`;
+      } else {
+        acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold flex items-center gap-1 cursor-not-allowed opacity-70" title="Apenas navios no Porto de Santos podem ocupar berço"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+      }
 
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
@@ -590,6 +666,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const localizacaoHtml = localizacaoBadgeHtml(n.localizacao);
 
+      // Berço ocupado pelo navio (public.bercos) — substitui a antiga coluna de coordenadas GPS
+      const bercoAtualHtml = bercoAtual
+        ? `<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold">${esc(bercoAtual.nome)}</span>`
+        : n.localizacao === 'DENTRO_DO_PORTO'
+          ? '<span class="text-amber-600 dark:text-amber-400 font-bold" title="Navio no porto sem berço: use o botão Vincular">Sem berço — vincular</span>'
+          : '<span class="text-slate-400 italic">—</span>';
+
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
           <td class="p-3 font-bold text-nexus-900 dark:text-white">
@@ -597,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="block font-mono text-[10px] text-nexus-500">${esc(n.imo)}</span>
           </td>
           <td class="p-3 font-mono text-xs">${bercosInfoHtml}</td>
-          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(n.gps)}</td>
+          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${bercoAtualHtml}</td>
           <td class="p-3">${localizacaoHtml}</td>
           <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino || 'Destino não informado')}</strong></td>
           <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}${etaExtraHtml}</td>
@@ -828,31 +911,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
-      // Desocupa o berço do navio ao liberar saída
-      bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-      let bercoDesocupado = false;
-      bercosList.forEach(b => {
-        if (b.navio_imo === imo || b.navio_nome === navio.nome) {
-          b.estado = 'LIVRE';
-          b.navio_nome = null;
-          b.navio_imo = null;
-          b.navio_id = null;
-          bercoDesocupado = true;
-          upsertBercoRemoto({
-        id: b.id,
-        nome: b.nome,
-        estado: 'LIVRE',
-        navio_nome: null,
-        navio_imo: null,
-        navio_id: null
-      });
-        }
-      });
-      if (bercoDesocupado) {
-        localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-        renderBercosPanel();
-      }
-
       // Atualiza status das cargas vinculadas para EM_TRANSITO
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       cargasFluxo.forEach(c => {
@@ -879,6 +937,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (err) { console.warn('Erro ao liberar navio no Supabase:', err); }
       }
+
+      // Navio fora do porto não ocupa berço: libera no banco e relê a ocupação
+      await liberarBercoDoNavio(navio);
 
       // Registra no Trail de Decisões Críticas
       if (window.registrarTrailDecisao) {
@@ -979,55 +1040,184 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Ocupa um berço com o navio de forma DIRETA (sem diálogo) — usada pelo
-  // cadastro obrigatório de berço e reaproveitada pela vinculação manual.
-  // Retorna true quando o berço foi ocupado.
-  function ocuparBercoComNavio(nomeBerco, navio) {
-    bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-    const bercoReal = bercosList.find(b => b.nome === nomeBerco);
-    if (!bercoReal || bercoReal.estado === 'OCUPADO') return false;
+  // cadastro obrigatório de berço e pela vinculação manual (modal).
+  // Com banco: vínculo atômico no Supabase (NexusIntegridade.ocuparBerco), que
+  // revalida o estado do berço no momento da gravação e libera o berço
+  // anterior em caso de transferência; a tela relê a ocupação do banco.
+  // @returns {Promise<{ok:boolean, mensagem?:string}>}
+  async function ocuparBercoComNavio(refBerco, navio) {
+    const bercoReal = bercosList.find(b => b.nome === refBerco || b.id === refBerco);
+    if (!bercoReal) return { ok: false, mensagem: `O berço "${refBerco}" não existe no terminal.` };
+    if (!navio || (!navio.nome && !navio.imo)) {
+      return { ok: false, mensagem: 'Não foi possível identificar o navio (nome/IMO) para ocupar o berço. Verifique o cadastro da embarcação.' };
+    }
 
-    // Desocupa berço anterior do navio se houver
-    bercosList.forEach(b => {
-      if ((navio.imo && b.navio_imo === navio.imo) || (navio.nome && b.navio_nome === navio.nome)) {
-        b.estado = 'LIVRE';
-        b.navio_nome = null;
-        b.navio_imo = null;
-        b.navio_id = null;
-        upsertBercoRemoto({ id: b.id, nome: b.nome, estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null });
-      }
-    });
+    const integ = window.NexusIntegridade;
+    if (clienteBercos() && integ) {
+      const r = await integ.ocuparBerco(bercoReal.id, navio);
+      await carregarBercosSupabase();
+      if (r.ok) return { ok: true, berco: bercoReal.nome };
+      return { ok: false, mensagem: r.mensagem || `Não foi possível ocupar o ${bercoReal.nome} no banco de dados.` };
+    }
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // Modo sem banco configurado: espelho local
+    if (bercoReal.estado !== 'LIVRE') {
+      const atual = bercoDoNavio(navio);
+      if (atual && atual.id === bercoReal.id) return { ok: true, berco: bercoReal.nome };
+      return { ok: false, mensagem: `O ${bercoReal.nome} já está ocupado${bercoReal.navio_nome ? ` pelo navio ${bercoReal.navio_nome}` : ''}.` };
+    }
     const ocupacao = normalizarBerco({
       id: bercoReal.id,
       nome: bercoReal.nome,
       estado: 'OCUPADO',
       navio_nome: navio.nome,
       navio_imo: navio.imo,
-      navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
+      navio_id: (navio.id && window.NexusIntegridade && window.NexusIntegridade.ehUuid(navio.id)) ? navio.id : null
     });
-    if (!ocupacao.payload || ocupacao.payload.estado !== 'OCUPADO') return false;
-
-    bercoReal.estado = ocupacao.payload.estado;
-    bercoReal.navio_nome = ocupacao.payload.navio_nome;
-    bercoReal.navio_imo = ocupacao.payload.navio_imo;
-    bercoReal.navio_id = ocupacao.payload.navio_id;
-    upsertBercoRemoto(ocupacao.payload);
-
+    if (!ocupacao.payload || ocupacao.payload.estado !== 'OCUPADO') {
+      return { ok: false, mensagem: 'Não foi possível identificar o navio (nome/IMO) para ocupar o berço.' };
+    }
+    bercosList.forEach(b => {
+      if (b.id !== bercoReal.id && b.estado === 'OCUPADO' && ((navio.imo && b.navio_imo === navio.imo) || (!b.navio_imo && navio.nome && b.navio_nome === navio.nome))) {
+        Object.assign(b, { estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null });
+      }
+    });
+    Object.assign(bercoReal, {
+      estado: 'OCUPADO',
+      navio_nome: ocupacao.payload.navio_nome,
+      navio_imo: ocupacao.payload.navio_imo,
+      navio_id: ocupacao.payload.navio_id
+    });
     localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-    return true;
+    renderBercosPanel();
+    return { ok: true, berco: bercoReal.nome };
   }
 
-  // Preenche o seletor de berço do formulário de cadastro (somente livres)
-  function preencherBercoCadastroSelect() {
+  // Preenche o seletor de berço do formulário de cadastro (somente livres,
+  // conforme o estado mais recente do banco).
+  async function preencherBercoCadastroSelect() {
     const bercoSel = document.getElementById('navioBercoSelect');
     if (!bercoSel) return;
-    const livres = (JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]') || []).filter(b => b.estado === 'LIVRE');
+    await carregarBercosSupabase();
+    const livres = bercosList.filter(b => b.estado === 'LIVRE');
     const atual = bercoSel.value;
     bercoSel.innerHTML = livres.length === 0
       ? '<option value="">Nenhum berço livre no momento</option>'
       : '<option value="">Selecione o berço...</option>' + livres.map(b => `<option value="${esc(b.nome)}">${esc(b.nome)}</option>`).join('');
-    if (atual) bercoSel.value = atual;
+    if (atual && livres.some(b => b.nome === atual)) bercoSel.value = atual;
+  }
+
+  // ------------------------------------------------------------------
+  // Modal "Vincular Navio a Berço": select com os berços cadastrados em
+  // public.bercos (ocupados desabilitados), atualizado ao abrir e
+  // revalidado no banco ao confirmar.
+  // ------------------------------------------------------------------
+  const vincularBercoModal = document.getElementById('vincularBercoModal');
+  const vincularBercoSelect = document.getElementById('vincularBercoSelect');
+  const vincularBercoAviso = document.getElementById('vincularBercoAviso');
+  const vincularBercoNavioLabel = document.getElementById('vincularBercoNavioLabel');
+  const vincularBercoAtualLabel = document.getElementById('vincularBercoAtualLabel');
+  const confirmVincularBercoBtn = document.getElementById('confirmVincularBercoBtn');
+  let navioParaVincularBerco = null;
+  let vinculandoBerco = false;
+
+  function avisoVincularBerco(texto) {
+    if (!vincularBercoAviso) return;
+    vincularBercoAviso.textContent = texto || '';
+    vincularBercoAviso.classList.toggle('hidden', !texto);
+  }
+
+  function fecharVincularBercoModal() {
+    if (vincularBercoModal) vincularBercoModal.classList.add('hidden');
+    navioParaVincularBerco = null;
+    avisoVincularBerco('');
+  }
+
+  function renderOpcoesVincularBerco(navio) {
+    if (!vincularBercoSelect) return 0;
+    const atual = bercoDoNavio(navio);
+    const livres = bercosList.filter(b => b.estado === 'LIVRE');
+    vincularBercoSelect.innerHTML = '<option value="">Selecione o berço...</option>' + bercosList.map(b => {
+      const ehAtual = atual && atual.id === b.id;
+      const disponivel = b.estado === 'LIVRE';
+      const situacaoTxt = ehAtual
+        ? ' — berço atual deste navio'
+        : b.estado === 'OCUPADO'
+          ? ` — ocupado por ${b.navio_nome || b.navio_imo || 'outro navio'}`
+          : disponivel ? ' — livre' : ` — indisponível (${b.estado})`;
+      return `<option value="${esc(b.id)}" ${disponivel ? '' : 'disabled'}>${esc(b.id)} · ${esc(b.nome)}${esc(situacaoTxt)}</option>`;
+    }).join('');
+    if (vincularBercoAtualLabel) {
+      vincularBercoAtualLabel.textContent = atual ? `Atualmente atracado no ${atual.nome}. Escolher outro berço fará a transferência.` : 'Sem berço vinculado no momento.';
+    }
+    if (confirmVincularBercoBtn) confirmVincularBercoBtn.disabled = livres.length === 0;
+    if (livres.length === 0) {
+      avisoVincularBerco('Nenhum berço livre no Terminal STS-01 no momento. Libere um berço (saída de navio) antes de vincular.');
+    } else {
+      avisoVincularBerco('');
+    }
+    return livres.length;
+  }
+
+  /**
+   * Valida e grava o vínculo navio × berço. Usada pelo modal e pelo agente
+   * WebMCP (opcoes.bercoNome). Reconsulta o banco antes de gravar.
+   */
+  async function confirmarVinculoBerco(navio, refBerco) {
+    if (!refBerco) {
+      return { ok: false, titulo: 'Berço Não Selecionado', mensagem: 'Selecione um dos berços livres da lista.' };
+    }
+    if ((navio.localizacao || 'DENTRO_DO_PORTO') !== 'DENTRO_DO_PORTO') {
+      return { ok: false, titulo: 'Vínculo Não Permitido', mensagem: `O navio ${navio.nome} não está no Porto de Santos (situação: ${localizacaoInfo(navio.localizacao).txt}). Apenas navios atracados no porto ocupam berço.` };
+    }
+    // Estado mais recente do banco antes de confirmar
+    await carregarBercosSupabase();
+    const berco = bercosList.find(b => b.id === refBerco || b.nome === refBerco);
+    if (!berco) {
+      return { ok: false, titulo: 'Berço Inexistente', mensagem: `O berço "${refBerco}" não está cadastrado no terminal.` };
+    }
+    const atual = bercoDoNavio(navio);
+    if (atual && atual.id === berco.id) {
+      return { ok: false, titulo: 'Berço Já Vinculado', mensagem: `O navio ${navio.nome} já está atracado no ${berco.nome}.` };
+    }
+    if (berco.estado !== 'LIVRE') {
+      return { ok: false, titulo: 'Berço Ocupado', mensagem: berco.estado === 'OCUPADO'
+        ? `O ${berco.nome} acabou de ser ocupado pelo navio ${berco.navio_nome || berco.navio_imo || '(sem nome)'}. Escolha outro berço.`
+        : `O ${berco.nome} está indisponível (${berco.estado}).` };
+    }
+    const resultado = await ocuparBercoComNavio(berco.id, navio);
+    if (!resultado.ok) {
+      return { ok: false, titulo: 'Vínculo Não Registrado', mensagem: resultado.mensagem };
+    }
+    return { ok: true, berco, anterior: atual };
+  }
+
+  async function concluirVinculoBerco(navio, refBerco) {
+    const r = await confirmarVinculoBerco(navio, refBerco);
+    if (!r.ok) {
+      if (vincularBercoModal && !vincularBercoModal.classList.contains('hidden')) {
+        avisoVincularBerco(r.mensagem);
+        renderOpcoesVincularBerco(navio);
+      }
+      if (window.mostrarFeedback) window.mostrarFeedback('alerta', r.titulo, r.mensagem);
+      return false;
+    }
+
+    renderGpsTable();
+    const descricao = r.anterior
+      ? `Navio ${navio.nome} transferido do ${r.anterior.nome} para o ${r.berco.nome}`
+      : `Navio ${navio.nome} vinculado ao ${r.berco.nome}`;
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, descricao);
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('bercos');
+    }
+    fecharVincularBercoModal();
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Navio Vinculado', `${descricao} com sucesso!`);
+    }
+    return true;
   }
 
   // Vincular Navio a um dos 15 Berços (Tarefa 6)
@@ -1035,183 +1225,181 @@ document.addEventListener('DOMContentLoaded', () => {
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
-    bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-    const bercosLivres = bercosList.filter(b => b.estado === 'LIVRE');
-
-    if (bercosLivres.length === 0) {
+    if ((navio.localizacao || 'DENTRO_DO_PORTO') !== 'DENTRO_DO_PORTO') {
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('alerta', 'Berços Indisponíveis', 'Nenhum berço desocupado disponível no momento para vinculação do navio.');
+        window.mostrarFeedback('alerta', 'Vínculo Não Permitido', `O navio ${navio.nome} não está no Porto de Santos (situação: ${localizacaoInfo(navio.localizacao).txt}). Apenas navios atracados no porto ocupam berço.`);
       }
       return;
     }
 
-    const optionsText = bercosLivres.map((b, idx) => `${idx + 1} - ${b.nome}`).join('\n');
-    let selecao;
+    // Uso do agente WebMCP: berço informado pelo nome/código, sem diálogo.
     if (opcoes && opcoes.bercoNome !== undefined) {
-      // Uso do agente WebMCP: escolhe o berço livre pelo nome, sem diálogo.
-      const idxBerco = bercosLivres.findIndex((b) => b.nome === opcoes.bercoNome);
-      selecao = idxBerco >= 0 ? String(idxBerco + 1) : '';
-    } else {
-      selecao = await window.nexusPrompt('Vincular Navio a Berço', `Selecione um Berço Desocupado para o navio ${navio.nome} (${navio.imo}):\n${optionsText}`);
+      await concluirVinculoBerco(navio, opcoes.bercoNome);
+      return;
     }
 
-    if (!selecao) return;
-
-    const idxSel = parseInt(selecao, 10) - 1;
-    if (!isNaN(idxSel) && bercosLivres[idxSel]) {
-      const bercoAlvo = bercosLivres[idxSel];
-
-      // Desocupa berço anterior do navio se houver
-      bercosList.forEach(b => {
-        if (b.navio_imo === imo || b.navio_nome === navio.nome) {
-          b.estado = 'LIVRE';
-          b.navio_nome = null;
-          b.navio_imo = null;
-          b.navio_id = null;
-          upsertBercoRemoto({
-        id: b.id,
-        nome: b.nome,
-        estado: 'LIVRE',
-        navio_nome: null,
-        navio_imo: null,
-        navio_id: null
-      });
-        }
-      });
-
-      const bercoReal = bercosList.find(b => b.nome === bercoAlvo.nome);
-      if (bercoReal) {
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        // A constraint bercos_vinculo_navio_check exige navio_nome ou navio_imo
-        // em berço OCUPADO: se o navio não tiver identificação, não ocupamos.
-        const ocupacao = normalizarBerco({
-          id: bercoReal.id,
-          nome: bercoReal.nome,
-          estado: 'OCUPADO',
-          navio_nome: navio.nome,
-          navio_imo: navio.imo,
-          navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
-        });
-        if (!ocupacao.payload || ocupacao.payload.estado !== 'OCUPADO') {
-          if (window.mostrarFeedback) {
-            window.mostrarFeedback('erro', 'Vínculo Não Registrado', 'Não foi possível identificar o navio (nome/IMO) para ocupar o berço. Verifique o cadastro da embarcação.');
-          }
-          return;
-        }
-
-        bercoReal.estado = ocupacao.payload.estado;
-        bercoReal.navio_nome = ocupacao.payload.navio_nome;
-        bercoReal.navio_imo = ocupacao.payload.navio_imo;
-        bercoReal.navio_id = ocupacao.payload.navio_id;
-
-        upsertBercoRemoto(ocupacao.payload);
-      }
-
-      localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-      renderBercosPanel();
-      renderGpsTable();
-
-      if (window.nexusSupabase) {
-        try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          let navioQuery = window.nexusSupabase.from('navios').update({
-            localizacao: 'DENTRO_DO_PORTO'
-          });
-          if (isUuid.test(navio.id)) {
-            navioQuery = navioQuery.eq('id', navio.id);
-          } else {
-            navioQuery = navioQuery.eq('numero_imo', navio.imo);
-          }
-          await navioQuery;
-        } catch (e) {
-          console.warn('[NexusPort] Erro ao salvar vinculação de navio no Supabase:', e);
-        }
-      }
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Navio ${navio.nome} vinculado ao ${bercoAlvo.nome}`);
-      }
+    // Lista sempre atualizada com o estado atual do banco
+    await carregarBercosSupabase();
+    const livres = bercosList.filter(b => b.estado === 'LIVRE');
+    if (livres.length === 0) {
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Navio Vinculado', `Navio ${navio.nome} vinculado com sucesso ao ${bercoAlvo.nome}!`);
+        window.mostrarFeedback('alerta', 'Berços Indisponíveis', 'Nenhum berço livre no Terminal STS-01 no momento. Não é possível vincular o navio até que um berço seja liberado.');
       }
-    } else {
-      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Seleção de berço inválida.');
+      return;
     }
+
+    if (!vincularBercoModal || !vincularBercoSelect) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Vínculo Indisponível', 'O seletor de berços não está disponível nesta página.');
+      return;
+    }
+
+    navioParaVincularBerco = navio;
+    if (vincularBercoNavioLabel) vincularBercoNavioLabel.textContent = `${navio.nome} (${navio.imo})`;
+    renderOpcoesVincularBerco(navio);
+    vincularBercoModal.classList.remove('hidden');
+    vincularBercoSelect.focus();
   };
+
+  if (confirmVincularBercoBtn) {
+    confirmVincularBercoBtn.addEventListener('click', async () => {
+      if (!navioParaVincularBerco || vinculandoBerco) return;
+      vinculandoBerco = true;
+      confirmVincularBercoBtn.disabled = true;
+      try {
+        await concluirVinculoBerco(navioParaVincularBerco, vincularBercoSelect ? vincularBercoSelect.value : '');
+      } finally {
+        vinculandoBerco = false;
+        if (confirmVincularBercoBtn) confirmVincularBercoBtn.disabled = bercosList.every(b => b.estado !== 'LIVRE');
+      }
+    });
+  }
+  ['closeVincularBercoModalBtn', 'cancelVincularBercoBtn'].forEach((idBtn) => {
+    const btn = document.getElementById(idBtn);
+    if (btn) btn.addEventListener('click', fecharVincularBercoModal);
+  });
+
+  /**
+   * Exclusão do navio no banco quando a RPC transacional ainda não existe
+   * (migração não aplicada). Ordem pensada para não deixar estado parcial:
+   *   1. bloqueios (OS ativa / cargas a bordo) conferidos no banco;
+   *   2. histórico de manutenção desvinculado (FK antiga é CASCADE);
+   *   3. DELETE verificado; se uma FK impedir (23503), desvincula
+   *      contêineres/cargas e tenta de novo;
+   *   4. berço liberado.
+   */
+  async function excluirNavioNoBancoSequencial(navio) {
+    const sb = window.nexusSupabase;
+    const integ = window.NexusIntegridade;
+    const isUuidNavio = integ ? integ.ehUuid(navio.id) : false;
+    try {
+      if (isUuidNavio) {
+        const { data: aBordo, error: errTransito } = await sb.from('cargas').select('id').eq('navio_id', navio.id).eq('status_fluxo', 'EM_TRANSITO');
+        if (errTransito) throw errTransito;
+        if (Array.isArray(aBordo) && aBordo.length > 0) {
+          return { ok: false, mensagem: `o navio está em viagem com ${aBordo.length} carga(s) a bordo (EM_TRANSITO). Aguarde a entrega antes de excluí-lo` };
+        }
+      }
+      const reg = integ ? await integ.resolverNoBanco('NAVIO', { id: navio.id, codigo: navio.imo }) : null;
+      if (!reg) return { ok: true, jaExcluido: true, containers: 0, cargas: 0 };
+      const ativas = await integ.osAtivasDo('NAVIO', reg);
+      if (ativas.length > 0) {
+        return { ok: false, mensagem: `o navio possui ${ativas.length} ordem(ns) de serviço de manutenção ativa(s). Conclua ou recuse a OS em Manutenção antes de excluí-lo` };
+      }
+      const historico = await integ.preservarHistoricoManutencao('NAVIO', reg.id);
+      if (!historico.ok) return { ok: false, mensagem: historico.mensagem };
+
+      let contsBanco = 0;
+      let cargasBanco = 0;
+      let del = await integ.excluirRegistro('navios', 'id', reg.id);
+      if (!del.ok && del.codigo === '23503') {
+        const { data: conts, error: errCont } = await sb.from('containers').update({ navio_id: null }).eq('navio_id', reg.id).select('id');
+        if (errCont) throw errCont;
+        const { data: crgs, error: errCargas } = await sb.from('cargas').update({ navio_id: null }).eq('navio_id', reg.id).select('id');
+        if (errCargas) throw errCargas;
+        contsBanco = (conts || []).length;
+        cargasBanco = (crgs || []).length;
+        del = await integ.excluirRegistro('navios', 'id', reg.id);
+      }
+      if (!del.ok) return { ok: false, mensagem: del.mensagem };
+      return { ok: true, containers: contsBanco, cargas: cargasBanco };
+    } catch (e) {
+      return { ok: false, mensagem: integ ? integ.descreverErroBanco(e) : ((e && e.message) || String(e)) };
+    }
+  }
 
   // Excluir Navio (Tarefa 6): apaga do banco e da interface; contêineres e
   // cargas vinculados são DESVINCULADOS (não apagados) e ficam livres para
-  // nova vinculação com outra embarcação.
+  // nova vinculação com outra embarcação. Bloqueado (com justificativa) para
+  // navio em viagem com cargas a bordo ou com OS de manutenção ativa.
   window.excluirNavio = async function(imo, opcoes) {
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
+    const nomeNavioLower = String(navio.nome || '').toLowerCase();
+    const cargaDoNavio = (c) => {
+      const idCarga = c.navio_id || c.navioId;
+      if (idCarga && navio.id) return String(idCarga) === String(navio.id);
+      return Boolean(c.navio) && String(c.navio).toLowerCase() === nomeNavioLower;
+    };
+
+    // Bloqueio de regra de negócio: cargas a bordo em viagem não ficam órfãs
+    const cargasAntes = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const aBordo = cargasAntes.filter(c => cargaDoNavio(c) && c.status === 'EM_TRANSITO');
+    if (aBordo.length > 0) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Exclusão Bloqueada', `O navio ${navio.nome} está em viagem com ${aBordo.length} carga(s) a bordo (${aBordo.slice(0, 3).map(c => c.id).join(', ')}${aBordo.length > 3 ? '…' : ''}). Aguarde a chegada ao destino antes de excluí-lo.`);
+      }
+      return;
+    }
+
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
-      ? await window.nexusConfirm('Excluir Navio', `Tem certeza que deseja EXCLUIR o navio ${navio.nome} (${navio.imo})? Essa ação desocupará berços, apagará o navio do banco de dados e desvinculará seus contêineres e cargas (que poderão ser vinculados a outro navio).`)
+      ? await window.nexusConfirm('Excluir Navio', `Tem certeza que deseja EXCLUIR o navio ${navio.nome} (${navio.imo})? Essa ação desocupará o berço, apagará o navio do banco de dados e desvinculará seus contêineres e cargas (que poderão ser vinculados a outro navio). O histórico de manutenção é preservado.`)
       : true;
 
     if (!confirmou) return;
 
-    const isUuidNavio = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(navio.id || ''));
-
-    // 1) Tenta desvincular/apagar no BANCO primeiro (as FKs de
-    // containers/cargas impedem o delete do navio enquanto houver referência —
-    // era a falta dessa ordem que fazia o navio "voltar" para a interface após
-    // o recarregamento do Supabase). Melhor esforço: se o banco estiver fora do
-    // ar, a exclusão local prossegue e o aviso informa a pendência (o app é
-    // offline-first — o operador nunca fica bloqueado sem conexão).
-    let avisoRemoto = '';
+    // 1) Banco primeiro: a interface só muda depois da confirmação do Supabase.
+    let contsBanco = null;
+    let cargasBanco = null;
     if (window.nexusSupabase) {
-      try {
-        if (isUuidNavio) {
-          const { error: errCont } = await window.nexusSupabase.from('containers').update({ navio_id: null }).eq('navio_id', navio.id);
-          if (errCont) throw new Error(`contêineres: ${errCont.message}`);
-          const { error: errCargas } = await window.nexusSupabase.from('cargas').update({ navio_id: null }).eq('navio_id', navio.id);
-          if (errCargas) throw new Error(`cargas: ${errCargas.message}`);
+      const integ = window.NexusIntegridade;
+      let resultado = null;
+      if (integ && integ.ehUuid(navio.id)) {
+        const rpc = await integ.chamarRpc('nexus_excluir_navio', { p_navio_id: navio.id });
+        if (!rpc.ausente) {
+          if (rpc.erro) {
+            resultado = { ok: false, mensagem: rpc.mensagem };
+          } else if (rpc.data && rpc.data.ok) {
+            resultado = { ok: true, containers: rpc.data.containers_desvinculados || 0, cargas: rpc.data.cargas_desvinculadas || 0 };
+          } else {
+            resultado = { ok: false, mensagem: (rpc.data && rpc.data.mensagem) || 'o banco de dados recusou a exclusão' };
+          }
         }
-        let delQuery = window.nexusSupabase.from('navios').delete();
-        delQuery = isUuidNavio ? delQuery.eq('id', navio.id) : delQuery.eq('numero_imo', imo);
-        const { error: errDel, count } = await delQuery;
-        if (errDel) throw new Error(errDel.message);
-        if (count === 0 && !isUuidNavio) {
-          // Fallback: tenta pelo nome caso o IMO local divirja do banco
-          const { error: errDelNome } = await window.nexusSupabase.from('navios').delete().eq('nome', navio.nome);
-          if (errDelNome) throw new Error(errDelNome.message);
-        }
-      } catch (e) {
-        console.warn('Erro ao excluir navio no Supabase (exclusão local prossegue):', e);
-        avisoRemoto = ` Não foi possível confirmar a remoção no banco de dados agora (${(e && e.message) || e}); a exclusão foi concluída neste aparelho.`;
       }
+      if (!resultado) {
+        resultado = integ
+          ? await excluirNavioNoBancoSequencial(navio)
+          : { ok: false, mensagem: 'módulo de integridade (js/integridade-operacional.js) não carregado' };
+      }
+      if (!resultado.ok) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Exclusão Não Realizada', `Não foi possível excluir o navio ${navio.nome} (${imo}): ${resultado.mensagem}. Nada foi removido.`);
+        }
+        await carregarNaviosSupabase();
+        return;
+      }
+      contsBanco = resultado.containers;
+      cargasBanco = resultado.cargas;
     }
 
-    // 2) Banco OK (ou modo local): remove da lista e desvincula no cache local
+    // 2) Banco confirmou (ou modo local): atualiza a interface sem recarregar
     naviosList = naviosList.filter(n => n.imo !== imo);
     localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
-
-    // Desocupa o navio de qualquer berço
-    bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-    bercosList.forEach(b => {
-      if (b.navio_imo === imo || (b.navio_nome && navio.nome && b.navio_nome === navio.nome)) {
-        b.estado = 'LIVRE';
-        b.navio_nome = null;
-        b.navio_imo = null;
-        b.navio_id = null;
-        upsertBercoRemoto({
-          id: b.id,
-          nome: b.nome,
-          estado: 'LIVRE',
-          navio_nome: null,
-          navio_imo: null,
-          navio_id: null
-        });
-      }
-    });
-    localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+    await liberarBercoDoNavio(navio);
 
     // 3) Desvincula contêineres e cargas do navio excluído (ficam livres)
-    const nomeNavioLower = String(navio.nome || '').toLowerCase();
     let contsDesvinc = 0;
-    let containersLocais = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+    const containersLocais = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
     containersLocais.forEach(c => {
       const peloNome = c.navio && String(c.navio).toLowerCase() === nomeNavioLower;
       const peloId = navio.id && (c.navio_id === navio.id || c.navioId === navio.id);
@@ -1227,20 +1415,18 @@ document.addEventListener('DOMContentLoaded', () => {
     containersList = containersLocais;
 
     let cargasDesvinc = 0;
-    let cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     cargasLocais.forEach(c => {
-      const peloNome = c.navio && String(c.navio).toLowerCase() === nomeNavioLower;
-      const peloId = navio.id && (c.navio_id === navio.id || c.navioId === navio.id);
-      if (peloNome || peloId) {
+      if (cargaDoNavio(c)) {
         c.navio = '';
         c.navio_id = null;
         c.navioId = null;
-        // Carga em trânsito com navio excluído volta a aguardar vinculação
-        if (c.status === 'EM_TRANSITO') c.status = 'PRONTA_PARA_ENTREGA';
         cargasDesvinc++;
       }
     });
     localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
+    if (contsBanco !== null && contsBanco !== undefined) contsDesvinc = Math.max(contsDesvinc, contsBanco);
+    if (cargasBanco !== null && cargasBanco !== undefined) cargasDesvinc = Math.max(cargasDesvinc, cargasBanco);
 
     if (window.registrarLogAlteracao) {
       await window.registrarLogAlteracao('EXCLUSAO', 'navios', navio.id || null, `Navio ${navio.nome} (${imo}) excluído do sistema; ${contsDesvinc} contêiner(es) e ${cargasDesvinc} carga(s) desvinculados e livres para nova vinculação`);
@@ -1257,11 +1443,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof renderContainersTable === 'function') renderContainersTable();
 
     if (window.mostrarFeedback) {
-      if (avisoRemoto) {
-        window.mostrarFeedback('atencao', 'Navio Excluído Localmente', `Navio ${navio.nome} (${imo}) removido da interface; ${contsDesvinc} contêiner(es) e ${cargasDesvinc} carga(s) foram desvinculados.${avisoRemoto}`);
-      } else {
-        window.mostrarFeedback('sucesso', 'Navio Excluído', `Navio ${navio.nome} (${imo}) apagado do banco de dados e removido da interface. ${contsDesvinc} contêiner(es) e ${cargasDesvinc} carga(s) foram desvinculados e já podem ser vinculados a outro navio.`);
-      }
+      const origem = window.nexusSupabase ? 'apagado do banco de dados e removido da interface' : 'removido (modo local, sem banco configurado)';
+      window.mostrarFeedback('sucesso', 'Navio Excluído', `Navio ${navio.nome} (${imo}) ${origem}. ${contsDesvinc} contêiner(es) e ${cargasDesvinc} carga(s) foram desvinculados e já podem ser vinculados a outro navio.`);
     }
   };
 
@@ -1309,20 +1492,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ajustarBercoObrigatorio();
   }
 
-  // Validador de Coordenadas GPS Reais (Item 12)
-  function validarCoordenadaGPS(gpsStr) {
-    if (!gpsStr) return false;
-    const clean = gpsStr.trim();
-    const regexCoords = /^[-+]?\d+(\.\d+)?\s*°?\s*([NSns])?\s*,\s*[-+]?\d+(\.\d+)?\s*°?\s*([EWEOewoe])?$/;
-    if (!regexCoords.test(clean)) return false;
-
-    const numbers = clean.match(/[-+]?\d+(\.\d+)?/g);
-    if (!numbers || numbers.length < 2) return false;
-    const lat = Math.abs(parseFloat(numbers[0]));
-    const lon = Math.abs(parseFloat(numbers[1]));
-    return lat <= 90 && lon <= 180;
-  }
-
   if (navioForm) {
     navioForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1336,7 +1505,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const imo = document.getElementById('navioImo').value.trim().toUpperCase().replace(/\s+/g, '');
       const rotaSel = document.getElementById('navioRotaSelect');
       const localizacao = document.getElementById('navioLocalizacao').value;
-      const gps = document.getElementById('navioGps').value.trim();
 
       // Backlog3 (formulários): origem, destino e distância vêm SOMENTE de
       // uma rota marítima registrada no Supabase (rotas_maritimas), selecionada
@@ -1393,27 +1561,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Item 12: Validação de Coordenada GPS Real
-      if (!validarCoordenadaGPS(gps)) {
-        const msg = 'COORDENADA GPS INVÁLIDA (Item 12): Informe uma coordenada geográfica real dentro dos limites válidos (ex.: "-23.9608, -46.3022" ou "23.9608° S, 46.3022° W").';
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'GPS Inválido', msg);
-        return;
-      }
-
-      // Item 12: Bloqueio de coordenadas GPS duplicadas
-      const gpsExistente = naviosList.find(n => n.gps && n.gps.trim() === gps);
-      if (gpsExistente) {
-        const msg = `BLOQUEIO DE LOCALIZAÇÃO (Item 12): já existe navio nesta localização (${gpsExistente.nome}). Dois navios não podem ocupar exatamente a mesma coordenada GPS simultaneamente!`;
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Localização Ocupada', msg);
-        return;
-      }
-
       // Berço OBRIGATÓRIO e IMEDIATO para navio DENTRO_DO_PORTO: um navio não
       // pode estar dentro do porto sem ocupar um berço ao mesmo tempo.
       const bercoSelCadastro = document.getElementById('navioBercoSelect');
       const bercoEscolhido = localizacao === 'DENTRO_DO_PORTO' ? (bercoSelCadastro ? bercoSelCadastro.value : '') : '';
       if (localizacao === 'DENTRO_DO_PORTO' && !bercoEscolhido) {
-        const livres = (JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]') || []).filter(b => b.estado === 'LIVRE');
+        await carregarBercosSupabase();
+        const livres = bercosList.filter(b => b.estado === 'LIVRE');
         const msg = livres.length === 0
           ? 'BERÇOS ESGOTADOS: não há berço livre no Terminal STS-01. Libere um berço antes de cadastrar um navio DENTRO_DO_PORTO, ou cadastre-o como FORA_DO_PORTO.'
           : 'BERÇO OBRIGATÓRIO: um navio DENTRO_DO_PORTO precisa estar vinculado a um berço imediatamente. Selecione o berço de atracação no formulário.';
@@ -1422,8 +1576,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Berço escolhido ainda livre? (estado atual do banco, não do formulário aberto)
+      if (localizacao === 'DENTRO_DO_PORTO' && bercoEscolhido) {
+        await carregarBercosSupabase();
+        const bercoAtual = bercosList.find(b => b.nome === bercoEscolhido);
+        if (!bercoAtual || bercoAtual.estado !== 'LIVRE') {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('alerta', 'Berço Indisponível', `O ${bercoEscolhido} foi ocupado por outro navio. Selecione outro berço livre.`);
+          }
+          preencherBercoCadastroSelect();
+          return;
+        }
+      }
+
+      // Localização fictícia controlada pelos estados do sistema
+      // (DENTRO_DO_PORTO / FORA_DO_PORTO / NO_PORTO_DE_DESTINO): não há mais
+      // coordenadas GPS digitadas no cadastro.
       const novoNavio = {
-        nome, imo, gps, localizacao, origem, destino, distancia, dataSaida: localizacao === 'FORA_DO_PORTO' ? new Date().toISOString() : null
+        nome, imo, localizacao, origem, destino, distancia, dataSaida: localizacao === 'FORA_DO_PORTO' ? new Date().toISOString() : null
       };
 
       let insertedId = null;
@@ -1435,10 +1605,17 @@ document.addEventListener('DOMContentLoaded', () => {
             porto_origem: origem,
             porto_destino: destino,
             localizacao,
-            coordenadas_gps: gps,
             estado_operacional: 'OPERANTE',
             qr_code_url: `QR-${imo}`
           }).select('id').single();
+
+          if (error) {
+            if (window.mostrarFeedback) {
+              const detalhe = window.NexusIntegridade ? window.NexusIntegridade.descreverErroBanco(error) : (error.message || error);
+              window.mostrarFeedback('erro', 'Navio Não Cadastrado', `Não foi possível salvar o navio ${nome} no banco de dados: ${detalhe}.`);
+            }
+            return;
+          }
 
           if (data && data.id) {
             insertedId = data.id;
@@ -1462,7 +1639,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // Vinculação imediata ao berço (obrigatória para DENTRO_DO_PORTO)
       let bercoOcupadoMsg = '';
       if (localizacao === 'DENTRO_DO_PORTO' && bercoEscolhido) {
-        if (ocuparBercoComNavio(bercoEscolhido, novoNavio)) {
+        const ocupacao = await ocuparBercoComNavio(bercoEscolhido, novoNavio);
+        if (ocupacao.ok) {
           renderBercosPanel();
           bercoOcupadoMsg = ` Vinculado imediatamente ao ${bercoEscolhido}.`;
           if (window.registrarLogAlteracao) {
@@ -1470,7 +1648,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } else {
           if (window.mostrarFeedback) {
-            window.mostrarFeedback('alerta', 'Berço Indisponível', `O ${bercoEscolhido} foi ocupado por outro navio antes da conclusão. Use o botão "Vincular" na tabela para escolher outro berço imediatamente.`);
+            window.mostrarFeedback('alerta', 'Berço Indisponível', `Navio cadastrado, mas o ${bercoEscolhido} não pôde ser ocupado: ${ocupacao.mensagem || 'berço indisponível'}. Use o botão "Vincular" na tabela para escolher outro berço imediatamente.`);
           }
         }
       }
@@ -1495,7 +1673,7 @@ document.addEventListener('DOMContentLoaded', () => {
           .from('containers')
           .select('*');
 
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           const supConts = data.map(c => ({
             id: c.id || `CONT-${c.numero_identificacao}`,
             rawDbId: c.id,
@@ -1509,11 +1687,14 @@ document.addEventListener('DOMContentLoaded', () => {
             estado: c.estado || 'OPERANTE'
           }));
 
-          // Mescla contêineres locais com o banco Supabase para preservar cadastros
-          const supIdSet = new Set(supConts.map(x => (x.identificacao || '').toUpperCase()));
-          localConts.forEach(lc => {
-            if (lc.identificacao && !supIdSet.has(lc.identificacao.toUpperCase())) {
-              supConts.push(lc);
+          // O banco é a fonte da verdade: contêineres que só existem no cache
+          // local (ex.: excluídos em outra sessão) não voltam para a tela.
+          const naviosPorId = new Map(naviosList.map(n => [String(n.id), n]));
+          supConts.forEach(c => {
+            const navio = c.navio_id ? naviosPorId.get(String(c.navio_id)) : null;
+            if (navio) {
+              c.navio = navio.nome;
+              c.navio_nome = navio.nome;
             }
           });
 
@@ -1555,10 +1736,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const manutDisplay = c.dataManut || 'Sem Manutenção';
+      const estadoCont = String(c.estado || 'OPERANTE').toUpperCase();
+      const contOperante = estadoCont === 'OPERANTE' || estadoCont === 'DISPONIVEL';
+      const estadoContHtml = contOperante
+        ? `<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-mono text-xs font-bold">${esc(c.estado || 'OPERANTE')}</span>`
+        : `<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-mono text-xs font-bold" title="Em manutenção: indisponível para novas operações">${esc(c.estado)} · Indisponível</span>`;
 
       let contAcoesHtml = `
         <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
-          <button type="button" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>
+          ${contOperante
+            ? `<button type="button" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>`
+            : `<button type="button" disabled aria-disabled="true" title="Contêiner em manutenção: indisponível para novas operações" class="px-2 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold flex items-center gap-1 cursor-not-allowed opacity-70"><span class="material-symbols-outlined text-[13px]">link_off</span><span>Indisponível</span></button>`}
           <button type="button" onclick="window.excluirContainer(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
         </div>
       `;
@@ -1571,7 +1759,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 font-mono text-xs">Fab: ${esc(c.dataFabr)}<br>Manut: ${esc(manutDisplay)}</td>
           <td class="p-3 font-mono text-xs"><span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-bold">${esc(c.refTempo)}</span></td>
           <td class="p-3 font-bold text-xs">${esc(c.navio || 'Não Vinculado')}</td>
-          <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-xs font-bold">${esc(c.estado)}</span></td>
+          <td class="p-3">${estadoContHtml}</td>
           <td class="p-3 text-right whitespace-nowrap">${contAcoesHtml}</td>
         </tr>
       `;
@@ -1636,10 +1824,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Backlog3: somente embarcações ATRACADAS no Porto de Santos podem
     // receber contêineres. Navios em trânsito (FORA_DO_PORTO) ou já no
     // porto de destino ficam fora da lista de vínculo.
-    const naviosElegiveis = naviosList.filter(n => (n.localizacao || 'DENTRO_DO_PORTO') === 'DENTRO_DO_PORTO');
+    // Equipamento em manutenção não entra em novas operações (estado do banco)
+    const integ = window.NexusIntegridade;
+    if (integ) {
+      const dispCont = await integ.verificarDisponibilidade('CONTAINER', { id: cont.rawDbId, codigo: cont.identificacao });
+      if (!dispCont.disponivel) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Contêiner Indisponível', `O contêiner ${cont.identificacao} está ${dispCont.motivo} e não pode ser vinculado a um navio.`);
+        }
+        await carregarContainersSupabase();
+        return;
+      }
+    } else if (!['OPERANTE', 'DISPONIVEL'].includes(String(cont.estado || 'OPERANTE').toUpperCase())) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Contêiner Indisponível', `O contêiner ${cont.identificacao} está em manutenção (${cont.estado}) e não pode ser vinculado a um navio.`);
+      }
+      return;
+    }
+
+    // Navios em manutenção (estado operacional ≠ OPERANTE) ficam fora da lista
+    let estadoNavios = null;
+    if (integ) {
+      const lista = await integ.listarDisponibilidade('NAVIO');
+      if (lista.fonte === 'erro') {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Vinculação Não Realizada', `Não foi possível conferir o estado dos navios no banco de dados (${lista.erro}). Tente novamente.`);
+        }
+        return;
+      }
+      estadoNavios = lista.itens;
+    }
+    const navioIndisponivel = (n) => {
+      if (!estadoNavios) return null;
+      const item = estadoNavios.find(x => (x.id && n.id && String(x.id) === String(n.id)) || (x.codigo && n.imo && String(x.codigo).toUpperCase() === String(n.imo).toUpperCase()));
+      return item && !item.disponivel ? item.motivo : null;
+    };
+    const naviosElegiveis = naviosList.filter(n => (n.localizacao || 'DENTRO_DO_PORTO') === 'DENTRO_DO_PORTO' && !navioIndisponivel(n));
     if (naviosElegiveis.length === 0) {
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('atencao', 'Nenhum Navio no Porto', 'Não há embarcações atracadas no Porto de Santos disponíveis para vinculação. Navios em trânsito ou no porto de destino não podem receber contêineres.');
+        window.mostrarFeedback('atencao', 'Nenhum Navio Disponível', 'Não há embarcações atracadas no Porto de Santos e operantes disponíveis para vinculação. Navios em trânsito, no porto de destino ou em manutenção não podem receber contêineres.');
       }
       return;
     }
@@ -1655,10 +1878,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!selecao && window.mostrarFeedback) {
         const navioPedido = naviosList.find((n) => n.imo === opcoes.navioImo);
         const nomePedido = navioPedido ? `${navioPedido.nome} (${navioPedido.imo})` : `IMO ${opcoes.navioImo}`;
-        window.mostrarFeedback('alerta', 'Navio Fora do Porto', `A embarcação ${nomePedido} não está atracada no Porto de Santos (situação: ${navioPedido ? localizacaoInfo(navioPedido.localizacao).txt : 'não encontrada'}) e não pode receber contêineres.`);
+        const motivoManut = navioPedido ? navioIndisponivel(navioPedido) : null;
+        if (motivoManut) {
+          window.mostrarFeedback('alerta', 'Navio Indisponível', `A embarcação ${nomePedido} está ${motivoManut} e não pode receber contêineres.`);
+        } else {
+          window.mostrarFeedback('alerta', 'Navio Fora do Porto', `A embarcação ${nomePedido} não está atracada no Porto de Santos (situação: ${navioPedido ? localizacaoInfo(navioPedido.localizacao).txt : 'não encontrada'}) e não pode receber contêineres.`);
+        }
       }
     } else {
-      selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao} (apenas embarcações no Porto de Santos):\n${optionsText}`);
+      selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao} (apenas embarcações no Porto de Santos e operantes):\n${optionsText}`);
     }
 
     if (!selecao) return;
@@ -1693,21 +1921,41 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      cont.navio = navioAlvo.nome;
-      cont.navio_id = navioAlvo.id;
-      cont.navio_nome = navioAlvo.nome;
-
-      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+      // Revalida no banco imediatamente antes de gravar (tela pode estar desatualizada)
+      if (integ) {
+        const [dispContFinal, dispNavio] = await Promise.all([
+          integ.verificarDisponibilidade('CONTAINER', { id: cont.rawDbId, codigo: cont.identificacao }),
+          integ.verificarDisponibilidade('NAVIO', { id: navioAlvo.id, codigo: navioAlvo.imo, nome: navioAlvo.nome })
+        ]);
+        const bloqueio = !dispContFinal.disponivel
+          ? `O contêiner ${cont.identificacao} está ${dispContFinal.motivo}`
+          : !dispNavio.disponivel ? `O navio ${navioAlvo.nome} está ${dispNavio.motivo}` : null;
+        if (bloqueio) {
+          if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Vinculação Bloqueada', `${bloqueio}. Nada foi alterado.`);
+          return;
+        }
+      }
 
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('containers')
+          const { error } = await window.nexusSupabase.from('containers')
             .update({ navio_id: navioAlvo.id })
             .eq('numero_identificacao', cont.identificacao);
+          if (error) throw error;
         } catch (e) {
           console.warn('Erro ao atualizar vinculação de contêiner no Supabase:', e);
+          if (window.mostrarFeedback) {
+            const detalhe = integ ? integ.descreverErroBanco(e) : ((e && e.message) || e);
+            window.mostrarFeedback('erro', 'Vinculação Não Realizada', `Não foi possível vincular o contêiner ${cont.identificacao} ao navio ${navioAlvo.nome}: ${detalhe}.`);
+          }
+          return;
         }
       }
+
+      cont.navio = navioAlvo.nome;
+      cont.navio_id = navioAlvo.id;
+      cont.navio_nome = navioAlvo.nome;
+      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
 
       // As cargas do contêiner com herança ativa passam a exibir o navio
       const cargasHerdadas = await propagarNavioParaCargasDoContainer(cont.identificacao, navioAlvo);
@@ -1730,39 +1978,88 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Excluir Contêiner (Tarefa 8)
+  // Excluir Contêiner (Tarefa 8): exclusão real no Supabase, verificada.
+  // Bloqueado (com justificativa) se houver carga ativa dentro do contêiner ou
+  // OS de manutenção ativa; cargas já finalizadas são apenas desvinculadas
+  // (FK ON DELETE SET NULL) e o histórico de manutenção é preservado.
   window.excluirContainer = async function(contIdentificacao, opcoes) {
-    const cont = containersList.find(c => (c.identificacao || '').toUpperCase() === contIdentificacao.toUpperCase());
+    const chave = String(contIdentificacao || '').toUpperCase();
+    const cont = containersList.find(c => (c.identificacao || '').toUpperCase() === chave);
     if (!cont) return;
 
-    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
-      ? await window.nexusConfirm('Excluir Contêiner', `Tem certeza que deseja EXCLUIR o contêiner ${cont.identificacao}? Essa ação o removerá do sistema.`)
-      : true;
+    const finalizados = ['ENTREGUE', 'CANCELADA', 'RECUSADA'];
+    const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const cargaNoCont = (c) => (c.container && String(c.container).toUpperCase() === chave) ||
+      (c.container_id && cont.rawDbId && String(c.container_id) === String(cont.rawDbId));
+    let ativas = cargasLocais.filter(c => cargaNoCont(c) && !finalizados.includes(c.status)).map(c => c.id);
 
-    if (confirmou) {
-      containersList = containersList.filter(c => (c.identificacao || '').toUpperCase() !== contIdentificacao.toUpperCase());
-      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
-
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('containers').delete().eq('numero_identificacao', contIdentificacao);
-        } catch (e) {
-          console.warn('Erro ao excluir contêiner no Supabase:', e);
+    // Confere também no banco (a lista local pode estar desatualizada)
+    if (window.nexusSupabase && window.NexusIntegridade && window.NexusIntegridade.ehUuid(cont.rawDbId)) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('cargas')
+          .select('id, qr_code_url, status_fluxo').eq('container_id', cont.rawDbId);
+        if (error) throw error;
+        (data || []).filter(c => !finalizados.includes(c.status_fluxo)).forEach(c => {
+          const rotulo = c.qr_code_url ? String(c.qr_code_url).replace(/^QR-/, '') : c.id;
+          if (!ativas.includes(rotulo)) ativas.push(rotulo);
+        });
+      } catch (e) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Exclusão Não Realizada', `Não foi possível conferir as cargas do contêiner ${cont.identificacao} no banco de dados (${window.NexusIntegridade.descreverErroBanco(e)}). Tente novamente.`);
         }
+        return;
       }
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EXCLUSAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} excluído do sistema`);
-      }
-
-      if (window.NexusRepository && window.NexusRepository.notifyChange) {
-        window.NexusRepository.notifyChange('containers');
-      }
-
-      renderContainersTable();
+    }
+    if (ativas.length > 0) {
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Contêiner Excluído', `Contêiner ${contIdentificacao} excluído com sucesso do sistema.`);
+        window.mostrarFeedback('alerta', 'Exclusão Bloqueada', `O contêiner ${cont.identificacao} possui ${ativas.length} carga(s) em andamento (${ativas.slice(0, 3).join(', ')}${ativas.length > 3 ? '…' : ''}). Conclua, cancele ou vincule essas cargas a outro contêiner antes de excluí-lo.`);
       }
+      return;
+    }
+
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
+      ? await window.nexusConfirm('Excluir Contêiner', `Tem certeza que deseja EXCLUIR o contêiner ${cont.identificacao}? Ele será removido do banco de dados; cargas já finalizadas serão desvinculadas e o histórico de manutenção será preservado.`)
+      : true;
+    if (!confirmou) return;
+
+    if (window.nexusSupabase) {
+      const resultado = window.NexusIntegridade
+        ? await window.NexusIntegridade.excluirEquipamento('CONTAINER', { id: cont.rawDbId, codigo: cont.identificacao })
+        : { ok: false, mensagem: 'módulo de integridade (js/integridade-operacional.js) não carregado' };
+      if (!resultado.ok) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Exclusão Não Realizada', `Não foi possível excluir o contêiner ${cont.identificacao}: ${resultado.mensagem}. Nada foi removido.`);
+        }
+        await carregarContainersSupabase();
+        return;
+      }
+    }
+
+    containersList = containersList.filter(c => (c.identificacao || '').toUpperCase() !== chave);
+    localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+    // Cargas finalizadas que apontavam para o contêiner ficam sem contêiner
+    let cargasAlteradas = false;
+    cargasLocais.forEach(c => {
+      if (cargaNoCont(c)) {
+        c.container = '';
+        c.container_id = null;
+        cargasAlteradas = true;
+      }
+    });
+    if (cargasAlteradas) localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EXCLUSAO', 'containers', cont.rawDbId || cont.id || null, `Contêiner ${cont.identificacao} excluído do sistema`);
+    }
+
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('containers');
+      if (cargasAlteradas) window.NexusRepository.notifyChange('cargas');
+    }
+
+    renderContainersTable();
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Contêiner Excluído', `Contêiner ${cont.identificacao} excluído ${window.nexusSupabase ? 'do banco de dados' : '(modo local)'} com sucesso.`);
     }
   };
 
@@ -1959,45 +2256,60 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Excluir Guindaste (Item 6)
+  // Excluir Guindaste/Pórtico: exclusão real no Supabase, verificada.
+  // Bloqueado (com justificativa) se houver tarefa de movimentação pendente
+  // (a carga ficaria presa aguardando um guindaste inexistente) ou OS de
+  // manutenção ativa. O histórico de manutenção é preservado.
   window.excluirGuindaste = async function(gndIdentificacao, opcoes) {
-    const guindaste = guindastesList.find(g => (g.identificacao || '').toUpperCase() === gndIdentificacao.toUpperCase());
+    const chave = String(gndIdentificacao || '').toUpperCase();
+    const guindaste = guindastesList.find(g => (g.identificacao || '').toUpperCase() === chave);
     if (!guindaste) return;
 
-    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
-      ? await window.nexusConfirm('Excluir Guindaste', `Tem certeza que deseja EXCLUIR o guindaste ${guindaste.identificacao}? Esta ação o removerá do sistema.`)
-      : true;
-
-    if (confirmou) {
-      guindastesList = guindastesList.filter(g => (g.identificacao || '').toUpperCase() !== gndIdentificacao.toUpperCase());
-      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
-
-      // Remove tarefas associadas
-      let tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
-      tarefasGnd = tarefasGnd.filter(t => t.guindasteId !== gndIdentificacao);
-      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd));
-
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('guindastes').delete().eq('numero_identificacao', gndIdentificacao);
-        } catch (e) {
-          console.warn('Erro ao excluir guindaste no Supabase:', e);
-        }
-      }
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EXCLUSAO', 'guindastes', guindaste.id || null, `Guindaste ${guindaste.identificacao} excluído do sistema`);
-      }
-
-      if (window.NexusRepository && window.NexusRepository.notifyChange) {
-        window.NexusRepository.notifyChange('guindastes');
-      }
-
-      renderGuindastesTable();
+    const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+    const pendentes = tarefasGnd.filter(t => String(t.guindasteId || '').toUpperCase() === chave && (!t.status || t.status === 'PENDENTE'));
+    if (pendentes.length > 0) {
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Guindaste Excluído', `Guindaste ${gndIdentificacao} excluído com sucesso do sistema.`);
+        window.mostrarFeedback('alerta', 'Exclusão Bloqueada', `O guindaste ${guindaste.identificacao} possui ${pendentes.length} tarefa(s) de movimentação pendente(s) (cargas ${pendentes.slice(0, 3).map(t => t.cargaId).join(', ')}). Conclua as tarefas antes de excluí-lo.`);
+      }
+      return;
+    }
+
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
+      ? await window.nexusConfirm('Excluir Guindaste', `Tem certeza que deseja EXCLUIR o guindaste ${guindaste.identificacao}? Ele será removido do banco de dados; o histórico de manutenção será preservado.`)
+      : true;
+    if (!confirmou) return;
+
+    if (window.nexusSupabase) {
+      const resultado = window.NexusIntegridade
+        ? await window.NexusIntegridade.excluirEquipamento('GUINDASTE', { id: guindaste.id, codigo: guindaste.identificacao })
+        : { ok: false, mensagem: 'módulo de integridade (js/integridade-operacional.js) não carregado' };
+      if (!resultado.ok) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Exclusão Não Realizada', `Não foi possível excluir o guindaste ${guindaste.identificacao}: ${resultado.mensagem}. Nada foi removido.`);
+        }
+        await carregarGuindastesSupabase();
+        return;
       }
     }
-  }
+
+    guindastesList = guindastesList.filter(g => (g.identificacao || '').toUpperCase() !== chave);
+    localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+    // Tarefas já concluídas/antigas do guindaste deixam de existir
+    localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasGnd.filter(t => String(t.guindasteId || '').toUpperCase() !== chave)));
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EXCLUSAO', 'guindastes', guindaste.id || null, `Guindaste ${guindaste.identificacao} excluído do sistema`);
+    }
+
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('guindastes');
+    }
+
+    renderGuindastesTable();
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Guindaste Excluído', `Guindaste ${guindaste.identificacao} excluído ${window.nexusSupabase ? 'do banco de dados' : '(modo local)'} com sucesso.`);
+    }
+  };
 
   // Modal de tarefas do guindaste: exibe as instruções de cada movimentação
   // pendente, com botão "Concluída" que atualiza o Setor do Pátio da carga.
@@ -2074,6 +2386,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!tarefa) {
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Tarefa Não Encontrada', 'Esta tarefa já foi concluída ou removida.');
       return;
+    }
+    // Guindaste que entrou em manutenção depois da criação da tarefa não executa a movimentação
+    if (window.NexusIntegridade) {
+      const disp = await window.NexusIntegridade.verificarDisponibilidade('GUINDASTE', { codigo: tarefa.guindasteId });
+      if (!disp.disponivel) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Guindaste Indisponível', `O guindaste ${tarefa.guindasteId} está ${disp.motivo}. A movimentação da carga ${tarefa.cargaId} não pode ser concluída por ele; aguarde a liberação da manutenção.`);
+        }
+        return;
+      }
     }
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Concluir Movimentação', `Confirmar que a carga ${tarefa.cargaId} foi posicionada no setor "${tarefa.destino}"? O Setor do Pátio será atualizado em Cargas & Pátio.`)

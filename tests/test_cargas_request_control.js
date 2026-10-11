@@ -186,13 +186,15 @@ async function testarRespostaObsoleta() {
   w.close();
 }
 
-async function carregarPaginaCargas({ falharAtualizacao = false, deferirAtualizacao = false, statusDuranteGravacao = null, localizacaoNavio = 'NO_PORTO_DE_DESTINO', herdarNavioDoContainer = false } = {}) {
+// Correções Adicionais (5): só a carga A BORDO (EM_TRANSITO) do navio que chegou ao
+// destino vira ENTREGUE — por isso o status inicial padrão destes cenários é EM_TRANSITO.
+async function carregarPaginaCargas({ falharAtualizacao = false, deferirAtualizacao = false, statusDuranteGravacao = null, localizacaoNavio = 'NO_PORTO_DE_DESTINO', herdarNavioDoContainer = false, statusInicial = 'EM_TRANSITO', esperarAtualizacao = true } = {}) {
   const estado = {
     leituras: 0,
     atualizacoes: 0,
     invalidacoes: 0,
     notificacoes: 0,
-    statusBanco: 'AGENDAMENTO',
+    statusBanco: statusInicial,
     falharAtualizacao,
     deferirAtualizacao,
     statusDuranteGravacao,
@@ -272,7 +274,7 @@ async function carregarPaginaCargas({ falharAtualizacao = false, deferirAtualiza
     html: htmlDaPagina('cargas.html'),
     session: sessao('SUPERVISOR_GERENTE_OPERACOES'),
     storage: {
-      nexus_cargas_fluxo: [cargaDaPagina('AGENDAMENTO')],
+      nexus_cargas_fluxo: [cargaDaPagina(statusInicial)],
       nexus_navios_list: [{ id: NAVIO_UUID, nome: 'MV Teste', localizacao: localizacaoNavio }],
       nexus_containers_list: herdarNavioDoContainer
         ? [{ identificacao: 'CONT-TESTE-1', navio: 'MV Teste', navio_id: NAVIO_UUID }]
@@ -297,7 +299,7 @@ async function carregarPaginaCargas({ falharAtualizacao = false, deferirAtualiza
   });
   w = janela.w;
   await prontoDom(w);
-  await aguardarCondicao(() => estado.leituras > 0 && estado.atualizacoes > 0);
+  await aguardarCondicao(() => estado.leituras > 0 && (!esperarAtualizacao || estado.atualizacoes > 0), esperarAtualizacao ? 1200 : 300);
   await aguardar(60);
   return { janela, w, estado };
 }
@@ -327,7 +329,7 @@ async function testarCicloDeInterface() {
 
 async function testarTransicaoSaidaNavio() {
   log('\n5. Transição de saída: navio fora do porto move a carga para EM_TRANSITO');
-  const { janela, w, estado } = await carregarPaginaCargas({ localizacaoNavio: 'FORA_DO_PORTO' });
+  const { janela, w, estado } = await carregarPaginaCargas({ localizacaoNavio: 'FORA_DO_PORTO', statusInicial: 'AGENDAMENTO' });
   const textoTabela = w.document.getElementById('cargasTableBody').textContent || '';
   check('a liberação do navio persiste EM_TRANSITO e mantém a carga na listagem',
     estado.leituras === 1 && estado.atualizacoes === 1 && estado.statusBanco === 'EM_TRANSITO' && /EM_TRANSITO/.test(textoTabela),
@@ -387,6 +389,19 @@ async function testarConflitoDeStatusConcorrente() {
   janela.w.close();
 }
 
+async function testarCargaForaDoNavioNaoEntregue() {
+  log('\n8b. Chegada ao destino: carga que não estava a bordo NÃO vira ENTREGUE (bug CRG-2026-303)');
+  for (const status of ['AGENDAMENTO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA']) {
+    const { janela, w, estado } = await carregarPaginaCargas({ statusInicial: status, esperarAtualizacao: false });
+    await aguardar(120);
+    const textoTabela = w.document.getElementById('cargasTableBody').textContent || '';
+    check(`carga ${status} do navio no destino permanece ${status} (sem atualização no banco)`,
+      estado.atualizacoes === 0 && estado.statusBanco === status && !/ENTREGUE/.test(textoTabela),
+      `atualizações=${estado.atualizacoes}, status=${estado.statusBanco}`);
+    janela.w.close();
+  }
+}
+
 async function testarNavegacaoDuranteAtualizacao() {
   log('\n9. Navegação: timer e gravação obsoleta são invalidados ao sair da página');
   const { janela, w, estado } = await carregarPaginaCargas({ deferirAtualizacao: true });
@@ -401,7 +416,7 @@ async function testarNavegacaoDuranteAtualizacao() {
     estado.atualizacoes === 1 && estado.statusBanco === 'ENTREGUE',
     `atualizações=${estado.atualizacoes}, status=${estado.statusBanco}`);
   check('a resposta obsoleta não grava no cache compartilhado após navegação',
-    cacheAntes[0].status === 'AGENDAMENTO' && cacheDepois[0].status === 'AGENDAMENTO',
+    cacheAntes[0].status === 'EM_TRANSITO' && cacheDepois[0].status === 'EM_TRANSITO',
     `antes=${cacheAntes[0].status}, depois=${cacheDepois[0].status}`);
   janela.w.close();
 }
@@ -427,6 +442,7 @@ function testarEsquemaCpfNascimento() {
     await testarTransicaoCargaComNavioHerdado();
     await testarFalhaSemRetryInfinito();
     await testarConflitoDeStatusConcorrente();
+    await testarCargaForaDoNavioNaoEntregue();
     await testarNavegacaoDuranteAtualizacao();
     testarEsquemaCpfNascimento();
   } catch (error) {

@@ -40,7 +40,47 @@ function provedorDeTeste(w) {
  */
 function supabaseRotasFalso(rotas, opcoes) {
   const o = opcoes || {};
+  // Tabelas em memória (opcional): insert/select/update/delete com filtros eq,
+  // como o PostgREST — o cadastro/exclusão só "acontece" se o banco confirmar.
+  const memoria = o.tabelasMemoria || null;
+  let seq = 0;
+  const novoUuid = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
+  function resolverMemoria(tabela, estado) {
+    const casa = (l) => estado.filtros.every((f) => f(l));
+    const linhas = memoria[tabela];
+    let data;
+    if (estado.op === 'insert') {
+      const novas = (Array.isArray(estado.payload) ? estado.payload : [estado.payload]).map((p) => Object.assign({ id: novoUuid() }, p));
+      linhas.push(...novas);
+      data = novas;
+    } else if (estado.op === 'upsert') {
+      const chave = (estado.opcoes && estado.opcoes.onConflict) || 'id';
+      data = [];
+      (Array.isArray(estado.payload) ? estado.payload : [estado.payload]).forEach((p) => {
+        const existente = linhas.find((l) => String(l[chave]) === String(p[chave]));
+        if (existente) {
+          if (!(estado.opcoes && estado.opcoes.ignoreDuplicates)) { Object.assign(existente, p); data.push(existente); }
+        } else {
+          const nova = Object.assign({ id: novoUuid() }, p);
+          linhas.push(nova);
+          data.push(nova);
+        }
+      });
+    } else if (estado.op === 'update') {
+      data = linhas.filter(casa);
+      data.forEach((l) => Object.assign(l, estado.payload));
+    } else if (estado.op === 'delete') {
+      data = linhas.filter(casa);
+      memoria[tabela] = linhas.filter((l) => !casa(l));
+    } else {
+      data = linhas.filter(casa);
+    }
+    data = data.map((l) => Object.assign({}, l));
+    if (estado.limite) data = data.slice(0, estado.limite);
+    return Promise.resolve({ data: estado.unico ? (data[0] || null) : data, error: null });
+  }
   function resolver(tabela, estado) {
+    if (memoria && Object.prototype.hasOwnProperty.call(memoria, tabela)) return resolverMemoria(tabela, estado);
     if (tabela !== 'rotas_maritimas') {
       return Promise.resolve({ data: null, error: { message: 'tabela indisponível no teste' } });
     }
@@ -52,14 +92,23 @@ function supabaseRotasFalso(rotas, opcoes) {
     return Promise.resolve({ data: rotas.map((x) => Object.assign({}, x)), error: null });
   }
   function construir(tabela) {
-    const estado = { insert: null };
+    const estado = { insert: null, op: 'select', payload: null, filtros: [], limite: null, unico: false };
     const proxy = new Proxy({}, {
       get(_, prop) {
         if (prop === 'then') return (res, rej) => resolver(tabela, estado).then(res, rej);
         if (prop === 'catch') return (rej) => resolver(tabela, estado).catch(rej);
         if (typeof prop !== 'string') return undefined;
         return (...args) => {
-          if (prop === 'insert') estado.insert = args[0];
+          if (prop === 'insert') { estado.insert = args[0]; estado.op = 'insert'; estado.payload = args[0]; }
+          if (prop === 'update') { estado.op = 'update'; estado.payload = args[0]; }
+          if (prop === 'delete') estado.op = 'delete';
+          if (prop === 'upsert') { estado.op = 'upsert'; estado.payload = args[0]; estado.opcoes = args[1] || null; }
+          if (prop === 'neq') estado.filtros.push((l) => String(l[args[0]]) !== String(args[1]));
+          if (prop === 'eq') estado.filtros.push((l) => String(l[args[0]]) === String(args[1]));
+          if (prop === 'ilike') estado.filtros.push((l) => String(l[args[0]] || '').toLowerCase() === String(args[1] || '').replace(/%/g, '').toLowerCase());
+          if (prop === 'in') estado.filtros.push((l) => (args[1] || []).map(String).includes(String(l[args[0]])));
+          if (prop === 'limit') estado.limite = args[0];
+          if (prop === 'maybeSingle' || prop === 'single') estado.unico = true;
           return proxy;
         };
       }
@@ -394,7 +443,9 @@ async function testesInspecao() {
 async function testesEmbarcacoes() {
   log('\n[3] Embarcações & GPS (embarcacoes.html)');
   const rotasSupabase = [{ origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }];
-  const supaRotas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasSupabase); };
+  // Berços no "banco" em memória: a ocupação vem do Supabase (Correções Adicionais 2.3)
+  const bancoSupervisor = { bercos: [] };
+  const supaRotas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasSupabase, { tabelasMemoria: bancoSupervisor }); };
   const navios = [
     { id: 'n1', nome: 'MV Santos Star', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia: 10200, gps: '-23.9608, -46.3022', dataSaida: null },
     { id: 'n2', nome: 'MV Sem Rota', imo: 'DEF7654321', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Tóquio', distancia: 20000, gps: '-23.9700, -46.3100', dataSaida: null }
@@ -407,7 +458,7 @@ async function testesEmbarcacoes() {
     nexus_cargas_fluxo: []
   };
   const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
-  const scr = ['js/pages/embarcacoes.js'];
+  const scr = ['js/integridade-operacional.js', 'js/pages/embarcacoes.js'];
   let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
   let r = await w.NexusWebMCP.executar('listar_navios', { localizacao: 'DENTRO_DO_PORTO' });
   check('listar_navios: filtro por localização', r.ok && r.dados.total === 2);
@@ -426,24 +477,34 @@ async function testesEmbarcacoes() {
   r = await w.NexusWebMCP.executar('vincular_navio_berco', { imo: 'DEF7654321', berco: 'Berço 01' });
   local = JSON.parse(w.localStorage.getItem('nexus_bercos_list'));
   check('vincular navio a berço: berço LIVRE recebe o navio (confirmado no estado)', r.ok === true && local.find((b) => b.nome === 'Berço 01').navio_imo === 'DEF7654321', JSON.stringify(r).slice(0, 160));
+  check('vincular navio a berço: ocupação gravada no Supabase', bancoSupervisor.bercos.some((b) => b.nome === 'Berço 01' && b.estado === 'OCUPADO' && b.navio_imo === 'DEF7654321'), JSON.stringify(bancoSupervisor.bercos.filter((b) => b.estado === 'OCUPADO')));
 
   w.__resposta = true;
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
   check('cadastrar navio: supervisor não cadastra (não é inspetor)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
 
-  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
+  // Inspetor: navios, cargas e manutenções no "banco" em memória — o cadastro e
+  // a exclusão só aparecem na tela depois da confirmação do Supabase.
+  const naviosNoBanco = navios.map((n) => ({ id: n.id, nome: n.nome, numero_imo: n.imo, localizacao: n.localizacao, porto_origem: n.origem, porto_destino: n.destino, data_saida: n.dataSaida }));
+  const bancoInspetor = { navios: naviosNoBanco, cargas: [], manutencoes: [], historico_manutencoes: [], bercos: [] };
+  const supaInspetor = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasSupabase, { tabelasMemoria: bancoInspetor }); };
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', supaInspetor].concat(scr), adaptadores: adapt }));
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
   check('cadastrar navio: IMO duplicado é recusado (Item 11)', r.codigo === 'IMO_DUPLICADO', JSON.stringify(r));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3', distancia_km: 10200 });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', distancia_km: 10200 });
   check('cadastrar navio: distância digitada manualmente é recusada pelo esquema (vem da rota)', r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r).slice(0, 160));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
   local = JSON.parse(w.localStorage.getItem('nexus_navios_list'));
   check('cadastrar navio: cria pelo formulário da página (confirmado no estado)', r.ok === true && local.some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r).slice(0, 200));
   const bercosAposCadastro = JSON.parse(w.localStorage.getItem('nexus_bercos_list'));
   check('cadastrar navio: DENTRO_DO_PORTO ocupa o berço imediatamente (primeiro livre)', bercosAposCadastro.some((b) => b.nome === 'Berço 01' && b.estado === 'OCUPADO' && b.navio_imo === 'XYZ7654321'), JSON.stringify(bercosAposCadastro).slice(0, 200));
+  check('cadastrar navio: gravado no Supabase (sem coordenadas GPS)', bancoInspetor.navios.some((n) => n.numero_imo === 'XYZ7654321') && !bancoInspetor.navios.some((n) => 'coordenadas_gps' in n), JSON.stringify(bancoInspetor.navios.slice(-1)));
+  check('cadastrar navio: berço ocupado gravado no Supabase', bancoInspetor.bercos.some((b) => b.estado === 'OCUPADO' && b.navio_imo === 'XYZ7654321'), JSON.stringify(bancoInspetor.bercos.filter((b) => b.estado === 'OCUPADO')));
   r = await w.NexusWebMCP.executar('excluir_navio', { imo: 'XYZ7654321' });
+  check('excluir navio: berço do navio liberado no Supabase', !bancoInspetor.bercos.some((b) => b.estado === 'OCUPADO' && b.navio_imo === 'XYZ7654321'));
   check('excluir navio: inspetor exclui com confirmação', r.ok === true && !JSON.parse(w.localStorage.getItem('nexus_navios_list')).some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r));
+  check('excluir navio: removido de fato do Supabase (exclusão verificada)', !bancoInspetor.navios.some((n) => n.numero_imo === 'XYZ7654321'), JSON.stringify(bancoInspetor.navios.map((n) => n.numero_imo)));
   r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU7654321', tipo: 'Têxteis', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
   check('cadastrar contêiner: identificação ISO e formulário da página', r.ok === true && JSON.parse(w.localStorage.getItem('nexus_containers_list')).some((c) => c.identificacao === 'MSCU7654321'), JSON.stringify(r).slice(0, 200));
   r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU1-234-567', tipo: 'X', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
@@ -468,7 +529,7 @@ async function testesEmbarcacoes() {
  */
 async function testesRotasMaritimas() {
   log('\n[3b] Rotas marítimas (Supabase como única fonte)');
-  const scr = ['js/pages/embarcacoes.js'];
+  const scr = ['js/integridade-operacional.js', 'js/pages/embarcacoes.js'];
   const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
   const storage = { nexus_navios_list: [] };
 

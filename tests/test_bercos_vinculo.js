@@ -21,6 +21,13 @@
  *      que não seja UUID de public.navios;
  *   4. o cache local é corrigido junto com o banco.
  *
+ * Correções Adicionais (2.3): a ocupação vem SEMPRE do Supabase. O cache
+ * local (localStorage) é só espelho: nunca ocupa nem libera berço no banco.
+ *   5. banco vazio → só os berços faltantes são inseridos, LIVRES, com
+ *      ignoreDuplicates (não sobrescreve ocupação gravada por outro usuário);
+ *   6. banco com berço OCUPADO e cache dizendo LIVRE → vale o banco (o berço
+ *      continua ocupado mesmo após limpar cookies/cache ou trocar de tela).
+ *
  * Executar: node tests/test_bercos_vinculo.js
  */
 const fs = require('fs');
@@ -88,7 +95,8 @@ function criarClienteDuble(capturas, dadosPorTabela) {
   };
 }
 
-function montarEmbarcacoes() {
+function montarEmbarcacoes(opcoes) {
+  const op = opcoes || {};
   const html = `<!doctype html><html><body>
     <table><tbody id="embarcacoesGpsTableBody"></tbody></table>
     <button id="toggleNavioFormBtn"></button>
@@ -118,7 +126,7 @@ function montarEmbarcacoes() {
   };
   dom.window.supabase = {
     createClient: () => criarClienteDuble(capturas, {
-      bercos: [],                 // tabela "recém-criada": força o caminho de sincronização
+      bercos: op.bercosNoBanco || [], // [] = tabela "recém-criada": força a criação dos berços
       navios: [navioNoBanco],     // navio real que ocupa o Berço 07
       cargas: [],
       manutencoes: [],
@@ -134,7 +142,7 @@ function montarEmbarcacoes() {
   dom.window.localStorage.setItem('nexus_navios_list', JSON.stringify([
     { id: UUID_VALIDO, nome: 'Navio Teste', imo: 'IMO9999999', localizacao: 'DENTRO_DO_PORTO' }
   ]));
-  dom.window.localStorage.setItem('nexus_bercos_list', JSON.stringify([
+  dom.window.localStorage.setItem('nexus_bercos_list', JSON.stringify(op.cacheBercos || [
     // Linha legada que gerava o erro 23514 (Berço 06 ocupado sem navio).
     { id: 'BERCO-6', nome: 'Berço 6', estado: 'OCUPADO', navio_nome: null, navio_imo: null, navio_id: null },
     { id: 'BERCO-07', nome: 'Berço 07', estado: 'OCUPADO', navio_nome: 'Navio Teste', navio_imo: 'IMO9999999', navio_id: UUID_VALIDO }
@@ -193,7 +201,7 @@ function montarEmbarcacoes() {
   check('todos os payloads satisfazem bercos_id_formato_check (^BERCO-[0-9]{2}$)',
     amostras.every(a => a.payload && /^BERCO-[0-9]{2}$/.test(a.payload.id)));
 
-  console.log('\n2) Sincronização da tela de Embarcações (lote de 15 berços)');
+  console.log('\n2) Banco vazio: criação dos 15 berços (cache local não ocupa berço)');
   await new Promise(resolve => setTimeout(resolve, 150)); // aguarda as promessas dos loaders
 
   const upsertsBercos = capturas.filter(c => c.tabela === 'bercos' && c.tipo === 'upsert');
@@ -202,31 +210,53 @@ function montarEmbarcacoes() {
   const lote = upsertsBercos.length ? upsertsBercos[0].payload : [];
   check('o lote tem os 15 berços do terminal STS-01', Array.isArray(lote) && lote.length === 15, `recebido: ${Array.isArray(lote) ? lote.length : 'não é lista'}`);
   check('o upsert continua usando onConflict: nome', upsertsBercos.length > 0 && upsertsBercos[0].opcoes && upsertsBercos[0].opcoes.onConflict === 'nome');
+  check('o upsert usa ignoreDuplicates (nunca sobrescreve ocupação gravada por outro usuário)',
+    upsertsBercos.length > 0 && upsertsBercos[0].opcoes && upsertsBercos[0].opcoes.ignoreDuplicates === true);
   check('nenhuma linha do lote viola bercos_vinculo_navio_check',
     Array.isArray(lote) && lote.every(respeitaVinculo),
     JSON.stringify(Array.isArray(lote) ? lote.filter(l => !respeitaVinculo(l)) : lote));
+  check('todos os berços criados vão LIVRES (o cache local não é fonte da ocupação)',
+    Array.isArray(lote) && lote.every(l => l.estado === 'LIVRE'), JSON.stringify(Array.isArray(lote) ? lote.filter(l => l.estado !== 'LIVRE') : lote));
 
   const berco06 = Array.isArray(lote) ? lote.find(l => l.id === 'BERCO-06') : null;
   check('Berço 06 legado (OCUPADO sem navio) vai como LIVRE', Boolean(berco06) && berco06.estado === 'LIVRE', JSON.stringify(berco06));
   check('id do Berço 06 foi corrigido para BERCO-06', Boolean(berco06) && berco06.id === 'BERCO-06');
-
-  const berco07 = Array.isArray(lote) ? lote.find(l => l.id === 'BERCO-07') : null;
-  check('Berço 07 ocupado por navio real é preservado no lote',
-    Boolean(berco07) && berco07.estado === 'OCUPADO' && berco07.navio_nome === 'Navio Teste' && berco07.navio_id === UUID_VALIDO,
-    JSON.stringify(berco07));
 
   const cacheLocal = JSON.parse(dom.window.localStorage.getItem('nexus_bercos_list') || '[]');
   const berco06Local = cacheLocal.find(b => (b.id || '') === 'BERCO-06');
   check('o cache local também fica coerente com o banco',
     Boolean(berco06Local) && berco06Local.estado === 'LIVRE' && berco06Local.navio_nome === null,
     JSON.stringify(berco06Local));
+  const berco07Local = cacheLocal.find(b => (b.id || '') === 'BERCO-07');
+  check('ocupação que existia só no cache local é descartada (espelho do banco)',
+    Boolean(berco07Local) && berco07Local.estado === 'LIVRE', JSON.stringify(berco07Local));
 
-  const grid = dom.window.document.getElementById('bercosGrid').innerHTML;
-  check('painel renderiza os 15 berços', (grid.match(/Pronto para atracação/g) || []).length >= 14, `livres na tela: ${(grid.match(/Pronto para atracação/g) || []).length}`);
-  check('painel mostra o navio do berço ocupado', grid.includes('Navio Teste'));
+  let grid = dom.window.document.getElementById('bercosGrid').innerHTML;
+  check('painel renderiza os 15 berços', (grid.match(/Pronto para atracação/g) || []).length === 15, `livres na tela: ${(grid.match(/Pronto para atracação/g) || []).length}`);
   check('contador de berços livres é exibido', dom.window.document.getElementById('bercosLivresCountTag').textContent.includes('Berço(s) Livre(s)'));
-
   dom.window.close();
+
+  console.log('\n3) Banco com berço OCUPADO e cache local LIVRE: vale o banco');
+  const ocupadoNoBanco = { id: 'BERCO-07', nome: 'Berço 07', estado: 'OCUPADO', navio_nome: 'Navio Teste', navio_imo: 'IMO9999999', navio_id: UUID_VALIDO };
+  const cenario = montarEmbarcacoes({
+    bercosNoBanco: [ocupadoNoBanco],
+    cacheBercos: [{ id: 'BERCO-07', nome: 'Berço 07', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null }]
+  });
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const lote2 = (cenario.capturas.find(c => c.tabela === 'bercos' && c.tipo === 'upsert') || {}).payload || [];
+  check('somente os 14 berços faltantes são criados', lote2.length === 14 && !lote2.some(l => l.nome === 'Berço 07'), `recebido: ${lote2.length}`);
+  check('nenhum update/upsert libera o Berço 07 ocupado no banco',
+    !cenario.capturas.some(c => c.tabela === 'bercos' && c.tipo === 'update') && !lote2.some(l => l.nome === 'Berço 07'));
+  grid = cenario.dom.window.document.getElementById('bercosGrid').innerHTML;
+  check('painel mostra o navio do berço ocupado (estado do banco)', grid.includes('Navio Teste'));
+  check('painel mostra 14 berços livres', (grid.match(/Pronto para atracação/g) || []).length === 14, `livres na tela: ${(grid.match(/Pronto para atracação/g) || []).length}`);
+  const cache2 = JSON.parse(cenario.dom.window.localStorage.getItem('nexus_bercos_list') || '[]');
+  const b07 = cache2.find(b => b.nome === 'Berço 07');
+  check('o cache local passa a espelhar a ocupação do banco',
+    Boolean(b07) && b07.estado === 'OCUPADO' && b07.navio_imo === 'IMO9999999', JSON.stringify(b07));
+  const tabela = cenario.dom.window.document.getElementById('embarcacoesGpsTableBody').innerHTML;
+  check('a tabela de navios mostra o berço atual do navio (coluna que substituiu o GPS)', tabela.includes('Berço 07'), tabela.slice(0, 300));
+  cenario.dom.window.close();
 
   console.log(`\n${passed ? '✅' : '❌'} Teste de vínculo navio × berço ${passed ? 'concluído com sucesso' : 'apresentou falhas'}.\n`);
   process.exit(passed ? 0 : 1);

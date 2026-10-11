@@ -130,8 +130,12 @@ function testarUiEDocumentacao() {
   console.log('\n3. Validando painel de diagnóstico e documentação...');
   const mh = read('manutencao.html');
 
-  check('Painel "Banco de dados" com botão Verificar em manutencao.html',
-    mh.includes('id="panicTablesCheckBtn"') && mh.includes('id="panicTablesStatus"'));
+  // O painel visual "Banco de dados (tabelas do pânico)" foi removido da tela de
+  // manutenção a pedido do usuário; o diagnóstico continua disponível pela API
+  // (NexusPanic.verificarTabelas) e pelas mensagens de console.
+  check('Painel "Banco de dados (tabelas do pânico)" REMOVIDO de manutencao.html',
+    !mh.includes('id="panicDbPanel"') && !mh.includes('id="panicTablesCheckBtn"') &&
+    !mh.includes('id="panicTablesStatus"') && !mh.includes('tabelas do pânico'));
   check('Painel de webhook REMOVIDO do front-end (o app não configura/dispara webhooks)',
     !['panicWebhookPanel', 'panicWebhookEnabled', 'panicWebhookUrl', 'panicWebhookSaveBtn',
       'panicWebhookTestBtn', 'panicWebhookStatus']

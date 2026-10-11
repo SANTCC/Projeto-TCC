@@ -180,10 +180,6 @@
               </select>
               <p class="text-[11px] text-slate-400 mt-1">Obrigatório e imediato para navios DENTRO_DO_PORTO: um navio não pode estar dentro do porto sem ocupar um berço.</p>
             </div>
-            <div>
-              <label class="block font-bold text-slate-500 mb-1">Coordenadas GPS</label>
-              <input type="text" id="navioGps" placeholder="Ex: 23.9608° S, 46.3022° W" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
-            </div>
             <div class="flex justify-end gap-2 items-end">
               <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 w-full justify-center">
                 <span class="material-symbols-outlined text-[16px]">save</span>
@@ -196,7 +192,7 @@
           <div class="flex flex-col sm:flex-row sm:items-center gap-2">
             <div class="relative flex-1">
               <span class="material-symbols-outlined text-[18px] text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
-              <input type="search" id="buscarNavioInput" placeholder="Buscar embarcação por nome, IMO, GPS ou destino..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
+              <input type="search" id="buscarNavioInput" placeholder="Buscar embarcação por nome, IMO, berço ou destino..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
             </div>
             <span id="embarcacoesCounter" class="text-[11px] font-mono text-slate-400 whitespace-nowrap">Exibindo 0 de 0 embarcações</span>
           </div>
@@ -207,7 +203,7 @@
                 <tr>
                   <th class="p-3">Navio (IMO)</th>
                   <th class="p-3">Berço da Carga / Cargas Alocadas</th>
-                  <th class="p-3">Coordenadas GPS</th>
+                  <th class="p-3">Berço Atual</th>
                   <th class="p-3">Classificação</th>
                   <th class="p-3">Origem → Destino</th>
                   <th class="p-3">Estimativa ETA (@ 33km/h)</th>
@@ -434,6 +430,44 @@
     </div>
   </div>
 
+  <!-- Modal: vincular navio a um berço (lista dos berços cadastrados em public.bercos) -->
+  <div id="vincularBercoModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="vincularBercoTitulo">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+        <h3 id="vincularBercoTitulo" class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-indigo-600">dock</span>
+          Vincular Navio a Berço
+        </h3>
+        <button type="button" id="closeVincularBercoModalBtn" aria-label="Fechar" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-600 dark:text-slate-300">
+        Navio: <strong id="vincularBercoNavioLabel" class="text-nexus-900 dark:text-white">--</strong>
+        <span id="vincularBercoAtualLabel" class="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5"></span>
+      </p>
+
+      <div class="text-xs">
+        <label for="vincularBercoSelect" class="block font-bold text-slate-500 mb-1">Berço de atracação</label>
+        <select id="vincularBercoSelect" class="w-full px-2.5 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
+          <option value="">Carregando berços...</option>
+        </select>
+        <p class="text-[11px] text-slate-400 mt-1">Berços ocupados aparecem desabilitados. A disponibilidade é conferida novamente no banco de dados ao confirmar.</p>
+      </div>
+
+      <p id="vincularBercoAviso" class="hidden text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-lg p-2"></p>
+
+      <div class="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-nexus-border dark:border-nexus-dark-border">
+        <button type="button" id="cancelVincularBercoBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs">Cancelar</button>
+        <button type="button" id="confirmVincularBercoBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center gap-1">
+          <span class="material-symbols-outlined text-[16px]">check</span>
+          <span>Confirmar vínculo</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>
@@ -441,6 +475,7 @@
   <script src="js/supabase-client.js"></script>
   <script src="js/online-presence.js"></script>
   <script src="js/data-repository.js"></script>
+  <script src="js/integridade-operacional.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
   <script src="js/pages/embarcacoes.js"></script>

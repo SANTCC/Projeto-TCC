@@ -179,20 +179,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const naviosPorNome = new Map();
+    const naviosPorId = new Map();
     naviosLocais.forEach((navio) => {
       const nome = String(navio && navio.nome || '').trim().toLowerCase();
       if (nome) naviosPorNome.set(nome, navio);
+      if (navio && navio.id) naviosPorId.set(String(navio.id), navio);
     });
 
     const transicoes = [];
     (Array.isArray(cargas) ? cargas : []).forEach((carga) => {
-      if (!carga || !carga.navio || ['CANCELADA', 'RECUSADA'].includes(carga.status)) return;
-      const navio = naviosPorNome.get(String(carga.navio).trim().toLowerCase());
+      if (!carga || ['CANCELADA', 'RECUSADA'].includes(carga.status)) return;
+      // Navio da carga: pelo id (navio_id) quando existe; o nome só vale para
+      // cargas antigas sem id — dois navios de mesmo nome não se misturam.
+      const idNavio = carga.navioId || carga.navio_id;
+      const navio = idNavio
+        ? naviosPorId.get(String(idNavio))
+        : (carga.navio ? naviosPorNome.get(String(carga.navio).trim().toLowerCase()) : null);
       if (!navio) return;
 
       const localizacao = navio.localizacao || navio.estado;
       let statusNovo = null;
-      if (localizacao === 'NO_PORTO_DE_DESTINO' && carga.status !== 'ENTREGUE') {
+      // Só é entregue a carga que estava A BORDO (EM_TRANSITO) deste navio.
+      if (localizacao === 'NO_PORTO_DE_DESTINO' && carga.status === 'EM_TRANSITO') {
         statusNovo = 'ENTREGUE';
       } else if (localizacao === 'FORA_DO_PORTO' && !['EM_TRANSITO', 'ENTREGUE'].includes(carga.status)) {
         statusNovo = 'EM_TRANSITO';
@@ -495,10 +503,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function etaCargaTexto(carga, naviosLocais) {
-    if (!carga || !carga.navio) return null;
-    const navio = (naviosLocais || []).find(n => String(n.nome || '').toLowerCase() === String(carga.navio).toLowerCase());
+    if (!carga || (!carga.navio && !carga.navioId && !carga.navio_id)) return null;
+    const idNavio = carga.navioId || carga.navio_id;
+    const navio = idNavio
+      ? (naviosLocais || []).find(n => String(n.id || '') === String(idNavio))
+      : (naviosLocais || []).find(n => String(n.nome || '').toLowerCase() === String(carga.navio).toLowerCase());
     if (!navio) return null;
-    if (navio.localizacao === 'NO_PORTO_DE_DESTINO') return 'Entregue no destino';
+    if (carga.status === 'ENTREGUE') return 'Entregue no destino';
+    if (navio.localizacao === 'NO_PORTO_DE_DESTINO') {
+      return carga.status === 'EM_TRANSITO' ? 'Entregue no destino' : 'Navio no porto de destino';
+    }
     if (navio.localizacao === 'DENTRO_DO_PORTO') {
       const km = parseFloat(navio.distancia) || distanciaRotaCargas(navio.origem, navio.destino);
       if (!(km > 0)) return 'ETA após liberação do navio';
@@ -1123,8 +1137,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const dispVol = Math.max(0, 75 - volCargasNoCont);
       const navioDoCont = navioDoContainerVinculo(cont, naviosModal);
       let statusText = '';
-      if (cont.estado !== 'OPERANTE') {
-        statusText = ` [INDISPONÍVEL: ${cont.estado}]`;
+      if (cont.motivoIndisponivel) {
+        statusText = ` [INDISPONÍVEL: ${cont.motivoIndisponivel}]`;
+      } else if (String(cont.estado || 'OPERANTE').toUpperCase() !== 'OPERANTE') {
+        statusText = ` [INDISPONÍVEL: em manutenção (${cont.estado})]`;
       } else if (navioDoCont && motivoNavioInaptoVinculo(navioDoCont)) {
         statusText = ` [Navio ${navioDoCont.nome || ''} ${motivoNavioInaptoVinculo(navioDoCont)}]`;
       } else if (navioEscolhido && navioDoCont && !mesmoNavioVinculo(navioEscolhido, navioDoCont)) {
@@ -1163,22 +1179,36 @@ document.addEventListener('DOMContentLoaded', () => {
       vincularNavioAviso.classList.toggle('hidden', naviosAptosModal.length > 0);
     }
 
-    // Buscar Contêineres do Supabase / Local
+    // Contêineres com o estado PERSISTIDO (Supabase é a fonte da verdade):
+    // em manutenção ou com OS em execução aparecem marcados e desabilitados.
     let containers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
-    if (window.nexusSupabase) {
+    if (window.nexusSupabase && window.NexusIntegridade) {
+      const lista = await window.NexusIntegridade.listarDisponibilidade('CONTAINER');
+      if (lista.fonte === 'supabase') {
+        containers = lista.itens.map(item => ({
+          id: item.id || `CONT-${item.codigo}`,
+          rawDbId: item.id || null,
+          identificacao: item.codigo,
+          tipo: item.linha.material_carregado || 'Carga Geral',
+          estado: item.estado,
+          motivoIndisponivel: item.motivo,
+          navio_id: item.linha.navio_id || null
+        }));
+      } else if (lista.fonte === 'erro' && window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Contêineres Indisponíveis', `Não foi possível consultar os contêineres no banco de dados (${lista.erro}). A vinculação será bloqueada até a consulta funcionar.`);
+        containers = [];
+      }
+    } else if (window.nexusSupabase) {
       try {
-        const { data } = await window.nexusSupabase.from('containers').select('*');
-        if (data && data.length > 0) {
-          const mapConts = data.map(c => ({
+        const { data, error } = await window.nexusSupabase.from('containers').select('*');
+        if (!error && Array.isArray(data)) {
+          containers = data.map(c => ({
             id: c.id || `CONT-${c.numero_identificacao}`,
             identificacao: c.numero_identificacao,
             tipo: c.material_carregado || 'Carga Geral',
             estado: c.estado || 'OPERANTE',
             navio_id: c.navio_id || null
           }));
-          const idSet = new Set(mapConts.map(x => x.identificacao));
-          containers.forEach(item => { if (!idSet.has(item.identificacao)) mapConts.push(item); });
-          containers = mapConts;
         }
       } catch (e) { console.warn('Erro ao carregar contêineres para modal:', e); }
     }
@@ -1278,17 +1308,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      targetCargaParaVinculacao.container = contIdentificacao;
-      targetCargaParaVinculacao.container_id = contUuid;
-      targetCargaParaVinculacao.navio = navVal;
-      targetCargaParaVinculacao.navioId = navUuid;
-      targetCargaParaVinculacao.navio_id = navUuid;
-      // Opção "Herdar o navio do contêiner": se o contêiner ainda não tem
-      // navio, a carga passa a exibi-lo automaticamente quando ele for
-      // vinculado (sincronizarNaviosHerdados). Escolha explícita não herda.
-      targetCargaParaVinculacao.herdarNavioDoContainer = !vincularNavioSelect || vincularNavioSelect.value === '';
-
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
+      // Revalida no banco, no momento da confirmação, o estado de manutenção do
+      // contêiner e do navio (o modal pode ter sido aberto antes de uma OS).
+      if (window.NexusIntegridade) {
+        const verificacoes = [window.NexusIntegridade.verificarDisponibilidade('CONTAINER', { id: contUuid, codigo: contIdentificacao })];
+        if (navioFinal && !navioFinal._naoEncontrado) {
+          verificacoes.push(window.NexusIntegridade.verificarDisponibilidade('NAVIO', { id: navioFinal.id, codigo: navioFinal.imo || navioFinal.numero_imo, nome: navioFinal.nome }));
+        }
+        const [dispCont, dispNavio] = await Promise.all(verificacoes);
+        const bloqueio = !dispCont.disponivel
+          ? `O contêiner ${contIdentificacao} está ${dispCont.motivo}`
+          : (dispNavio && !dispNavio.disponivel ? `O navio ${navVal} está ${dispNavio.motivo}` : null);
+        if (bloqueio) {
+          if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Vinculação Bloqueada', `${bloqueio} e não pode receber cargas. Nada foi alterado.`);
+          window.abrirModalVinculacao(targetCargaParaVinculacao.id);
+          return;
+        }
+      }
 
       if (window.nexusSupabase) {
         try {
@@ -1328,10 +1364,30 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
               query = query.eq('qr_code_url', targetQr);
             }
-            await query;
+            const { error: erroVinculo } = (await query) || {};
+            if (erroVinculo) throw erroVinculo;
           }
-        } catch (e) { console.warn('Erro ao atualizar vinculação no Supabase:', e); }
+        } catch (e) {
+          console.warn('Erro ao atualizar vinculação no Supabase:', e);
+          if (window.mostrarFeedback) {
+            const detalhe = window.NexusIntegridade ? window.NexusIntegridade.descreverErroBanco(e) : ((e && e.message) || e);
+            window.mostrarFeedback('erro', 'Vinculação Não Realizada', `Não foi possível gravar o vínculo da carga ${targetCargaParaVinculacao.id} no banco de dados: ${detalhe}. Nada foi alterado.`);
+          }
+          return;
+        }
       }
+
+      // Banco confirmou (ou modo local): reflete o vínculo na tela
+      targetCargaParaVinculacao.container = contIdentificacao;
+      targetCargaParaVinculacao.container_id = contUuid;
+      targetCargaParaVinculacao.navio = navVal;
+      targetCargaParaVinculacao.navioId = navUuid;
+      targetCargaParaVinculacao.navio_id = navUuid;
+      // Opção "Herdar o navio do contêiner": se o contêiner ainda não tem
+      // navio, a carga passa a exibi-lo automaticamente quando ele for
+      // vinculado (sincronizarNaviosHerdados). Escolha explícita não herda.
+      targetCargaParaVinculacao.herdarNavioDoContainer = !vincularNavioSelect || vincularNavioSelect.value === '';
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
 
       if (window.registrarLogAlteracao) {
         await window.registrarLogAlteracao(targetCargaParaVinculacao.id, 'EDICAO', `Carga vinculada ao Contêiner ${contIdentificacao} e Navio ${navVal}`);
@@ -1386,16 +1442,36 @@ document.addEventListener('DOMContentLoaded', () => {
     'Pátio STS-01 (Setor Refrigeração)'
   ];
 
-  function guindastesDisponiveis() {
-    let guindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
-    if (!Array.isArray(guindastes) || guindastes.length === 0) {
-      guindastes = [
-        { id: 'GND-01-STS', identificacao: 'GND-01-STS', estado: 'OPERANTE' },
-        { id: 'GND-02-STS', identificacao: 'GND-02-STS', estado: 'OPERANTE' }
-      ];
-      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastes));
+  /**
+   * Guindastes cadastrados com a disponibilidade calculada a partir do estado
+   * PERSISTIDO (Supabase): EM_MANUTENCAO ou com OS em execução = indisponível.
+   * Sem banco configurado, usa o espelho local (nexus_guindastes_list).
+   * Não existem mais guindastes "padrão" fictícios.
+   * @returns {Promise<{fonte:string, erro?:string, itens:Array<{codigo,estado,disponivel,motivo}>}>}
+   */
+  async function guindastesDisponiveis() {
+    if (window.NexusIntegridade) {
+      const lista = await window.NexusIntegridade.listarDisponibilidade('GUINDASTE');
+      if (lista.fonte === 'supabase') {
+        // Mantém o espelho local alinhado ao banco (outras telas o leem)
+        const anteriores = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+        const espelho = lista.itens.map((g) => {
+          const antigo = anteriores.find(a => String(a.identificacao || '').toUpperCase() === String(g.codigo).toUpperCase()) || {};
+          return Object.assign({}, antigo, { id: g.id, identificacao: g.codigo, estado: g.estado });
+        });
+        localStorage.setItem('nexus_guindastes_list', JSON.stringify(espelho));
+      }
+      return lista;
     }
-    return guindastes;
+    const locais = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+    return {
+      fonte: 'local',
+      itens: (Array.isArray(locais) ? locais : []).map((g) => {
+        const estado = String(g.estado || 'OPERANTE').toUpperCase();
+        const disponivel = estado === 'OPERANTE';
+        return { id: g.id || null, codigo: g.identificacao, estado, disponivel, motivo: disponivel ? null : `em manutenção (${estado})` };
+      })
+    };
   }
 
   function montarInstrucaoMovimentacao(carga, setorDestino, guindasteIdent) {
@@ -1405,16 +1481,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function criarTarefaMovimentacao(carga, setorDestino, guindasteIdent) {
-    const guindastes = guindastesDisponiveis();
-    const gnd = guindastes.find(g => String(g.identificacao || '').toUpperCase() === String(guindasteIdent || '').toUpperCase());
-    if (!gnd) {
+    // Revalida no momento do registro (a tela/modal pode estar desatualizada ou
+    // a função pode ser chamada diretamente): estado persistido do guindaste.
+    const lista = await guindastesDisponiveis();
+    if (lista.fonte === 'erro') {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Movimentação Não Registrada', `Não foi possível conferir a disponibilidade dos guindastes no banco de dados (${lista.erro}). Tente novamente.`);
+      return false;
+    }
+    const chaveGnd = window.NexusIntegridade ? window.NexusIntegridade.normalizarCodigo(guindasteIdent) : String(guindasteIdent || '').toUpperCase();
+    const item = lista.itens.find(g => (window.NexusIntegridade ? window.NexusIntegridade.normalizarCodigo(g.codigo) : String(g.codigo || '').toUpperCase()) === chaveGnd);
+    if (!item) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Guindaste Inválido', `Guindaste "${guindasteIdent}" não encontrado no cadastro.`);
       return false;
     }
-    if (gnd.estado && gnd.estado !== 'OPERANTE') {
-      if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Guindaste Indisponível', `O guindaste ${gnd.identificacao} está em "${gnd.estado}" e não pode executar a tarefa. Escolha um guindaste OPERANTE.`);
+    if (!item.disponivel) {
+      if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Guindaste Indisponível', `O guindaste ${item.codigo} está ${item.motivo} e não pode executar a tarefa. Escolha um guindaste disponível.`);
+      if (movimentarModal && !movimentarModal.classList.contains('hidden')) preencherGuindastesMovimentacao(lista);
       return false;
     }
+    const gnd = { identificacao: item.codigo, estado: item.estado };
     if (!SETORES_PATIO.includes(setorDestino)) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Setor Inválido', 'Selecione um setor de destino válido do pátio.');
       return false;
@@ -1494,16 +1579,44 @@ document.addEventListener('DOMContentLoaded', () => {
     if (movimentarSetorAtualLabel) movimentarSetorAtualLabel.textContent = targetCargaMovimentacao.portoDescarga || '—';
     if (movimentarSetorSelect) movimentarSetorSelect.value = '';
     if (movimentarGuindasteSelect) {
-      const guindastes = guindastesDisponiveis();
-      movimentarGuindasteSelect.innerHTML = '<option value="">Selecione o guindaste...</option>' +
-        guindastes.map(g => {
-          const operante = !g.estado || g.estado === 'OPERANTE';
-          return `<option value="${esc(g.identificacao)}" ${operante ? '' : 'disabled'}>${esc(g.identificacao)} (${esc(g.estado || 'OPERANTE')})${operante ? '' : ' — indisponível'}</option>`;
-        }).join('');
+      movimentarGuindasteSelect.innerHTML = '<option value="">Carregando guindastes...</option>';
+      movimentarGuindasteSelect.disabled = true;
     }
     if (movimentarInstrucaoBox) movimentarInstrucaoBox.classList.add('hidden');
     movimentarModal.classList.remove('hidden');
+    // Opções sempre recarregadas com o estado atual do banco
+    const cargaAberta = targetCargaMovimentacao;
+    guindastesDisponiveis().then((lista) => {
+      if (targetCargaMovimentacao !== cargaAberta) return;
+      preencherGuindastesMovimentacao(lista);
+    });
   };
+
+  /** Monta o select de guindastes: em manutenção aparece marcado e desabilitado. */
+  function preencherGuindastesMovimentacao(lista) {
+    if (!movimentarGuindasteSelect) return;
+    const selecionado = movimentarGuindasteSelect.value;
+    movimentarGuindasteSelect.disabled = false;
+    if (lista.fonte === 'erro') {
+      movimentarGuindasteSelect.innerHTML = '<option value="">Não foi possível carregar os guindastes</option>';
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Guindastes Indisponíveis', `Não foi possível consultar os guindastes no banco de dados (${lista.erro}).`);
+      return;
+    }
+    const itens = lista.itens || [];
+    const algumDisponivel = itens.some(g => g.disponivel);
+    movimentarGuindasteSelect.innerHTML =
+      `<option value="">${esc(itens.length === 0 ? 'Nenhum guindaste cadastrado' : (algumDisponivel ? 'Selecione o guindaste...' : 'Nenhum guindaste disponível'))}</option>` +
+      itens.map(g => {
+        const rotulo = g.disponivel
+          ? `${g.codigo} (OPERANTE)`
+          : `${g.codigo} — INDISPONÍVEL: ${g.motivo}`;
+        return `<option value="${esc(g.codigo)}" ${g.disponivel ? '' : 'disabled'}>${esc(rotulo)}</option>`;
+      }).join('');
+    if (selecionado && itens.some(g => g.disponivel && g.codigo === selecionado)) {
+      movimentarGuindasteSelect.value = selecionado;
+    }
+    atualizarInstrucaoMovimentacao();
+  }
 
   if (movimentarSetorSelect) movimentarSetorSelect.addEventListener('change', atualizarInstrucaoMovimentacao);
   if (movimentarGuindasteSelect) movimentarGuindasteSelect.addEventListener('change', atualizarInstrucaoMovimentacao);
