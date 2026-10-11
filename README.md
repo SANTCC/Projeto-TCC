@@ -27,7 +27,7 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 
 - **Frontend:** HTML5, Tailwind CSS, JavaScript (ES6 Modules)
 - **Supabase Backend:** PostgreSQL com Row Level Security (RLS) e Auth Client (`@supabase/supabase-js`)
-- **Supabase Edge Functions (Deno):** `panic-alert` (evento de servidor do botão de pânico)
+- **Supabase Edge Functions (Deno):** `panic-alert` (botão de pânico), `vpn-gate` (verificação de IP antes de revelar a interface)
 - **Supabase Realtime (WebSocket):** Broadcast do alarme de emergência para todos os clientes conectados
 - **Bibliotecas:** `Chart.js`, `qrcode.js`, `html5-qrcode`, `jsPDF`
 - **Automação & Testes:** Node.js, `jsdom`, `Playwright`
@@ -94,6 +94,26 @@ Os gráficos são montados em tempo de execução recortados pela **camada de vi
 1. **Autenticação e Sessão Client-Side:** Validação por código individual vinculada ao perfil/cargo do funcionário (`nexus_session`).
 2. **Proteção Anti-XSS (DOM-based):** Módulo `js/security.js` expõe sanitização contextual obrigatoriamente aplicada antes da renderização HTML (`nexusEsc`, `nexusJsArg`, `nexusSafeUrl`).
 3. **Row Level Security (RLS) no Supabase:** Políticas *Append-Only* para tabelas de auditoria (`logs_alteracoes`, `trail_decisoes`) e restrição de comandos destrutivos (`DELETE`) nas tabelas operacionais.
+
+---
+
+## 🚫 Bloqueio de IPs de VPN (`vpn-gate`)
+
+- **Função:** `supabase/functions/vpn-gate` recebe uma chamada `GET`, obtém o IP dos cabeçalhos de proxy do Supabase e compara IPv4/IPv6 com listas CIDR públicas. Não aceita um IP enviado no corpo/query e não usa `service_role`.
+- **Fontes atualizadas pelo GitHub:**
+  - [X4BNet/lists_vpn](https://github.com/X4BNet/lists_vpn), arquivos `output/vpn/ipv4.txt` e `output/vpn/ipv6.txt` (redes de VPNs comerciais comuns; não a lista separada e mais abrangente de datacenters; licença MIT).
+  - [tn3w/ProtonVPN-IPs](https://github.com/tn3w/ProtonVPN-IPs), `protonvpn_ip_ranges.txt` (atualização diária; blocos IPv4 `/24` para cobrir a saída NAT da ProtonVPN; licença Apache-2.0).
+  - [antonme/ipranges](https://github.com/antonme/ipranges), `protonvpn/ipv6_merged.txt` (redes IPv6 da ProtonVPN; CC0).
+- **Atualização:** a Edge Function baixa as quatro listas em paralelo e as mantém em cache por até 60 min por instância. Se uma atualização falhar, uma instância aquecida usa o último snapshot validado; sem snapshot, falha fechada com HTTP 503. A resposta de bloqueio é HTTP 403 `text/plain; charset=utf-8`, com o texto exato `AQUI NÃO!! TICO-TICO!!!!!!!!`.
+- **Deploy:**
+  ```bash
+  supabase functions deploy vpn-gate --no-verify-jwt
+  npm run build
+  ```
+  O build injeta a espera visual em todas as páginas HTML publicadas. A configuração real de `js/config.js` (URL e chave pública do Supabase) precisa estar no deploy. O arquivo de exemplo mantém o modo offline/demonstração; `npm start` serve os arquivos-fonte e não ativa a espera de produção.
+- **Limites importantes:** nenhuma lista pública contém literalmente *todos* os IPs de todas as VPNs. Serviços novos, IPs rotativos e VPNs residenciais podem escapar; por outro lado, o `/24` da ProtonVPN pode alcançar IPs vizinhos não operados pela VPN. Revise falsos positivos e as licenças das fontes antes de uso operacional.
+- **Não é bloqueio de rede:** a hospedagem atual serve arquivos estáticos. A Edge Function do Supabase só intercepta chamadas feitas a ela; portanto, o gate mantém a interface invisível até a decisão e navega para um documento `text/plain` quando bloqueia, mas o HTML/JS já foi entregue ao navegador e um cliente pode contornar JavaScript ou pedir os arquivos diretamente. Para negar até a resposta HTTP/entrega do HTML, todo o domínio precisa passar por um proxy de entrada que faça a verificação antes de servir os arquivos. Esta implementação **não** usa Vercel Edge Functions e não transforma a Edge Function do Supabase em middleware automático do domínio estático.
+- **Testes:** `npm run test:vpn-gate` (ou `npm run test:edge-functions`).
 
 ---
 

@@ -1,0 +1,8 @@
+/* O build adiciona esta classe a todas as páginas públicas; a tela fica oculta até a decisão da Edge Function. */
+html.nexus-vpn-gate-checking body {
+  visibility: hidden !important;
+}
+
+html.nexus-vpn-gate-checking {
+  background: #fff !important;
+}
