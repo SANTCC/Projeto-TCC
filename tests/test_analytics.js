@@ -132,7 +132,7 @@ function testarCodigoEPaginas() {
   log('\n[6] Páginas: js/analytics.js em todas e nenhum snippet inline');
   const paginas = fs.readdirSync(ROOT).filter((f) => f.endsWith('.html'));
   const comGa = paginas.filter((f) => read(f).includes('js/analytics.js'));
-  check('12 páginas carregam js/analytics.js', comGa.length === 12, `${comGa.length}`);
+  check('13 páginas carregam js/analytics.js', comGa.length === 13, `${comGa.length}`);
   const restos = paginas.filter((f) => /googletagmanager|gtag\('config'/.test(read(f)));
   check('nenhuma página mantém o snippet inline do GA', restos.length === 0, restos.join(', '));
   const idsEspalhados = paginas.filter((f) => read(f).includes(ID));

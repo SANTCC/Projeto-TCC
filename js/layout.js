@@ -56,6 +56,7 @@
       { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: isDiretor || isSupervisor || isInspetor },
       { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: isDiretor || isSupervisor },
       { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: isTecnico || isDiretor },
+      { id: 'seguranca.html', label: 'Auditoria de Login', icon: 'shield_lock', href: 'seguranca.html', visible: isDiretor || isSupervisor },
       { id: 'relatorios.html', label: 'Relatórios & PDF', icon: 'assessment', href: 'relatorios.html', visible: true }
     ];
 

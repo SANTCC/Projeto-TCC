@@ -50,6 +50,7 @@
     "test:icones": "python3 -m unittest discover -s tests -p \"test_material_symbols.py\"",
     "test:log-acesso": "node tests/test_log_acesso.js",
     "test:login-protecao": "node tests/test_login_protecao.js",
+    "test:login-auditoria": "node tests/test_login_auditoria.js",
     "test:equipamentos-manutencao": "node tests/test_equipamentos_manutencao.js",
     "test:berco-selecao": "node tests/test_berco_selecao.js",
     "test:bercos-persistencia": "node tests/test_bercos_persistencia.js",
