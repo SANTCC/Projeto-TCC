@@ -428,6 +428,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /** Distância oficial do navio: a da rota cadastrada (ETA e progresso dependem dela). */
+  // Identifica o Porto de Santos pelo nome cadastrado (origem/destino da rota)
+  function ehPortoSantos(nomePorto) {
+    return /santos/i.test(String(nomePorto || ''));
+  }
+
   function distanciaDoNavio(navio) {
     const km = parseFloat(navio && navio.distancia);
     if (km > 0) return km;
@@ -546,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let etaExtraHtml = '';
 
       if (n.localizacao === 'DENTRO_DO_PORTO') {
-        etaText = 'Em Atracação no Porto Origem';
+        etaText = ehPortoSantos(n.origem) || !n.origem ? 'Em Atracação no Porto Origem' : 'Atracado no Porto de Santos (destino da viagem)';
         tempoForaText = 'No Porto (0s)';
       } else if (n.localizacao === 'NO_PORTO_DE_DESTINO') {
         // CORREÇÃO CRÍTICA (RF 5 / RN 8): Pausa/finaliza contagem de tempo fora do porto
@@ -580,11 +585,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
           // Transição automática para NO_PORTO_DE_DESTINO se o ETA zerou
           if (msRestantes <= 0 && n.localizacao === 'FORA_DO_PORTO') {
-            n.localizacao = 'NO_PORTO_DE_DESTINO';
+            // Chegada ao Porto de Santos (ex.: retorno de Paranaguá) = "No porto", apto a receber cargas.
+            // Demais destinos = "Chegou ao destino" (cargas são entregues).
+            const novaLocalizacao = ehPortoSantos(n.destino) ? 'DENTRO_DO_PORTO' : 'NO_PORTO_DE_DESTINO';
+            n.localizacao = novaLocalizacao;
             localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
             if (window.nexusSupabase) {
               window.nexusSupabase.from('navios')
-                .update({ localizacao: 'NO_PORTO_DE_DESTINO' })
+                .update({ localizacao: novaLocalizacao })
                 .eq('numero_imo', n.imo)
                 .then(() => {})
                 .catch(err => console.warn('Erro ao atualizar chegada ao destino no Supabase:', err));
@@ -864,6 +872,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
+
+    // Navio já no Porto de Santos com destino Santos não tem próxima viagem definida:
+    // liberar a saída o faria "navegar" de volta ao próprio porto.
+    if (navio.localizacao === 'DENTRO_DO_PORTO' && ehPortoSantos(navio.destino)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Próximo Destino Não Definido', `O navio ${navio.nome} está no Porto de Santos, que também é o destino cadastrado. Informe o próximo destino da embarcação antes de liberar a saída.`);
+      }
+      return;
+    }
 
     // Trava de regra de negócio: só libera a saída de navio que está no porto
     if (navio.localizacao !== 'DENTRO_DO_PORTO') {
