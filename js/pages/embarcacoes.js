@@ -1090,16 +1090,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return { ok: true };
   }
 
-  // Preenche o seletor de berço do formulário de cadastro (somente livres)
-  function preencherBercoCadastroSelect() {
+  // Preenche o seletor de berço do formulário de cadastro com os berços LIVRES do banco.
+  // Sem consulta bem-sucedida, o seletor não oferece berço algum.
+  async function preencherBercoCadastroSelect() {
     const bercoSel = document.getElementById('navioBercoSelect');
     if (!bercoSel) return;
-    const livres = (JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]') || []).filter(b => b.estado === 'LIVRE');
+    const lido = await lerBercosAtuais();
+    // Lido DEPOIS da consulta: uma escolha feita enquanto o banco respondia não pode ser apagada.
     const atual = bercoSel.value;
+    if (!lido.ok) {
+      bercoSel.innerHTML = '<option value="">Não foi possível consultar os berços</option>';
+      return;
+    }
+    const livres = lido.lista.filter(b => b.estado === 'LIVRE');
     bercoSel.innerHTML = livres.length === 0
       ? '<option value="">Nenhum berço livre no momento</option>'
       : '<option value="">Selecione o berço...</option>' + livres.map(b => `<option value="${esc(b.nome)}">${esc(b.nome)}</option>`).join('');
-    if (atual) bercoSel.value = atual;
+    if (atual && livres.some(b => b.nome === atual)) bercoSel.value = atual;
   }
 
   // ------------------------------------------------------------------
@@ -1539,14 +1546,24 @@ document.addEventListener('DOMContentLoaded', () => {
       // pode estar dentro do porto sem ocupar um berço ao mesmo tempo.
       const bercoSelCadastro = document.getElementById('navioBercoSelect');
       const bercoEscolhido = localizacao === 'DENTRO_DO_PORTO' ? (bercoSelCadastro ? bercoSelCadastro.value : '') : '';
-      if (localizacao === 'DENTRO_DO_PORTO' && !bercoEscolhido) {
-        const livres = (JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]') || []).filter(b => b.estado === 'LIVRE');
-        const msg = livres.length === 0
-          ? 'BERÇOS ESGOTADOS: não há berço livre no Terminal STS-01. Libere um berço antes de cadastrar um navio DENTRO_DO_PORTO, ou cadastre-o como FORA_DO_PORTO.'
-          : 'BERÇO OBRIGATÓRIO: um navio DENTRO_DO_PORTO precisa estar vinculado a um berço imediatamente. Selecione o berço de atracação no formulário.';
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Berço Obrigatório', msg);
-        if (bercoSelCadastro) preencherBercoCadastroSelect();
-        return;
+      if (localizacao === 'DENTRO_DO_PORTO') {
+        // Revalidação no banco (não no cache local) antes de qualquer gravação.
+        const lidoBercos = await lerBercosAtuais();
+        if (!lidoBercos.ok) {
+          if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Berços Não Confirmados', `Não foi possível confirmar os berços no banco de dados (${lidoBercos.erro}). Navio não cadastrado.`);
+          return;
+        }
+        const livresBanco = lidoBercos.lista.filter(b => b.estado === 'LIVRE');
+        if (!bercoEscolhido || !livresBanco.some(b => b.nome === bercoEscolhido)) {
+          const msg = livresBanco.length === 0
+            ? 'BERÇOS ESGOTADOS: não há berço livre no Terminal STS-01. Libere um berço antes de cadastrar um navio DENTRO_DO_PORTO, ou cadastre-o como FORA_DO_PORTO.'
+            : (bercoEscolhido
+              ? `O ${bercoEscolhido} não está mais livre. Escolha outro berço na lista atualizada.`
+              : 'BERÇO OBRIGATÓRIO: um navio DENTRO_DO_PORTO precisa estar vinculado a um berço imediatamente. Selecione o berço de atracação no formulário.');
+          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Berço Obrigatório', msg);
+          await preencherBercoCadastroSelect();
+          return;
+        }
       }
 
       const novoNavio = {
@@ -1582,25 +1599,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      naviosList.unshift(novoNavio);
-      localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
-
-      // Vinculação imediata ao berço (obrigatória para DENTRO_DO_PORTO)
+      // Vinculação imediata ao berço (obrigatória para DENTRO_DO_PORTO). Se a reserva falhar,
+      // o navio recém-gravado é removido: nenhum navio pode ficar DENTRO_DO_PORTO sem berço.
       let bercoOcupadoMsg = '';
       if (localizacao === 'DENTRO_DO_PORTO' && bercoEscolhido) {
         const resOcupacao = await ocuparBercoComNavio(bercoEscolhido, novoNavio);
-        if (resOcupacao.ok) {
-          renderBercosPanel();
-          bercoOcupadoMsg = ` Vinculado imediatamente ao ${bercoEscolhido}.`;
-          if (window.registrarLogAlteracao) {
-            await window.registrarLogAlteracao('EDICAO', 'navios', novoNavio.id || null, `Navio ${nome} vinculado ao ${bercoEscolhido} no cadastro (DENTRO_DO_PORTO)`);
+        if (!resOcupacao.ok) {
+          let desfeito = true;
+          if (insertedId && window.nexusSupabase) {
+            const { error: errDesfazer } = await window.nexusSupabase.from('navios').delete().eq('id', insertedId);
+            if (errDesfazer) desfeito = false;
           }
-        } else {
           if (window.mostrarFeedback) {
-            if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Berço Indisponível', `${resOcupacao.motivo} Use o botão "Vincular" na tabela para escolher outro berço imediatamente.`);
+            window.mostrarFeedback('alerta', 'Navio Não Cadastrado', desfeito
+              ? `${resOcupacao.motivo} O cadastro foi desfeito: um navio DENTRO_DO_PORTO precisa ocupar um berço no mesmo momento.`
+              : `${resOcupacao.motivo} Não foi possível desfazer o registro do navio ${nome} no banco; verifique a lista de embarcações e remova-o se necessário.`);
           }
+          await preencherBercoCadastroSelect();
+          return;
+        }
+        renderBercosPanel();
+        bercoOcupadoMsg = ` Vinculado imediatamente ao ${bercoEscolhido}.`;
+        if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'navios', novoNavio.id || null, `Navio ${nome} vinculado ao ${bercoEscolhido} no cadastro (DENTRO_DO_PORTO)`);
         }
       }
+
+      naviosList.unshift(novoNavio);
+      localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
       renderGpsTable();
       navioForm.reset();
