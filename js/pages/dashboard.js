@@ -113,7 +113,47 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
   }
 };
 
-window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
+// Tabelas usadas por chamadas antigas (decisao, tabela, id, motivo) de outros módulos.
+const TRAIL_TABELAS_LEGADAS = {
+  navios: 'NAVIO',
+  guindastes: 'GUINDASTE',
+  containers: 'CONTAINER',
+  manutencoes: 'MANUTENCAO',
+  cargas: 'CARGA',
+  delegacoes_supervisor: 'FUNCIONARIO'
+};
+
+// Tipos de entidade aceitos para cada decisão (sem combinações sem sentido).
+const TRAIL_TIPOS_COMPATIVEIS = {
+  APROVOU_CARGA: ['CARGA'],
+  RECUSOU_CARGA: ['CARGA'],
+  CANCELOU_ENTREGA: ['CARGA'],
+  LIBEROU_NAVIO: ['NAVIO'],
+  SOLICITOU_MANUTENCAO_NAVIO: ['NAVIO'],
+  SOLICITOU_MANUTENCAO_CONTAINER: ['CONTAINER', 'GUINDASTE'],
+  APROVOU_MANUTENCAO: ['MANUTENCAO', 'GUINDASTE'],
+  RECUSOU_MANUTENCAO: ['MANUTENCAO', 'GUINDASTE'],
+  DESIGNOU_SUBSTITUTO: ['FUNCIONARIO']
+};
+window.TRAIL_TIPOS_COMPATIVEIS = TRAIL_TIPOS_COMPATIVEIS;
+
+// registrarTrailDecisao(decisao, entidade, motivo, referencia)
+//   referencia = { tipo, id, codigo, rotulo } vindo de um registro real do Supabase (formulário do painel).
+//   Sem referencia, mantém o comportamento anterior (texto livre), usado por chamadas legadas.
+window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', referencia = null) {
+  // Chamadas antigas com 4 argumentos: (decisao, tabela, id, motivo). O id não pode virar motivo.
+  if (arguments.length >= 4 && TRAIL_TABELAS_LEGADAS[entidade] && !(referencia && typeof referencia === 'object')) {
+    const idLegado = motivo;
+    motivo = referencia;
+    referencia = {
+      tipo: TRAIL_TABELAS_LEGADAS[entidade],
+      id: idLegado || null,
+      codigo: idLegado ? String(idLegado) : String(entidade),
+      rotulo: entidade,
+      legado: true
+    };
+  }
+
   // Decisões tomadas via agente de IA (WebMCP) ficam marcadas na trilha imutável.
   const marcaAgente = (window.NexusWebMCP && typeof window.NexusWebMCP.marcaAuditoria === 'function') ? window.NexusWebMCP.marcaAuditoria() : '';
   if (marcaAgente) motivo = marcaAgente + (motivo || 'Decisão registrada pelo agente');
@@ -152,11 +192,25 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
 
   let entidadeTipo = 'CARGA';
   let entidadeId = String(entidade || '').trim();
-  const entUpper = entidadeId.toUpperCase();
-  if (entUpper.startsWith('NAVIO') || entUpper.includes('NAVIO')) entidadeTipo = 'NAVIO';
-  else if (entUpper.startsWith('CONT') || entUpper.includes('CONTAINER')) entidadeTipo = 'CONTAINER';
-  else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
-  else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
+  let detalhes = null;
+  if (referencia) {
+    const permitidos = TRAIL_TIPOS_COMPATIVEIS[decisaoEnum] || [];
+    if (!referencia.legado && !permitidos.includes(referencia.tipo)) {
+      return { ok: false, mensagem: `A decisão "${decisaoEnum}" não pode ser registrada para ${referencia.tipo}.` };
+    }
+    entidadeTipo = referencia.tipo;
+    entidadeId = String(referencia.codigo || '').trim();
+    if (!referencia.legado && !entidadeId) {
+      return { ok: false, mensagem: 'Selecione um registro válido antes de registrar a decisão.' };
+    }
+    detalhes = { referencia_id: referencia.id || null, rotulo: referencia.rotulo || null };
+  } else {
+    const entUpper = entidadeId.toUpperCase();
+    if (entUpper.startsWith('NAVIO') || entUpper.includes('NAVIO')) entidadeTipo = 'NAVIO';
+    else if (entUpper.startsWith('CONT') || entUpper.includes('CONTAINER')) entidadeTipo = 'CONTAINER';
+    else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
+    else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
+  }
 
   const validCargos = [
     'ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 
@@ -168,6 +222,11 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
   if (validCargos.includes(session.cargo)) cargoEnum = session.cargo;
 
   const nowIso = new Date().toISOString();
+  const estruturado = !!(referencia && !referencia.legado);
+  const msgFalhaBanco = 'Não foi possível gravar a decisão no banco de dados. Nada foi registrado; tente novamente.';
+  if (estruturado && !window.nexusSupabase) {
+    return { ok: false, mensagem: 'Sem conexão com o banco de dados. A decisão não foi registrada.' };
+  }
   let insertedDbId = null;
 
   if (window.nexusSupabase) {
@@ -181,20 +240,23 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
         entidade_id: entidadeId,
         motivo: motivo || 'Decisão homologada conforme fluxo operacional'
       };
+      if (detalhes) payload.detalhes = detalhes;
       if (funcId) payload.funcionario_id = funcId;
 
-      const { data, error } = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
-      if (error && payload.funcionario_id) {
+      let resposta = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
+      if (resposta.error && payload.funcionario_id) {
         delete payload.funcionario_id;
-        const retry = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
-        if (!retry.error && retry.data) {
-          insertedDbId = retry.data.id;
-        }
-      } else if (!error && data) {
-        insertedDbId = data.id;
+        resposta = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
+      }
+      if (!resposta.error && resposta.data) {
+        insertedDbId = resposta.data.id;
+      } else if (estruturado) {
+        console.warn('[NexusPort] Trail não gravado no Supabase:', resposta.error);
+        return { ok: false, mensagem: msgFalhaBanco };
       }
     } catch (err) {
       console.warn('[NexusPort] Erro ao invocar trail Supabase:', err);
+      if (estruturado) return { ok: false, mensagem: msgFalhaBanco };
     }
   }
 
@@ -218,6 +280,7 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
   }
 
   window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'trail_decisoes' } }));
+  return { ok: true, id: idReg, dbId: insertedDbId };
 };
 
 window.calcularEstimativaChegada = function(distanciaKm) {
@@ -893,8 +956,136 @@ document.addEventListener('DOMContentLoaded', () => {
   const cancelRegistrarTrailModalBtn = document.getElementById('cancelRegistrarTrailModalBtn');
   const registrarTrailForm = document.getElementById('registrarTrailForm');
 
+  // Entidade da decisão: tipo e registro vêm de listas (cadastros do Supabase), sem digitação livre.
+  const trailDecisaoSel = document.getElementById('trailTipoDecisao');
+  const trailTipoSel = document.getElementById('trailEntidadeTipo');
+  const trailRegistroSel = document.getElementById('trailEntidadeRegistro');
+  const trailAvisoEl = document.getElementById('trailEntidadeAviso');
+  const ROTULOS_TIPO_TRAIL = {
+    CARGA: 'Carga', NAVIO: 'Navio', CONTAINER: 'Contêiner', GUINDASTE: 'Guindaste',
+    MANUTENCAO: 'Ordem de manutenção', FUNCIONARIO: 'Funcionário'
+  };
+  let trailRegistrosAtuais = [];
+
+  function preencherOpcoesTrail(select, opcoes, placeholder) {
+    select.textContent = '';
+    const vazia = document.createElement('option');
+    vazia.value = '';
+    vazia.textContent = placeholder;
+    select.appendChild(vazia);
+    opcoes.forEach((o) => {
+      const op = document.createElement('option');
+      op.value = o.value;
+      op.textContent = o.label;
+      select.appendChild(op);
+    });
+  }
+
+  function mostrarAvisoTrail(msg) {
+    if (!trailAvisoEl) return;
+    trailAvisoEl.textContent = msg || '';
+    trailAvisoEl.classList.toggle('hidden', !msg);
+  }
+
+  // Consultas reais por tipo. O código exibido é o identificador que o operador reconhece.
+  const CONSULTAS_TRAIL = {
+    CARGA: {
+      tabela: 'cargas', colunas: 'id, qr_code_url, natureza, status_fluxo',
+      mapear: (c) => {
+        const codigo = c.qr_code_url ? String(c.qr_code_url).replace(/^QR-/, '') : `CRG-${c.id}`;
+        return { id: c.id, codigo, rotulo: `${codigo} · ${c.natureza || 'Carga'} (${c.status_fluxo || 'sem status'})` };
+      }
+    },
+    NAVIO: {
+      tabela: 'navios', colunas: 'id, nome, numero_imo',
+      mapear: (n) => ({ id: n.id, codigo: n.numero_imo, rotulo: `${n.nome} · IMO ${n.numero_imo}` })
+    },
+    CONTAINER: {
+      tabela: 'containers', colunas: 'id, numero_identificacao',
+      mapear: (c) => ({ id: c.id, codigo: c.numero_identificacao, rotulo: c.numero_identificacao })
+    },
+    GUINDASTE: {
+      tabela: 'guindastes', colunas: 'id, numero_identificacao',
+      mapear: (g) => ({ id: g.id, codigo: g.numero_identificacao, rotulo: g.numero_identificacao })
+    },
+    MANUTENCAO: {
+      tabela: 'manutencoes', colunas: 'id, descricao, status',
+      mapear: (m) => {
+        const codigo = `OS-${String(m.id).substring(0, 8).toUpperCase()}`;
+        return { id: m.id, codigo, rotulo: `${codigo} · ${m.descricao || 'Manutenção'} (${m.status || 'sem status'})` };
+      }
+    },
+    FUNCIONARIO: {
+      tabela: 'funcionarios', colunas: 'id, nome, matricula', filtro: (q) => q.eq('ativo', true),
+      mapear: (f) => ({ id: f.id, codigo: f.matricula, rotulo: `${f.nome} · ${f.matricula}` })
+    }
+  };
+
+  async function buscarRegistrosTrail(tipo) {
+    const cfg = CONSULTAS_TRAIL[tipo];
+    if (!cfg || !window.nexusSupabase) throw new Error('sem consulta');
+    let consulta = window.nexusSupabase.from(cfg.tabela).select(cfg.colunas);
+    if (cfg.filtro) consulta = cfg.filtro(consulta);
+    const { data, error } = await consulta;
+    if (error) throw error;
+    return (Array.isArray(data) ? data : [])
+      .map((r) => Object.assign({ tipo }, cfg.mapear(r)))
+      .filter((r) => r.id && r.codigo)
+      .sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR'));
+  }
+
+  async function carregarRegistrosTrail() {
+    trailRegistrosAtuais = [];
+    const tipo = trailTipoSel ? trailTipoSel.value : '';
+    mostrarAvisoTrail('');
+    if (!tipo) {
+      preencherOpcoesTrail(trailRegistroSel, [], 'Selecione primeiro o tipo');
+      trailRegistroSel.disabled = true;
+      return;
+    }
+    if (!window.nexusSupabase) {
+      preencherOpcoesTrail(trailRegistroSel, [], 'Sem conexão');
+      trailRegistroSel.disabled = true;
+      mostrarAvisoTrail('Sem conexão com o banco de dados. Não é possível registrar a decisão agora.');
+      return;
+    }
+    preencherOpcoesTrail(trailRegistroSel, [], 'Carregando registros...');
+    trailRegistroSel.disabled = true;
+    try {
+      trailRegistrosAtuais = await buscarRegistrosTrail(tipo);
+    } catch (err) {
+      console.warn('[NexusPort] Falha ao carregar registros para a trilha:', err);
+      preencherOpcoesTrail(trailRegistroSel, [], 'Erro ao carregar');
+      mostrarAvisoTrail('Não foi possível carregar os registros do banco. Tente novamente.');
+      return;
+    }
+    if (!trailRegistrosAtuais.length) {
+      preencherOpcoesTrail(trailRegistroSel, [], 'Nenhum registro disponível');
+      mostrarAvisoTrail(`Não há ${(ROTULOS_TIPO_TRAIL[tipo] || 'registro').toLowerCase()} cadastrado(a) no banco para esta decisão.`);
+      return;
+    }
+    preencherOpcoesTrail(trailRegistroSel, trailRegistrosAtuais.map((r) => ({ value: r.id, label: r.rotulo })), 'Selecione o registro');
+    trailRegistroSel.disabled = false;
+  }
+
+  // Tipos de entidade mudam conforme a decisão escolhida; se só há um, ele é selecionado.
+  function atualizarTiposTrail() {
+    const tipos = (window.TRAIL_TIPOS_COMPATIVEIS || {})[trailDecisaoSel.value] || [];
+    preencherOpcoesTrail(trailTipoSel, tipos.map((t) => ({ value: t, label: ROTULOS_TIPO_TRAIL[t] || t })), 'Selecione o tipo');
+    if (tipos.length === 1) trailTipoSel.value = tipos[0];
+    carregarRegistrosTrail();
+  }
+
+  if (trailDecisaoSel && trailTipoSel && trailRegistroSel) {
+    trailDecisaoSel.addEventListener('change', atualizarTiposTrail);
+    trailTipoSel.addEventListener('change', carregarRegistrosTrail);
+  }
+
   if (toggleRegistrarTrailBtn && registrarTrailModal) {
-    toggleRegistrarTrailBtn.addEventListener('click', () => registrarTrailModal.classList.remove('hidden'));
+    toggleRegistrarTrailBtn.addEventListener('click', () => {
+      registrarTrailModal.classList.remove('hidden');
+      atualizarTiposTrail();
+    });
   }
   function fecharRegistrarTrailModal() {
     if (registrarTrailModal) registrarTrailModal.classList.add('hidden');
@@ -905,19 +1096,34 @@ document.addEventListener('DOMContentLoaded', () => {
   if (registrarTrailForm) {
     registrarTrailForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const tipoDecisao = document.getElementById('trailTipoDecisao').value;
-      const entidade = document.getElementById('trailEntidadeInput').value.trim();
+      const tipoDecisao = trailDecisaoSel.value;
+      const tipoEntidade = trailTipoSel.value;
+      const registroId = trailRegistroSel.value;
       const motivo = document.getElementById('trailMotivoInput').value.trim();
 
-      if (!entidade || !motivo) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Informe a entidade e a justificativa formal.');
+      if (!tipoDecisao || !tipoEntidade || !registroId || !motivo) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Informe o tipo de entidade, o registro e a justificativa formal.');
         return;
       }
 
-      await window.registrarTrailDecisao(tipoDecisao, entidade, motivo);
+      const registro = trailRegistrosAtuais.find((r) => r.id === registroId && r.tipo === tipoEntidade);
+      if (!registro) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Registro Inválido', 'A lista de registros mudou. Selecione o registro novamente.');
+        carregarRegistrosTrail();
+        return;
+      }
+
+      const resultado = await window.registrarTrailDecisao(tipoDecisao, registro.codigo, motivo, {
+        tipo: registro.tipo, id: registro.id, codigo: registro.codigo, rotulo: registro.rotulo
+      });
+      if (!resultado || !resultado.ok) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Decisão Não Registrada', (resultado && resultado.mensagem) || 'Não foi possível registrar a decisão.');
+        return;
+      }
       await renderTrailDecisoesTable();
 
       registrarTrailForm.reset();
+      atualizarTiposTrail();
       fecharRegistrarTrailModal();
 
       if (window.mostrarFeedback) {
