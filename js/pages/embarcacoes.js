@@ -452,7 +452,6 @@ document.addEventListener('DOMContentLoaded', () => {
             id: n.id,
             nome: n.nome,
             imo: n.numero_imo || n.imo,
-            gps: n.coordenadas_gps || '23.9608° S, 46.3022° W',
             localizacao: n.localizacao || 'DENTRO_DO_PORTO',
             origem: n.porto_origem || 'Porto de Santos',
             destino: n.porto_destino || '',
@@ -481,7 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (naviosList.length === 0) {
       gpsTableBody.innerHTML = `
         <tr>
-          <td colspan="8" class="p-8 text-center">
+          <td colspan="7" class="p-8 text-center">
             <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">sailing</span>
             <span class="block font-bold text-slate-600 text-xs">Nenhuma embarcação cadastrada ainda.</span>
             <span class="block text-[11px] text-slate-600 mt-1">Navios são cadastrados pelo Inspetor em "Gerenciar Embarcações". Assim que o primeiro cadastro for salvo, o GPS, o ETA e as ações aparecem aqui automaticamente.</span>
@@ -523,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const buscaNavioVal = (document.getElementById('buscarNavioInput')?.value || '').trim().toLowerCase();
     const naviosVisiveis = naviosList.filter(n => {
       if (!buscaNavioVal) return true;
-      const haystack = `${n.nome || ''} ${n.imo || ''} ${n.gps || ''} ${n.origem || ''} ${n.destino || ''}`.toLowerCase();
+      const haystack = `${n.nome || ''} ${n.imo || ''} ${n.origem || ''} ${n.destino || ''}`.toLowerCase();
       return haystack.includes(buscaNavioVal);
     });
 
@@ -535,10 +534,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (naviosVisiveis.length === 0) {
       gpsTableBody.innerHTML = `
         <tr>
-          <td colspan="8" class="p-8 text-center">
+          <td colspan="7" class="p-8 text-center">
             <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">search_off</span>
             <span class="block font-bold text-slate-600 text-xs">Nenhuma embarcação corresponde à busca.</span>
-            <span class="block text-[11px] text-slate-600 mt-1">Ajuste o termo pesquisado (nome, IMO, GPS ou destino) para listar novamente.</span>
+            <span class="block text-[11px] text-slate-600 mt-1">Ajuste o termo pesquisado (nome, IMO ou destino) para listar novamente.</span>
           </td>
         </tr>
       `;
@@ -691,7 +690,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="block font-mono text-[10px] text-nexus-500">${esc(n.imo)}</span>
           </td>
           <td class="p-3 font-mono text-xs">${bercosInfoHtml}</td>
-          <td class="p-3 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(n.gps)}</td>
           <td class="p-3">${localizacaoHtml}</td>
           <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino || 'Destino não informado')}</strong></td>
           <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}${etaExtraHtml}</td>
@@ -1449,20 +1447,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ajustarBercoObrigatorio();
   }
 
-  // Validador de Coordenadas GPS Reais (Item 12)
-  function validarCoordenadaGPS(gpsStr) {
-    if (!gpsStr) return false;
-    const clean = gpsStr.trim();
-    const regexCoords = /^[-+]?\d+(\.\d+)?\s*°?\s*([NSns])?\s*,\s*[-+]?\d+(\.\d+)?\s*°?\s*([EWEOewoe])?$/;
-    if (!regexCoords.test(clean)) return false;
-
-    const numbers = clean.match(/[-+]?\d+(\.\d+)?/g);
-    if (!numbers || numbers.length < 2) return false;
-    const lat = Math.abs(parseFloat(numbers[0]));
-    const lon = Math.abs(parseFloat(numbers[1]));
-    return lat <= 90 && lon <= 180;
-  }
-
   if (navioForm) {
     navioForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1476,7 +1460,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const imo = document.getElementById('navioImo').value.trim().toUpperCase().replace(/\s+/g, '');
       const rotaSel = document.getElementById('navioRotaSelect');
       const localizacao = document.getElementById('navioLocalizacao').value;
-      const gps = document.getElementById('navioGps').value.trim();
 
       // Backlog3 (formulários): origem, destino e distância vêm SOMENTE de
       // uma rota marítima registrada no Supabase (rotas_maritimas), selecionada
@@ -1533,21 +1516,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Item 12: Validação de Coordenada GPS Real
-      if (!validarCoordenadaGPS(gps)) {
-        const msg = 'COORDENADA GPS INVÁLIDA (Item 12): Informe uma coordenada geográfica real dentro dos limites válidos (ex.: "-23.9608, -46.3022" ou "23.9608° S, 46.3022° W").';
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'GPS Inválido', msg);
-        return;
-      }
-
-      // Item 12: Bloqueio de coordenadas GPS duplicadas
-      const gpsExistente = naviosList.find(n => n.gps && n.gps.trim() === gps);
-      if (gpsExistente) {
-        const msg = `BLOQUEIO DE LOCALIZAÇÃO (Item 12): já existe navio nesta localização (${gpsExistente.nome}). Dois navios não podem ocupar exatamente a mesma coordenada GPS simultaneamente!`;
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Localização Ocupada', msg);
-        return;
-      }
-
       // Berço OBRIGATÓRIO e IMEDIATO para navio DENTRO_DO_PORTO: um navio não
       // pode estar dentro do porto sem ocupar um berço ao mesmo tempo.
       const bercoSelCadastro = document.getElementById('navioBercoSelect');
@@ -1563,7 +1531,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const novoNavio = {
-        nome, imo, gps, localizacao, origem, destino, distancia, dataSaida: localizacao === 'FORA_DO_PORTO' ? new Date().toISOString() : null
+        nome, imo, localizacao, origem, destino, distancia, dataSaida: localizacao === 'FORA_DO_PORTO' ? new Date().toISOString() : null
       };
 
       let insertedId = null;
@@ -1575,7 +1543,6 @@ document.addEventListener('DOMContentLoaded', () => {
             porto_origem: origem,
             porto_destino: destino,
             localizacao,
-            coordenadas_gps: gps,
             estado_operacional: 'OPERANTE',
             qr_code_url: `QR-${imo}`
           }).select('id').single();

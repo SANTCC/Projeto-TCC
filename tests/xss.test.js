@@ -392,7 +392,6 @@ async function scenarioEmbarcacoes(collected) {
     id: '22222222-2222-2222-2222-222222222222',
     nome: PAYLOADS.htmlEvent,
     imo: PAYLOADS.jsBreakParen,
-    gps: PAYLOADS.svgEvent,
     localizacao: 'DENTRO_DO_PORTO',
     origem: PAYLOADS.tagBreak,
     destino: PAYLOADS.attrBreak,

@@ -432,16 +432,16 @@ async function testesEmbarcacoes() {
   check('vincular navio a berço: berço LIVRE recebe o navio (confirmado no estado)', r.ok === true && local.find((b) => b.nome === 'Berço 01').navio_imo === 'DEF7654321', JSON.stringify(r).slice(0, 160));
 
   w.__resposta = true;
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
   check('cadastrar navio: supervisor não cadastra (não é inspetor)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
 
   w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
   check('cadastrar navio: IMO duplicado é recusado (Item 11)', r.codigo === 'IMO_DUPLICADO', JSON.stringify(r));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3', distancia_km: 10200 });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', distancia_km: 10200 });
   check('cadastrar navio: distância digitada manualmente é recusada pelo esquema (vem da rota)', r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r).slice(0, 160));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', gps: '-23.5, -46.3' });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
   local = JSON.parse(w.localStorage.getItem('nexus_navios_list'));
   check('cadastrar navio: cria pelo formulário da página (confirmado no estado)', r.ok === true && local.some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r).slice(0, 200));
   const bercosAposCadastro = JSON.parse(w.localStorage.getItem('nexus_bercos_list'));

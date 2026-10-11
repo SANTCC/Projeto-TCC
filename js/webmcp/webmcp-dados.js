@@ -152,7 +152,6 @@
       origem: n.origem || null,
       destino: n.destino || null,
       distancia_km: Number.isFinite(Number(n.distancia)) ? Number(n.distancia) : null,
-      gps: n.gps || null,
       saida: dataHora(n.dataSaida || n.data_saida)
     };
   }
