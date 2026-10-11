@@ -9,8 +9,9 @@
  *   1. geográfica dos EUA (`VPN_GATE_BLOCK_US`, ligada por padrão);
  *   2. Proton: ASNs próprias da Proton AG bloqueadas por inteiro + o bloco BGP
  *      anunciado que contém cada IP anunciado pela Proton (pega a saída NAT que
- *      as listas por `/24` não pegam). `VPN_GATE_NIVEL=agressivo` amplia para
- *      todo o espaço anunciado pelas hospedagens usadas pela Proton;
+ *      as listas por `/24` não pegam) + sub-redes IPv6 de saída observadas.
+ *      `VPN_GATE_NIVEL=agressivo` amplia para todo o espaço anunciado pelas
+ *      hospedagens usadas pela Proton;
  *   3. listas públicas de VPN (X4BNet, tn3w e antonme).
  * As camadas 1 e 3 falham fechadas (HTTP 503 com a mensagem de bloqueio); a
  * camada 2 é um reforço e, sem dados, não derruba a decisão das outras.
@@ -100,6 +101,19 @@ export const FONTE_IPS_PROTON = Object.freeze({
 
 /** Menor prefixo aceito ao expandir um IP anunciado (evita blocos gigantes de backbone). */
 export const PREFIXO_MINIMO_BLOCO_PROTON = 20;
+
+/**
+ * Sub-redes IPv6 de saídas Proton confirmadas por ifconfig.me em 2026-10-11.
+ * A primeira também cai no bloco IPv6 do X4BNet (`2a02:6ea0:5100::/40`). A
+ * segunda está na rota compartilhada AS60068 (`2a02:6ea0:ce00::/39`) e no /48
+ * onde a lista Proton do TLop503 registra um servidor. Não herdamos os blocos
+ * inteiros dos provedores compartilhados: só estes /64 observados são bloqueados,
+ * cobrindo rotação do identificador de interface sem bloquear o /39 do CDN77.
+ */
+export const BLOCOS_PROTON_IPV6_OBSERVADOS = Object.freeze([
+  '2a02:6ea0:510c:3882::/64',
+  '2a02:6ea0:ce14:3032::/64'
+]);
 
 /** Quantidade de downloads simultâneos ao consultar os prefixos por ASN. */
 const CONCORRENCIA_FONTES = 6;
@@ -251,6 +265,10 @@ export function parseListaCIDR(texto, maximo = MAXIMO_CIDRS_POR_FONTE) {
   }
   return redes;
 }
+
+const REDES_PROTON_IPV6_OBSERVADAS = Object.freeze(
+  parseListaCIDR(BLOCOS_PROTON_IPV6_OBSERVADOS.join('\n'))
+);
 
 const indicesRedes = new WeakMap();
 
@@ -580,6 +598,12 @@ export function criarHandler({
         // Sem uma base geográfica validada e sem snapshot, mantém o fail-closed.
         return respostaTexto(MENSAGEM_BLOQUEIO, 503, 'geo-indisponivel');
       }
+    }
+
+    // Os /64s confirmados são locais e podem ser negados sem esperar downloads
+    // das listas dinâmicas (ou depender de uma conexão com o GitHub).
+    if (ipPertenceALista(ipValidado, REDES_PROTON_IPV6_OBSERVADAS)) {
+      return respostaTexto(MENSAGEM_BLOQUEIO, 403, 'proton');
     }
 
     const [blocosProton, listasVpn] = await Promise.all([

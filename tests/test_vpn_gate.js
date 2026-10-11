@@ -25,6 +25,7 @@ async function main() {
     FONTES_LISTAS,
     FONTES_GEO_EUA,
     FONTE_IPS_PROTON,
+    BLOCOS_PROTON_IPV6_OBSERVADOS,
     ASNS_PROTON_AG,
     ASNS_HOSPEDAGEM_PROTON,
     PREFIXO_MINIMO_BLOCO_PROTON,
@@ -277,7 +278,7 @@ async function main() {
   check('configuração de exemplo mantém o modo offline e não chama a função',
     uiOffline.chamadas === 0 && !uiOffline.classes.has('nexus-vpn-gate-checking'));
 
-  console.log('\n[8] Camada Proton: ASNs próprias, blocos BGP anunciados e nível de bloqueio');
+  console.log('\n[8] Camada Proton: ASNs próprias, blocos BGP, IPv6 observado e nível de bloqueio');
   check('ASNs próprias da Proton AG são as registradas no RIPE/ipverse',
     ASNS_PROTON_AG.includes('209103') && ASNS_PROTON_AG.includes('208172'));
   check('ASNs de hospedagem incluem Datacamp, M247, WorldStream e CDN77',
@@ -289,6 +290,15 @@ async function main() {
     /tn3w\/ProtonVPN-IPs/.test(FONTE_IPS_PROTON.url) && FONTE_IPS_PROTON.minimo >= 50);
   check('expansão nunca herda blocos maiores que /20 (evita backbone inteiro)',
     PREFIXO_MINIMO_BLOCO_PROTON === 20);
+  const redesProtonIpv6Observadas = parseListaCIDR(BLOCOS_PROTON_IPV6_OBSERVADOS.join('\n'));
+  check('os dois IPv6 relatados estão protegidos por prefixos /64 específicos',
+    BLOCOS_PROTON_IPV6_OBSERVADOS.length === 2
+    && BLOCOS_PROTON_IPV6_OBSERVADOS.every((cidr) => cidr.endsWith('/64'))
+    && ipPertenceALista('2a02:6ea0:510c:3882::13', redesProtonIpv6Observadas)
+    && ipPertenceALista('2a02:6ea0:ce14:3032::12', redesProtonIpv6Observadas));
+  check('a regra IPv6 evita herdar a rota compartilhada inteira da CDN77',
+    !ipPertenceALista('2a02:6ea0:ce14:3033::12', redesProtonIpv6Observadas)
+    && !ipPertenceALista('2a02:6ea0:ce15::12', redesProtonIpv6Observadas));
 
   const redesAnunciadas = parseListaCIDR(['192.0.2.0/22', '10.20.0.0/16', '172.16.40.0/21'].join('\n'));
   const blocoEspecifico = menorBlocoContido('192.0.2.40', redesAnunciadas, 20);
@@ -343,6 +353,30 @@ async function main() {
     /x-vpn-gate-motivo/i.test(dentroAsnPropria.headers.get('access-control-expose-headers') || ''));
   const asnPropriaIpv6 = await handlerProton(reqComIp('2001:db8:aaaa::42'));
   check('IPv6 das ASNs próprias também é bloqueado', asnPropriaIpv6.status === 403);
+  const saidaProtonIpv6A = await handlerProton(reqComIp('2a02:6ea0:510c:3882::13'));
+  const saidaProtonIpv6B = await handlerProton(reqComIp('2a02:6ea0:ce14:3032::12'));
+  check('os dois IPv6 observados são bloqueados com motivo proton',
+    saidaProtonIpv6A.status === 403 && saidaProtonIpv6B.status === 403
+    && saidaProtonIpv6A.headers.get('x-vpn-gate-motivo') === 'proton'
+    && saidaProtonIpv6B.headers.get('x-vpn-gate-motivo') === 'proton');
+  const outro64Cdn77 = await handlerProton(reqComIp('2a02:6ea0:ce14:3033::12'));
+  check('outro /64 do prefixo compartilhado não é bloqueado por engano', outro64Cdn77.status === 204);
+  let chamadasParaBloqueioEstatico = 0;
+  const handlerIpv6ObservadoSemRede = criarHandler({
+    fetchFn: async () => {
+      chamadasParaBloqueioEstatico++;
+      throw new Error('GitHub indisponível');
+    },
+    fontes: [fonteVpnProton],
+    asnsProprias: [],
+    asnsHospedagem: [],
+    getEnv: () => 'false'
+  });
+  const bloqueioIpv6OfflineA = await handlerIpv6ObservadoSemRede(reqComIp('2a02:6ea0:510c:3882::13'));
+  const bloqueioIpv6OfflineB = await handlerIpv6ObservadoSemRede(reqComIp('2a02:6ea0:ce14:3032::12'));
+  check('os dois /64 são bloqueados imediatamente, sem consultar feeds externos',
+    bloqueioIpv6OfflineA.status === 403 && bloqueioIpv6OfflineB.status === 403
+    && chamadasParaBloqueioEstatico === 0);
   const vizinhoDoAnunciado = await handlerProton(reqComIp('192.0.3.9'));
   check('saída NAT em /24 vizinho do bloco anunciado é bloqueada (antes escapava)',
     vizinhoDoAnunciado.status === 403 && vizinhoDoAnunciado.headers.get('x-vpn-gate-motivo') === 'proton');
@@ -387,7 +421,6 @@ async function main() {
   const vpnSemReforco = await handlerSemCamadaProton(reqComIp('198.51.100.30'));
   check('listas de VPN seguem decidindo quando a camada Proton falha',
     vpnSemReforco.status === 403 && vpnSemReforco.headers.get('x-vpn-gate-motivo') === 'vpn');
-
   const urlsSolicitadas = [];
   const handlerFontesReais = criarHandler({
     fetchFn: async (url) => {
