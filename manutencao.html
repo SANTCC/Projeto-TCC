@@ -131,23 +131,6 @@
           <p id="hapticsFeedback" class="text-[11px] font-bold text-nexus-500 dark:text-nexus-300"></p>
         </div>
 
-        <!-- Diagnóstico das tabelas do pânico: o que explica o HTTP 404
-             (PGRST205) em /rest/v1/emergencias antes de aplicar a migração -->
-        <div id="panicDbPanel" class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-3">
-          <div class="flex items-start gap-3">
-            <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">database</span>
-            <div class="min-w-0 flex-1">
-              <span class="font-bold text-sm text-nexus-900 dark:text-white block">Banco de dados (tabelas do pânico)</span>
-              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Confere se a tabela <code class="font-mono">emergencias</code> e o valor de auditoria <code class="font-mono">EMERGENCIA</code> já foram provisionados no Supabase. Sem eles, a consulta de estado responde HTTP 404 (PGRST205) e o aviso abaixo indica a migração SQL a aplicar.</p>
-            </div>
-            <button id="panicTablesCheckBtn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] transition-colors flex items-center gap-1 shrink-0">
-              <span class="material-symbols-outlined text-[15px]">sync</span>
-              <span>Verificar</span>
-            </button>
-          </div>
-          <p id="panicTablesStatus" class="text-[11px] font-mono text-slate-600 dark:text-slate-400"></p>
-        </div>
-
         <!-- Alerta de Manutenção Preventiva Sugerida (> 3 Anos) -->
         <div id="alertaPreventivaBox" class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
           <span class="material-symbols-outlined text-2xl text-amber-700 shrink-0 mt-0.5">warning</span>
