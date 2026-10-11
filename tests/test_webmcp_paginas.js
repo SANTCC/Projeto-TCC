@@ -41,6 +41,10 @@ function provedorDeTeste(w) {
 function supabaseRotasFalso(rotas, opcoes) {
   const o = opcoes || {};
   function resolver(tabela, estado) {
+    // Berços: o banco é consultado antes de cada vinculação (fonte de verdade).
+    if (tabela === 'bercos') {
+      return Promise.resolve({ data: (o.bercos || [{ id: 'BERCO-01', nome: 'Berço 01', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null }]).map((x) => Object.assign({}, x)), error: null });
+    }
     if (tabela !== 'rotas_maritimas') {
       return Promise.resolve({ data: null, error: { message: 'tabela indisponível no teste' } });
     }

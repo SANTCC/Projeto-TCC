@@ -422,6 +422,33 @@
     </div>
   </div>
 
+  <!-- Modal de Vinculação de Navio a Berço (seleção; berços ocupados ficam desabilitados) -->
+  <div id="vincularBercoModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-indigo-600">dock</span>
+          Vincular Navio a Berço
+        </h2>
+        <button type="button" id="closeVincularBercoBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+      <p class="text-xs text-slate-700 dark:text-slate-200">Navio: <strong id="vincularBercoNavioLabel" class="font-mono">--</strong></p>
+      <div>
+        <label for="vincularBercoSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1 text-xs">Berço de atracação:</label>
+        <select id="vincularBercoSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-xs">
+          <option value="">Selecione o berço...</option>
+        </select>
+        <p id="vincularBercoAviso" class="text-[11px] text-slate-600 mt-1"></p>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-nexus-border dark:border-nexus-dark-border">
+        <button type="button" id="cancelarVincularBercoBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs">Cancelar</button>
+        <button type="button" id="confirmarVincularBercoBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs">Confirmar vinculação</button>
+      </div>
+    </div>
+  </div>
+
   <script src="vendor/supabase-js.min.js"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>

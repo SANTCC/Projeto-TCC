@@ -1030,114 +1030,199 @@ document.addEventListener('DOMContentLoaded', () => {
     if (atual) bercoSel.value = atual;
   }
 
-  // Vincular Navio a um dos 15 Berços (Tarefa 6)
+  // ------------------------------------------------------------------
+  // Vincular Navio a Berço (Tarefa 6 / seleção sem digitação manual)
+  // Os berços vêm do Supabase; ocupados aparecem desabilitados e a
+  // disponibilidade é revalidada antes de qualquer gravação.
+  // ------------------------------------------------------------------
+  const vincularBercoModal = document.getElementById('vincularBercoModal');
+  const vincularBercoSelect = document.getElementById('vincularBercoSelect');
+  const vincularBercoNavioLabel = document.getElementById('vincularBercoNavioLabel');
+  const vincularBercoAviso = document.getElementById('vincularBercoAviso');
+  const confirmarVincularBercoBtn = document.getElementById('confirmarVincularBercoBtn');
+  const cancelarVincularBercoBtn = document.getElementById('cancelarVincularBercoBtn');
+  const closeVincularBercoBtn = document.getElementById('closeVincularBercoBtn');
+  let navioPendenteBerco = null;
+
+  /** Lê o estado atual dos berços no Supabase e espelha no cache local. */
+  async function lerBercosAtuais() {
+    const cache = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+    const client = clienteBercos();
+    if (!client) return { ok: true, lista: cache, origem: 'local' };
+    try {
+      const { data, error } = await client.from('bercos').select('*').order('nome', { ascending: true });
+      if (error) {
+        // Tabela ausente: operação segue apenas com o cache local (comportamento já existente).
+        if (tratarErroBercos(error)) return { ok: true, lista: cache, origem: 'local' };
+        return { ok: false, lista: cache, erro: error.message || 'erro desconhecido' };
+      }
+      if (!Array.isArray(data)) return { ok: false, lista: cache, erro: 'resposta inválida' };
+      const doBanco = data.map(b => ({
+        id: b.id || `BERCO-${String(b.nome).replace(/\D/g, '')}`,
+        nome: b.nome,
+        estado: b.estado || 'LIVRE',
+        navio_nome: b.navio_nome || null,
+        navio_imo: b.navio_imo || null,
+        navio_id: b.navio_id || null
+      }));
+      // O banco é a fonte de verdade: com registros, nenhum berço do cache local entra na lista
+      // (um berço só-local marcado LIVRE poderia ser vinculado por engano). Sem registros, usa o cache.
+      if (doBanco.length === 0) return { ok: true, lista: cache, origem: 'local' };
+      const lista = doBanco;
+      localStorage.setItem('nexus_bercos_list', JSON.stringify(lista));
+      bercosList = lista;
+      return { ok: true, lista, origem: 'banco' };
+    } catch (e) {
+      return { ok: false, lista: cache, erro: e && e.message ? e.message : String(e) };
+    }
+  }
+
+  function preencherSelectVincularBerco(lista) {
+    if (!vincularBercoSelect) return;
+    vincularBercoSelect.innerHTML = '<option value="">Selecione o berço...</option>' + lista.map(b => {
+      const livre = b.estado === 'LIVRE';
+      const situacao = livre ? 'Livre' : `Ocupado${b.navio_nome ? ` por ${b.navio_nome}` : ''}`;
+      return `<option value="${esc(b.nome)}" ${livre ? '' : 'disabled'}>${esc(b.nome)} — ${esc(situacao)}</option>`;
+    }).join('');
+  }
+
+  function fecharVincularBerco() {
+    if (vincularBercoModal) vincularBercoModal.classList.add('hidden');
+    navioPendenteBerco = null;
+  }
+
+  // Vincular Navio a um dos 15 Berços: abre a seleção (somente berços livres habilitados)
   window.vincularNavioABerco = async function(imo, opcoes) {
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
-    bercosList = JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
-    const bercosLivres = bercosList.filter(b => b.estado === 'LIVRE');
-
-    if (bercosLivres.length === 0) {
+    const atual = await lerBercosAtuais();
+    if (!atual.ok) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Berços Não Confirmados', `Não foi possível confirmar a situação dos berços no banco de dados (${atual.erro}). Tente novamente.`);
+      return;
+    }
+    const livres = atual.lista.filter(b => b.estado === 'LIVRE');
+    if (livres.length === 0) {
       if (window.mostrarFeedback) {
         window.mostrarFeedback('alerta', 'Berços Indisponíveis', 'Nenhum berço desocupado disponível no momento para vinculação do navio.');
       }
       return;
     }
 
-    const optionsText = bercosLivres.map((b, idx) => `${idx + 1} - ${b.nome}`).join('\n');
-    let selecao;
+    // Uso do agente WebMCP: berço informado pelo nome, validado no mesmo caminho da interface.
     if (opcoes && opcoes.bercoNome !== undefined) {
-      // Uso do agente WebMCP: escolhe o berço livre pelo nome, sem diálogo.
-      const idxBerco = bercosLivres.findIndex((b) => b.nome === opcoes.bercoNome);
-      selecao = idxBerco >= 0 ? String(idxBerco + 1) : '';
-    } else {
-      selecao = await window.nexusPrompt('Vincular Navio a Berço', `Selecione um Berço Desocupado para o navio ${navio.nome} (${navio.imo}):\n${optionsText}`);
+      await aplicarVinculoBerco(navio, opcoes.bercoNome);
+      return;
     }
 
-    if (!selecao) return;
-
-    const idxSel = parseInt(selecao, 10) - 1;
-    if (!isNaN(idxSel) && bercosLivres[idxSel]) {
-      const bercoAlvo = bercosLivres[idxSel];
-
-      // Desocupa berço anterior do navio se houver
-      bercosList.forEach(b => {
-        if (b.navio_imo === imo || b.navio_nome === navio.nome) {
-          b.estado = 'LIVRE';
-          b.navio_nome = null;
-          b.navio_imo = null;
-          b.navio_id = null;
-          upsertBercoRemoto({
-        id: b.id,
-        nome: b.nome,
-        estado: 'LIVRE',
-        navio_nome: null,
-        navio_imo: null,
-        navio_id: null
-      });
-        }
-      });
-
-      const bercoReal = bercosList.find(b => b.nome === bercoAlvo.nome);
-      if (bercoReal) {
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        // A constraint bercos_vinculo_navio_check exige navio_nome ou navio_imo
-        // em berço OCUPADO: se o navio não tiver identificação, não ocupamos.
-        const ocupacao = normalizarBerco({
-          id: bercoReal.id,
-          nome: bercoReal.nome,
-          estado: 'OCUPADO',
-          navio_nome: navio.nome,
-          navio_imo: navio.imo,
-          navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
-        });
-        if (!ocupacao.payload || ocupacao.payload.estado !== 'OCUPADO') {
-          if (window.mostrarFeedback) {
-            window.mostrarFeedback('erro', 'Vínculo Não Registrado', 'Não foi possível identificar o navio (nome/IMO) para ocupar o berço. Verifique o cadastro da embarcação.');
-          }
-          return;
-        }
-
-        bercoReal.estado = ocupacao.payload.estado;
-        bercoReal.navio_nome = ocupacao.payload.navio_nome;
-        bercoReal.navio_imo = ocupacao.payload.navio_imo;
-        bercoReal.navio_id = ocupacao.payload.navio_id;
-
-        upsertBercoRemoto(ocupacao.payload);
-      }
-
-      localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
-      renderBercosPanel();
-      renderGpsTable();
-
-      if (window.nexusSupabase) {
-        try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          let navioQuery = window.nexusSupabase.from('navios').update({
-            localizacao: 'DENTRO_DO_PORTO'
-          });
-          if (isUuid.test(navio.id)) {
-            navioQuery = navioQuery.eq('id', navio.id);
-          } else {
-            navioQuery = navioQuery.eq('numero_imo', navio.imo);
-          }
-          await navioQuery;
-        } catch (e) {
-          console.warn('[NexusPort] Erro ao salvar vinculação de navio no Supabase:', e);
-        }
-      }
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Navio ${navio.nome} vinculado ao ${bercoAlvo.nome}`);
-      }
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Navio Vinculado', `Navio ${navio.nome} vinculado com sucesso ao ${bercoAlvo.nome}!`);
-      }
-    } else {
-      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Seleção de berço inválida.');
+    if (!vincularBercoModal || !vincularBercoSelect) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Tela Incompleta', 'Seletor de berços não encontrado nesta página.');
+      return;
     }
+    navioPendenteBerco = navio;
+    if (vincularBercoNavioLabel) vincularBercoNavioLabel.textContent = `${navio.nome} (IMO ${navio.imo})`;
+    preencherSelectVincularBerco(atual.lista);
+    vincularBercoSelect.value = '';
+    if (vincularBercoAviso) vincularBercoAviso.textContent = `${livres.length} berço(s) livre(s). Berços ocupados aparecem desabilitados e não podem ser selecionados.`;
+    vincularBercoModal.classList.remove('hidden');
   };
+
+  /**
+   * Efetiva a vinculação após revalidar, no Supabase, que o berço continua LIVRE.
+   * Retorna true quando a ocupação foi registrada.
+   */
+  async function aplicarVinculoBerco(navio, nomeBerco) {
+    const fresh = await lerBercosAtuais();
+    if (!fresh.ok) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Berços Não Confirmados', `Não foi possível confirmar a disponibilidade do berço no banco de dados (${fresh.erro}). Vinculação não realizada.`);
+      return false;
+    }
+    const bercoAlvo = fresh.lista.find(b => b.nome === nomeBerco);
+    if (!bercoAlvo) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Seleção de berço inválida.');
+      return false;
+    }
+    if (bercoAlvo.estado !== 'LIVRE') {
+      if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Berço Indisponível', `O ${bercoAlvo.nome} não está mais livre${bercoAlvo.navio_nome ? ` (ocupado por ${bercoAlvo.navio_nome})` : ''}. Escolha outro berço.`);
+      return false;
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // A constraint bercos_vinculo_navio_check exige navio_nome ou navio_imo em berço OCUPADO.
+    const ocupacao = normalizarBerco({
+      id: bercoAlvo.id,
+      nome: bercoAlvo.nome,
+      estado: 'OCUPADO',
+      navio_nome: navio.nome,
+      navio_imo: navio.imo,
+      navio_id: (navio.id && isUuid.test(navio.id)) ? navio.id : null
+    });
+    if (!ocupacao.payload || ocupacao.payload.estado !== 'OCUPADO') {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Vínculo Não Registrado', 'Não foi possível identificar o navio (nome/IMO) para ocupar o berço. Verifique o cadastro da embarcação.');
+      }
+      return false;
+    }
+
+    bercosList = fresh.lista;
+    // Desocupa berço anterior do navio, se houver
+    const anteriores = [];
+    bercosList.forEach(b => {
+      if (b.nome !== bercoAlvo.nome && (b.navio_imo === navio.imo || b.navio_nome === navio.nome)) {
+        b.estado = 'LIVRE';
+        b.navio_nome = null;
+        b.navio_imo = null;
+        b.navio_id = null;
+        anteriores.push(b);
+      }
+    });
+    const bercoReal = bercosList.find(b => b.nome === bercoAlvo.nome);
+    bercoReal.estado = ocupacao.payload.estado;
+    bercoReal.navio_nome = ocupacao.payload.navio_nome;
+    bercoReal.navio_imo = ocupacao.payload.navio_imo;
+    bercoReal.navio_id = ocupacao.payload.navio_id;
+
+    localStorage.setItem('nexus_bercos_list', JSON.stringify(bercosList));
+    await Promise.all(anteriores.map(b => upsertBercoRemoto({ id: b.id, nome: b.nome, estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null })));
+    await upsertBercoRemoto(ocupacao.payload);
+
+    renderBercosPanel();
+    renderGpsTable();
+
+    if (window.nexusSupabase) {
+      try {
+        let navioQuery = window.nexusSupabase.from('navios').update({ localizacao: 'DENTRO_DO_PORTO' });
+        navioQuery = isUuid.test(navio.id) ? navioQuery.eq('id', navio.id) : navioQuery.eq('numero_imo', navio.imo);
+        await navioQuery;
+      } catch (e) {
+        console.warn('[NexusPort] Erro ao salvar vinculação de navio no Supabase:', e);
+      }
+    }
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Navio ${navio.nome} vinculado ao ${bercoAlvo.nome}`);
+    }
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Navio Vinculado', `Navio ${navio.nome} vinculado com sucesso ao ${bercoAlvo.nome}!`);
+    }
+    return true;
+  }
+
+  if (confirmarVincularBercoBtn) {
+    confirmarVincularBercoBtn.addEventListener('click', async () => {
+      if (!navioPendenteBerco) return;
+      const nome = vincularBercoSelect ? vincularBercoSelect.value : '';
+      if (!nome) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Berço Obrigatório', 'Selecione um berço desocupado para vincular o navio.');
+        return;
+      }
+      const navio = navioPendenteBerco;
+      const ok = await aplicarVinculoBerco(navio, nome);
+      if (ok) fecharVincularBerco();
+    });
+  }
+  if (cancelarVincularBercoBtn) cancelarVincularBercoBtn.addEventListener('click', fecharVincularBerco);
+  if (closeVincularBercoBtn) closeVincularBercoBtn.addEventListener('click', fecharVincularBerco);
 
   // Excluir Navio (Tarefa 6): apaga do banco e da interface; contêineres e
   // cargas vinculados são DESVINCULADOS (não apagados) e ficam livres para
