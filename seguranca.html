@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
+       defer: o gtag.js entra de forma assíncrona e nada aqui bloqueia a renderização. -->
+  <script defer src="js/analytics.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>NexusPort — Auditoria de Tentativas de Login</title>
+  <meta name="description" content="Log permanente das tentativas de login erradas: IPs, códigos tentados, número de tentativas e horário, com gráficos para a Direção." />
+
+  <link rel="icon" href="favicon.ico" type="image/x-icon" />
+
+  <!-- Tipografia e ícones locais (tools/assets.js) e CSS do Tailwind compilado (css/nexus.css):
+       substituem o CDN do Tailwind (~400 KiB de JavaScript) e o Google Fonts, sem terceiros no caminho. -->
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="css/fonts.css?v=20261011-icons" />
+  <link rel="stylesheet" href="css/nexus.css" />
+  <!-- Utilitários de Segurança Anti-XSS (deve carregar antes dos módulos de página) -->
+  <script src="js/security.js"></script>
+  <!-- Bibliotecas locais sob demanda (vendor/) -->
+  <script src="js/asset-loader.js"></script>
+  <script src="js/session-cookies.js"></script>
+  <script src="js/auth-guard.js"></script>
+  <script>
+    // Tela restrita à Direção/Conselho e ao Supervisor: quem vê os IPs que
+    // atacaram o login. Mesma lista de cargos da página de Gestão de Pessoas,
+    // mais o Supervisor (camada operacional).
+    window.currentUserSession = NexusAuth.requireAuth([
+      'DIRETOR_PRESIDENTE_SUPERINTENDENTE',
+      'DIRETOR_OPERACOES_LOGISTICA',
+      'CONSELHO_ADMINISTRACAO',
+      'SUPERVISOR_GERENTE_OPERACOES'
+    ]);
+  </script>
+  <script src="js/vision-layer.js"></script>
+  <script src="js/layout.js"></script>
+</head>
+<body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
+
+  <!-- Topbar Superior -->
+  <header id="appTopbar" class="w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm"></header>
+
+  <!-- Layout Principal -->
+  <div class="flex-1 flex overflow-hidden pt-16 md:h-[calc(100vh-4rem)] md:overflow-hidden">
+    <!-- Sidebar Navegação -->
+    <aside id="appSidebar" class="w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0"></aside>
+
+    <!-- Conteúdo da Página -->
+    <main class="flex-1 p-6 overflow-y-auto">
+      <div class="max-w-6xl mx-auto flex flex-col gap-6">
+
+        <!-- Page Header -->
+        <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm">
+          <div>
+            <div class="flex items-center gap-2 text-nexus-500 font-mono text-xs font-bold uppercase tracking-wider">
+              <span class="material-symbols-outlined text-sm">shield_lock</span>
+              <span>Módulo Exclusivo / Acesso Restrito</span>
+            </div>
+            <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Auditoria de Tentativas de Login</h1>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Log permanente das tentativas erradas (migration <span class="font-mono">20261011000000</span>): IP, código tentado, quantas vezes aquele IP errou <em>qualquer</em> código e quando. O log não é apagado quando o login acerta.</p>
+          </div>
+          <span class="px-3 py-1 rounded-full bg-nexus-500 text-white font-mono text-xs font-bold">
+            Direção / Supervisor
+          </span>
+        </div>
+
+        <!-- Aviso de erro / estado vazio -->
+        <div id="segAviso" class="hidden bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-2xl p-4 text-xs font-medium flex items-start gap-2">
+          <span class="material-symbols-outlined text-[18px] shrink-0">error</span>
+          <span id="segAvisoTexto" class="leading-relaxed"></span>
+        </div>
+
+        <!-- Controles: período e atualização -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+              <span class="material-symbols-outlined text-nexus-500">filter_alt</span>
+              Período Analisado
+            </h2>
+            <span id="segStatus" role="status" aria-live="polite" class="text-[10px] font-mono text-slate-600 dark:text-slate-500 max-w-[220px] truncate">Aguardando consulta…</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+              <label for="segPeriodo" class="block text-[11px] font-bold uppercase text-slate-600">Janela do gráfico de atividade</label>
+              <select id="segPeriodo" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 text-xs font-bold">
+                <option value="6">Últimas 6 horas</option>
+                <option value="24" selected>Últimas 24 horas</option>
+                <option value="72">Últimas 3 dias</option>
+                <option value="168">Últimos 7 dias</option>
+              </select>
+            </div>
+            <div class="md:col-span-2 flex items-end gap-2">
+              <button id="segAtualizarBtn" type="button" title="Consulta o servidor e redesenha o painel com os dados mais recentes" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-10 disabled:opacity-60 disabled:cursor-wait">
+                <span class="material-symbols-outlined text-[18px]">refresh</span>
+                <span>Atualizar Log</span>
+              </button>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Renovação automática a cada 60 s</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Indicadores -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="segKpis">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-1">
+            <span class="text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400">Tentativas Erradas</span>
+            <span id="kpiTentativas" class="font-display text-2xl font-bold text-nexus-900 dark:text-white">--</span>
+            <span class="text-[10px] text-slate-500 dark:text-slate-500">Total acumulado no log</span>
+          </div>
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-1">
+            <span class="text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400">IPs Distintos</span>
+            <span id="kpiIps" class="font-display text-2xl font-bold text-nexus-900 dark:text-white">--</span>
+            <span id="kpiIpsPeriodo" class="text-[10px] text-slate-500 dark:text-slate-500">-- no período</span>
+          </div>
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-1">
+            <span class="text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400">IPs em Alerta</span>
+            <span id="kpiAlerta" class="font-display text-2xl font-bold text-amber-700">--</span>
+            <span class="text-[10px] text-slate-500 dark:text-slate-500">2+ falhas na janela de 15 min</span>
+          </div>
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-1">
+            <span class="text-[11px] font-bold uppercase text-slate-600 dark:text-slate-400">IPs Bloqueados</span>
+            <span id="kpiBloqueados" class="font-display text-2xl font-bold text-red-600">--</span>
+            <span class="text-[10px] text-slate-500 dark:text-slate-500">5+ falhas — login travado</span>
+          </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
+            <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+              <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-nexus-500">lan</span>
+                IPs por Tentativas Erradas
+              </h2>
+              <span class="font-mono text-[10px] text-slate-500 dark:text-slate-500">Top 10</span>
+            </div>
+            <div style="height: 300px; position: relative;">
+              <canvas id="segGraficoIps" role="img" aria-label="Gráfico de barras com os IPs que mais erraram o código de acesso"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
+            <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+              <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-nexus-500">schedule</span>
+                Atividade por Hora
+              </h2>
+              <span class="font-mono text-[10px] text-slate-500 dark:text-slate-500">IPs com tentativa</span>
+            </div>
+            <div style="height: 300px; position: relative;">
+              <canvas id="segGraficoHora" role="img" aria-label="Gráfico de colunas com o número de IPs que tiveram tentativa errada por hora"></canvas>
+            </div>
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">Cada barra conta os IPs cuja <em>última</em> tentativa errada caiu naquela hora. O total de tentativas de cada IP está na tabela abaixo.</p>
+          </div>
+        </div>
+
+        <!-- Códigos mais tentados -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+              <span class="material-symbols-outlined text-nexus-500">key_off</span>
+              Códigos Mais Tentados
+            </h2>
+            <span id="segTotalCodigos" class="font-mono text-[10px] text-slate-500 dark:text-slate-500">-- códigos distintos</span>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+            <div style="height: 260px; position: relative;">
+              <canvas id="segGraficoCodigos" role="img" aria-label="Gráfico de rosca com os códigos de acesso mais tentados"></canvas>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
+                  <tr>
+                    <th class="p-3">Código Tentado</th>
+                    <th class="p-3 text-right">Tentativas</th>
+                    <th class="p-3 text-right">Última Tentativa</th>
+                  </tr>
+                </thead>
+                <tbody id="segTabelaCodigos" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">
+                  <!-- Renderizado via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log dos IPs -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
+              <span class="material-symbols-outlined text-nexus-500">travel_explore</span>
+              Log Completo por IP
+            </h2>
+            <span class="font-mono text-[10px] text-slate-500 dark:text-slate-500">Janela de bloqueio: 15 min</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
+                <tr>
+                  <th class="p-3">Endereço IP</th>
+                  <th class="p-3">Situação</th>
+                  <th class="p-3 text-right">Falhas (15 min)</th>
+                  <th class="p-3 text-right">Total de Tentativas</th>
+                  <th class="p-3">Início da Rajada</th>
+                  <th class="p-3">Última Tentativa</th>
+                  <th class="p-3">Acertou Depois</th>
+                </tr>
+              </thead>
+              <tbody id="segTabelaIps" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">
+                <!-- Renderizado via JS -->
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+            "Falhas (15 min)" é a contagem da janela que decide o bloqueio: 5 falhas travam o acesso de um humano, 2 travam um bot.
+            "Total de Tentativas" é o histórico do IP — quantas vezes ele errou <em>qualquer</em> código — e nunca é zerado.
+            "Acertou depois" indica que o código entered pelo mesmo IP foi válido depois das falhas: evidência de credencial descoberta.
+          </p>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="vendor/supabase-js.min.js"></script>
+  <!-- Rodapé Institucional -->
+  <footer class="w-full py-4 text-center text-xs text-slate-500 dark:text-slate-400 border-t border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900">
+    <div class="flex flex-wrap items-center justify-center gap-3">
+      <span class="font-mono">Sessão Autenticada</span>
+      <span>•</span>
+      <span>Porto de Santos STS-01</span>
+      <span>•</span>
+      <span>NexusPort © 2026</span>
+      <span>•</span>
+      <a href="about.html" class="font-semibold text-nexus-500 hover:underline">Como funciona o sistema</a>
+    </div>
+  </footer>
+
+  <script src="js/config.example.js"></script>
+  <script src="js/config.js" onerror="this.remove()"></script>
+  <script src="js/net-debug.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/online-presence.js"></script>
+  <script src="js/data-repository.js"></script>
+  <script src="js/haptics.js"></script>
+  <script src="js/panic-realtime.js"></script>
+  <script src="js/pages/seguranca.js"></script>
+
+  <script src="js/webmcp/webmcp-core.js"></script>
+  <script src="js/webmcp/webmcp-ui.js"></script>
+  <script src="js/webmcp/webmcp-dados.js"></script>
+  <script src="js/webmcp/webmcp-global.js"></script>
+
+  <!-- VLibras Widget (Acessibilidade em Libras) -->
+  <div vw class="enabled">
+    <div vw-access-button class="active"></div>
+    <div vw-plugin-wrapper>
+      <div class="vw-plugin-top-wrapper"></div>
+    </div>
+  </div>
+  <!-- Tradutor de Libras (VLibras, serviço público): o plugin é um recurso de acessibilidade, mas o
+       script vem de um servidor de terceiros. Ele é baixado na primeira interação do operador — ou
+       pelo atalho de acessibilidade —, então a página abre sem depender de rede externa. -->
+  <script>
+    // VLibras (LIBRAS) — mesmo carregamento sob demanda das demais telas: a
+    // biblioteca do vlibras.gov.br só entra no primeiro gesto do operador.
+    (function () {
+      var url = 'https://vlibras.gov.br/app/vlibras-plugin.js';
+      var pedido = false;
+      function carregar() {
+        if (pedido) return;
+        pedido = true;
+        var script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.onload = function () {
+          if (window.VLibras && window.VLibras.Widget) {
+            new window.VLibras.Widget('https://vlibras.gov.br/app');
+          }
+        };
+        document.body.appendChild(script);
+      }
+      ['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(function (evento) {
+        window.addEventListener(evento, carregar, { once: true, passive: true });
+      });
+      window.nexusCarregarVLibras = carregar;
+    })();
+  </script>
+</body>
+</html>

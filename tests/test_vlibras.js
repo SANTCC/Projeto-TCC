@@ -17,6 +17,7 @@ const PAGES = [
   'manutencao.html',
   'relatorios.html',
   'scanner.html',
+  'seguranca.html',
   'tecnico_portos.html',
   'teste-vibracao.html'
 ];

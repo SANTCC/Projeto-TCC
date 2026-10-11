@@ -176,7 +176,7 @@ function testarReorganizacaoJs() {
     faltando.slice(0, 3).map((r) => `${r.arq} → ${r.src}`).join(', '));
 
   const modulosDePagina = ['charts', 'cargas', 'confirm-role', 'dashboard', 'delegacao', 'embarcacoes', 'inspecao',
-    'login', 'manutencao', 'relatorios', 'scanner', 'tecnico_portos', 'tipos-carga'];
+    'login', 'manutencao', 'relatorios', 'scanner', 'seguranca', 'tecnico_portos', 'tipos-carga'];
   const raiz = fs.readdirSync(path.join(ROOT, 'js')).filter((f) => f.endsWith('.js'));
   const naRaiz = raiz.filter((f) => /^webmcp-/.test(f) || modulosDePagina.includes(f.replace(/\.js$/, '')));
   check('js/ raiz não tem mais módulos de página nem webmcp-*.js', naRaiz.length === 0, naRaiz.join(', '));
@@ -184,7 +184,7 @@ function testarReorganizacaoJs() {
   const webmcp = fs.readdirSync(path.join(ROOT, 'js', 'webmcp')).filter((f) => /^webmcp-.*\.js$/.test(f));
   check(`js/webmcp/ contém os 14 módulos WebMCP (encontrados: ${webmcp.length})`, webmcp.length === 14);
   const paginas = fs.readdirSync(path.join(ROOT, 'js', 'pages')).filter((f) => f.endsWith('.js'));
-  check(`js/pages/ contém os 13 módulos de página (encontrados: ${paginas.length})`, paginas.length === 13);
+  check(`js/pages/ contém os 14 módulos de página (encontrados: ${paginas.length})`, paginas.length === 14);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -97,6 +97,19 @@ Os gráficos são montados em tempo de execução recortados pela **camada de vi
 
 ---
 
+## 🕵️ Auditoria das Tentativas de Login (`tentativas_login` / `seguranca.html`)
+
+- **O que é gravado:** a função `login_funcionario(p_codigo, p_veredito)` (migration `20261011000000_login_auditoria_tentativas.sql`) grava **duas linhas por tentativa errada** na tabela `tentativas_login`, no formato que já existia: `ip:<endereço>` — quantas vezes aquele IP tentou **qualquer** código errado — e `cod:<CÓDIGO>` — quantas vezes aquele código foi tentado. Cada linha carrega a contagem (`falhas`), o início da rajada (`janela_inicio`), o horário da última tentativa (`ultima_tentativa`) e o total histórico (`total_falhas`).
+- **O log não é mais apagado:** até aqui a linha era apagada quando o login dava certo e a contagem reiniciava a cada janela de 15 min — o histórico do ataque sumia. Agora o acerto apenas zera `falhas` (liberando o bloqueio) e carimba `ultimo_sucesso`: a evidência permanece. Tentativas que já estavam **bloqueadas** também entram no log.
+- **Janela de bloqueio mantida:** 5 falhas em 15 min travam um acesso humano, 3 travam um navegador suspeito e 2 travam um bot (um User-Agent com automação força o nível `bot`). O `total_falhas` nunca é zerado — é o número mostrado no painel.
+- **Limpeza:** a migração remove uma única vez as linhas gravadas no formato antigo (`total_falhas = 0` e `ultima_tentativa IS NULL`), para o painel começar limpo. Reaplicar a migração não apaga o log atual. **Daqui em diante nada é apagado:** o histórico é permanente e a tabela cresce com o tempo.
+- **Painel (`seguranca.html`, cargos de Direção/Conselho/Supervisor):** indicadores (tentativas erradas, IPs distintos, IPs em alerta, IPs bloqueados), gráfico de **IPs por total de tentativas erradas**, gráfico de **atividade por hora** e de **códigos mais tentados**, além da tabela completa por IP com data/hora. Renovação automática a cada 60 s e botão "Atualizar Log".
+- **Leitura agregada no servidor:** o painel não consulta a tabela; chama `login_tentativas_relatorio(p_limite, p_horas)`, que devolve resumo, top IPs, códigos e série por hora já agregados. A tabela **não tem policies** (RLS sem leitura direta): a função é a única porta de entrada.
+- **Ressalva de segurança:** o NexusPort não usa Supabase Auth, então o PostgREST entrega toda requisição como `anon` e o banco não consegue validar o cargo de quem chamou — quem restringe o painel é o app (`js/auth-guard.js`). Quem precisar do dado protegido no servidor precisa migrar a autenticação para o Supabase Auth (o mesmo pendente já apontado para as demais tabelas).
+- **Testes:** `npm run test:login-auditoria`.
+
+---
+
 ## 🚫 Bloqueio de IPs de VPN e geográfico (`vpn-gate`)
 
 - **Função:** `supabase/functions/vpn-gate` recebe uma chamada `GET`, obtém o IP dos cabeçalhos de proxy do Supabase e compara IPv4/IPv6 com listas CIDR públicas. Não aceita um IP enviado no corpo/query e não usa `service_role`.

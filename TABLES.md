@@ -389,6 +389,21 @@
 | `url` | `text` |  Nullable |
 | `updated_at` | `timestamptz` |  |
 
+## Table `tentativas_login`
+
+> Log permanente das tentativas de login. **Sem policies**: ninguém lê nem escreve pela tabela — só as funções `login_funcionario(text, text)` (escreve) e `login_tentativas_relatorio(int, int)` (lê agregado para `seguranca.html`).
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `chave` | `text` | Primary |
+| `falhas` | `int` |  Default `0` |
+| `janela_inicio` | `timestamptz` |  Default `now()` |
+| `ultima_tentativa` | `timestamptz` |  Nullable |
+| `total_falhas` | `int` | Not Null, Default `0` |
+| `ultimo_sucesso` | `timestamptz` |  Nullable |
+
 ## Custom Types / Enums
 
 ### `cargo_enum`
@@ -631,3 +646,10 @@
 | `nexus_select_panic_webhook_config` | SELECT | public | PERMISSIVE | `true` | — |
 | `nexus_insert_panic_webhook_config` | INSERT | public | PERMISSIVE | — | `true` |
 | `nexus_update_panic_webhook_config` | UPDATE | public | PERMISSIVE | `true` | `true` |
+
+### `tentativas_login`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+
+*Sem policies (RLS ativada).* A tabela não é lida nem escrita pelo PostgREST: a gravação é feita pela função `login_funcionario(text, text)` (`security definer`, chamada pelo login) e a leitura somente pela função `login_tentativas_relatorio(int, int)`, que devolve o agregado do painel `seguranca.html`.
