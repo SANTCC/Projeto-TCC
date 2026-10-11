@@ -187,7 +187,7 @@ async function testarCargaEmTransito() {
   };
 
   const dom = await loadPage('cargas.html', {
-    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/cargas.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js', 'js/pages/cargas.js'],
     seed: { nexus_cargas_fluxo: [carga], nexus_containers_list: [], nexus_navios_list: [] }
   });
   const { window } = dom;
@@ -233,7 +233,7 @@ async function testarAutorizarRetorno() {
   };
 
   const dom = await loadPage('embarcacoes.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/embarcacoes.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js', 'js/pages/embarcacoes.js'],
     seed: { nexus_navios_list: [navioForaDoPorto], nexus_bercos_list: [], nexus_cargas_fluxo: [] }
   });
   const { window } = dom;

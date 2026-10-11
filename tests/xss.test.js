@@ -186,7 +186,7 @@ async function scenarioCargas(collected) {
     data_cadastro: new Date().toISOString()
   };
   const dom = await loadApp('cargas.html', {
-    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/cargas.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js', 'js/pages/cargas.js'],
     seed: { nexus_cargas_fluxo: [carga], nexus_containers_list: [] }
   });
   const { window } = dom;
@@ -251,7 +251,7 @@ async function scenarioModalVinculacao(collected) {
   };
 
   const dom = await loadApp('cargas.html', {
-    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/cargas.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js', 'js/pages/cargas.js'],
     seed: {
       nexus_cargas_fluxo: [carga],
       nexus_containers_list: [containerMalicioso]
@@ -305,7 +305,7 @@ async function scenarioInlineHandlerExecution(collected) {
     data_cadastro: new Date().toISOString()
   };
   const dom = await loadApp('cargas.html', {
-    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/pages/cargas.js'],
+    scripts: ['js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js', 'js/pages/cargas.js'],
     seed: { nexus_cargas_fluxo: [carga], nexus_containers_list: [] },
     session: { ...SESSION, cargo: 'ESTIVADOR', cargo_nome: 'Estivador' }
   });
@@ -398,7 +398,7 @@ async function scenarioEmbarcacoes(collected) {
     distancia: 100
   };
   const dom = await loadApp('embarcacoes.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/embarcacoes.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js', 'js/pages/embarcacoes.js'],
     seed: {
       nexus_navios_list: [navio],
       nexus_bercos_list: [{ id: 'B1', nome: PAYLOADS.htmlEvent, estado: 'OCUPADO', navio_nome: PAYLOADS.svgEvent }],

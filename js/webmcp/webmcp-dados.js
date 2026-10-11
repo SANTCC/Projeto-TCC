@@ -50,6 +50,7 @@
   }
 
   function normalizarImo(valor) {
+    if (window.NexusCodigos) return NexusCodigos.formatarImo(valor).replace(/\s+/g, '').toUpperCase();
     return String(valor || '').replace(/\s+/g, '').toUpperCase();
   }
 

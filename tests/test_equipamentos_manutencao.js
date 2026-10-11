@@ -89,6 +89,7 @@ async function carregar() {
       'js/pages/tipos-carga.js',
       'js/vision-layer.js',
       'js/layout.js',
+      'js/padronizacao-codigos.js',
       'js/pages/cargas.js'
     ]
   });

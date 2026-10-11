@@ -85,6 +85,7 @@ async function carregar(banco, confirmacao) {
         // layout.js define o nexusConfirm real (modal); o teste o substitui pela decisão do cenário
         win.nexusConfirm = async () => (confirmacao === undefined ? true : confirmacao);
       },
+      'js/padronizacao-codigos.js',
       'js/pages/embarcacoes.js'
     ]
   });

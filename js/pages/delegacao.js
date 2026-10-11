@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const delegCpfInput = document.getElementById('delegSubstitutoCpf');
+  if (window.NexusCodigos) NexusCodigos.vincularFormatacao(document.getElementById('delegSubstituidoMatricula'), NexusCodigos.formatarMatricula);
   if (delegCpfInput) {
     delegCpfInput.addEventListener('input', (e) => {
       aplicarMascaraCPFPreservandoCursor(e.target);
@@ -281,12 +282,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const substituidoMatricula = document.getElementById('delegSubstituidoMatricula').value.trim().toUpperCase();
+      const matValidacao = NexusCodigos.validarMatricula(document.getElementById('delegSubstituidoMatricula').value);
+      const substituidoMatricula = matValidacao.valor;
       const substitutoNomeInput = document.getElementById('delegSubstitutoNome').value.trim();
       const substitutoCpf = document.getElementById('delegSubstitutoCpf').value.trim();
       const substitutoDataNasc = document.getElementById('delegSubstitutoDataNasc').value;
       const inicio = document.getElementById('delegDataInicio').value;
       const fim = document.getElementById('delegDataFim').value;
+
+      if (substituidoMatricula && !matValidacao.ok) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Matrícula Inválida', matValidacao.erro);
+        return;
+      }
 
       if (!substituidoMatricula || !substitutoNomeInput || !substitutoCpf || !inicio || !fim) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Preencha a matrícula do funcionário substituído, os dados do substituto e a vigência.');

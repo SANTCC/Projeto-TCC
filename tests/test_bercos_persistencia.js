@@ -60,6 +60,7 @@ async function carregar(banco, storage) {
       (win) => {
         win.mostrarFeedback = (tipo, titulo, msg) => { win.__feedbacks = (win.__feedbacks || []).concat([{ tipo, titulo, msg }]); };
       },
+      'js/padronizacao-codigos.js',
       'js/pages/embarcacoes.js'
     ]
   });

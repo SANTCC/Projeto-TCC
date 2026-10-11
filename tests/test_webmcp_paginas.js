@@ -94,7 +94,7 @@ async function pronta(w) {
   return w;
 }
 
-const PAGINA_CARGAS = ['js/pages/cargas.js', 'js/webmcp/webmcp-cargas.js'];
+const PAGINA_CARGAS = ['js/padronizacao-codigos.js', 'js/pages/cargas.js', 'js/webmcp/webmcp-cargas.js'];
 
 function cargasBase() {
   const agora = new Date().toISOString();
@@ -411,7 +411,7 @@ async function testesEmbarcacoes() {
     nexus_cargas_fluxo: []
   };
   const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
-  const scr = ['js/pages/embarcacoes.js'];
+  const scr = ['js/padronizacao-codigos.js', 'js/pages/embarcacoes.js'];
   let w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
   let r = await w.NexusWebMCP.executar('listar_navios', { localizacao: 'DENTRO_DO_PORTO' });
   check('listar_navios: filtro por localização', r.ok && r.dados.total === 2);
@@ -432,24 +432,26 @@ async function testesEmbarcacoes() {
   check('vincular navio a berço: berço LIVRE recebe o navio (confirmado no estado)', r.ok === true && local.find((b) => b.nome === 'Berço 01').navio_imo === 'DEF7654321', JSON.stringify(r).slice(0, 160));
 
   w.__resposta = true;
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'IMO-7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
   check('cadastrar navio: supervisor não cadastra (não é inspetor)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
 
   w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
   r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'ABC1234567', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
-  check('cadastrar navio: IMO duplicado é recusado (Item 11)', r.codigo === 'IMO_DUPLICADO', JSON.stringify(r));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', distancia_km: 10200 });
+  check('cadastrar navio: IMO fora do padrão IMO-NNNNNNN é recusado em cadastro novo', r.codigo === 'FORMATO_INVALIDO', JSON.stringify(r));
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'IMO-7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO', distancia_km: 10200 });
   check('cadastrar navio: distância digitada manualmente é recusada pelo esquema (vem da rota)', r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r).slice(0, 160));
-  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'XYZ7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova', imo: 'IMO-7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'DENTRO_DO_PORTO' });
   local = JSON.parse(w.localStorage.getItem('nexus_navios_list'));
-  check('cadastrar navio: cria pelo formulário da página (confirmado no estado)', r.ok === true && local.some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r).slice(0, 200));
+  check('cadastrar navio: cria pelo formulário da página (confirmado no estado)', r.ok === true && local.some((n) => n.imo === 'IMO-7654321'), JSON.stringify(r).slice(0, 200));
+  r = await w.NexusWebMCP.executar('cadastrar_navio', { nome: 'MV Nova 2', imo: 'imo7654321', origem: 'Porto de Santos', destino: 'Porto de Roterdã', localizacao: 'FORA_DO_PORTO' });
+  check('cadastrar navio: IMO duplicado é recusado mesmo digitado sem hífen (Item 11)', r.codigo === 'IMO_DUPLICADO', JSON.stringify(r));
   const bercosAposCadastro = JSON.parse(w.localStorage.getItem('nexus_bercos_list'));
-  check('cadastrar navio: DENTRO_DO_PORTO ocupa o berço imediatamente (primeiro livre)', bercosAposCadastro.some((b) => b.nome === 'Berço 01' && b.estado === 'OCUPADO' && b.navio_imo === 'XYZ7654321'), JSON.stringify(bercosAposCadastro).slice(0, 200));
-  r = await w.NexusWebMCP.executar('excluir_navio', { imo: 'XYZ7654321' });
-  check('excluir navio: sem confirmação do banco, não remove e informa erro (exclusão só após o banco)', r.ok === false && JSON.parse(w.localStorage.getItem('nexus_navios_list')).some((n) => n.imo === 'XYZ7654321'), JSON.stringify(r));
-  r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU7654321', tipo: 'Têxteis', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
-  check('cadastrar contêiner: identificação ISO e formulário da página', r.ok === true && JSON.parse(w.localStorage.getItem('nexus_containers_list')).some((c) => c.identificacao === 'MSCU7654321'), JSON.stringify(r).slice(0, 200));
+  check('cadastrar navio: DENTRO_DO_PORTO ocupa o berço imediatamente (primeiro livre)', bercosAposCadastro.some((b) => b.nome === 'Berço 01' && b.estado === 'OCUPADO' && b.navio_imo === 'IMO-7654321'), JSON.stringify(bercosAposCadastro).slice(0, 200));
+  r = await w.NexusWebMCP.executar('excluir_navio', { imo: 'IMO-7654321' });
+  check('excluir navio: sem confirmação do banco, não remove e informa erro (exclusão só após o banco)', r.ok === false && JSON.parse(w.localStorage.getItem('nexus_navios_list')).some((n) => n.imo === 'IMO-7654321'), JSON.stringify(r));
+  r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU-7654321', tipo: 'Têxteis', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
+  check('cadastrar contêiner: identificação ISO e formulário da página', r.ok === true && JSON.parse(w.localStorage.getItem('nexus_containers_list')).some((c) => c.identificacao === 'MSCU-7654321'), JSON.stringify(r).slice(0, 200));
   r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU1-234-567', tipo: 'X', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
   check('cadastrar contêiner: identificação fora do padrão é recusada pelo esquema', r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('listar_guindastes', {});
@@ -472,7 +474,7 @@ async function testesEmbarcacoes() {
  */
 async function testesRotasMaritimas() {
   log('\n[3b] Rotas marítimas (Supabase como única fonte)');
-  const scr = ['js/pages/embarcacoes.js'];
+  const scr = ['js/padronizacao-codigos.js', 'js/pages/embarcacoes.js'];
   const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
   const storage = { nexus_navios_list: [] };
 
@@ -542,7 +544,7 @@ async function testesManutencao() {
     nexus_os_list: [{ id: 'OS-2026-100', equipamento: 'Guindaste ABC123DEF', prioridade: 'ALTA', descricao: 'Revisão', status: 'SOLICITADA', data: '2026-10-01' }],
     nexus_containers_list: [], nexus_navios_list: []
   };
-  let w = await pronta(pagina('manutencao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/manutencao.js'], adaptadores: ['js/webmcp/webmcp-manutencao.js'] }));
+  let w = await pronta(pagina('manutencao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/padronizacao-codigos.js', 'js/pages/manutencao.js'], adaptadores: ['js/webmcp/webmcp-manutencao.js'] }));
   let r = await w.NexusWebMCP.executar('listar_ordens_servico', { status: 'SOLICITADA' });
   check('listar OS: filtra por status', r.ok && r.dados.total === 1);
   r = await w.NexusWebMCP.executar('obter_ordem_servico', { id: 'OS-2026-100' });
@@ -567,7 +569,7 @@ async function testesManutencao() {
   check('manutenção de navio: ferramenta declarativa de preenchimento registrada', Boolean(prep));
   w.close();
 
-  w = await pronta(pagina('manutencao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/pages/manutencao.js'], adaptadores: ['js/webmcp/webmcp-manutencao.js'] }));
+  w = await pronta(pagina('manutencao.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/padronizacao-codigos.js', 'js/pages/manutencao.js'], adaptadores: ['js/webmcp/webmcp-manutencao.js'] }));
   r = await w.NexusWebMCP.executar('solicitar_manutencao_guindaste', { identificacao: 'ABC123DEF', justificativa: 'Teste de permissão' });
   check('inspetor não solicita manutenção de guindaste (só supervisão)', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
@@ -579,7 +581,7 @@ async function testesDelegacaoETecnico() {
   const storage = {
     nexus_active_delegation: { substitutoMatricula: 'MAT-7001', substitutoNome: 'Carlos Substituto', substituidoNome: 'Ana Titular', substituidoMatricula: 'MAT-1001', inicio: '2026-10-01T08:00', fim: '2099-01-01T00:00' }
   };
-  let w = await pronta(pagina('delegacao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/delegacao.js'], adaptadores: ['js/webmcp/webmcp-delegacao.js'] }));
+  let w = await pronta(pagina('delegacao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/padronizacao-codigos.js', 'js/pages/delegacao.js'], adaptadores: ['js/webmcp/webmcp-delegacao.js'] }));
   let r = await w.NexusWebMCP.executar('obter_delegacao_ativa', {});
   check('delegação ativa: mostra substituto e vigência, sem CPF', r.ok && r.dados.ativa === true && !/cpf|CPF/.test(JSON.stringify(r.dados)), JSON.stringify(r).slice(0, 200));
   const form = w.document.getElementById('delegacaoForm');
@@ -712,7 +714,7 @@ async function testesGlobaisEAcesso() {
   check('emergência: motivo chega ao módulo de pânico', chamadas[0] && chamadas[0].motivo === 'Incêndio na área de contêineres');
   w.close();
 
-  w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/pages/cargas.js'], adaptadores: ['js/webmcp/webmcp-cargas.js'] }));
+  w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/padronizacao-codigos.js', 'js/pages/cargas.js'], adaptadores: ['js/webmcp/webmcp-cargas.js'] }));
   check('emergência: supervisor TEM a ferramenta de acionar alarme (qualquer cargo pode acionar)', w.NexusWebMCP.ativas().includes('acionar_emergencia'));
   r = await w.NexusWebMCP.executar('ir_para_pagina', { pagina: 'embarcacoes' });
   check('ir para página: destino permitido ao cargo', r.ok === true && r.dados.destino === 'embarcacoes.html', JSON.stringify(r));

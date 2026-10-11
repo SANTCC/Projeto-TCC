@@ -558,7 +558,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (filterCodigoVal) {
         const codigoHay = `${c.id || ''} ${c.qrCode || ''}`.toLowerCase();
         const codigoBusca = filterCodigoVal.replace(/^qr-/i, '');
-        if (!codigoHay.includes(filterCodigoVal) && !codigoHay.includes(codigoBusca)) return false;
+        const codigoChaveHay = NexusCodigos.chave(codigoHay);
+        if (!codigoHay.includes(filterCodigoVal) && !codigoHay.includes(codigoBusca) && !codigoChaveHay.includes(NexusCodigos.chave(filterCodigoVal))) return false;
       }
       if (filterStatusVal && c.status !== filterStatusVal) return false;
 
@@ -706,6 +707,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const filterContainer = document.getElementById('filterContainer');
   const filterTipo = document.getElementById('filterTipo');
   const filterCodigo = document.getElementById('filterCodigo');
+  if (window.NexusCodigos) NexusCodigos.vincularFormatacao(filterCodigo, NexusCodigos.formatarCarga);
   const filterStatus = document.getElementById('filterStatus');
   const filterDataInicio = document.getElementById('filterDataInicio');
   const filterDataFim = document.getElementById('filterDataFim');

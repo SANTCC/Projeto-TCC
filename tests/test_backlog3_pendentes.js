@@ -116,7 +116,7 @@ function testarRotasMaritimas() {
   const { JSDOM: JSDOM_ } = { JSDOM };
   const sessao = { id: undefined, nome: 'Teste Inspetor', matricula: 'MAT-9001', codigo_individual: 'NX-9001-SP', cargo: 'INSPETOR', cargo_nome: 'Inspetor' };
   const navios = [{ id: 'n1', nome: 'MV Sem Rota', imo: 'DEF7654321', localizacao: 'FORA_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Tóquio', gps: '-23.9700, -46.3100', dataSaida: new Date(Date.now() - 3600 * 1000).toISOString() }];
-  const scripts = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/supabase-client.js', 'js/pages/embarcacoes.js'];
+  const scripts = ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/pages/tipos-carga.js', 'js/vision-layer.js', 'js/layout.js', 'js/supabase-client.js', 'js/padronizacao-codigos.js', 'js/pages/embarcacoes.js'];
   const janela = criarJanelaTeste({
     url: 'https://nexusport.test/embarcacoes.html',
     html: read('embarcacoes.html'),

@@ -1403,6 +1403,13 @@ document.addEventListener('DOMContentLoaded', () => {
     avisoExclusao(avisoBercos ? 'alerta' : 'sucesso', avisoBercos ? 'Navio Excluído com Pendência' : 'Navio Excluído', mensagemBanco + avisoBercos);
   };
 
+  // Padronização com hífen durante a digitação (IMO, contêiner e guindaste)
+  if (window.NexusCodigos) {
+    NexusCodigos.vincularFormatacao(document.getElementById('navioImo'), NexusCodigos.formatarImo);
+    NexusCodigos.vincularFormatacao(document.getElementById('contIdentificacao'), NexusCodigos.formatarConteiner);
+    NexusCodigos.vincularFormatacao(document.getElementById('gndNumero'), NexusCodigos.formatarGuindaste);
+  }
+
   carregarNaviosSupabase();
 
   // C6: Relógio em tempo real que atualiza continuamente a contagem de ETA e tempo fora do porto
@@ -1457,7 +1464,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       const nome = document.getElementById('navioNome').value.trim();
-      const imo = document.getElementById('navioImo').value.trim().toUpperCase().replace(/\s+/g, '');
+      const imoValidacao = NexusCodigos.validarImo(document.getElementById('navioImo').value);
+      const imo = imoValidacao.valor;
       const rotaSel = document.getElementById('navioRotaSelect');
       const localizacao = document.getElementById('navioLocalizacao').value;
 
@@ -1481,16 +1489,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Item 11: Validação do padrão do Número IMO (3 letras + 7 números)
-      const imoRegex = /^[A-Z]{3}\d{7}$/;
-      if (!imoRegex.test(imo)) {
-        const msg = 'FORMATO DE IMO INVÁLIDO (Item 11): O número IMO deve seguir obrigatoriamente a estrutura fixa de 3 letras + 7 números (ex.: IMO1234567 ou ABC1234567).';
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Inválido', msg);
+      // Item 11: Validação do padrão do Número IMO (IMO-1234567: prefixo IMO + 7 números)
+      if (!imoValidacao.ok) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Inválido', imoValidacao.erro);
         return;
       }
 
       // Item 11: Validação de unicidade do IMO
-      const imoExistente = naviosList.find(n => (n.imo || '').toUpperCase().replace(/\s+/g, '') === imo);
+      const imoExistente = naviosList.find(n => NexusCodigos.chave(n.imo) === NexusCodigos.chave(imo));
       if (imoExistente) {
         const msg = `BLOQUEIO DE DUPLICIDADE (Item 11): Já existe um navio cadastrado com o número IMO "${imo}" (${imoExistente.nome}). Cada embarcação deve possuir IMO único!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Duplicado', msg);
@@ -1731,7 +1737,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
   window.vincularContainerANavio = async function(contIdentificacao, opcoes) {
-    const cont = containersList.find(c => (c.identificacao || '').toUpperCase() === contIdentificacao.toUpperCase());
+    const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
     if (!cont) return;
 
     if (naviosList.length === 0) {
@@ -1840,7 +1846,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Excluir Contêiner (Tarefa 8)
   window.excluirContainer = async function(contIdentificacao, opcoes) {
-    const cont = containersList.find(c => (c.identificacao || '').toUpperCase() === contIdentificacao.toUpperCase());
+    const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
     if (!cont) return;
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
@@ -1885,7 +1891,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    containersList = containersList.filter(c => (c.identificacao || '').toUpperCase() !== contIdentificacao.toUpperCase());
+    containersList = containersList.filter(c => NexusCodigos.chave(c.identificacao) !== NexusCodigos.chave(contIdentificacao));
     localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
 
     if (window.registrarLogAlteracao) {
@@ -1940,8 +1946,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
       }
-      const rawIdentificacao = document.getElementById('contIdentificacao').value.trim().toUpperCase();
-      const identificacao = rawIdentificacao.replace(/[^A-Z0-9]/g, '');
+      const contValidacao = NexusCodigos.validarConteiner(document.getElementById('contIdentificacao').value);
+      const identificacao = contValidacao.valor;
       const tipo = document.getElementById('contTipo').value.trim();
       const dataFabr = document.getElementById('contFabricacao').value;
       let dataManut = document.getElementById('contManutencao').value;
@@ -1953,15 +1959,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const refTempo = document.getElementById('contRefTempo').value;
 
       // Tarefa 7: Validação do padrão 4 letras e 7 números (ex: ABCD1234567)
-      const patternContainer = /^[A-Z]{4}\d{7}$/;
-      if (!patternContainer.test(identificacao)) {
-        const msg = 'PADRÃO DE CONTÊINER INVÁLIDO (Tarefa 7): A identificação do contêiner deve seguir o padrão de 4 letras seguidas de 7 números (Exemplo: MSCU1234567)!';
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Formato Inválido', msg);
+      if (!contValidacao.ok) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Formato Inválido', contValidacao.erro);
         return;
       }
 
       // Item 13: Validação de unicidade do código de contêiner
-      const contExistente = containersList.find(c => (c.identificacao || '').toUpperCase() === identificacao);
+      const contExistente = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(identificacao));
       if (contExistente) {
         const msg = `BLOQUEIO DE DUPLICIDADE (Item 13): O código de contêiner "${identificacao}" já está cadastrado no sistema. Não é permitido duplicar contêineres!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Contêiner Duplicado', msg);
@@ -2096,7 +2100,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Excluir Guindaste (Item 6)
   window.excluirGuindaste = async function(gndIdentificacao, opcoes) {
-    const guindaste = guindastesList.find(g => (g.identificacao || '').toUpperCase() === gndIdentificacao.toUpperCase());
+    const guindaste = guindastesList.find(g => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(gndIdentificacao));
     if (!guindaste) return;
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
@@ -2132,7 +2136,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    guindastesList = guindastesList.filter(g => (g.identificacao || '').toUpperCase() !== gndIdentificacao.toUpperCase());
+    guindastesList = guindastesList.filter(g => NexusCodigos.chave(g.identificacao) !== NexusCodigos.chave(gndIdentificacao));
     localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
 
     // Tarefas locais do guindaste (cache de operação) também são removidas
@@ -2295,20 +2299,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const rawIdentificacao = document.getElementById('gndNumero').value.trim().toUpperCase();
-      const identificacao = rawIdentificacao.replace(/[^A-Z0-9]/g, '');
+      const gndValidacao = NexusCodigos.validarGuindaste(document.getElementById('gndNumero').value);
+      const identificacao = gndValidacao.valor;
       const dataManut = document.getElementById('gndDataManut').value;
       const estado = document.getElementById('gndEstado').value;
 
       // Tarefa 8: Validação do padrão 3 letras - 3 números - 3 letras (ex: ABC123DEF)
-      const patternCrane = /^[A-Z]{3}\d{3}[A-Z]{3}$/;
-      if (!patternCrane.test(identificacao)) {
-        const msg = 'PADRÃO DE GUINDASTE/PÓRTICO INVÁLIDO (Tarefa 8): A identificação deve seguir o padrão de 3 letras, 3 números e 3 letras (Exemplo: ABC123DEF)!';
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Formato Inválido', msg);
+      if (!gndValidacao.ok) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Formato Inválido', gndValidacao.erro);
         return;
       }
 
-      const gndExistente = guindastesList.find(g => (g.identificacao || '').toUpperCase() === identificacao);
+      const gndExistente = guindastesList.find(g => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(identificacao));
       if (gndExistente) {
         const msg = `O guindaste "${identificacao}" já está cadastrado no sistema.`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Guindaste Duplicado', msg);

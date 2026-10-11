@@ -69,6 +69,7 @@ async function carregar(banco) {
         win.mostrarFeedback = (tipo, titulo, msg) => { win.__feedbacks = (win.__feedbacks || []).concat([{ tipo, titulo, msg }]); };
         win.nexusConfirm = async () => true;
       },
+      'js/padronizacao-codigos.js',
       'js/pages/embarcacoes.js'
     ]
   });
