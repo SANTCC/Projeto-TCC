@@ -130,8 +130,8 @@ function testarUiEDocumentacao() {
   console.log('\n3. Validando painel de diagnóstico e documentação...');
   const mh = read('manutencao.html');
 
-  check('Painel "Banco de dados" com botão Verificar em manutencao.html',
-    mh.includes('id="panicTablesCheckBtn"') && mh.includes('id="panicTablesStatus"'));
+  check('Painel de banco de dados (tabelas do pânico) removido de manutencao.html',
+    !mh.includes('id="panicTablesCheckBtn"') && !mh.includes('id="panicTablesStatus"') && !mh.includes('id="panicDbPanel"'));
   check('Painel de webhook REMOVIDO do front-end (o app não configura/dispara webhooks)',
     !['panicWebhookPanel', 'panicWebhookEnabled', 'panicWebhookUrl', 'panicWebhookSaveBtn',
       'panicWebhookTestBtn', 'panicWebhookStatus']

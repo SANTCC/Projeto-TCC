@@ -23,10 +23,13 @@ const filesToCheck = [
   'delegacao.html',
   'relatorios.html',
   'js/pages/dashboard.js',
+  'js/padronizacao-codigos.js',
   'js/pages/cargas.js',
+  'js/padronizacao-codigos.js',
   'js/pages/embarcacoes.js',
   'js/pages/manutencao.js',
   'js/pages/tecnico_portos.js',
+  'js/padronizacao-codigos.js',
   'js/pages/delegacao.js',
   'js/pages/relatorios.js',
   'js/data-repository.js'
@@ -66,10 +69,12 @@ console.log('  ✅ [PASS] Critério 4: Operações CRUD completas persistidas no
 // 4. Critério 5: Nenhum alert() ou confirm() nativo; todos os avisos via modal estilizado
 console.log('4. Validando Ausência de Alerts Nativos e Uso de Modais Estilizados (Critério 5)...');
 const jsFilesWithAlertChecks = [
-  'js/pages/cargas.js',
+  'js/padronizacao-codigos.js', 'js/pages/cargas.js',
+  'js/padronizacao-codigos.js',
   'js/pages/embarcacoes.js',
   'js/pages/manutencao.js',
   'js/pages/tecnico_portos.js',
+  'js/padronizacao-codigos.js',
   'js/pages/delegacao.js',
   'js/pages/relatorios.js',
   'js/pages/dashboard.js'

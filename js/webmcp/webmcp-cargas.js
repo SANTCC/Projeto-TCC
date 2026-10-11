@@ -329,7 +329,12 @@
         }
       }
       if (args.guindaste !== undefined) {
-        const g = listaGuindastes().find((x) => x.identificacao === args.guindaste);
+        // Estado lido do banco (não do cache local), para não recusar nem aceitar com base em dado antigo.
+        const atual = typeof window.nexusObterGuindastesAtuais === 'function'
+          ? await window.nexusObterGuindastesAtuais()
+          : { ok: true, lista: listaGuindastes() };
+        if (!atual.ok) return { codigo: 'ESTADO_NAO_CONFIRMADO', mensagem: 'Não foi possível confirmar o estado do guindaste no banco de dados. Tente novamente.' };
+        const g = atual.lista.find((x) => x.identificacao === args.guindaste);
         if (!g) return { codigo: 'GUINDASTE_NAO_ENCONTRADO', mensagem: `Guindaste ${args.guindaste} não cadastrado.` };
         if (g.estado !== 'OPERANTE') return { codigo: 'GUINDASTE_INDISPONIVEL', mensagem: `Guindaste ${args.guindaste} está em ${g.estado}.` };
       }
@@ -408,7 +413,12 @@
         if (args.container !== undefined) {
           const cont = D.containers().find((c) => c.identificacao === args.container);
           if (!cont) return { codigo: 'CONTAINER_NAO_ENCONTRADO', mensagem: `Contêiner ${args.container} não cadastrado.` };
-          if (cont.estado !== 'OPERANTE') return { codigo: 'CONTAINER_INDISPONIVEL', mensagem: `Contêiner ${args.container} está em ${cont.estado}.` };
+          // Estado lido do banco (fonte de verdade), não do cache local.
+          const lido = typeof window.nexusEstadoContainerNoBanco === 'function'
+            ? await window.nexusEstadoContainerNoBanco(cont)
+            : { ok: true, estado: cont.estado };
+          if (!lido.ok) return { codigo: 'ESTADO_NAO_CONFIRMADO', mensagem: 'Não foi possível confirmar o estado do contêiner no banco de dados. Tente novamente.' };
+          if (lido.estado && lido.estado !== 'OPERANTE') return { codigo: 'CONTAINER_INDISPONIVEL', mensagem: `Contêiner ${args.container} está em ${lido.estado}.` };
           const disponivel = D.disponibilidadeContainer(args.container, await D.cargas());
           const volume = D.volumeNumero(carga.volume);
           if (volume > disponivel) {

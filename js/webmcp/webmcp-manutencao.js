@@ -19,14 +19,14 @@
   const CARGOS_PAGINA = G.gestaoOperacional;
   const CARGOS_SUPERVISAO = G.supervisao;
   const ESQUEMA_OS = { type: 'string', minLength: 5, maxLength: 40, pattern: '^[A-Za-z0-9._-]{5,40}$', rotulo: 'Ordem de serviço', description: 'Número da OS, por exemplo OS-2026-123.' };
-  const ESQUEMA_GUINDASTE = { type: 'string', minLength: 9, maxLength: 9, pattern: '^[A-Za-z]{3}\\d{3}[A-Za-z]{3}$', rotulo: 'Guindaste', description: 'Identificação do guindaste (ABC123DEF).' };
+  const ESQUEMA_GUINDASTE = { type: 'string', minLength: 9, maxLength: 11, pattern: '^[A-Za-z]{3}-?\\d{3}-?[A-Za-z]{3}$', rotulo: 'Guindaste', description: 'Identificação do guindaste no padrão ABC-123-DEF (o hífen é aceito também sem separação).' };
 
   function osLocal(id) {
     return D.ordens().find((o) => o.id === id) || null;
   }
 
   function guindasteLocal(id) {
-    return D.guindastes().find((g) => (g.identificacao || '').toUpperCase() === id.toUpperCase()) || null;
+    return D.guindastes().find((g) => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(id)) || null;
   }
 
   const listarOrdens = {

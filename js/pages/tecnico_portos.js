@@ -374,26 +374,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.excluirFuncionarioReal = async function(matricula, opcoes) {
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Excluir Funcionário', `Tem certeza que deseja desativar/excluir o funcionário de matrícula ${matricula}?`) : true;
-    if (confirmou) {
-      if (window.NexusRepository && window.NexusRepository.deleteFuncionario) {
-        await window.NexusRepository.deleteFuncionario(matricula);
-      } else if (window.nexusSupabase) {
-        await window.nexusSupabase.from('funcionarios').update({ ativo: false }).eq('matricula', matricula);
-      }
+    if (!confirmou) return;
 
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EXCLUSAO', 'funcionarios', null, { matricula, motivo: 'Desativação pelo Técnico em Portos' });
-      }
-
-      if (window.NexusRepository && window.NexusRepository.notifyChange) {
-        window.NexusRepository.notifyChange('funcionarios');
-      }
-
-      await carregarFuncionariosCompleto();
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Funcionário Desativado', `Funcionário de matrícula ${matricula} desativado com sucesso.`);
-      }
+    const aviso = (tipo, titulo, msg) => { if (window.mostrarFeedback) window.mostrarFeedback(tipo, titulo, msg); };
+    if (!window.NexusRepository || typeof window.NexusRepository.deleteFuncionario !== 'function') {
+      aviso('erro', 'Exclusão Não Realizada', `Não foi possível excluir o funcionário ${matricula}: serviço de dados indisponível.`);
+      return;
     }
+
+    // A exclusão só é considerada feita quando o banco confirma.
+    const resultado = await window.NexusRepository.deleteFuncionario(matricula);
+    if (!resultado || !resultado.ok) {
+      const motivo = (resultado && resultado.erro) || 'falha desconhecida';
+      aviso(resultado && resultado.bloqueio ? 'alerta' : 'erro', 'Exclusão Não Realizada',
+        `Funcionário ${matricula} não foi excluído: ${motivo} Nada foi alterado.`);
+      return;
+    }
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EXCLUSAO', 'funcionarios', null, { matricula, motivo: 'Exclusão pelo Técnico em Portos' });
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('funcionarios');
+    }
+
+    // Remove da tabela sem recarregar a página.
+    mergedFuncList = (mergedFuncList || []).filter(f => f.matricula !== matricula);
+    renderFuncTable();
+    aviso('sucesso', 'Funcionário Excluído', resultado.removido
+      ? `Funcionário de matrícula ${matricula} excluído do banco de dados.`
+      : `Funcionário de matrícula ${matricula} removido da lista; ele não existia no banco de dados.`);
   };
 
   carregarFuncionariosCompleto();

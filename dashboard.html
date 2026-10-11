@@ -340,8 +340,18 @@
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Entidade / Identificação</label>
-          <input type="text" id="trailEntidadeInput" required placeholder="Ex: Carga CRG-2026-101 ou Navio Santos Star" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
+          <label for="trailEntidadeTipo" class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Tipo de Entidade</label>
+          <select id="trailEntidadeTipo" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800">
+            <option value="">Selecione primeiro a decisão</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="trailEntidadeRegistro" class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Registro Cadastrado</label>
+          <select id="trailEntidadeRegistro" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800">
+            <option value="">Selecione primeiro o tipo</option>
+          </select>
+          <p id="trailEntidadeAviso" role="alert" class="hidden mt-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400"></p>
         </div>
 
         <div>
@@ -409,6 +419,7 @@
   <script src="js/panic-realtime.js"></script>
   <script src="js/pages/dashboard.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
+  <script src="js/padronizacao-codigos.js"></script>
   <script src="js/webmcp/webmcp-core.js"></script>
   <script src="js/webmcp/webmcp-ui.js"></script>
   <script src="js/webmcp/webmcp-dados.js"></script>

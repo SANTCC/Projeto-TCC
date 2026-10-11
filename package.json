@@ -9,7 +9,11 @@
     "assets:icones": "python3 tools/subset-material-symbols.py",
     "assets:icones:check": "python3 tools/subset-material-symbols.py --check",
     "start": "npx serve -l 3000 .",
+
+    "test": "npm run test:graficos && npm run test:equipamentos-manutencao && npm run test:berco-selecao && npm run test:bercos-persistencia && npm run test:exclusao-registros && npm run test:exclusao-funcionario && npm run test:padronizacao-codigos && npm run test:trail-auditoria && npm run test:cargas-entrega-navio && npm run test:inspecao-qr && npm run test:relatorios-periodo && npm run test:berco-cadastro && npm run test:retorno-santos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
+
     "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run test:icones && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
+
     "test:vlibras": "node tests/test_vlibras.js",
     "test:edge-functions": "node tests/test_edge_functions.js",
     "test:graficos": "node tests/test_graficos_por_cargo.js",
@@ -48,7 +52,19 @@
     "test:python": "python3 -m unittest discover -s tests -p \"test_python_suite.py\"",
     "test:icones": "python3 -m unittest discover -s tests -p \"test_material_symbols.py\"",
     "test:log-acesso": "node tests/test_log_acesso.js",
-    "test:login-protecao": "node tests/test_login_protecao.js"
+    "test:login-protecao": "node tests/test_login_protecao.js",
+    "test:equipamentos-manutencao": "node tests/test_equipamentos_manutencao.js",
+    "test:berco-selecao": "node tests/test_berco_selecao.js",
+    "test:bercos-persistencia": "node tests/test_bercos_persistencia.js",
+    "test:exclusao-registros": "node tests/test_exclusao_registros.js",
+    "test:padronizacao-codigos": "node tests/test_padronizacao_codigos.js",
+    "test:trail-auditoria": "node tests/test_trail_auditoria.js",
+    "test:cargas-entrega-navio": "node tests/test_cargas_entrega_navio.js",
+    "test:inspecao-qr": "node tests/test_inspecao_qr.js",
+    "test:relatorios-periodo": "node tests/test_relatorios_periodo.js",
+    "test:berco-cadastro": "node tests/test_berco_cadastro.js",
+    "test:retorno-santos": "node tests/test_retorno_santos.js",
+    "test:exclusao-funcionario": "node tests/test_exclusao_funcionario.js"
   },
   "keywords": [
     "nexusport",

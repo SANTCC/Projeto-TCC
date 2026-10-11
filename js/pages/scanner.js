@@ -222,6 +222,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (cargo === 'CONFERENTE_CARGA') {
       msgAcao = 'Redirecionamento para Ficha de Recebimento Físico e Condições de Saída.';
       targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
+    } else if (cargo === 'INSPETOR' && displayStatus === 'ENTREGUE') {
+      // Carga entregue não tem mais inspeção: o inspetor vê a ficha da carga, sem checklist.
+      msgAcao = 'Carga entregue: inspeção não disponível. Redirecionamento para a ficha da carga.';
+      targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
     } else if (cargo === 'INSPETOR') {
       msgAcao = 'Redirecionamento para o Checklist Técnico de Inspeção.';
       targetRedirectUrl = `inspecao.html?carga=${displayIdParam}`;

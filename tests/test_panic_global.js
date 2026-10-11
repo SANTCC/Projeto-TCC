@@ -108,8 +108,8 @@ function testPanicGlobal() {
   check('Painel de webhook REMOVIDO do front-end',
     !['panicWebhookPanel', 'panicWebhookEnabled', 'panicWebhookUrl', 'panicWebhookSaveBtn',
       'panicWebhookTestBtn', 'panicWebhookStatus'].some(id => mh.includes(id)));
-  check('Diagnóstico das tabelas do pânico preservado (Verificar + status)',
-    mh.includes('id="panicTablesCheckBtn"') && mh.includes('id="panicTablesStatus"'));
+  check('Painel \"Banco de dados (tabelas do pânico)\" REMOVIDO da interface',
+    !mh.includes('id="panicTablesCheckBtn"') && !mh.includes('id="panicTablesStatus"') && !mh.includes('id="panicDbPanel"'));
 
   // 7.1 Painel "Alerta no Aparelho" + testes dedicados
   console.log('\n7.1. Validando painel de vibração/som e testes dedicados...');
