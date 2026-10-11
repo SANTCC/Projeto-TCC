@@ -22,9 +22,16 @@ const bancoGuindastes = [
   { id: 'g-2', numero_identificacao: 'GND-02-STS', estado: 'OPERANTE', data_ultima_manutencao: null }
 ];
 
+// Estado "persistido" simulado (tabela containers do Supabase).
+const bancoContainers = [
+  { id: 'c-1', numero_identificacao: 'MSCU-1234567', estado: 'OPERANTE', material_carregado: 'Carga Geral', navio_id: null },
+  { id: 'c-2', numero_identificacao: 'MSCU-7654321', estado: 'EM_REFORMA', material_carregado: 'Carga Geral', navio_id: null }
+];
+
 function consultaSimulada(tabela) {
   const resultado = () => {
     if (tabela === 'guindastes') return { data: bancoGuindastes.map(g => Object.assign({}, g)), error: null };
+    if (tabela === 'containers') return { data: bancoContainers.map(c => Object.assign({}, c)), error: null };
     return { data: [], error: null };
   };
   const builder = {
@@ -149,6 +156,37 @@ async function main() {
   check('guindaste liberado volta a aparecer como opção', ops.includes('GND-01-STS'), `opções=${ops.join(',')}`);
   const avisoLiberado = w.document.getElementById('movimentarGuindasteAviso').textContent || '';
   check('aviso não lista mais equipamentos indisponíveis', !/GND-01-STS/.test(avisoLiberado), avisoLiberado);
+
+  log('\n4. Contêiner em manutenção/reforma não aparece como opção de vínculo');
+  bancoContainers[0].estado = 'OPERANTE';
+  bancoContainers[1].estado = 'EM_REFORMA';
+  w.abrirModalVinculacao(CARGA_ID);
+  await aguardar(250);
+  const selCont = w.document.getElementById('vincularContainerSelect');
+  const identificacoes = Array.from(selCont.options).map(o => o.getAttribute('data-identificacao')).filter(Boolean);
+  check('contêiner em reforma NÃO aparece no seletor de vínculo', !identificacoes.includes('MSCU-7654321'), `opções=${identificacoes.join(',')}`);
+  check('contêiner operante aparece no seletor de vínculo', identificacoes.includes('MSCU-1234567'), `opções=${identificacoes.join(',')}`);
+
+  log('\n5. Modal desatualizado: contêiner que entrou em reforma depois de aberto não é vinculado');
+  selCont.value = 'c-1';
+  bancoContainers[0].estado = 'EM_REFORMA';
+  w.document.getElementById('confirmVincularModalBtn').click();
+  await aguardar(300);
+  const cargaDepois = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo') || '[]').find(c => c.id === CARGA_ID) || {};
+  check('vínculo NÃO é gravado com contêiner em reforma (estado relido do banco)', !cargaDepois.container, `container=${cargaDepois.container}`);
+
+  log('\n6. Após liberação no banco, o contêiner volta a ser vinculável');
+  bancoContainers[0].estado = 'OPERANTE';
+  w.abrirModalVinculacao(CARGA_ID);
+  await aguardar(250);
+  const selLib = w.document.getElementById('vincularContainerSelect');
+  const idsLib = Array.from(selLib.options).map(o => o.getAttribute('data-identificacao')).filter(Boolean);
+  check('contêiner liberado volta a aparecer no seletor', idsLib.includes('MSCU-1234567'), `opções=${idsLib.join(',')}`);
+  selLib.value = 'c-1';
+  w.document.getElementById('confirmVincularModalBtn').click();
+  await aguardar(300);
+  const cargaLib = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo') || '[]').find(c => c.id === CARGA_ID) || {};
+  check('controle: contêiner operante é vinculado normalmente', cargaLib.container === 'MSCU-1234567', `container=${cargaLib.container}`);
 
   janela.w.close();
   const r = resumo();

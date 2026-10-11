@@ -1107,6 +1107,28 @@ document.addEventListener('DOMContentLoaded', () => {
     return naviosAptosModal[parseInt(vincularNavioSelect.value, 10)] || null;
   }
 
+  /**
+   * Estado persistido de um contêiner (Supabase, fonte de verdade). Sem Supabase configurado,
+   * usa o estado local. Retorna { ok, estado, erro }; ok=false = não foi possível confirmar.
+   */
+  async function estadoContainerNoBanco(cont) {
+    const client = window.nexusSupabase;
+    const idLocal = String((cont && cont.identificacao) || '').toUpperCase();
+    if (!client) return { ok: true, estado: cont && cont.estado ? cont.estado : null };
+    try {
+      const { data, error } = await client.from('containers').select('*');
+      if (error || !Array.isArray(data)) {
+        return { ok: false, erro: error ? error.message : 'resposta inválida' };
+      }
+      const linha = data.find(c => String(c.numero_identificacao || '').toUpperCase() === idLocal);
+      if (!linha) return { ok: true, estado: cont && cont.estado ? cont.estado : null };
+      return { ok: true, estado: linha.estado || 'OPERANTE' };
+    } catch (e) {
+      return { ok: false, erro: e && e.message ? e.message : String(e) };
+    }
+  }
+  window.nexusEstadoContainerNoBanco = estadoContainerNoBanco;
+
   function uuidContainerVinculo(cont) {
     return cont.rawDbId || cont.id || cont.identificacao;
   }
@@ -1118,6 +1140,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const navioEscolhido = obterNavioEscolhidoVinculo();
     vincularContainerSelect.innerHTML = '<option value="">Selecione o Contêiner...</option>';
     containersModal.forEach(cont => {
+      // Contêiner em manutenção/reforma (estado persistido diferente de OPERANTE) não é opção.
+      if (cont.estado && cont.estado !== 'OPERANTE') return;
       // Tarefa 5: volume já ocupado em cada contêiner, com limite de 75 m³
       const volCargasNoCont = cargasFluxoList
         .filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA' && (
@@ -1243,6 +1267,25 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Estado do contêiner relido no banco (o modal pode estar desatualizado).
+      const estadoLido = await estadoContainerNoBanco({
+        identificacao: contIdentificacao,
+        estado: selectedContOpt ? selectedContOpt.getAttribute('data-estado') : null
+      });
+      if (!estadoLido.ok) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Estado Não Confirmado', `Não foi possível confirmar o estado do contêiner ${contIdentificacao} no banco de dados (${estadoLido.erro}). Vinculação não realizada.`);
+        }
+        return;
+      }
+      if (estadoLido.estado && estadoLido.estado !== 'OPERANTE') {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Contêiner Indisponível', `BLOQUEIO DE SEGURANÇA: o contêiner ${contIdentificacao} está em ${estadoLido.estado} e não pode ser vinculado!`);
+        }
+        renderOpcoesContainerVinculo();
+        return;
+      }
+
       // Backlog 3 (L): o navio da carga é o escolhido no seletor (somente aptos) ou, na falta de
       // escolha, o navio do contêiner. Ambos são conferidos de novo, com dados frescos do cadastro.
       const naviosAtuais = await carregarNaviosParaVinculo();
@@ -1275,13 +1318,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const cargaVol = parseFloat(targetCargaParaVinculacao.volume) || 0;
       const dispVol = parseFloat(selectedContOpt.getAttribute('data-disp')) || 0;
-      const estadoCont = selectedContOpt.getAttribute('data-estado');
-
-      if (estadoCont && estadoCont !== 'OPERANTE') {
-        if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Contêiner Indisponível', `BLOQUEIO DE SEGURANÇA: Contêiner selecionado está no estado ${estadoCont} e não pode ser vinculado!`);
-        return;
-      }
-
       if (cargaVol > dispVol) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Capacidade Excedida', `A7 REGRA DE CAPACIDADE: Volume da carga (${cargaVol} m³) excede a capacidade disponível do contêiner (${dispVol.toFixed(1)} m³ de no máximo 75 m³)!`);
         return;
@@ -1410,6 +1446,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return guindastes;
   }
+
+  window.nexusObterGuindastesAtuais = function () { return obterGuindastesAtuais(); };
 
   /** Guindaste só pode receber tarefas quando estiver OPERANTE (estado persistido). */
   function guindasteOperante(gnd) {

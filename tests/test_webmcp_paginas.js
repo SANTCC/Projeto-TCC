@@ -45,6 +45,11 @@ function supabaseRotasFalso(rotas, opcoes) {
     if (tabela === 'bercos') {
       return Promise.resolve({ data: (o.bercos || [{ id: 'BERCO-01', nome: 'Berço 01', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null }]).map((x) => Object.assign({}, x)), error: null });
     }
+    // Contêineres: o banco é consultado antes de cada vinculação. Sem linhas no banco de teste,
+    // o estado vem do cadastro local (mesmo comportamento de um banco sem contêineres persistidos).
+    if (tabela === 'containers') {
+      return Promise.resolve({ data: [], error: null });
+    }
     if (tabela !== 'rotas_maritimas') {
       return Promise.resolve({ data: null, error: { message: 'tabela indisponível no teste' } });
     }
