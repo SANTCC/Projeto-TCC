@@ -29,7 +29,7 @@ Opções:
   -h, --help        mostra esta ajuda
 
 Camadas verificadas, na ordem: geográfica (EUA), Proton (ASNs próprias + blocos BGP
-anunciados) e listas públicas de VPN. O motivo aparece como geo-eua, proton ou vpn.`);
+anunciados + sub-redes IPv6 observadas) e listas públicas de VPN. O motivo aparece como geo-eua, proton ou vpn.`);
 }
 
 function lerArgumentos(argumentos) {

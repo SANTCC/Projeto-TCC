@@ -78,6 +78,20 @@ Exemplo concreto: `109.236.82.5` (vizinho de um bloco WorldStream anunciado para
 
 A resposta de bloqueio ganhou o cabeçalho `X-Vpn-Gate-Motivo` (`geo-eua`, `proton`, `vpn`, `*-indisponivel`) para o operador identificar a camada que decidiu.
 
+### 3.2 Saídas IPv6 observadas
+
+Dois testes posteriores com a Proton ligada mostraram saídas IPv6 que ainda passavam:
+
+- `2a02:6ea0:510c:3882::13`
+- `2a02:6ea0:ce14:3032::12`
+
+A busca nas listas do GitHub confirmou a origem dos prefixos:
+
+- A lista IPv6 do [X4BNet/lists_vpn](https://github.com/X4BNet/lists_vpn/blob/main/output/vpn/ipv6.txt) contém `2a02:6ea0:5100::/40`, que abrange o primeiro IP.
+- O agregado IPv6 de [AS60068 no ipverse/as-ip-blocks](https://github.com/ipverse/as-ip-blocks/blob/master/as/60068/ipv6-aggregated.txt) contém `2a02:6ea0:ce00::/39`, que abrange o segundo. O inventário Proton do [TLop503/ipcheq2](https://github.com/TLop503/ipcheq2/blob/main/internal/data/proton.txt) também lista `2a02:6ea0:ce14:2577::10`, servidor no mesmo `/48`.
+
+AS60068 é uma hospedagem compartilhada; bloquear seu `/39` inteiro causaria falsos positivos. O gate passa a incluir os dois `/64` observados (`2a02:6ea0:510c:3882::/64` e `2a02:6ea0:ce14:3032::/64`): isso cobre mudanças no identificador de interface dentro de cada sub-rede sem bloquear o agregado inteiro do provedor. A checagem local desses `/64` ocorre antes dos downloads dinâmicos; o primeiro também continua coberto pela lista do X4BNet.
+
 ## 4. Como verificar sem deploy
 
 ```bash
