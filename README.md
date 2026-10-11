@@ -168,7 +168,7 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 ## 🎨 Recursos Locais (fontes, CSS e bibliotecas)
 
 - **Comando:** `npm run assets` gera `css/nexus.css` (Tailwind compilado a partir de `tailwind.config.js`), `css/fonts.css`, as fontes `fonts/*.woff2` e copia as bibliotecas para `vendor/`.
-- **Sem CDN:** as páginas não carregam Tailwind, Google Fonts, Chart.js, QRCode, jsPDF ou Supabase de terceiros. Os ícones usam um subconjunto da Material Symbols (`npm run assets:icones`, que exige `pip install fonttools brotli`).
+- **Sem CDN:** as páginas não carregam Tailwind, Google Fonts, Chart.js, QRCode, jsPDF ou Supabase de terceiros. Os ícones usam um subconjunto da Material Symbols (`npm run assets:icones`, que exige `pip install fonttools brotli`); `npm run assets:icones:check` verifica se ele contém também os ícones trocados dinamicamente pelo JavaScript.
 - **Bibliotecas sob demanda:** `js/asset-loader.js` (`NexusAssets.carregar`) baixa Chart.js, QRCode, html5-qrcode, jsPDF e o cliente do Supabase só quando a tela precisa delas.
 - **Terceiros fora do caminho crítico:** o `gtag.js` (Analytics) e o plugin do VLibras entram na primeira interação do visitante.
 - **Cabeçalhos:** `dist/_headers` (gerado pelo build) e `vercel.json` publicam cache longo para estáticos, `no-cache` para HTML e a política de segurança (CSP). O gate Lighthouse mede a mesma política.

@@ -974,7 +974,7 @@ function gerarHtml(manifest) {
        página não depende de terceiros para renderizar e fica igual às demais telas. -->
   <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/fonts.css?v=20261011-icons" />
   <style>${CSS}  </style>
 </head>
 <body>
