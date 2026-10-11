@@ -1502,7 +1502,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       const nome = document.getElementById('navioNome').value.trim();
-      const imo = document.getElementById('navioImo').value.trim().toUpperCase().replace(/\s+/g, '');
+      // O campo exibe o IMO com hífen (ABC-1234567); o banco guarda o formato já existente, sem hífen
+      const imo = document.getElementById('navioImo').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
       const rotaSel = document.getElementById('navioRotaSelect');
       const localizacao = document.getElementById('navioLocalizacao').value;
 
@@ -1535,7 +1536,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Item 11: Validação de unicidade do IMO
-      const imoExistente = naviosList.find(n => (n.imo || '').toUpperCase().replace(/\s+/g, '') === imo);
+      const imoExistente = naviosList.find(n => (n.imo || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === imo);
       if (imoExistente) {
         const msg = `BLOQUEIO DE DUPLICIDADE (Item 11): Já existe um navio cadastrado com o número IMO "${imo}" (${imoExistente.nome}). Cada embarcação deve possuir IMO único!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Duplicado', msg);
@@ -2122,7 +2123,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Item 13: Validação de unicidade do código de contêiner
-      const contExistente = containersList.find(c => (c.identificacao || '').toUpperCase() === identificacao);
+      const contExistente = containersList.find(c => String(c.identificacao || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === identificacao);
       if (contExistente) {
         const msg = `BLOQUEIO DE DUPLICIDADE (Item 13): O código de contêiner "${identificacao}" já está cadastrado no sistema. Não é permitido duplicar contêineres!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Contêiner Duplicado', msg);
@@ -2476,7 +2477,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const gndExistente = guindastesList.find(g => (g.identificacao || '').toUpperCase() === identificacao);
+      const gndExistente = guindastesList.find(g => String(g.identificacao || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === identificacao);
       if (gndExistente) {
         const msg = `O guindaste "${identificacao}" já está cadastrado no sistema.`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Guindaste Duplicado', msg);

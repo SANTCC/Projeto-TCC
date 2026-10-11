@@ -152,6 +152,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const displayIdParam = encodeURIComponent(String(displayId));
     targetChecklistUrl = `inspecao.html?carga=${displayIdParam}`;
+    // Cargas ENTREGUE/CANCELADA não têm inspeção: o atalho para o checklist some
+    const semInspecao = ['ENTREGUE', 'CANCELADA'].includes(displayStatus);
+    if (irChecklistBtn) irChecklistBtn.classList.toggle('hidden', semInspecao);
 
     // Grava log de leitura QR Code no pátio (T5.8 & Supabase leituras_qr_code)
     const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
@@ -219,8 +222,13 @@ document.addEventListener('DOMContentLoaded', () => {
       msgAcao = 'Redirecionamento para Ficha de Recebimento Físico e Condições de Saída.';
       targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
     } else if (cargo === 'INSPETOR') {
-      msgAcao = 'Redirecionamento para o Checklist Técnico de Inspeção.';
-      targetRedirectUrl = `inspecao.html?carga=${displayIdParam}`;
+      if (semInspecao) {
+        msgAcao = `Carga com status ${displayStatus}: inspeção indisponível. Redirecionamento para o Painel de Cargas.`;
+        targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
+      } else {
+        msgAcao = 'Redirecionamento para o Checklist Técnico de Inspeção.';
+        targetRedirectUrl = `inspecao.html?carga=${displayIdParam}`;
+      }
     } else if (cargo === 'ARRUMADOR_CONSERTADOR') {
       msgAcao = 'Redirecionamento para Alteração do Status "Pronta para Entrega".';
       targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;

@@ -233,7 +233,7 @@
               status: c.status_fluxo || 'ARMAZENAGEM',
               container_id: c.container_id || 'N/A',
               porto_descarga: c.porto_descarga || 'N/A',
-              data: c.created_at || c.data_entrada || new Date().toISOString()
+              data: c.created_at || c.data_entrada || ''
             }));
           }
         } catch (e) {
@@ -252,7 +252,8 @@
           status: c.status || 'ARMAZENAGEM',
           container_id: c.container || c.container_id || 'N/A',
           porto_descarga: c.portoDescarga || c.porto_descarga || 'N/A',
-          data: c.dataChegada || new Date().toISOString()
+          // Data de cadastro real; vazio quando desconhecida (antes: data de hoje)
+          data: c.data_cadastro || c.created_at || c.dataChegada || ''
         }));
       }
 

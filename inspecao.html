@@ -53,6 +53,22 @@
   <script src="js/pages/tipos-carga.js"></script>
   <script src="js/vision-layer.js"></script>
   <script src="js/layout.js"></script>
+  <!-- Leitor de QR do checklist: a biblioteca injeta <video>/<canvas> com
+       largura/altura fixas em pixels; sem estas regras o vídeo ultrapassava o
+       contêiner (h-48) e quebrava o layout/responsividade da página. -->
+  <style>
+    #checklistQrViewport:not(.hidden) { display: flex; }
+    #inspecaoQrReader { position: relative; max-width: min(24rem, 100%); }
+    #inspecaoQrReader video,
+    #inspecaoQrReader canvas,
+    #inspecaoQrReader img {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100%;
+      object-fit: cover;
+    }
+    #inspecaoQrReader > div { max-width: 100%; }
+  </style>
 </head>
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
 
@@ -85,23 +101,25 @@
 
         <!-- Leitura de QR Code na Mesma Página de Checklist (RN 17) & Seletor de Carga -->
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
-          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <div>
+          <!-- flex-wrap: em telas estreitas o botão desce para a linha de baixo
+               em vez de espremer/estourar o título (antes não havia quebra) -->
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+            <div class="min-w-0 flex-1 basis-56">
               <h3 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">qr_code_scanner</span>
-                Leitura de QR Code no Pátio (RN 17)
+                <span class="material-symbols-outlined text-nexus-500 shrink-0">qr_code_scanner</span>
+                <span class="min-w-0">Leitura de QR Code no Pátio (RN 17)</span>
               </h3>
               <p class="text-xs text-slate-500 dark:text-slate-400">Escaneie a etiqueta diretamente na área de checklist para carregar a carga instantaneamente.</p>
             </div>
-            <button id="scanChecklistBtn" type="button" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1">
+            <button id="scanChecklistBtn" type="button" aria-controls="checklistQrViewport" aria-expanded="false" class="shrink-0 w-full sm:w-auto min-h-[40px] justify-center whitespace-nowrap px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1">
               <span class="material-symbols-outlined text-[16px]">photo_camera</span>
-              <span>Escanear QR Code</span>
+              <span id="scanChecklistBtnLabel">Escanear QR Code</span>
             </button>
           </div>
 
-          <div id="checklistQrViewport" class="hidden p-4 rounded-xl bg-slate-900 text-white flex flex-col items-center gap-2">
-            <div id="inspecaoQrReader" class="w-full max-w-sm h-48 bg-black rounded-lg border border-slate-700"></div>
-            <span class="text-[11px] text-slate-400">Aponte a câmera para a etiqueta da carga.</span>
+          <div id="checklistQrViewport" class="hidden w-full p-3 sm:p-4 rounded-xl bg-slate-900 text-white flex-col items-center gap-2 overflow-hidden">
+            <div id="inspecaoQrReader" class="w-full max-w-sm aspect-square bg-black rounded-lg border border-slate-700 overflow-hidden"></div>
+            <span id="inspecaoQrStatus" class="text-[11px] text-slate-400 text-center" aria-live="polite">Aponte a câmera para a etiqueta da carga.</span>
           </div>
 
           <div>

@@ -572,7 +572,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (filterCodigoVal) {
         const codigoHay = `${c.id || ''} ${c.qrCode || ''}`.toLowerCase();
         const codigoBusca = filterCodigoVal.replace(/^qr-/i, '');
-        if (!codigoHay.includes(filterCodigoVal) && !codigoHay.includes(codigoBusca)) return false;
+        // Comparação normalizada (sem hífens/espaços): "crg2026303" encontra CRG-2026-303
+        const semSeparador = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const hayNormal = `${semSeparador(c.id)} ${semSeparador(c.qrCode)}`;
+        const buscaNormal = semSeparador(codigoBusca.replace(/^qr/i, ''));
+        if (!codigoHay.includes(filterCodigoVal) && !codigoHay.includes(codigoBusca) && !(buscaNormal && hayNormal.includes(buscaNormal))) return false;
       }
       if (filterStatusVal && c.status !== filterStatusVal) return false;
 
@@ -584,8 +588,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (filterDataInicioVal || filterDataFimVal) {
         const cDateRaw = c.data_cadastro || c.created_at || c.data_entrada || c.dataAgendamento || c.dataChegada;
-        if (cDateRaw) {
-          const cDateStr = new Date(cDateRaw).toISOString().split('T')[0];
+        const cDate = cDateRaw ? new Date(cDateRaw) : null;
+        if (cDate && !Number.isNaN(cDate.getTime())) {
+          // (data inválida, ex.: texto pt-BR antigo, fazia toISOString lançar RangeError)
+          const cDateStr = cDate.toISOString().split('T')[0];
           if (filterDataInicioVal && cDateStr < filterDataInicioVal) return false;
           if (filterDataFimVal && cDateStr > filterDataFimVal) return false;
         } else {

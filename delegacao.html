@@ -132,7 +132,7 @@
           <form id="delegacaoForm" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs pt-2">
             <div>
               <label class="block font-bold text-slate-500 mb-1">Matrícula do Funcionário Substituído</label>
-              <input type="text" id="delegSubstituidoMatricula" required placeholder="Ex: MAT-2001 (Supervisor)" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+              <input type="text" id="delegSubstituidoMatricula" data-mascara="MATRICULA" required placeholder="Ex: MAT-2001 (Supervisor)" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
             </div>
             <div>
               <label class="block font-bold text-slate-500 mb-1">Nome do Funcionário Substituto <span class="font-normal text-nexus-500">(digite para buscar e autopreencher CPF e nascimento)</span></label>
@@ -176,6 +176,7 @@
   <script src="js/data-repository.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
+  <script src="js/mascaras-codigo.js"></script>
   <script src="js/pages/delegacao.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
   <script src="js/webmcp/webmcp-core.js"></script>

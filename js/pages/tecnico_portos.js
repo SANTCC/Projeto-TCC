@@ -372,26 +372,46 @@ document.addEventListener('DOMContentLoaded', () => {
     `).join('');
   }
 
+  // Exclusão de funcionário: real e verificada no Supabase. Com registros
+  // vinculados (FK RESTRICT: auditoria, inspeções, histórico) o funcionário é
+  // desativado (perde o acesso) em vez de apagado — o histórico é preservado.
   window.excluirFuncionarioReal = async function(matricula, opcoes) {
-    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Excluir Funcionário', `Tem certeza que deseja desativar/excluir o funcionário de matrícula ${matricula}?`) : true;
-    if (confirmou) {
-      if (window.NexusRepository && window.NexusRepository.deleteFuncionario) {
-        await window.NexusRepository.deleteFuncionario(matricula);
-      } else if (window.nexusSupabase) {
-        await window.nexusSupabase.from('funcionarios').update({ ativo: false }).eq('matricula', matricula);
-      }
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Excluir Funcionário', `Tem certeza que deseja excluir o funcionário de matrícula ${matricula}? Se ele tiver registros no histórico do sistema, será desativado (sem acesso) para preservá-los.`) : true;
+    if (!confirmou) return;
 
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EXCLUSAO', 'funcionarios', null, { matricula, motivo: 'Desativação pelo Técnico em Portos' });
-      }
+    let resultado = { ok: true, modo: 'LOCAL' };
+    if (window.NexusRepository && window.NexusRepository.deleteFuncionario) {
+      resultado = (await window.NexusRepository.deleteFuncionario(matricula)) || { ok: true, modo: 'LOCAL' };
+    } else if (window.nexusSupabase) {
+      const { data, error } = await window.nexusSupabase.from('funcionarios').update({ ativo: false }).eq('matricula', matricula).select('id');
+      resultado = error || !Array.isArray(data) || data.length === 0
+        ? { ok: false, mensagem: (error && error.message) || 'o banco de dados não confirmou a desativação' }
+        : { ok: true, modo: 'DESATIVADO' };
+    }
 
-      if (window.NexusRepository && window.NexusRepository.notifyChange) {
-        window.NexusRepository.notifyChange('funcionarios');
-      }
-
-      await carregarFuncionariosCompleto();
+    if (!resultado.ok) {
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Funcionário Desativado', `Funcionário de matrícula ${matricula} desativado com sucesso.`);
+        window.mostrarFeedback('erro', 'Exclusão Não Realizada', `Não foi possível excluir o funcionário ${matricula}: ${resultado.mensagem}. Nada foi alterado.`);
+      }
+      await carregarFuncionariosCompleto();
+      return;
+    }
+
+    const desativado = resultado.modo === 'DESATIVADO';
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EXCLUSAO', 'funcionarios', null, { matricula, motivo: desativado ? 'Desativação pelo Técnico em Portos (registros vinculados preservados)' : 'Exclusão pelo Técnico em Portos' });
+    }
+
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('funcionarios');
+    }
+
+    await carregarFuncionariosCompleto();
+    if (window.mostrarFeedback) {
+      if (desativado) {
+        window.mostrarFeedback('sucesso', 'Funcionário Desativado', `O funcionário ${matricula} possui registros vinculados (auditoria, inspeções ou histórico) e por isso foi DESATIVADO em vez de excluído: ele não tem mais acesso ao sistema e o histórico foi preservado.`);
+      } else {
+        window.mostrarFeedback('sucesso', 'Funcionário Excluído', `Funcionário de matrícula ${matricula} excluído com sucesso.`);
       }
     }
   };
@@ -487,7 +507,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const formattedMatricula = matriculaRaw.toUpperCase().startsWith('MAT-') ? matriculaRaw.toUpperCase() : `MAT-${matriculaRaw.toUpperCase()}`;
+      // Máscara do campo (js/mascaras-codigo.js): "mat 1234", "1234" ou colado → MAT-1234
+      const formattedMatricula = window.NexusMascaras
+        ? window.NexusMascaras.canonico('MATRICULA', matriculaRaw)
+        : (matriculaRaw.toUpperCase().startsWith('MAT-') ? matriculaRaw.toUpperCase() : `MAT-${matriculaRaw.toUpperCase()}`);
 
       // Tarefa 4: Padronizar a matrícula de funcionários no padrão MAT-4 números (ex: MAT-1234)
       const matriculaPattern = /^MAT-\d{4}$/;
@@ -498,7 +521,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Validação de Duplicidade Rígida: Bloqueia qualquer cadastro com a mesma matrícula
-      const funcionarioExistente = mergedFuncList.find(f => f.matricula.toUpperCase() === formattedMatricula);
+      // Comparação normalizada (sem hífen/espaços): MAT1234 e MAT-1234 são a mesma matrícula
+      const chaveMatricula = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const funcionarioExistente = mergedFuncList.find(f => chaveMatricula(f.matricula) === chaveMatricula(formattedMatricula));
       if (funcionarioExistente) {
         const msg = `BLOQUEIO DE DUPLICIDADE: A matrícula "${formattedMatricula}" já está cadastrada no sistema para o funcionário "${funcionarioExistente.nome}". Não é permitido cadastrar mais de uma pessoa com a mesma matrícula!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Matrícula Duplicada', msg);

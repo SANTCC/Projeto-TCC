@@ -113,7 +113,40 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
   }
 };
 
-window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
+/**
+ * Tipos de entidade da trilha (tipo_entidade_enum) aceitos por tabela de origem.
+ * Chamadas no formato (decisao, 'tabela', id, motivo) usam este mapa.
+ */
+const TRAIL_TIPO_POR_TABELA = {
+  navios: 'NAVIO', containers: 'CONTAINER', cargas: 'CARGA', funcionarios: 'FUNCIONARIO',
+  visitantes: 'VISITANTE', guindastes: 'GUINDASTE', manutencoes: 'MANUTENCAO',
+  delegacoes_supervisor: 'FUNCIONARIO', rotas_maritimas: 'ROTA', tipos_carga: 'TIPO_CARGA',
+  inspecoes: 'CHECKLIST', checklists: 'CHECKLIST'
+};
+const TRAIL_TIPOS_ENTIDADE = ['NAVIO', 'CONTAINER', 'CARGA', 'FUNCIONARIO', 'VISITANTE', 'GUINDASTE', 'MANUTENCAO', 'CHECKLIST', 'ROTA', 'TIPO_CARGA'];
+
+/**
+ * Registra uma decisão crítica na trilha imutável (trail_decisoes).
+ * Formas aceitas:
+ *   (decisao, 'CRG-2026-101', motivo)                 — identificação em texto
+ *   (decisao, 'navios', idDoRegistro, motivo)         — tabela + id
+ *   (decisao, { tipo: 'NAVIO', id: 'IMO1234567' }, motivo) — tipo explícito
+ * @returns {Promise<{ok:boolean, dbId:string|null, local:boolean, mensagem?:string}>}
+ */
+window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', motivoTabela) {
+  let tipoExplicito = null;
+  let idExplicito = null;
+  if (entidade && typeof entidade === 'object') {
+    tipoExplicito = String(entidade.tipo || '').toUpperCase();
+    idExplicito = entidade.id == null ? '' : String(entidade.id);
+  } else if (arguments.length >= 4 && TRAIL_TIPO_POR_TABELA[String(entidade || '').toLowerCase()]) {
+    // Antes, 'navios' ia para entidade_id e o id do registro ia para o motivo
+    tipoExplicito = TRAIL_TIPO_POR_TABELA[String(entidade).toLowerCase()];
+    idExplicito = motivo == null ? '' : String(motivo);
+    motivo = typeof motivoTabela === 'string' ? motivoTabela : '';
+  }
+  if (tipoExplicito && !TRAIL_TIPOS_ENTIDADE.includes(tipoExplicito)) tipoExplicito = null;
+
   // Decisões tomadas via agente de IA (WebMCP) ficam marcadas na trilha imutável.
   const marcaAgente = (window.NexusWebMCP && typeof window.NexusWebMCP.marcaAuditoria === 'function') ? window.NexusWebMCP.marcaAuditoria() : '';
   if (marcaAgente) motivo = marcaAgente + (motivo || 'Decisão registrada pelo agente');
@@ -151,12 +184,16 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
   }
 
   let entidadeTipo = 'CARGA';
-  let entidadeId = String(entidade || '').trim();
-  const entUpper = entidadeId.toUpperCase();
-  if (entUpper.startsWith('NAVIO') || entUpper.includes('NAVIO')) entidadeTipo = 'NAVIO';
-  else if (entUpper.startsWith('CONT') || entUpper.includes('CONTAINER')) entidadeTipo = 'CONTAINER';
-  else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
-  else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
+  let entidadeId = tipoExplicito ? (idExplicito || 'N/A') : String(entidade || '').trim();
+  if (tipoExplicito) {
+    entidadeTipo = tipoExplicito;
+  } else {
+    const entUpper = entidadeId.toUpperCase();
+    if (entUpper.startsWith('NAVIO') || entUpper.includes('NAVIO')) entidadeTipo = 'NAVIO';
+    else if (entUpper.startsWith('CONT') || entUpper.includes('CONTAINER')) entidadeTipo = 'CONTAINER';
+    else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
+    else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
+  }
 
   const validCargos = [
     'ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 
@@ -169,6 +206,7 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
 
   const nowIso = new Date().toISOString();
   let insertedDbId = null;
+  let erroTrail = null;
 
   if (window.nexusSupabase) {
     try {
@@ -189,12 +227,17 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
         const retry = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
         if (!retry.error && retry.data) {
           insertedDbId = retry.data.id;
+        } else if (retry.error) {
+          erroTrail = retry.error;
         }
       } else if (!error && data) {
         insertedDbId = data.id;
+      } else if (error) {
+        erroTrail = error;
       }
     } catch (err) {
       console.warn('[NexusPort] Erro ao invocar trail Supabase:', err);
+      erroTrail = err;
     }
   }
 
@@ -218,6 +261,10 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '') {
   }
 
   window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'trail_decisoes' } }));
+  if (window.nexusSupabase && !insertedDbId) {
+    return { ok: false, dbId: null, local: true, mensagem: (erroTrail && (erroTrail.message || erroTrail.details)) || 'o banco de dados não confirmou o registro' };
+  }
+  return { ok: true, dbId: insertedDbId, local: !window.nexusSupabase };
 };
 
 window.calcularEstimativaChegada = function(distanciaKm) {
@@ -893,8 +940,144 @@ document.addEventListener('DOMContentLoaded', () => {
   const cancelRegistrarTrailModalBtn = document.getElementById('cancelRegistrarTrailModalBtn');
   const registrarTrailForm = document.getElementById('registrarTrailForm');
 
+  // Entidade da decisão: 1º select = tipo permitido (tipo_entidade_enum) para a
+  // decisão escolhida; 2º select = registro real carregado do Supabase.
+  const trailTipoDecisaoSelect = document.getElementById('trailTipoDecisao');
+  const trailEntidadeTipoSelect = document.getElementById('trailEntidadeTipoSelect');
+  const trailEntidadeRegistroSelect = document.getElementById('trailEntidadeRegistroSelect');
+  const trailEntidadeAviso = document.getElementById('trailEntidadeAviso');
+
+  const TIPOS_POR_DECISAO = {
+    APROVOU_CARGA: ['CARGA'],
+    RECUSOU_CARGA: ['CARGA'],
+    CANCELOU_ENTREGA: ['CARGA'],
+    LIBEROU_NAVIO: ['NAVIO'],
+    SOLICITOU_MANUTENCAO_NAVIO: ['NAVIO'],
+    SOLICITOU_MANUTENCAO_CONTAINER: ['CONTAINER', 'GUINDASTE'],
+    APROVOU_MANUTENCAO: ['MANUTENCAO', 'NAVIO', 'CONTAINER', 'GUINDASTE'],
+    RECUSOU_MANUTENCAO: ['MANUTENCAO', 'NAVIO', 'CONTAINER', 'GUINDASTE'],
+    DESIGNOU_SUBSTITUTO: ['FUNCIONARIO']
+  };
+
+  const codigoOs = (m) => {
+    const mt = String(m.descricao || '').match(/^\[([^\]]+)\]/);
+    return mt ? mt[1] : `OS-${String(m.id || '').substring(0, 8)}`;
+  };
+
+  // Fonte de cada tipo: tabela/colunas no Supabase e espelho local (modo sem banco).
+  // `chave` = identificação gravada em entidade_id (mesmo formato já usado na trilha).
+  const FONTES_ENTIDADE = {
+    CARGA: {
+      rotulo: 'Carga', tabela: 'cargas', colunas: 'id, qr_code_url, natureza, status_fluxo',
+      chave: (r) => String(r.qr_code_url || '').replace(/^QR-/, '') || r.id,
+      descrever: (r) => `${String(r.qr_code_url || '').replace(/^QR-/, '') || r.id} — ${r.natureza || 'Carga'} (${r.status_fluxo || '—'})`,
+      local: () => JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]').map(c => ({ id: c.rawDbId || c.id, qr_code_url: c.qrCode || `QR-${c.id}`, natureza: c.natureza || c.tipo, status_fluxo: c.status }))
+    },
+    NAVIO: {
+      rotulo: 'Navio', tabela: 'navios', colunas: 'id, nome, numero_imo, localizacao',
+      chave: (r) => r.numero_imo || r.nome,
+      descrever: (r) => `${r.nome || 'Sem nome'} (IMO ${r.numero_imo || '—'})`,
+      local: () => JSON.parse(localStorage.getItem('nexus_navios_list') || '[]').map(n => ({ id: n.id, nome: n.nome, numero_imo: n.imo, localizacao: n.localizacao }))
+    },
+    CONTAINER: {
+      rotulo: 'Contêiner', tabela: 'containers', colunas: 'id, numero_identificacao, estado',
+      chave: (r) => r.numero_identificacao,
+      descrever: (r) => `${r.numero_identificacao} (${r.estado || 'OPERANTE'})`,
+      local: () => JSON.parse(localStorage.getItem('nexus_containers_list') || '[]').map(c => ({ id: c.rawDbId || c.id, numero_identificacao: c.identificacao, estado: c.estado }))
+    },
+    GUINDASTE: {
+      rotulo: 'Guindaste', tabela: 'guindastes', colunas: 'id, numero_identificacao, estado',
+      chave: (r) => r.numero_identificacao,
+      descrever: (r) => `${r.numero_identificacao} (${r.estado || 'OPERANTE'})`,
+      local: () => JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]').map(g => ({ id: g.id, numero_identificacao: g.identificacao, estado: g.estado }))
+    },
+    MANUTENCAO: {
+      rotulo: 'Ordem de Serviço (Manutenção)', tabela: 'manutencoes', colunas: 'id, descricao, status, entidade_tipo',
+      chave: codigoOs,
+      descrever: (r) => `${codigoOs(r)} — ${r.entidade_tipo || ''} (${r.status || '—'})`,
+      local: () => JSON.parse(localStorage.getItem('nexus_os_list') || '[]').map(o => ({ id: o.rawDbId || o.id, descricao: `[${o.id}]`, status: o.status, entidade_tipo: o.equipamento }))
+    },
+    FUNCIONARIO: {
+      rotulo: 'Funcionário', tabela: 'funcionarios', colunas: 'id, matricula, nome, ativo',
+      chave: (r) => r.matricula,
+      descrever: (r) => `${r.matricula} — ${r.nome || ''}${r.ativo === false ? ' (inativo)' : ''}`,
+      local: () => JSON.parse(localStorage.getItem('nexus_func_list') || '[]').map(f => ({ id: f.id, matricula: f.matricula, nome: f.nome, ativo: f.ativo }))
+    }
+  };
+
+  /** Registros do tipo, lidos do Supabase (ou do espelho local sem banco). */
+  async function carregarRegistrosEntidade(tipo) {
+    const fonte = FONTES_ENTIDADE[tipo];
+    if (!fonte) return { ok: false, mensagem: 'tipo de entidade não suportado', itens: [] };
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from(fonte.tabela).select(fonte.colunas);
+        if (error) throw error;
+        return { ok: true, itens: (Array.isArray(data) ? data : []).filter(r => fonte.chave(r)) };
+      } catch (err) {
+        return { ok: false, mensagem: (err && err.message) || String(err), itens: [] };
+      }
+    }
+    return { ok: true, itens: fonte.local().filter(r => fonte.chave(r)) };
+  }
+
+  function avisoEntidade(texto, erro) {
+    if (!trailEntidadeAviso) return;
+    trailEntidadeAviso.textContent = texto || '';
+    trailEntidadeAviso.classList.toggle('hidden', !texto);
+    trailEntidadeAviso.classList.toggle('text-danger', Boolean(erro));
+  }
+
+  function preencherTiposEntidade() {
+    if (!trailEntidadeTipoSelect) return;
+    const decisao = trailTipoDecisaoSelect ? trailTipoDecisaoSelect.value : '';
+    const tipos = TIPOS_POR_DECISAO[decisao] || [];
+    const anterior = trailEntidadeTipoSelect.value;
+    trailEntidadeTipoSelect.innerHTML = '<option value="">Selecione o tipo...</option>' +
+      tipos.map(t => `<option value="${esc(t)}">${esc(FONTES_ENTIDADE[t].rotulo)}</option>`).join('');
+    trailEntidadeTipoSelect.value = tipos.includes(anterior) ? anterior : (tipos.length === 1 ? tipos[0] : '');
+    preencherRegistrosEntidade();
+  }
+
+  let revisaoRegistros = 0;
+  async function preencherRegistrosEntidade() {
+    if (!trailEntidadeRegistroSelect) return;
+    const tipo = trailEntidadeTipoSelect ? trailEntidadeTipoSelect.value : '';
+    const minhaRevisao = ++revisaoRegistros;
+    avisoEntidade('');
+    if (!tipo) {
+      trailEntidadeRegistroSelect.innerHTML = '<option value="">Selecione primeiro o tipo</option>';
+      trailEntidadeRegistroSelect.disabled = true;
+      return;
+    }
+    trailEntidadeRegistroSelect.disabled = true;
+    trailEntidadeRegistroSelect.innerHTML = '<option value="">Carregando registros...</option>';
+    const r = await carregarRegistrosEntidade(tipo);
+    if (minhaRevisao !== revisaoRegistros) return; // o tipo mudou durante a leitura
+    if (!r.ok) {
+      trailEntidadeRegistroSelect.innerHTML = '<option value="">Não foi possível carregar</option>';
+      avisoEntidade(`Não foi possível carregar os registros do banco de dados: ${r.mensagem}`, true);
+      return;
+    }
+    const fonte = FONTES_ENTIDADE[tipo];
+    if (r.itens.length === 0) {
+      trailEntidadeRegistroSelect.innerHTML = '<option value="">Nenhum registro cadastrado</option>';
+      avisoEntidade(`Não há registros de ${fonte.rotulo.toLowerCase()} cadastrados para vincular a esta decisão.`, true);
+      return;
+    }
+    trailEntidadeRegistroSelect.innerHTML = '<option value="">Selecione o registro...</option>' +
+      r.itens.map(item => `<option value="${esc(fonte.chave(item))}">${esc(fonte.descrever(item))}</option>`).join('');
+    trailEntidadeRegistroSelect.disabled = false;
+  }
+
+  if (trailTipoDecisaoSelect) trailTipoDecisaoSelect.addEventListener('change', preencherTiposEntidade);
+  if (trailEntidadeTipoSelect) trailEntidadeTipoSelect.addEventListener('change', preencherRegistrosEntidade);
+
   if (toggleRegistrarTrailBtn && registrarTrailModal) {
-    toggleRegistrarTrailBtn.addEventListener('click', () => registrarTrailModal.classList.remove('hidden'));
+    toggleRegistrarTrailBtn.addEventListener('click', () => {
+      registrarTrailModal.classList.remove('hidden');
+      preencherTiposEntidade(); // registros sempre recarregados ao abrir
+    });
   }
   function fecharRegistrarTrailModal() {
     if (registrarTrailModal) registrarTrailModal.classList.add('hidden');
@@ -905,23 +1088,47 @@ document.addEventListener('DOMContentLoaded', () => {
   if (registrarTrailForm) {
     registrarTrailForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const tipoDecisao = document.getElementById('trailTipoDecisao').value;
-      const entidade = document.getElementById('trailEntidadeInput').value.trim();
+      const tipoDecisao = trailTipoDecisaoSelect ? trailTipoDecisaoSelect.value : '';
+      const tipoEntidade = trailEntidadeTipoSelect ? trailEntidadeTipoSelect.value : '';
+      const registro = trailEntidadeRegistroSelect ? trailEntidadeRegistroSelect.value : '';
       const motivo = document.getElementById('trailMotivoInput').value.trim();
 
-      if (!entidade || !motivo) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Informe a entidade e a justificativa formal.');
+      if (!tipoEntidade || !registro || !motivo) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Selecione o tipo de entidade, o registro e informe a justificativa formal.');
+        return;
+      }
+      // Compatibilidade: o tipo precisa ser permitido para a decisão…
+      if (!(TIPOS_POR_DECISAO[tipoDecisao] || []).includes(tipoEntidade)) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Entidade Incompatível', `A decisão "${tipoDecisao}" não pode ser vinculada a ${FONTES_ENTIDADE[tipoEntidade] ? FONTES_ENTIDADE[tipoEntidade].rotulo.toLowerCase() : 'esse tipo de entidade'}.`);
+        preencherTiposEntidade();
+        return;
+      }
+      // …e o registro precisa existir AGORA nesse tipo (pode ter sido excluído)
+      const atual = await carregarRegistrosEntidade(tipoEntidade);
+      if (!atual.ok) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Decisão Não Registrada', `Não foi possível validar o registro no banco de dados: ${atual.mensagem}.`);
+        return;
+      }
+      const fonte = FONTES_ENTIDADE[tipoEntidade];
+      if (!atual.itens.some(item => String(fonte.chave(item)) === registro)) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Registro Inválido', `O registro "${registro}" não existe (mais) entre os registros de ${fonte.rotulo.toLowerCase()}. Selecione novamente.`);
+        preencherRegistrosEntidade();
         return;
       }
 
-      await window.registrarTrailDecisao(tipoDecisao, entidade, motivo);
+      const resultado = await window.registrarTrailDecisao(tipoDecisao, { tipo: tipoEntidade, id: registro }, motivo);
       await renderTrailDecisoesTable();
+      if (resultado && resultado.ok === false) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Decisão Não Registrada no Banco', `A decisão não foi confirmada pelo banco de dados (${resultado.mensagem}). Ela ficou apenas neste navegador; tente novamente.`);
+        return;
+      }
 
       registrarTrailForm.reset();
+      preencherTiposEntidade();
       fecharRegistrarTrailModal();
 
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Decisão Registrada', `Decisão "${tipoDecisao}" registrada com sucesso no Trail Imutável!`);
+        window.mostrarFeedback('sucesso', 'Decisão Registrada', `Decisão "${tipoDecisao}" registrada para ${fonte.rotulo} ${registro} no Trail Imutável!`);
       }
     });
   }

@@ -153,7 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
             status: 'SOLICITADA'
           }).select('id').single();
 
-          await window.nexusSupabase.from('navios').update({ estado_operacional: 'AGENDADO_PARA_REFORMA' }).eq('nome', navioNome);
+          const rNavio = await gravarEstadoEquipamento('NAVIO', { id: navio && navio.id, codigo: navio && navio.imo, nome: navioNome }, 'AGENDADO_PARA_REFORMA');
+          if (!rNavio.ok) console.warn('[NexusPort] Estado do navio não atualizado:', rNavio.mensagem);
 
           if (window.registrarTrailDecisao) {
             await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_NAVIO', 'navios', navio ? navio.id : null, `Solicitada manutenção [${tipoManut}] para o navio ${navioNome} por ${session.nome || session.cargo}. Motivo: ${descricao}`);
@@ -252,46 +253,75 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (gnd) gnd.estado = 'EM_MANUTENCAO';
+    // Duplicidade conferida também no estado persistido (a lista local pode estar desatualizada)
+    if (window.nexusSupabase && window.NexusIntegridade) {
+      const disp = await window.NexusIntegridade.verificarDisponibilidade('GUINDASTE', { id: gnd && gnd.id, codigo: identificacao });
+      if (!disp.disponivel) {
+        const jaEmManutencao = disp.registro && disp.motivo && !/não foi possível/i.test(disp.motivo);
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback(jaEmManutencao ? 'atencao' : 'erro', jaEmManutencao ? 'Guindaste em Manutenção' : 'Manutenção Não Solicitada',
+            jaEmManutencao
+              ? `BLOQUEIO DE DUPLICIDADE (Tarefa 9): O guindaste "${identificacao}" já está ${disp.motivo}. Não é permitido solicitar manutenção duplicada!`
+              : `Não foi possível conferir o guindaste ${identificacao} no banco de dados: ${disp.motivo}.`);
+        }
+        if (jaEmManutencao) espelharGuindasteLocal(identificacao, disp.registro.estado || 'EM_MANUTENCAO');
+        return;
+      }
+    }
 
     const newOsId = `OS-2026-${Math.floor(100 + Math.random() * 900)}`;
-    osList.unshift({
+    const novaOs = {
       id: newOsId,
       equipamento: `Guindaste ${identificacao}`,
       prioridade: 'ALTA',
       descricao: `Manutenção de Guindaste: ${descricao}`,
       status: 'EM_MANUTENCAO',
-      data: new Date().toISOString().split('T')[0]
-    });
+      data: new Date().toISOString().split('T')[0],
+      entidadeTipo: 'GUINDASTE'
+    };
 
-    localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
-    localStorage.setItem('nexus_os_list', JSON.stringify(osList));
-
+    // Banco primeiro: o guindaste só fica indisponível na tela (e nas outras
+    // telas) depois que o estado EM_MANUTENCAO foi confirmado no Supabase.
     if (window.nexusSupabase) {
+      const rEstado = await gravarEstadoEquipamento('GUINDASTE', { id: gnd && gnd.id, codigo: identificacao }, 'EM_MANUTENCAO');
+      if (!rEstado.ok) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Manutenção Não Solicitada', `Não foi possível colocar o guindaste ${identificacao} em manutenção no banco de dados: ${rEstado.mensagem}.`);
+        return;
+      }
+      const gndId = rEstado.registro && rEstado.registro.id;
+      novaOs.guindaste_id = gndId || null;
       try {
-        await window.nexusSupabase.from('guindastes')
-          .update({ estado: 'EM_MANUTENCAO' })
-          .eq('numero_identificacao', identificacao);
-
-        await window.nexusSupabase.from('manutencoes').insert({
+        const { data: insOs, error: erroOs } = await window.nexusSupabase.from('manutencoes').insert(Object.assign({
           entidade_tipo: 'GUINDASTE',
           descricao: `[${newOsId}][ALTA] Guindaste: ${identificacao} - ${descricao}`,
           status: 'APROVADA'
-        });
-
-        if (window.registrarTrailDecisao) {
-          await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_CONTAINER', 'guindastes', null, `Solicitou manutenção do Guindaste ${identificacao}: ${descricao}`);
-        }
-        if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'guindastes', null, { estado: 'EM_MANUTENCAO', justificativa: descricao });
-        }
-        if (window.NexusRepository && window.NexusRepository.notifyChange) {
-          window.NexusRepository.notifyChange('guindastes');
-          window.NexusRepository.notifyChange('manutencoes');
-        }
+        }, gndId ? { guindaste_id: gndId } : {})).select('id').single();
+        if (erroOs) throw erroOs;
+        if (insOs && insOs.id) novaOs.rawDbId = insOs.id;
       } catch (err) {
-        console.warn('[NexusPort] Erro ao atualizar guindaste no Supabase:', err);
+        console.warn('[NexusPort] Erro ao registrar a OS do guindaste no Supabase:', err);
+        // Desfaz o estado para não deixar o guindaste indisponível sem OS
+        await gravarEstadoEquipamento('GUINDASTE', { id: gndId, codigo: identificacao }, 'OPERANTE');
+        if (window.mostrarFeedback) {
+          const detalhe = window.NexusIntegridade ? window.NexusIntegridade.descreverErroBanco(err) : ((err && err.message) || err);
+          window.mostrarFeedback('erro', 'Manutenção Não Solicitada', `Não foi possível registrar a ordem de serviço do guindaste ${identificacao}: ${detalhe}.`);
+        }
+        return;
       }
+      if (window.registrarTrailDecisao) {
+        await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_CONTAINER', 'guindastes', gndId || null, `Solicitou manutenção do Guindaste ${identificacao}: ${descricao}`);
+      }
+      if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EDICAO', 'guindastes', gndId || null, { estado: 'EM_MANUTENCAO', justificativa: descricao });
+      }
+    }
+
+    espelharGuindasteLocal(identificacao, 'EM_MANUTENCAO');
+    osList.unshift(novaOs);
+    localStorage.setItem('nexus_os_list', JSON.stringify(osList));
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('guindastes');
+      window.NexusRepository.notifyChange('manutencoes');
     }
 
     if (typeof renderGuindastesTable === 'function') renderGuindastesTable();
@@ -309,50 +339,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const todayStr = new Date().toISOString().split('T')[0];
     const gnd = guindastesList.find(x => x.identificacao === identificacao);
-    if (gnd) {
-      gnd.estado = 'OPERANTE';
-      gnd.dataManut = todayStr;
-    }
-
     const os = osList.find(o => o.equipamento.includes(identificacao) && o.status === 'EM_MANUTENCAO');
-    if (os) os.status = 'CONCLUIDA';
-
-    localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
-    localStorage.setItem('nexus_os_list', JSON.stringify(osList));
+    let avisoConclusao = null;
 
     if (window.nexusSupabase) {
+      const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
       try {
-        await window.nexusSupabase.from('guindastes')
-          .update({ estado: 'OPERANTE', data_ultima_manutencao: todayStr })
-          .eq('numero_identificacao', identificacao);
-
-        await window.nexusSupabase.from('historico_manutencoes').insert({
-          data_manutencao: todayStr,
-          descricao_servicos: `Conclusão da manutenção do Guindaste ${identificacao}`
-        });
-
-        const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+        // 1) Conclui a(s) OS em execução do guindaste (verificado)
         let q = window.nexusSupabase.from('manutencoes').update({ status: 'CONCLUIDA' });
         if (os && os.rawDbId && isUuid(os.rawDbId)) {
           q = q.eq('id', os.rawDbId);
         } else {
-          q = q.ilike('descricao', `%${identificacao}%`);
+          q = q.eq('status', 'APROVADA').ilike('descricao', `%${identificacao}%`);
         }
-        await q;
+        const { data: concluidas, error: erroOs } = await q.select('id');
+        if (erroOs) throw erroOs;
+        const idsConcluidos = (concluidas || []).map(c => c.id);
+
+        // 2) Libera o guindaste (OPERANTE = disponível de novo), verificado
+        const rEstado = await gravarEstadoEquipamento('GUINDASTE', { id: (gnd && gnd.id) || (os && os.guindaste_id), codigo: identificacao }, 'OPERANTE',
+          { data_ultima_manutencao: todayStr }, { ignorarOsId: idsConcluidos[0] || (os && os.rawDbId) });
+        if (!rEstado.ok) throw new Error(rEstado.mensagem);
+        if (rEstado.codigo === 'MANTIDO_EM_MANUTENCAO') avisoConclusao = `O guindaste ${rEstado.mensagem}.`;
+
+        const gndId = rEstado.registro && rEstado.registro.id;
+        const { error: erroHist } = await window.nexusSupabase.from('historico_manutencoes').insert(Object.assign({
+          data_manutencao: todayStr,
+          descricao_servicos: `Conclusão da manutenção do Guindaste ${identificacao}`
+        }, gndId && isUuid(String(gndId)) ? { guindaste_id: gndId } : {}));
+        if (erroHist) console.warn('[NexusPort] Histórico de manutenção não registrado:', erroHist);
 
         if (window.registrarTrailDecisao) {
-          await window.registrarTrailDecisao('APROVOU_MANUTENCAO', 'guindastes', null, `Concluiu manutenção do Guindaste ${identificacao} e reativou para OPERANTE`);
+          await window.registrarTrailDecisao('APROVOU_MANUTENCAO', 'guindastes', gndId || null, `Concluiu manutenção do Guindaste ${identificacao} e reativou para OPERANTE`);
         }
         if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'guindastes', null, { estado: 'OPERANTE', data_ultima_manutencao: todayStr });
-        }
-        if (window.NexusRepository && window.NexusRepository.notifyChange) {
-          window.NexusRepository.notifyChange('guindastes');
-          window.NexusRepository.notifyChange('manutencoes');
+          await window.registrarLogAlteracao('EDICAO', 'guindastes', gndId || null, { estado: 'OPERANTE', data_ultima_manutencao: todayStr });
         }
       } catch (err) {
-        console.warn('[NexusPort] Erro ao atualizar guindaste no Supabase:', err);
+        console.warn('[NexusPort] Erro ao concluir a manutenção do guindaste no Supabase:', err);
+        if (window.mostrarFeedback) {
+          const detalhe = window.NexusIntegridade ? window.NexusIntegridade.descreverErroBanco(err) : ((err && err.message) || err);
+          window.mostrarFeedback('erro', 'Manutenção Não Concluída', `Não foi possível concluir a manutenção do guindaste ${identificacao} no banco de dados: ${detalhe}. O guindaste continua indisponível.`);
+        }
+        return;
       }
+    }
+
+    if (!avisoConclusao) espelharGuindasteLocal(identificacao, 'OPERANTE', todayStr);
+    if (os) os.status = 'CONCLUIDA';
+    localStorage.setItem('nexus_os_list', JSON.stringify(osList));
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('guindastes');
+      window.NexusRepository.notifyChange('manutencoes');
+    }
+
+    if (avisoConclusao) {
+      if (typeof renderGuindastesTable === 'function') renderGuindastesTable();
+      renderOsTable();
+      if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Manutenção Concluída', `OS concluída. ${avisoConclusao}`);
+      return;
     }
 
     if (typeof renderGuindastesTable === 'function') renderGuindastesTable();
@@ -363,6 +408,74 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   let osList = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
+
+  /**
+   * Identifica o equipamento de uma OS do banco. A identificação fica na FK
+   * (navio_id/guindaste_id/container_id) e/ou na descrição gravada:
+   *   "[OS-ID][PRIO] Guindaste: ABC123DEF - ..."  |  "[OS-ID][TIPO] Navio: Jaguar - ..."
+   *   "[OS-ID][PRIO] Equipamento: Contêiner MSCU1234567 - ..."
+   * Antes, a OS recarregada ficava só com "Guindaste"/"Navio"/"Contêiner" e, ao
+   * concluí-la, o UPDATE do equipamento não encontrava nada: ele ficava preso
+   * em manutenção (indisponível) para sempre.
+   */
+  function identificarEquipamentoOS(m) {
+    const tipo = String(m.entidade_tipo || '').toUpperCase();
+    const rotulo = tipo === 'NAVIO' ? 'Navio' : tipo === 'GUINDASTE' ? 'Guindaste' : tipo === 'CONTAINER' ? 'Contêiner' : 'Equipamento';
+    const texto = String(m.descricao || '').replace(/^(\[[^\]]*\]){1,2}\s*/, '');
+    const mt = texto.match(/^(?:Equipamento:\s*)?(?:Navio|Guindaste|Cont[êe]iner|Container)\s*:?\s*(.+?)\s+-\s+([\s\S]*)$/i);
+    if (mt) return { tipo, rotulo, nome: mt[1].trim(), descricao: mt[2].trim() };
+    return { tipo, rotulo, nome: '', descricao: texto };
+  }
+
+  /** Tipo + identificação + FK do equipamento de uma OS da lista. */
+  function referenciaEquipamentoOS(os) {
+    const eq = String(os.equipamento || '');
+    let tipo = os.entidadeTipo || null;
+    if (!tipo) {
+      if (/^Navio/i.test(eq)) tipo = 'NAVIO';
+      else if (/^Guindaste/i.test(eq)) tipo = 'GUINDASTE';
+      else if (/^Cont[êe]iner/i.test(eq)) tipo = 'CONTAINER';
+    }
+    const nome = eq.replace(/^(Navio|Guindaste|Contêiner|Container|Equipamento)\s*/i, '').trim();
+    const fk = tipo === 'NAVIO' ? os.navio_id : tipo === 'GUINDASTE' ? os.guindaste_id : tipo === 'CONTAINER' ? os.container_id : null;
+    return { tipo, nome, fk: fk || null };
+  }
+
+  /**
+   * Grava o estado do equipamento no banco com verificação. Sem o módulo de
+   * integridade (não deveria ocorrer: manutencao.html o carrega), faz o UPDATE
+   * pela identificação conferindo o erro.
+   */
+  async function gravarEstadoEquipamento(tipo, alvo, estado, extras, opcoes) {
+    if (!window.nexusSupabase || !tipo) return { ok: true, local: true };
+    if (window.NexusIntegridade) {
+      return window.NexusIntegridade.definirEstadoEquipamento(tipo, alvo, estado, extras, opcoes);
+    }
+    const tabela = { GUINDASTE: 'guindastes', CONTAINER: 'containers', NAVIO: 'navios' }[tipo];
+    const colEstado = tipo === 'NAVIO' ? 'estado_operacional' : 'estado';
+    const colChave = tipo === 'NAVIO' ? 'nome' : 'numero_identificacao';
+    try {
+      const { error } = await window.nexusSupabase.from(tabela)
+        .update(Object.assign({ [colEstado]: estado }, extras || {}))
+        .eq(colChave, tipo === 'NAVIO' ? (alvo.nome || alvo.codigo) : (alvo.codigo || alvo.nome));
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, mensagem: (e && e.message) || String(e) };
+    }
+  }
+
+  /** Atualiza o espelho local do guindaste (outras telas sem banco o leem). */
+  function espelharGuindasteLocal(identificacao, estado, dataManut) {
+    const chave = String(identificacao || '').toUpperCase();
+    guindastesList.forEach(g => {
+      if (String(g.identificacao || '').toUpperCase() === chave) {
+        g.estado = estado;
+        if (dataManut) g.dataManut = dataManut;
+      }
+    });
+    localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+  }
 
   // Backlog 3 (7h/7b): estado do filtro de status das OS (declarado junto da
   // lista para evitar erro de TDZ quando carregarOsSupabase renderiza primeiro).
@@ -379,27 +492,25 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (m.status === 'RECUSADA') statusLocal = 'REPROVADA';
             else if (m.status === 'CONCLUIDA') statusLocal = 'CONCLUIDA';
 
-            // Extrai equipamento e prioridade da descrição se houver formato [ID][PRIORIDADE]
-            let equip = 'Equipamento Geral';
+            // Extrai prioridade da descrição se houver formato [ID][PRIORIDADE]
             let prioridade = 'MEDIA';
-            let descLimpa = m.descricao || '';
             const matchDesc = m.descricao ? m.descricao.match(/^\[(.*?)\]\[(.*?)\]\s*(.*)$/) : null;
-            if (matchDesc) {
-              prioridade = matchDesc[2];
-              descLimpa = matchDesc[3];
-            }
-            if (m.entidade_tipo === 'NAVIO') equip = 'Navio';
-            else if (m.entidade_tipo === 'GUINDASTE') equip = 'Guindaste';
-            else if (m.entidade_tipo === 'CONTAINER') equip = 'Contêiner';
+            if (matchDesc) prioridade = matchDesc[2];
+            const ident = identificarEquipamentoOS(m);
+            const equip = ident.tipo ? (ident.nome ? `${ident.rotulo} ${ident.nome}` : ident.rotulo) : 'Equipamento Geral';
 
             return {
               id: m.id ? `OS-${m.id.substring(0, 8)}` : `OS-${Date.now()}`,
               equipamento: equip,
               prioridade: prioridade,
-              descricao: descLimpa,
+              descricao: ident.descricao,
               status: statusLocal,
               data: m.created_at ? new Date(m.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-              rawDbId: m.id
+              rawDbId: m.id,
+              entidadeTipo: ident.tipo || null,
+              navio_id: m.navio_id || null,
+              guindaste_id: m.guindaste_id || null,
+              container_id: m.container_id || null
             };
           });
           localStorage.setItem('nexus_os_list', JSON.stringify(osList));
@@ -669,17 +780,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
-          const { data: insOs } = await window.nexusSupabase.from('manutencoes').insert({
+          // FK do equipamento: a OS fica ligada ao registro (não só ao texto)
+          let fkEquip = {};
+          if (window.NexusIntegridade) {
+            const identEquip = equipamento.replace(/^(Navio|Guindaste|Contêiner)\s+/, '').trim();
+            try {
+              const reg = await window.NexusIntegridade.resolverNoBanco(entidadeTipo, { codigo: identEquip, nome: identEquip });
+              if (reg && window.NexusIntegridade.ehUuid(reg.id)) {
+                fkEquip = { [entidadeTipo === 'NAVIO' ? 'navio_id' : entidadeTipo === 'GUINDASTE' ? 'guindaste_id' : 'container_id']: reg.id };
+              }
+            } catch (errFk) {
+              console.warn('[NexusPort] Equipamento da OS não localizado no banco:', errFk);
+            }
+          }
+          const { data: insOs, error: erroInsOs } = await window.nexusSupabase.from('manutencoes').insert(Object.assign({
             entidade_tipo: entidadeTipo,
             descricao: `[${newId}][${prioridade}] Equipamento: ${equipamento} - ${descricao}`,
             status: 'SOLICITADA'
-          }).select('id').single();
+          }, fkEquip)).select('id').single();
+          if (erroInsOs) throw erroInsOs;
+          const osLocal = osList.find(o => o.id === newId);
+          if (osLocal) {
+            Object.assign(osLocal, fkEquip, { entidadeTipo, rawDbId: insOs ? insOs.id : undefined });
+            localStorage.setItem('nexus_os_list', JSON.stringify(osList));
+          }
 
           if (window.registrarLogAlteracao) {
             await window.registrarLogAlteracao('CRIACAO', 'manutencoes', insOs ? insOs.id : null, { equipamento, prioridade, descricao });
           }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar OS com Supabase:', err);
+          osList = osList.filter(o => o.id !== newId);
+          localStorage.setItem('nexus_os_list', JSON.stringify(osList));
+          if (window.mostrarFeedback) {
+            const detalhe = window.NexusIntegridade ? window.NexusIntegridade.descreverErroBanco(err) : ((err && err.message) || err);
+            window.mostrarFeedback('erro', 'Ordem de Serviço Não Criada', `Não foi possível registrar a OS de ${equipamento} no banco de dados: ${detalhe}.`);
+          }
+          return;
         }
       }
 
@@ -705,6 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const os = osList.find(o => o.id === idOS);
     if (!os) return;
+    const osAnterior = os.status;
 
     let supabaseStatus = 'SOLICITADA';
     let feedbackTitulo = '';
@@ -731,10 +869,12 @@ document.addEventListener('DOMContentLoaded', () => {
       feedbackMsg = `Manutenção da OS ${idOS} CONCLUÍDA! Equipamento ${os.equipamento} reativado e no estado OPERANTE.`;
     }
 
-    localStorage.setItem('nexus_os_list', JSON.stringify(osList));
+    const statusAnteriorOs = osAnterior;
+    let avisoEquipamento = null;
 
     if (window.nexusSupabase) {
       try {
+        // 1) Status da OS — verificado (a OS só muda na tela se o banco confirmar)
         const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
         let qStatus = window.nexusSupabase.from('manutencoes').update({ status: supabaseStatus });
         if (os.rawDbId && isUuid(os.rawDbId)) {
@@ -742,43 +882,53 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           qStatus = qStatus.ilike('descricao', `%${idOS}%`);
         }
-        await qStatus;
+        const { data: osAtualizadas, error: erroOs } = await qStatus.select('id, navio_id, guindaste_id, container_id');
+        if (erroOs) throw erroOs;
+        if (!Array.isArray(osAtualizadas) || osAtualizadas.length === 0) {
+          throw new Error(`a ordem de serviço ${idOS} não foi encontrada no banco de dados`);
+        }
+        const linhaOs = osAtualizadas[0];
+        if (!os.rawDbId && linhaOs.id) os.rawDbId = linhaOs.id;
+        ['navio_id', 'guindaste_id', 'container_id'].forEach(c => { if (!os[c] && linhaOs[c]) os[c] = linhaOs[c]; });
 
-        const limpaNome = os.equipamento.replace(/^(Navio|Guindaste|Contêiner)\s+/, '').trim();
-
-        if (os.equipamento.startsWith('Navio')) {
+        // 2) Estado do equipamento (localizado pela FK da OS ou pela identificação).
+        //    APROVAR → indisponível; CONCLUIR/REPROVAR → OPERANTE (disponível
+        //    novamente), salvo se houver outra OS em execução para ele.
+        const ref = referenciaEquipamentoOS(os);
+        if (ref.tipo) {
+          const hoje = new Date().toISOString().split('T')[0];
+          let estadoNovo;
+          let extras = null;
           if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).ilike('nome', limpaNome);
-          } else if (acao === 'CONCLUIR' || acao === 'REPROVAR') {
+            // estado_container_enum/estado_navio_enum não têm EM_MANUTENCAO: o valor válido é EM_REFORMA
+            estadoNovo = ref.tipo === 'GUINDASTE' ? 'EM_MANUTENCAO' : 'EM_REFORMA';
+          } else {
             // Backlog3: ao REPROVAR a OS, o navio também precisa sair do estado
             // AGENDADO_PARA_REFORMA/EM_REFORMA, senão fica preso no contador de
             // "Manutenção" do dashboard sem nunca ter sido atendido.
-            await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).ilike('nome', limpaNome);
+            estadoNovo = 'OPERANTE';
+            if (acao === 'CONCLUIR' && ref.tipo !== 'NAVIO') extras = { data_ultima_manutencao: hoje };
           }
-        } else if (os.equipamento.startsWith('Guindaste')) {
-          if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'REPROVAR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', limpaNome);
+          const rEquip = await gravarEstadoEquipamento(ref.tipo, { id: ref.fk, codigo: ref.nome, nome: ref.nome }, estadoNovo, extras, { ignorarOsId: os.rawDbId });
+          if (!rEquip.ok) {
+            avisoEquipamento = `A OS ${idOS} foi atualizada, mas o estado do equipamento ${os.equipamento} não pôde ser gravado: ${rEquip.mensagem}.`;
+          } else {
+            if (rEquip.codigo === 'MANTIDO_EM_MANUTENCAO') avisoEquipamento = `O equipamento ${os.equipamento} ${rEquip.mensagem}.`;
+            if (ref.tipo === 'GUINDASTE' && rEquip.codigo !== 'MANTIDO_EM_MANUTENCAO') {
+              espelharGuindasteLocal(ref.nome, estadoNovo, acao === 'CONCLUIR' ? hoje : null);
+            }
           }
-        } else if (os.equipamento.startsWith('Contêiner')) {
-          if (acao === 'APROVAR') {
-            // estado_container_enum não tem EM_MANUTENCAO: o valor válido é EM_REFORMA
-            await window.nexusSupabase.from('containers').update({ estado: 'EM_REFORMA' }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'REPROVAR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', limpaNome);
-          }
-        }
 
-        if (acao === 'CONCLUIR') {
-          await window.nexusSupabase.from('historico_manutencoes').insert({
-            data_manutencao: new Date().toISOString().split('T')[0],
-            descricao_servicos: `Conclusão da Ordem de Serviço ${idOS} para ${os.equipamento}: ${os.descricao}`
-          });
+          if (acao === 'CONCLUIR') {
+            const fkHist = rEquip.registro && rEquip.registro.id && isUuid(String(rEquip.registro.id))
+              ? { [ref.tipo === 'NAVIO' ? 'navio_id' : ref.tipo === 'GUINDASTE' ? 'guindaste_id' : 'container_id']: rEquip.registro.id }
+              : {};
+            const { error: erroHist } = await window.nexusSupabase.from('historico_manutencoes').insert(Object.assign({
+              data_manutencao: hoje,
+              descricao_servicos: `Conclusão da Ordem de Serviço ${idOS} para ${os.equipamento}: ${os.descricao}`
+            }, fkHist));
+            if (erroHist) console.warn('[NexusPort] Histórico de manutenção não registrado:', erroHist);
+          }
         }
 
         if (window.registrarTrailDecisao) {
@@ -790,8 +940,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (err) {
         console.warn('[NexusPort] Erro ao atualizar status da OS no Supabase:', err);
+        os.status = statusAnteriorOs;
+        localStorage.setItem('nexus_os_list', JSON.stringify(osList));
+        renderOsTable();
+        if (window.mostrarFeedback) {
+          const detalhe = window.NexusIntegridade ? window.NexusIntegridade.descreverErroBanco(err) : ((err && err.message) || err);
+          window.mostrarFeedback('erro', 'Ordem de Serviço Não Atualizada', `Não foi possível atualizar a OS ${idOS} no banco de dados: ${detalhe}. Nada foi alterado.`);
+        }
+        return;
       }
     }
+    localStorage.setItem('nexus_os_list', JSON.stringify(osList));
 
     if (window.NexusRepository && window.NexusRepository.notifyChange) {
       window.NexusRepository.notifyChange('manutencoes');
@@ -802,7 +961,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderOsTable();
     if (window.mostrarFeedback) {
-      window.mostrarFeedback('sucesso', feedbackTitulo, feedbackMsg);
+      if (avisoEquipamento) {
+        window.mostrarFeedback('alerta', feedbackTitulo, `${feedbackMsg} ${avisoEquipamento}`);
+      } else {
+        window.mostrarFeedback('sucesso', feedbackTitulo, feedbackMsg);
+      }
     }
   };
 

@@ -594,6 +594,17 @@
   // Normalização das entidades vindas do Supabase ou do cache local
   // ---------------------------------------------------------------------
 
+  /** ISO ou texto pt-BR "dd/mm/aaaa[, hh:mm[:ss]]" → ISO; null se inválida (nunca "hoje"). */
+  function lerDataCarga(valor) {
+    if (!valor) return null;
+    const texto = String(valor).trim();
+    const br = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:[,\s]+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    const d = br
+      ? new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]), Number(br[4] || 0), Number(br[5] || 0), Number(br[6] || 0))
+      : new Date(texto);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
   function normalizarCarga(c) {
     return {
       id: c.id || c.rawDbId || c.qr_code_url || '',
@@ -607,6 +618,9 @@
       navioNome: c.navio || c.navioNome || null,
       containerId: c.container || c.container_id || c.containerId || null,
       dataEntrada: c.data_entrada || c.dataChegada || c.created_at || c.data_cadastro || c.dataEntrada || null,
+      // Data de CADASTRO (created_at): referência do Período de Referência.
+      // dataChegada era texto pt-BR (não convertível) e data_entrada é a chegada física.
+      dataCadastro: lerDataCarga(c.created_at || c.data_cadastro || c.dataCadastro || c.data_entrada || c.dataChegada || null),
       dataSaida: c.data_saida || c.dataSaida || null,
       inspecao: String(c.resultado_inspecao || c.inspecao || '').toUpperCase() || null,
       estivador: c.estivador_id || c.estivadorMatricula || c.estivador || null,
@@ -754,7 +768,7 @@
     '7D': 'últimos 7 dias',
     '30D': 'últimos 30 dias',
     MENSAL: 'este mês',
-    TRIMESTRAL: 'trimestre atual',
+    TRIMESTRAL: 'últimos 3 meses',
     ANUAL: 'ano atual',
     TODOS: 'todo o histórico'
   };
@@ -807,10 +821,9 @@
       if (usarContainer) {
         if (textoFiltro(c.containerId) !== contFiltro) return false;
       }
-      // Cargas sem qualquer data de referência passam (não há como julgá-las
-      // pelo período); as datadas precisam estar dentro do período.
-      const referencia = c.dataEntrada || c.dataSaida;
-      if (!dataDentroDoPeriodo(referencia, inicio, true)) return false;
+      // Período de Referência = data de CADASTRO da carga. Sem data de cadastro
+      // não há como afirmar que pertence ao período (antes passava em todos).
+      if (!dataDentroDoPeriodo(c.dataCadastro, inicio, false)) return false;
       return true;
     });
 
@@ -1478,7 +1491,7 @@
       const meses = ultimosMeses(6);
       const porMes = somarPor(
         dados.cargas.filter(c => c.valor > 0),
-        c => chaveMes(c.dataEntrada),
+        c => chaveMes(c.dataCadastro || c.dataEntrada),
         c => c.valor
       );
       const valores = meses.map(m => Math.round(porMes.get(m.chave) || 0));

@@ -332,7 +332,11 @@ function testarConfiguracao() {
   log('\n7. Código: manutenção, embarcações e Relatórios');
   const manut = read('js/pages/manutencao.js');
   check('manutenção de contêiner grava EM_REFORMA (não EM_MANUTENCAO)',
-    /from\('containers'\)\.update\(\{ estado: 'EM_REFORMA' \}\)/.test(manut) && !/from\('containers'\)\.update\(\{ estado: 'EM_MANUTENCAO' \}\)/.test(manut));
+    // Correções Adicionais (1.1): o estado é gravado pelo helper DB-first
+    // (gravarEstadoEquipamento/NexusIntegridade) — contêiner/navio recebem EM_REFORMA.
+    (/from\('containers'\)\.update\(\{ estado: 'EM_REFORMA' \}\)/.test(manut) ||
+      /estadoNovo = ref\.tipo === 'GUINDASTE' \? 'EM_MANUTENCAO' : 'EM_REFORMA'/.test(manut)) &&
+      !/from\('containers'\)\.update\(\{ estado: 'EM_MANUTENCAO' \}\)/.test(manut));
   check('OS de navio grava navio_id (UUID validado)', /navio_id:\s*navioUuid/.test(manut) && /navioUuid\s*=.*test\(/.test(manut));
   check('listener nexus_data_changed de manutenção recarrega do Supabase (carregarOsSupabase)',
     /addEventListener\('nexus_data_changed'[\s\S]*?carregarOsSupabase\(\)/.test(manut));

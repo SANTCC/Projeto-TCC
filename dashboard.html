@@ -351,9 +351,20 @@
           </select>
         </div>
 
-        <div>
-          <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Entidade / Identificação</label>
-          <input type="text" id="trailEntidadeInput" required placeholder="Ex: Carga CRG-2026-101 ou Navio Santos Star" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="trailEntidadeTipoSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Tipo de Entidade</label>
+            <select id="trailEntidadeTipoSelect" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold">
+              <option value="">Selecione o tipo...</option>
+            </select>
+          </div>
+          <div>
+            <label for="trailEntidadeRegistroSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Registro</label>
+            <select id="trailEntidadeRegistroSelect" required disabled class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 disabled:opacity-60">
+              <option value="">Selecione primeiro o tipo</option>
+            </select>
+          </div>
+          <p id="trailEntidadeAviso" class="sm:col-span-2 text-[11px] text-slate-500 dark:text-slate-400 hidden" aria-live="polite"></p>
         </div>
 
         <div>

@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node tools/build.js",
     "start": "npx serve -l 3000 .",
-    "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
+    "test:correcoes": "node tests/test_correcoes_adicionais.js",
+    "test": "npm run test:graficos && npm run test:correcoes && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
     "test:vlibras": "node tests/test_vlibras.js",
     "test:edge-functions": "node tests/test_edge_functions.js",
     "test:graficos": "node tests/test_graficos_por_cargo.js",

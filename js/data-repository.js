@@ -139,20 +139,51 @@
     },
 
     /**
-     * EXCLUIR FUNCIONÁRIO
+     * EXCLUIR FUNCIONÁRIO — exclusão real e verificada.
+     * Funcionário com registros vinculados (auditoria, inspeções, histórico:
+     * FKs ON DELETE RESTRICT) não é apagado — o banco recusa com 23503. Nesse
+     * caso ele é DESATIVADO (ativo = false: perde o acesso), preservando o
+     * histórico. Nunca há exclusão em cascata.
+     * @returns {Promise<{ok:boolean, modo:'EXCLUIDO'|'DESATIVADO'|'LOCAL'|'ERRO', mensagem?:string}>}
      */
     deleteFuncionario: async function (matricula) {
       const client = this.getSupabase();
+      let resultado = { ok: true, modo: 'LOCAL' };
       if (client) {
         try {
-          await client.from('funcionarios').delete().eq('matricula', matricula);
+          const { data, error } = await client.from('funcionarios').delete().eq('matricula', matricula).select('id');
+          if (error && String(error.code) === '23503') {
+            const { data: desativados, error: erroDesativar } = await client.from('funcionarios')
+              .update({ ativo: false }).eq('matricula', matricula).select('id');
+            if (erroDesativar) throw erroDesativar;
+            resultado = (Array.isArray(desativados) && desativados.length > 0)
+              ? { ok: true, modo: 'DESATIVADO', mensagem: 'o funcionário possui registros vinculados (auditoria, inspeções ou histórico) e foi desativado para preservá-los' }
+              : { ok: false, modo: 'ERRO', mensagem: 'o banco de dados não confirmou a desativação do funcionário' };
+          } else if (error) {
+            throw error;
+          } else if (Array.isArray(data) && data.length > 0) {
+            resultado = { ok: true, modo: 'EXCLUIDO' };
+          } else {
+            // 0 linhas: já não existia ou a política de DELETE recusou em silêncio
+            const { data: ainda } = await client.from('funcionarios').select('id').eq('matricula', matricula).limit(1);
+            resultado = (Array.isArray(ainda) && ainda.length > 0)
+              ? { ok: false, modo: 'ERRO', mensagem: 'o banco de dados não autorizou a exclusão (política de DELETE em "funcionarios")' }
+              : { ok: true, modo: 'EXCLUIDO' };
+          }
         } catch (err) {
           console.warn('[NexusRepository] Erro ao excluir funcionario do Supabase:', err);
+          resultado = { ok: false, modo: 'ERRO', mensagem: (err && (err.message || err.details)) || String(err) };
         }
       }
+      if (!resultado.ok) return resultado;
       let list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
-      list = list.filter(f => f.matricula !== matricula);
+      if (resultado.modo === 'DESATIVADO') {
+        list.forEach(f => { if (f.matricula === matricula) { f.ativo = false; f.doc = 'Inativo no Supabase'; } });
+      } else {
+        list = list.filter(f => f.matricula !== matricula);
+      }
       localStorage.setItem('nexus_func_list', JSON.stringify(list));
+      return resultado;
     },
 
     /**
@@ -297,14 +328,23 @@
       const client = this.getSupabase();
       if (client) {
         try {
-          await client.from('cargas').delete().eq('qr_code_url', `QR-${idCarga}`);
+          const { data, error } = await client.from('cargas').delete().eq('qr_code_url', `QR-${idCarga}`).select('id');
+          if (error) throw error;
+          if (!Array.isArray(data) || data.length === 0) {
+            const { data: ainda } = await client.from('cargas').select('id').eq('qr_code_url', `QR-${idCarga}`).limit(1);
+            if (Array.isArray(ainda) && ainda.length > 0) {
+              return { ok: false, mensagem: 'o banco de dados não autorizou a exclusão (política de DELETE em "cargas")' };
+            }
+          }
         } catch (err) {
           console.warn('[NexusRepository] Erro ao excluir carga do Supabase:', err);
+          return { ok: false, mensagem: (err && (err.message || err.details)) || String(err) };
         }
       }
       let list = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       list = list.filter(c => c.id !== idCarga);
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(list));
+      return { ok: true };
     },
 
     /**
@@ -460,14 +500,20 @@
       const client = this.getSupabase();
       if (client) {
         try {
-          await client.from('visitantes').delete().or(`documento.eq.${docOuId},id.eq.${docOuId}`);
+          // id é uuid: filtrar por id com valor que não é uuid gera erro 22P02
+          const ehUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(docOuId || ''));
+          const coluna = ehUuid ? 'id' : 'documento';
+          const { error } = await client.from('visitantes').delete().eq(coluna, docOuId).select('id');
+          if (error) throw error;
         } catch (err) {
           console.warn('[NexusRepository] Erro ao excluir visitante do Supabase:', err);
+          return { ok: false, mensagem: (err && (err.message || err.details)) || String(err) };
         }
       }
       let list = JSON.parse(localStorage.getItem('nexus_vis_list') || '[]');
       list = list.filter(v => v.documento !== docOuId && v.id !== docOuId);
       localStorage.setItem('nexus_vis_list', JSON.stringify(list));
+      return { ok: true };
     },
 
     /**

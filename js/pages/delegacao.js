@@ -281,7 +281,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const substituidoMatricula = document.getElementById('delegSubstituidoMatricula').value.trim().toUpperCase();
+      const matriculaDigitada = document.getElementById('delegSubstituidoMatricula').value.trim().toUpperCase();
+      // Máscara do campo (js/mascaras-codigo.js): grava no formato MAT-1234
+      const substituidoMatricula = (window.NexusMascaras && matriculaDigitada) ? window.NexusMascaras.canonico('MATRICULA', matriculaDigitada) : matriculaDigitada;
       const substitutoNomeInput = document.getElementById('delegSubstitutoNome').value.trim();
       const substitutoCpf = document.getElementById('delegSubstitutoCpf').value.trim();
       const substitutoDataNasc = document.getElementById('delegSubstitutoDataNasc').value;

@@ -146,8 +146,9 @@
       const f = funcionarioPorMatricula(args.matricula);
       if (!f) return { ok: false, codigo: 'FUNCIONARIO_NAO_ENCONTRADO', mensagem: 'Funcionário não localizado.' };
       await window.excluirFuncionarioReal(f.matricula, { confirmado: true });
-      const ainda = D.funcionarios().some((x) => x.matricula === f.matricula);
-      if (!ainda) return { mensagem: `Funcionário ${f.matricula} desativado.`, dados: { matricula: f.matricula } };
+      // Excluído (sumiu da lista) ou desativado (ativo = false, histórico preservado)
+      const atual = D.funcionarios().find((x) => x.matricula === f.matricula);
+      if (!atual || atual.ativo === false) return { mensagem: `Funcionário ${f.matricula} ${atual ? 'desativado (possui registros vinculados)' : 'excluído'}.`, dados: { matricula: f.matricula } };
       return { ok: false, codigo: 'NAO_CONCLUIDA', mensagem: 'O funcionário não foi desativado. Veja a mensagem exibida ao operador.' };
     }
   };

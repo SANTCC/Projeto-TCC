@@ -42,6 +42,9 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
   }
 
+  // Status em que a inspeção não é permitida (ciclo da carga encerrado)
+  const STATUS_SEM_INSPECAO = ['ENTREGUE', 'CANCELADA'];
+
   let cargas = [];
   let cargaAtual = null;
   let itemsEstado = {};
@@ -71,7 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
       cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     }
 
-    const cargasAtivas = cargas.filter(c => c.status !== 'CANCELADA' && Boolean(c.id));
+    // Cargas ENTREGUE (ciclo encerrado) ou CANCELADA não podem ser inspecionadas
+    const cargasAtivas = cargas.filter(c => !STATUS_SEM_INSPECAO.includes(c.status) && Boolean(c.id));
 
     selectCarga.innerHTML = '<option value="">Selecione uma Carga para Vistoria...</option>';
     cargasAtivas.forEach(c => {
@@ -90,34 +94,99 @@ document.addEventListener('DOMContentLoaded', () => {
   popularSeletor();
 
   // Leitura de QR Code na mesma página de checklist (RN 17)
+  // Causa da quebra de layout: cada clique criava uma NOVA instância do leitor
+  // sem parar a anterior — ao reabrir, um segundo <video> era empilhado no mesmo
+  // contêiner (e a câmera continuava ligada com o painel oculto). Agora há uma
+  // única instância, parada/limpa ao fechar, com área de leitura proporcional.
+  const qrStatus = document.getElementById('inspecaoQrStatus');
+  const scanBtnLabel = document.getElementById('scanChecklistBtnLabel');
+  let leitorChecklist = null;
+  let leitorAtivo = false;
+
+  function statusLeitor(texto) {
+    if (qrStatus) qrStatus.textContent = texto;
+  }
+
+  function marcarPainelLeitor(aberto) {
+    checklistQrViewport.classList.toggle('hidden', !aberto);
+    if (scanChecklistBtn) scanChecklistBtn.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+    if (scanBtnLabel) scanBtnLabel.textContent = aberto ? 'Fechar Leitor' : 'Escanear QR Code';
+  }
+
+  async function pararLeitorChecklist() {
+    const leitor = leitorChecklist;
+    leitorChecklist = null;
+    if (leitor && leitorAtivo) {
+      leitorAtivo = false;
+      try { await leitor.stop(); } catch (e) { /* já parado */ }
+    }
+    leitorAtivo = false;
+    if (leitor) {
+      try { leitor.clear(); } catch (e) { /* sem elementos para limpar */ }
+    }
+    const area = document.getElementById('inspecaoQrReader');
+    if (area) area.innerHTML = '';
+  }
+
+  async function fecharLeitorChecklist() {
+    await pararLeitorChecklist();
+    marcarPainelLeitor(false);
+    statusLeitor('Aponte a câmera para a etiqueta da carga.');
+  }
+
+  async function abrirLeitorChecklist() {
+    await pararLeitorChecklist(); // nunca duas instâncias no mesmo contêiner
+    marcarPainelLeitor(true);
+    if (typeof Html5Qrcode === 'undefined') {
+      statusLeitor('Leitor de QR Code indisponível neste navegador. Selecione a carga manualmente abaixo.');
+      return;
+    }
+    statusLeitor('Aponte a câmera para a etiqueta da carga.');
+    const leitor = new Html5Qrcode('inspecaoQrReader');
+    leitorChecklist = leitor;
+    try {
+      await leitor.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          // Área de leitura quadrada proporcional ao preview (cabe em telas pequenas)
+          qrbox: (largura, altura) => {
+            const lado = Math.max(120, Math.floor(Math.min(largura, altura) * 0.7));
+            return { width: lado, height: lado };
+          },
+          aspectRatio: 1
+        },
+        (decodedText) => {
+          let rawCode = decodedText;
+          if (rawCode.includes('?carga=')) {
+            try {
+              const url = new URL(rawCode, window.location.origin);
+              rawCode = url.searchParams.get('carga') || rawCode;
+            } catch (e) {}
+          }
+          rawCode = rawCode.replace('QR-', '');
+          fecharLeitorChecklist();
+          if (selectCarga && Array.from(selectCarga.options).some(o => o.value === rawCode)) selectCarga.value = rawCode;
+          carregarChecklistParaCarga(rawCode);
+        },
+        () => {}
+      );
+      if (leitorChecklist === leitor) leitorAtivo = true;
+      else { try { await leitor.stop(); } catch (e) {} } // fechado durante a inicialização
+    } catch (err) {
+      console.warn('Câmera indisponível no checklist:', err);
+      if (leitorChecklist === leitor) leitorChecklist = null;
+      try { leitor.clear(); } catch (e) {}
+      statusLeitor('Câmera indisponível ou permissão negada. Selecione a carga manualmente abaixo.');
+    }
+  }
+
   if (scanChecklistBtn && checklistQrViewport) {
     scanChecklistBtn.addEventListener('click', () => {
-      checklistQrViewport.classList.toggle('hidden');
-      if (!checklistQrViewport.classList.contains('hidden') && typeof Html5Qrcode !== 'undefined') {
-        const scanner = new Html5Qrcode("inspecaoQrReader");
-        scanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 200, height: 200 } },
-          (decodedText) => {
-            let rawCode = decodedText;
-            if (rawCode.includes('?carga=')) {
-              try {
-                const url = new URL(rawCode, window.location.origin);
-                rawCode = url.searchParams.get('carga') || rawCode;
-              } catch (e) {}
-            }
-            rawCode = rawCode.replace('QR-', '');
-            selectCarga.value = rawCode;
-            carregarChecklistParaCarga(rawCode);
-            scanner.stop();
-            checklistQrViewport.classList.add('hidden');
-          },
-          () => {}
-        ).catch(err => {
-          console.warn("Câmera indisponível no checklist:", err);
-        });
-      }
+      if (checklistQrViewport.classList.contains('hidden')) abrirLeitorChecklist();
+      else fecharLeitorChecklist();
     });
+    window.addEventListener('pagehide', () => { pararLeitorChecklist(); });
   }
 
   if (carregarBtn) {
@@ -137,6 +206,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!cargaAtual) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Carga Não Localizada', `Carga "${idCarga}" não foi localizada.`);
+      return;
+    }
+
+    // Guarda também para ?carga= na URL e leitura de QR (não só o seletor)
+    if (STATUS_SEM_INSPECAO.includes(cargaAtual.status)) {
+      const rotulo = cargaAtual.status === 'ENTREGUE' ? 'já foi entregue' : 'está cancelada';
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Inspeção Indisponível', `A carga ${cargaAtual.id} ${rotulo}; não há inspeção para cargas com status ${cargaAtual.status}.`);
+      cargaAtual = null;
+      itemsEstado = {};
+      if (formContainer) formContainer.classList.add('hidden');
+      if (selectCarga) selectCarga.value = '';
       return;
     }
 
@@ -232,8 +312,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Aprovar Carga (RN 14)
+  /** Status atual da carga em inspeção, se ele impedir a inspeção (tela aberta há tempo/aba antiga). */
+  function bloqueioInspecaoAtual() {
+    if (!cargaAtual) return null;
+    const atual = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]').find(c => c.id === cargaAtual.id);
+    const status = atual ? atual.status : cargaAtual.status;
+    if (!STATUS_SEM_INSPECAO.includes(status)) return null;
+    if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Inspeção Indisponível', `A carga ${cargaAtual.id} está com status ${status}; a inspeção não pode ser concluída.`);
+    if (formContainer) formContainer.classList.add('hidden');
+    cargaAtual = null;
+    popularSeletor();
+    return status;
+  }
+
   async function aprovarCargaAtual() {
       if (!cargaAtual) return false;
+      if (bloqueioInspecaoAtual()) return false;
 
       cargaAtual.status = 'ARMAZENAGEM';
       cargaAtual.resultadoInspecao = 'APROVADA';
@@ -371,6 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Recusar Carga (RN 14 & Item 10: campo obrigatório de motivo de recusa)
   async function recusarCargaAtual(opcoes) {
       if (!cargaAtual) return false;
+      if (bloqueioInspecaoAtual()) return false;
 
       if (motivoBox) motivoBox.classList.remove('hidden');
 

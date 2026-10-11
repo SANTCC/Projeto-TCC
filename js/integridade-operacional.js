@@ -361,6 +361,47 @@
   }
 
   /**
+   * Grava o estado de manutenção do equipamento, localizado pelo id (FK da OS)
+   * ou pela identificação, com verificação (.select): o chamador só informa
+   * sucesso se o banco confirmou. Ao liberar (OPERANTE), o equipamento continua
+   * indisponível se ainda houver OUTRA ordem de serviço em execução (APROVADA).
+   *
+   * @param {'GUINDASTE'|'CONTAINER'|'NAVIO'} tipo
+   * @param {{id?:string,codigo?:string,nome?:string}} alvo
+   * @param {string} estado  ex.: 'EM_MANUTENCAO', 'EM_REFORMA', 'OPERANTE'
+   * @param {object} [extras] colunas adicionais (ex.: data_ultima_manutencao)
+   * @param {{ignorarOsId?:string}} [opcoes]
+   * @returns {Promise<{ok:boolean, codigo:string, mensagem?:string, registro?:object, local?:boolean}>}
+   */
+  async function definirEstadoEquipamento(tipo, alvo, estado, extras, opcoes) {
+    const cfg = configDo(tipo);
+    const client = cliente();
+    if (!client) return { ok: true, local: true, codigo: 'SEM_BANCO' };
+    try {
+      const reg = await resolverNoBanco(tipo, alvo);
+      if (!reg) {
+        return { ok: false, codigo: 'NAO_ENCONTRADO', mensagem: `o ${cfg.nome} não foi encontrado no banco de dados` };
+      }
+      if (estado === 'OPERANTE') {
+        const ignorar = opcoes && opcoes.ignorarOsId ? String(opcoes.ignorarOsId) : null;
+        const outras = (await osAtivasDo(tipo, reg)).filter((o) => o.status === 'APROVADA' && String(o.id) !== ignorar);
+        if (outras.length > 0) {
+          return { ok: true, codigo: 'MANTIDO_EM_MANUTENCAO', registro: reg, mensagem: `o ${cfg.nome} continua em manutenção: há outra ordem de serviço em execução` };
+        }
+      }
+      const payload = Object.assign({ [cfg.colEstado]: estado }, extras || {});
+      const { data, error } = await client.from(cfg.tabela).update(payload).eq('id', reg.id).select('id');
+      if (error) throw error;
+      if (!Array.isArray(data) || data.length === 0) {
+        return { ok: false, codigo: 'NAO_CONFIRMADO', registro: reg, mensagem: `o banco de dados não confirmou a alteração do estado do ${cfg.nome} (verifique as políticas de UPDATE em "${cfg.tabela}")` };
+      }
+      return { ok: true, codigo: 'ATUALIZADO', registro: reg };
+    } catch (e) {
+      return { ok: false, codigo: 'ERRO', mensagem: descreverErroBanco(e) };
+    }
+  }
+
+  /**
    * Desvincula (FK = null) o histórico de manutenção do equipamento antes da
    * exclusão. Em bancos sem a migração as FKs ainda são ON DELETE CASCADE e
    * apagariam todo o histórico junto com o equipamento.
@@ -540,6 +581,7 @@
     resolverNoBanco,
     osAtivasDo,
     preservarHistoricoManutencao,
+    definirEstadoEquipamento,
     chamarRpc,
     carregarBercos,
     ocuparBerco,

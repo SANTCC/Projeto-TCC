@@ -124,7 +124,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const codeValue = operatorCodeInput ? operatorCodeInput.value.trim() : '';
+      // O campo formata o código com hífen durante a digitação (js/mascaras-codigo.js);
+      // a comparação local ignora hífens/espaços/maiúsculas.
+      const codeValue = operatorCodeInput ? operatorCodeInput.value.trim().toUpperCase() : '';
+      const mesmoCodigo = (a, b) => {
+        const ka = String(a || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return ka !== '' && ka === String(b || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      };
 
       if (!codeValue) {
         showAuthNotice('error', 'Credencial Requerida', 'Por favor, informe seu código individual único para acessar o sistema.');
@@ -198,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Verifica se o código digitado é um novo código REEMITIDO pelo Técnico
-      const reissuedEntry = Object.entries(storedOverrides).find(([mat, ov]) => ov.codigo === codeValue);
+      const reissuedEntry = Object.entries(storedOverrides).find(([mat, ov]) => mesmoCodigo(ov.codigo, codeValue));
 
       // Se não encontrou via Supabase ou se não há Supabase conectado, busca exclusivamente nos cadastros dinâmicos locais (nexus_func_list)
       if (!employeeFound) {
@@ -220,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } else {
           // Busca estrita apenas por código exato ou matrícula na base ativa
-          employeeFound = allLocalEmployees.find(emp => (emp.codigo === codeValue || emp.codigo_individual === codeValue || emp.matricula === codeValue) && emp.ativo);
+          employeeFound = allLocalEmployees.find(emp => (mesmoCodigo(emp.codigo, codeValue) || mesmoCodigo(emp.codigo_individual, codeValue) || mesmoCodigo(emp.matricula, codeValue)) && emp.ativo);
         }
       }
 

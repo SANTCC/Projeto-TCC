@@ -34,7 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (periodo === '7D')  { const d = new Date(agora); d.setDate(d.getDate() - 7);  d.setHours(0, 0, 0, 0); return d; }
     if (periodo === '30D') { const d = new Date(agora); d.setDate(d.getDate() - 30); d.setHours(0, 0, 0, 0); return d; }
     if (periodo === 'MENSAL') { return new Date(agora.getFullYear(), agora.getMonth(), 1); }
-    if (periodo === 'TRIMESTRAL') { return new Date(agora.getFullYear(), agora.getMonth() - 3, 1); }
+    // Últimos 3 meses (mês atual + 2 anteriores) — mesma regra dos gráficos (charts.js)
+    if (periodo === 'TRIMESTRAL') { return new Date(agora.getFullYear(), agora.getMonth() - 2, 1); }
     if (periodo === 'ANUAL') { return new Date(agora.getFullYear(), 0, 1); }
     return null; // 'TODOS' ou valor desconhecido: sem corte de data
   }
@@ -43,6 +44,68 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!inicio) return true;
     const dataLog = new Date(l.created_at || l.data_hora || 0);
     return !Number.isNaN(dataLog.getTime()) && dataLog >= inicio;
+  }
+
+  /**
+   * Converte a data de cadastro em Date. Aceita ISO (created_at do Supabase) e
+   * o texto pt-BR "dd/mm/aaaa[, hh:mm[:ss]]" gravado por versões antigas do cache.
+   * Retorna null quando não há data válida (nunca assume "hoje").
+   */
+  function lerDataCadastro(valor) {
+    if (!valor) return null;
+    if (valor instanceof Date) return Number.isNaN(valor.getTime()) ? null : valor;
+    const texto = String(valor).trim();
+    const br = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:[,\s]+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    const d = br
+      ? new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]), Number(br[4] || 0), Number(br[5] || 0), Number(br[6] || 0))
+      : new Date(texto);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // Data de CADASTRO da carga: created_at (preenchido pelo banco no insert);
+  // data_entrada (ou dataChegada do cache local) só quando não houver created_at.
+  function dataCadastroCarga(c) {
+    return lerDataCadastro(c.created_at || c.data_cadastro || c.dataCadastro || c.data_entrada || c.dataChegada || null);
+  }
+
+  /** Cargas cujo cadastro está dentro do período de referência selecionado. */
+  function cargasDoPeriodo(periodo) {
+    const inicio = inicioDoPeriodo(periodo);
+    if (!inicio) return cargas.slice();
+    // Sem data de cadastro não há como afirmar que pertence ao período: fica de fora
+    return cargas.filter(c => c.dataCadastro && c.dataCadastro >= inicio);
+  }
+
+  function rotuloPeriodo(periodo) {
+    const opt = document.querySelector(`#relatorioPeriodoSelect option[value="${periodo}"]`);
+    return opt ? opt.textContent.trim() : periodo;
+  }
+
+  function renderSeletorCargas() {
+    if (!selectCarga) return;
+    const info = document.getElementById('relatorioCargaPeriodoInfo');
+    const selecionada = selectCarga.value;
+    if (cargas.length === 0) {
+      selectCarga.innerHTML = '<option value="" disabled>Nenhuma carga cadastrada no sistema</option>';
+      if (info) info.textContent = '';
+      return;
+    }
+    const doPeriodo = cargasDoPeriodo(periodoRelatorioAtual)
+      .sort((a, b) => (b.dataCadastro ? b.dataCadastro.getTime() : 0) - (a.dataCadastro ? a.dataCadastro.getTime() : 0));
+    if (doPeriodo.length === 0) {
+      selectCarga.innerHTML = '<option value="" disabled selected>Nenhuma carga cadastrada neste período</option>';
+    } else {
+      selectCarga.innerHTML = '<option value="">Selecione a Carga para Emitir PDF A4...</option>' +
+        doPeriodo.map(c => {
+          const quando = c.dataCadastro ? c.dataCadastro.toLocaleDateString('pt-BR') : 'sem data de cadastro';
+          return `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.tipo)} (${esc(c.status)}) • cadastrada em ${esc(quando)}</option>`;
+        }).join('');
+      // Mantém a seleção só se a carga continuar dentro do período
+      if (selecionada && doPeriodo.some(c => c.id === selecionada)) selectCarga.value = selecionada;
+    }
+    if (info) {
+      info.textContent = `${doPeriodo.length} de ${cargas.length} carga(s) cadastrada(s) no período "${rotuloPeriodo(periodoRelatorioAtual)}".`;
+    }
   }
 
   async function popularCargas() {
@@ -59,7 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
             container: c.container_id || '',
             destino: c.destino || '',
             portoDescarga: c.porto_descarga || '',
-            rawDbId: c.id
+            rawDbId: c.id,
+            dataCadastro: dataCadastroCarga(c)
           }));
         }
       } catch (e) {
@@ -67,16 +131,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     if (cargas.length === 0 && window.NexusRepository) {
-      try { cargas = await window.NexusRepository.getCargas(); } catch (e) {}
+      try {
+        cargas = (await window.NexusRepository.getCargas()).map(c => Object.assign({}, c, { dataCadastro: dataCadastroCarga(c) }));
+      } catch (e) {}
     }
-    selectCarga.innerHTML = '<option value="">Selecione a Carga para Emitir PDF A4...</option>';
-    if (cargas.length === 0) {
-      selectCarga.innerHTML = '<option value="" disabled>Nenhuma carga cadastrada no sistema</option>';
-      return;
-    }
-    cargas.forEach(c => {
-      selectCarga.innerHTML += `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.tipo)} (${esc(c.status)})</option>`;
-    });
+    renderSeletorCargas();
   }
 
   popularCargas();
@@ -107,6 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
       periodoRelatorioAtual = novoPeriodo;
       if (periodoSelect && periodoSelect.value !== novoPeriodo) periodoSelect.value = novoPeriodo;
       sincronizarChips();
+      // O período recorta as cargas pela DATA DE CADASTRO (antes não filtrava nada)
+      renderSeletorCargas();
       renderProdutividadeTable();
       // O período filtra os GRÁFICOS de verdade (não só a tabela)
       if (window.NexusCharts && typeof window.NexusCharts.definirFiltros === 'function') {
