@@ -10,7 +10,7 @@ function criarBancoFalso(tabelas, opcoes) {
 
   function executar(tabela, op, filtros, payload, opts, retorno) {
     const rows = tabelas[tabela] || (tabelas[tabela] = []);
-    const casa = (r) => filtros.every(([c, v]) => r[c] !== undefined && r[c] !== null && String(r[c]) === String(v));
+    const casa = (r) => filtros.every(([c, v]) => r[c] !== undefined && r[c] !== null && (v && v.__in ? v.__in.indexOf(String(r[c])) >= 0 : String(r[c]) === String(v)));
     const falhar = config.falhar || [];
     const falharOp = config.falharOp || {};
     if (falhar.indexOf(tabela) >= 0) {
@@ -64,6 +64,7 @@ function criarBancoFalso(tabelas, opcoes) {
       maybeSingle() { return b; },
       single() { return b; },
       eq(c, v) { estado.filtros.push([c, v]); return b; },
+      in(c, valores) { estado.filtros.push([c, { __in: (valores || []).map(String) }]); return b; },
       update(p) { estado.op = 'update'; estado.payload = p; return b; },
       upsert(p, o) { estado.op = 'upsert'; estado.payload = p; estado.opts = o || null; return b; },
       insert(p) { estado.op = 'upsert'; estado.payload = p; estado.opts = null; return b; },

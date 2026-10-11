@@ -490,28 +490,41 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // C10 & RN 12: Atualização automática do status das cargas quando o navio chega ao porto de destino
+    // C10 & RN 12: só as cargas vinculadas ao navio que chegou ao porto de destino viram ENTREGUE.
+    // A gravação no Supabase é feita por id de carga, nunca por status (não atinge outras cargas).
+    const UUID_CARGA_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const idsRemotosEntregues = [];
     let cargasAtualizadas = false;
 
-    naviosList.forEach(n => {
-      if (n.localizacao === 'NO_PORTO_DE_DESTINO') {
-        cargasFluxo.forEach(c => {
-          if (c.navio && c.navio.toLowerCase() === n.nome.toLowerCase() && c.status !== 'ENTREGUE' && c.status !== 'CANCELADA') {
-            c.status = 'ENTREGUE';
-            cargasAtualizadas = true;
-          }
-        });
-      }
+    const cargaPertenceAoNavio = (c, n) => {
+      const navioIdCarga = c.navioId || c.navio_id;
+      if (navioIdCarga && n.id) return String(navioIdCarga) === String(n.id);
+      const nomeNavio = String(n.nome || '').trim().toLowerCase();
+      return !!nomeNavio && String(c.navio || '').trim().toLowerCase() === nomeNavio;
+    };
+
+    cargasFluxo.forEach((c) => {
+      if (!c || (!c.navio && !c.navioId && !c.navio_id)) return;
+      if (['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)) return;
+      const navio = naviosList.find((n) => n.localizacao === 'NO_PORTO_DE_DESTINO' && cargaPertenceAoNavio(c, n));
+      if (!navio) return;
+      c.status = 'ENTREGUE';
+      cargasAtualizadas = true;
+      const idBanco = String(c.rawDbId || '');
+      if (UUID_CARGA_RE.test(idBanco)) idsRemotosEntregues.push(idBanco);
     });
 
     if (cargasAtualizadas) {
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
-      if (window.nexusSupabase) {
+      if (window.nexusSupabase && idsRemotosEntregues.length > 0) {
         window.nexusSupabase.from('cargas')
           .update({ status_fluxo: 'ENTREGUE' })
-          .eq('status_fluxo', 'EM_TRANSITO')
-          .then().catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
+          .in('id', idsRemotosEntregues)
+          .then(({ error }) => {
+            if (error) console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
+          })
+          .catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
       }
     }
 

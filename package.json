@@ -8,7 +8,7 @@
     "assets": "node tools/assets.js",
     "assets:icones": "python3 tools/subset-material-symbols.py",
     "start": "npx serve -l 3000 .",
-    "test": "npm run test:graficos && npm run test:equipamentos-manutencao && npm run test:berco-selecao && npm run test:bercos-persistencia && npm run test:exclusao-registros && npm run test:padronizacao-codigos && npm run test:trail-auditoria && npm run test:retorno-santos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
+    "test": "npm run test:graficos && npm run test:equipamentos-manutencao && npm run test:berco-selecao && npm run test:bercos-persistencia && npm run test:exclusao-registros && npm run test:padronizacao-codigos && npm run test:trail-auditoria && npm run test:cargas-entrega-navio && npm run test:retorno-santos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
     "test:vlibras": "node tests/test_vlibras.js",
     "test:edge-functions": "node tests/test_edge_functions.js",
     "test:graficos": "node tests/test_graficos_por_cargo.js",
@@ -53,6 +53,7 @@
     "test:exclusao-registros": "node tests/test_exclusao_registros.js",
     "test:padronizacao-codigos": "node tests/test_padronizacao_codigos.js",
     "test:trail-auditoria": "node tests/test_trail_auditoria.js",
+    "test:cargas-entrega-navio": "node tests/test_cargas_entrega_navio.js",
     "test:retorno-santos": "node tests/test_retorno_santos.js"
   },
   "keywords": [
