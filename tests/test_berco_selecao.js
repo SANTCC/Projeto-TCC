@@ -17,35 +17,22 @@ const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, htmlDaPagi
 
 const UUID_NAVIO = '11111111-2222-3333-4444-555555555555';
 
-// Estado "persistido" simulado
-const bancoBercos = [
-  { id: 'BERCO-01', nome: 'Berço 01', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null },
-  { id: 'BERCO-02', nome: 'Berço 02', estado: 'OCUPADO', navio_nome: 'Navio Outro', navio_imo: 'IMO1111111', navio_id: null },
-  { id: 'BERCO-03', nome: 'Berço 03', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null }
-];
-const bancoNavios = [
-  { id: UUID_NAVIO, nome: 'Navio Teste', numero_imo: 'IMO9999999', localizacao: 'DENTRO_DO_PORTO', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' },
-  { id: '22222222-3333-4444-5555-666666666666', nome: 'Navio B', numero_imo: 'IMO8888888', localizacao: 'DENTRO_DO_PORTO', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' }
-];
-const upserts = [];
-
-function consulta(tabela) {
-  const resultado = () => {
-    if (tabela === 'bercos') return { data: bancoBercos.map(b => Object.assign({}, b)), error: null };
-    if (tabela === 'navios') return { data: bancoNavios.map(n => Object.assign({}, n)), error: null };
-    return { data: [], error: null };
-  };
-  const b = {
-    select() { return b; }, order() { return b; }, eq() { return b; }, ilike() { return b; },
-    or() { return b; }, limit() { return b; }, maybeSingle() { return Promise.resolve({ data: null, error: null }); },
-    insert() { return b; }, delete() { return b; },
-    update() { return b; },
-    upsert(payload) { upserts.push(payload); return b; },
-    then(res, rej) { return Promise.resolve(resultado()).then(res, rej); }
-  };
-  return b;
-}
-const clienteSimulado = { from: (t) => consulta(t), channel: () => ({ on() { return this; }, subscribe() { return {}; } }) };
+const { criarBancoFalso } = require('./fake-supabase-db');
+// Estado "persistido" simulado (tabelas bercos e navios)
+const banco = criarBancoFalso({
+  bercos: [
+    { id: 'BERCO-01', nome: 'Berço 01', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null },
+    { id: 'BERCO-02', nome: 'Berço 02', estado: 'OCUPADO', navio_nome: 'Navio Outro', navio_imo: 'IMO1111111', navio_id: null },
+    { id: 'BERCO-03', nome: 'Berço 03', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null }
+  ],
+  navios: [
+    { id: UUID_NAVIO, nome: 'Navio Teste', numero_imo: 'IMO9999999', localizacao: 'DENTRO_DO_PORTO', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' },
+    { id: '33333333-4444-5555-6666-777777777777', nome: 'Navio Outro', numero_imo: 'IMO1111111', localizacao: 'DENTRO_DO_PORTO', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' },
+    { id: '22222222-3333-4444-5555-666666666666', nome: 'Navio B', numero_imo: 'IMO8888888', localizacao: 'DENTRO_DO_PORTO', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' }
+  ]
+});
+const bancoBercos = banco.tabelas.bercos;
+const clienteSimulado = banco;
 
 async function carregar() {
   let w;
@@ -85,7 +72,6 @@ async function carregar() {
 }
 
 const modalAberto = (w) => !w.document.getElementById('vincularBercoModal').classList.contains('hidden');
-const upsertsDeOcupacao = () => upserts.flat().filter(p => p && p.estado === 'OCUPADO');
 
 async function main() {
   const { janela, w } = await carregar();
@@ -111,7 +97,7 @@ async function main() {
   sel.appendChild(forcada); sel.value = 'Berço 02';
   w.document.getElementById('confirmarVincularBercoBtn').click();
   await aguardar(250);
-  check('berço ocupado NÃO é gravado para o navio tentado', upsertsDeOcupacao().every(p => !(p.nome === 'Berço 02' && p.navio_imo === 'IMO9999999')), JSON.stringify(upsertsDeOcupacao()));
+  check('berço ocupado NÃO é alterado pelo navio tentado', bancoBercos[1].navio_imo === 'IMO1111111' && bancoBercos[1].estado === 'OCUPADO');
   check('usuário é informado da indisponibilidade', (w.__feedbacks || []).some(f => /Indispon|não está mais livre/i.test(f.titulo + f.msg)));
 
   log('\n3. Escolha de berço livre grava a ocupação no Supabase');
@@ -119,8 +105,7 @@ async function main() {
   w.document.getElementById('confirmarVincularBercoBtn').click();
   await aguardar(300);
   check('modal fecha após vincular', !modalAberto(w));
-  const ocup = upsertsDeOcupacao().find(p => p.nome === 'Berço 01');
-  check('upsert de public.bercos com Berço 01 OCUPADO pelo navio', Boolean(ocup) && ocup.navio_imo === 'IMO9999999' && ocup.navio_nome === 'Navio Teste', JSON.stringify(ocup));
+  check('banco: Berço 01 ficou OCUPADO pelo navio', bancoBercos[0].estado === 'OCUPADO' && bancoBercos[0].navio_imo === 'IMO9999999' && bancoBercos[0].navio_nome === 'Navio Teste', JSON.stringify(bancoBercos[0]));
   check('cache local reflete a ocupação', JSON.parse(w.localStorage.getItem('nexus_bercos_list')).find(b => b.nome === 'Berço 01').estado === 'OCUPADO');
 
   log('\n4. Concorrência: berço ocupado por outro usuário após abrir a seleção');
@@ -130,10 +115,10 @@ async function main() {
   bancoBercos[2].estado = 'OCUPADO'; bancoBercos[2].navio_nome = 'Navio Concorrente'; bancoBercos[2].navio_imo = 'IMO7777777';
   const sel2 = w.document.getElementById('vincularBercoSelect');
   sel2.value = 'Berço 03';
-  const antes = upsertsDeOcupacao().length;
+  const antes = JSON.stringify(bancoBercos[2]);
   w.document.getElementById('confirmarVincularBercoBtn').click();
   await aguardar(300);
-  check('vinculação é recusada quando o berço foi ocupado no banco', upsertsDeOcupacao().length === antes && modalAberto(w));
+  check('vinculação é recusada quando o berço foi ocupado no banco', JSON.stringify(bancoBercos[2]) === antes && bancoBercos[2].navio_imo === 'IMO7777777' && modalAberto(w));
 
   log('\n5. Sem berço livre: informa e não abre a vinculação');
   bancoBercos.forEach(b => { b.estado = 'OCUPADO'; b.navio_nome = b.navio_nome || 'X'; b.navio_imo = b.navio_imo || 'IMO0'; });
