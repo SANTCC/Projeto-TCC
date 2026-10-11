@@ -1364,6 +1364,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       contsDesvinc = conts.contagem;
 
+      // 3b) Cargas deste navio que estavam EM_TRANSITO voltam a PRONTA_PARA_ENTREGA NO BANCO
+      //     (antes só o cache local era ajustado). Se não for possível gravar, nada é excluído.
+      const cargasNoNavio = await window.nexusSupabase.from('cargas').select('id, status_fluxo').eq('navio_id', busca.id);
+      if (cargasNoNavio.error) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível verificar as cargas do navio ${navio.nome} (${cargasNoNavio.error.message || 'erro'}). Nada foi excluído.`);
+        return;
+      }
+      const emTransito = (cargasNoNavio.data || []).filter(c => c.status_fluxo === 'EM_TRANSITO').map(c => c.id);
+      if (emTransito.length > 0) {
+        const { error: errCargas } = await window.nexusSupabase.from('cargas')
+          .update({ status_fluxo: 'PRONTA_PARA_ENTREGA' })
+          .in('id', emTransito);
+        if (errCargas) {
+          avisoExclusao('erro', 'Exclusão Não Realizada', `Não foi possível devolver as cargas do navio ${navio.nome} para pronta entrega (${errCargas.message || 'erro'}). Nada foi excluído.`);
+          return;
+        }
+      }
+
       // 4) Exclui no banco. Só depois disso a interface é alterada.
       const { error: errDel } = await window.nexusSupabase.from('navios').delete().eq('id', busca.id);
       if (errDel) {

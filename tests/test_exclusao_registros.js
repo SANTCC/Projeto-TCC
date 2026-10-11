@@ -114,6 +114,29 @@ async function cenarioNavio() {
   check('sucesso informado após confirmação do banco', ultimo(w).tipo === 'sucesso', JSON.stringify(ultimo(w)));
 }
 
+async function cenarioNavioCargaEmTransito() {
+  log('\n1b. Navio com carga EM_TRANSITO: a volta para PRONTA_PARA_ENTREGA é gravada NO BANCO');
+  const cargaT = { id: 'carga-t', navio_id: NAV1, status_fluxo: 'EM_TRANSITO', qr_code_url: 'QR-carga-t' };
+  const banco = bancoBase(undefined, { cargas: [cargaT] });
+  const { w } = await carregar(banco);
+  await w.excluirNavio('IMO9999999', { confirmado: true });
+  await aguardar(50);
+  check('navio removido após a gravação', !banco.tabelas.navios.some(n => n.numero_imo === 'IMO9999999'));
+  const c = banco.tabelas.cargas.find(x => x.id === 'carga-t');
+  check('carga em trânsito voltou a PRONTA_PARA_ENTREGA no banco', c && c.status_fluxo === 'PRONTA_PARA_ENTREGA', JSON.stringify(c));
+
+  log('\n1c. Falha ao gravar a carga: o navio NÃO é excluído e a interface não muda');
+  const banco2 = bancoBase({ falharOp: { cargas: ['update'] } }, { cargas: [{ id: 'carga-t', navio_id: NAV1, status_fluxo: 'EM_TRANSITO', qr_code_url: 'QR-carga-t' }] });
+  const { w: w2 } = await carregar(banco2);
+  const antes2 = linhas(w2, 'embarcacoesGpsTableBody');
+  await w2.excluirNavio('IMO9999999', { confirmado: true });
+  await aguardar(50);
+  check('navio segue no banco', banco2.tabelas.navios.some(n => n.numero_imo === 'IMO9999999'));
+  check('carga segue EM_TRANSITO no banco', banco2.tabelas.cargas.find(x => x.id === 'carga-t').status_fluxo === 'EM_TRANSITO');
+  check('tabela não alterada', linhas(w2, 'embarcacoesGpsTableBody') === antes2);
+  check('erro informado ao usuário', ultimo(w2).tipo === 'erro', JSON.stringify(ultimo(w2)));
+}
+
 async function cenarioNavioBloqueado() {
   log('\n2. Navio com histórico de manutenção: exclusão bloqueada com justificativa');
   const banco = bancoBase({}, { manutencoes: [{ id: 'm1', navio_id: NAV1 }] });
@@ -227,6 +250,7 @@ async function cenarioGuindasteBloqueado() {
 
 async function main() {
   await cenarioNavio();
+  await cenarioNavioCargaEmTransito();
   await cenarioNavioBloqueado();
   await cenarioNavioFalhaDelete();
   await cenarioNavioFalhaLeitura();
