@@ -24,12 +24,12 @@ const SAIDA_PADRAO = path.join(RAIZ, 'dist');
 // Diretórios que nunca vão para produção (em qualquer nível).
 const DIRETORIOS_EXCLUIDOS = new Set([
   'node_modules', '.git', '.github', '.vercel', 'dist', 'tests', 'tools', 'SPECs', 'supabase', 'THEME',
-  'lighthouse', 'lighthouse-report'
+  'lighthouse', 'lighthouse-report', 'edge'
 ]);
 // Arquivos da raiz que não são servidos. Documentação (.md) e Python (.py) são excluídos em qualquer pasta.
 const ARQUIVOS_EXCLUIDOS = new Set([
   'package.json', 'package-lock.json', 'vercel.json', '.gitignore', '.vercelignore',
-  'tailwind.config.js', 'nexus_cli.py'
+  'tailwind.config.js', 'nexus_cli.py', 'middleware.js'
 ]);
 
 // keep_fnames: nomes de função são preservados (stack traces legíveis).

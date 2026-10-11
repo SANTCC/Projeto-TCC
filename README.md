@@ -154,6 +154,17 @@ O NexusPort disponibiliza ferramentas seguras para agentes de IA via padrão Web
 
 ---
 
+## 🚫 Bloqueio de IPs de VPN na borda (Vercel)
+
+- `middleware.js` roda no Vercel Edge antes de responder páginas, APIs e arquivos estáticos. Usa o IP de origem (`x-real-ip`, via `@vercel/edge`) e compara o endereço com CIDRs IPv4/IPv6; não depende de JavaScript no navegador nem de um serviço externo de consulta de IP.
+- A lista vem do GitHub [`X4BNet/lists_vpn`](https://github.com/X4BNet/lists_vpn), incluindo a lista agregada de VPNs e a fonte específica [`input/vpn/ips/protonvpn.txt`](https://github.com/X4BNet/lists_vpn/blob/main/input/vpn/ips/protonvpn.txt). A lista upstream declara licença MIT (aviso incluído em `licenses/X4BNet-lists-vpn-MIT.txt`); a atualização usa a API do GitHub na instalação (`prepare`) e no `prebuild`; também pode ser executada manualmente com `npm run vpn:update`. A snapshot versionada em `edge/vpn-cidrs.mjs` continua disponível se o GitHub estiver fora do ar.
+- IP encontrado recebe redirect para `/vpn-blocked.txt`, servido como `text/plain; charset=utf-8` com o texto `AQUI NÃO!! TICO-TICO!!!!!!!!`. O próprio TXT é a única rota isenta para evitar um loop de redirect.
+- **Limite importante:** nenhuma lista pública identifica todos os VPNs; provedores criam e removem IPs e há risco de falso positivo. Esta fonte se propõe a cobrir os provedores comuns, não a garantir 100%. A atualização da lista acontece em cada build/deploy, não em tempo real entre deploys.
+- O gate atua no domínio servido pela Vercel. `npm start` é um servidor estático local e não executa middleware; chamadas diretas a domínios externos (como Supabase) também não passam por esse gate.
+- **Testes:** `npm run test:vpn-blocklist`.
+
+---
+
 ## 🎨 Recursos Locais (fontes, CSS e bibliotecas)
 
 - **Comando:** `npm run assets` gera `css/nexus.css` (Tailwind compilado a partir de `tailwind.config.js`), `css/fonts.css`, as fontes `fonts/*.woff2` e copia as bibliotecas para `vendor/`.

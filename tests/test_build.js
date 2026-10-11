@@ -77,6 +77,12 @@ async function testarSaida(saida) {
     modulos.every((m) => fs.existsSync(path.join(saida, 'js', m))));
   check('estáticos usados pelas páginas foram copiados (logo e favicon)',
     fs.existsSync(path.join(saida, 'design', 'logo_porto.png')) && fs.existsSync(path.join(saida, 'favicon.ico')));
+  check('TXT de bloqueio VPN foi copiado sem alterar a mensagem',
+    fs.readFileSync(path.join(saida, 'vpn-blocked.txt'), 'utf8').trimEnd() === 'AQUI NÃO!! TICO-TICO!!!!!!!!');
+  check('código/dados do middleware não são publicados como arquivos estáticos',
+    !fs.existsSync(path.join(saida, 'middleware.js')) && !fs.existsSync(path.join(saida, 'edge')));
+  check('aviso da licença da lista upstream acompanha o build',
+    fs.existsSync(path.join(saida, 'licenses', 'X4BNet-lists-vpn-MIT.txt')));
 
   log('\n[2] JS e CSS minificados e válidos');
   const antes = modulos.reduce((t, m) => t + fs.statSync(path.join(ROOT, 'js', m)).size, 0);
@@ -213,6 +219,16 @@ function testarConfiguracao() {
   const vercel = JSON.parse(read('vercel.json'));
   check('vercel.json executa npm run build antes do deploy', vercel.buildCommand === 'npm run build');
   check('vercel.json publica dist/', vercel.outputDirectory === 'dist');
+  check('middleware Edge do Vercel e helper estão configurados',
+    fs.existsSync(path.join(ROOT, 'middleware.js'))
+      && /runtime:\s*'edge'/.test(read('middleware.js'))
+      && !!pacote.dependencies?.['@vercel/edge']);
+  check('prepare/prebuild atualizam a lista de VPNs do GitHub',
+    pacote.scripts?.prepare === 'npm run vpn:update' && pacote.scripts?.prebuild === 'npm run vpn:update');
+  const avisoVpn = (vercel.headers || []).find((item) => item.source === '/vpn-blocked.txt');
+  check('vercel.json serve o aviso VPN como text/plain',
+    !!avisoVpn && avisoVpn.headers.some((header) => header.key.toLowerCase() === 'content-type'
+      && header.value === 'text/plain; charset=utf-8'));
   check('.gitignore ignora dist/', /^dist\/?$/m.test(read('.gitignore')));
 }
 

@@ -4,11 +4,15 @@
   "description": "NexusPort - Sistema de Gestão Operacional Portuária para o Porto de Santos (STS-01)",
   "main": "index.html",
   "scripts": {
+    "prepare": "npm run vpn:update",
+    "prebuild": "npm run vpn:update",
     "build": "node tools/build.js",
+    "vpn:update": "node tools/update-vpn-blocklist.js",
+    "test:vpn-blocklist": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/test_vpn_blocklist.js",
     "assets": "node tools/assets.js",
     "assets:icones": "python3 tools/subset-material-symbols.py",
     "start": "npx serve -l 3000 .",
-    "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
+    "test": "npm run test:graficos && npm run test:refresh && npm run test:autorefresh && npm run test:bercos && npm run test:panic && npm run test:net-debug && npm run test:vpn-blocklist && npm run test:backlog3 && npm run test:webmcp && npm run test:gravacao && npm run test:single-flight && npm run test:cargas-loop && npm run test:funcionario-cpf && npm run audit:xss && npm run test:haptics && npm run test:vlibras && npm run test:screenshots && npm run test:about && npm run test:python && npm run test:vlibras",
     "test:vlibras": "node tests/test_vlibras.js",
     "test:edge-functions": "node tests/test_edge_functions.js",
     "test:graficos": "node tests/test_graficos_por_cargo.js",
@@ -57,6 +61,9 @@
   ],
   "author": "NexusPort Team",
   "license": "MIT",
+  "dependencies": {
+    "@vercel/edge": "^1.3.3"
+  },
   "devDependencies": {
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
