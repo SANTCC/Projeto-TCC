@@ -1409,6 +1409,41 @@ document.addEventListener('DOMContentLoaded', () => {
     return guindastes;
   }
 
+  /** Guindaste só pode receber tarefas quando estiver OPERANTE (estado persistido). */
+  function guindasteOperante(gnd) {
+    return !!gnd && (!gnd.estado || gnd.estado === 'OPERANTE');
+  }
+
+  /**
+   * Lê o estado REAL dos guindastes na tabela `guindastes` do Supabase (fonte de verdade)
+   * e espelha o resultado no cache local. Guindastes existentes só no cache (sem registro
+   * no banco) são mantidos com o estado local. Sem Supabase configurado, usa o cache.
+   * Retorna { ok, lista, origem, erro }; ok=false significa que não foi possível confirmar.
+   */
+  async function obterGuindastesAtuais() {
+    const cache = guindastesDisponiveis();
+    const client = window.nexusSupabase;
+    if (!client) return { ok: true, lista: cache, origem: 'local' };
+    try {
+      const { data, error } = await client.from('guindastes').select('*');
+      if (error || !Array.isArray(data)) {
+        return { ok: false, lista: cache, origem: 'local', erro: error ? error.message : 'resposta inválida' };
+      }
+      const doBanco = data.map(g => {
+        const id = g.numero_identificacao || g.id;
+        const antigo = cache.find(c => String(c.identificacao || '').toUpperCase() === String(id).toUpperCase()) || {};
+        return Object.assign({}, antigo, { id, identificacao: id, estado: g.estado || 'OPERANTE', dataManut: g.data_ultima_manutencao || antigo.dataManut || '' });
+      });
+      const idsBanco = new Set(doBanco.map(g => String(g.identificacao).toUpperCase()));
+      const somenteLocais = cache.filter(g => !idsBanco.has(String(g.identificacao || '').toUpperCase()));
+      const lista = doBanco.concat(somenteLocais);
+      localStorage.setItem('nexus_guindastes_list', JSON.stringify(lista));
+      return { ok: true, lista, origem: 'banco' };
+    } catch (e) {
+      return { ok: false, lista: cache, origem: 'local', erro: e && e.message ? e.message : String(e) };
+    }
+  }
+
   function montarInstrucaoMovimentacao(carga, setorDestino, guindasteIdent) {
     return `Movimentar a carga ${carga.id} (${carga.tipo || 'Carga Geral'} — ${carga.peso || '?'} / ${carga.volume || '?'}) ` +
       `do setor "${carga.portoDescarga || 'atual'}" para o setor "${setorDestino}", utilizando o guindaste ${guindasteIdent}. ` +
@@ -1416,13 +1451,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function criarTarefaMovimentacao(carga, setorDestino, guindasteIdent) {
-    const guindastes = guindastesDisponiveis();
-    const gnd = guindastes.find(g => String(g.identificacao || '').toUpperCase() === String(guindasteIdent || '').toUpperCase());
+    // Validação no momento da confirmação, com o estado persistido (não o cache da tela).
+    const atual = await obterGuindastesAtuais();
+    if (!atual.ok) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Disponibilidade Não Confirmada', `Não foi possível confirmar o estado do guindaste no banco de dados (${atual.erro || 'sem conexão'}). A tarefa não foi criada; tente novamente.`);
+      return false;
+    }
+    const gnd = atual.lista.find(g => String(g.identificacao || '').toUpperCase() === String(guindasteIdent || '').toUpperCase());
     if (!gnd) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Guindaste Inválido', `Guindaste "${guindasteIdent}" não encontrado no cadastro.`);
       return false;
     }
-    if (gnd.estado && gnd.estado !== 'OPERANTE') {
+    if (!guindasteOperante(gnd)) {
       if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Guindaste Indisponível', `O guindaste ${gnd.identificacao} está em "${gnd.estado}" e não pode executar a tarefa. Escolha um guindaste OPERANTE.`);
       return false;
     }
@@ -1481,6 +1521,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const movimentarInstrucaoText = document.getElementById('movimentarInstrucaoText');
   let targetCargaMovimentacao = null;
 
+  // Mantém o cache local de guindastes alinhado ao estado persistido ao abrir a tela.
+  obterGuindastesAtuais();
+
   function fecharMovimentarModal() {
     if (movimentarModal) movimentarModal.classList.add('hidden');
     targetCargaMovimentacao = null;
@@ -1504,17 +1547,36 @@ document.addEventListener('DOMContentLoaded', () => {
     if (movimentarCargaIdLabel) movimentarCargaIdLabel.textContent = targetCargaMovimentacao.id;
     if (movimentarSetorAtualLabel) movimentarSetorAtualLabel.textContent = targetCargaMovimentacao.portoDescarga || '—';
     if (movimentarSetorSelect) movimentarSetorSelect.value = '';
-    if (movimentarGuindasteSelect) {
-      const guindastes = guindastesDisponiveis();
-      movimentarGuindasteSelect.innerHTML = '<option value="">Selecione o guindaste...</option>' +
-        guindastes.map(g => {
-          const operante = !g.estado || g.estado === 'OPERANTE';
-          return `<option value="${esc(g.identificacao)}" ${operante ? '' : 'disabled'}>${esc(g.identificacao)} (${esc(g.estado || 'OPERANTE')})${operante ? '' : ' — indisponível'}</option>`;
-        }).join('');
-    }
     if (movimentarInstrucaoBox) movimentarInstrucaoBox.classList.add('hidden');
     movimentarModal.classList.remove('hidden');
+    renderSelectGuindastesMovimentacao();
   };
+
+  /**
+   * Preenche o seletor de guindastes apenas com equipamentos OPERANTES (estado do Supabase).
+   * Guindastes em manutenção não aparecem como opção; são listados em um aviso informativo.
+   */
+  async function renderSelectGuindastesMovimentacao() {
+    if (!movimentarGuindasteSelect) return;
+    const atual = await obterGuindastesAtuais();
+    const operantes = atual.lista.filter(guindasteOperante);
+    const indisponiveis = atual.lista.filter(g => !guindasteOperante(g));
+    movimentarGuindasteSelect.innerHTML = '<option value="">' +
+      (operantes.length ? 'Selecione o guindaste...' : 'Nenhum guindaste operante disponível') + '</option>' +
+      operantes.map(g => `<option value="${esc(g.identificacao)}">${esc(g.identificacao)} (OPERANTE)</option>`).join('');
+    const aviso = document.getElementById('movimentarGuindasteAviso');
+    if (aviso) {
+      const partes = [];
+      if (indisponiveis.length) {
+        partes.push(`Indisponíveis para tarefas (não selecionáveis): ${indisponiveis.map(g => `${g.identificacao} (${g.estado})`).join(', ')}.`);
+      }
+      if (!atual.ok) {
+        partes.push('Não foi possível confirmar o estado dos guindastes no banco de dados; a lista pode estar desatualizada.');
+      }
+      aviso.textContent = partes.join(' ');
+      aviso.classList.toggle('hidden', partes.length === 0);
+    }
+  }
 
   if (movimentarSetorSelect) movimentarSetorSelect.addEventListener('change', atualizarInstrucaoMovimentacao);
   if (movimentarGuindasteSelect) movimentarGuindasteSelect.addEventListener('change', atualizarInstrucaoMovimentacao);
