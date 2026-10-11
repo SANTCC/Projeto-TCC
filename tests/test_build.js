@@ -72,6 +72,13 @@ async function testarSaida(saida) {
   const pastasPaginas = paginasRaiz();
   check(`todas as ${pastasPaginas.length} páginas HTML estão na saída`,
     pastasPaginas.every((p) => fs.existsSync(path.join(saida, p))));
+  const paginasSemGateVpn = pastasPaginas.filter((p) => {
+    const html = fs.readFileSync(path.join(saida, p), 'utf-8');
+    return !html.includes('nexus-vpn-gate-checking')
+      || !html.includes('css/vpn-gate.css')
+      || !html.includes('js/vpn-gate.js');
+  });
+  check('todas as páginas de produção começam ocultas e carregam o gate VPN', paginasSemGateVpn.length === 0, paginasSemGateVpn.join(', '));
   const modulos = jsDaOrigem();
   check(`todos os ${modulos.length} módulos js/ estão na saída`,
     modulos.every((m) => fs.existsSync(path.join(saida, 'js', m))));

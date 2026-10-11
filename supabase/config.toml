@@ -37,6 +37,11 @@ verify_jwt = false
 [functions.log-acesso]
 verify_jwt = false
 
+# vpn-gate: verificação pública do IP do visitante (sem Supabase Auth). O IP é
+# validado contra listas CIDR públicas; a função não usa service role nem grava dados.
+[functions.vpn-gate]
+verify_jwt = false
+
 # Seed de demonstração (Backlog 3, itens C e D): usuários mock por cargo e dados fictícios de navios,
 # contêineres, cargas e histórico. `supabase db reset` roda este arquivo localmente. Não aplicar em produção.
 [db.seed]

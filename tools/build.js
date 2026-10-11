@@ -179,6 +179,48 @@ function escreverHeaders(saida) {
 }
 
 /**
+ * Adiciona uma espera visual de VPN a todas as páginas da saída estática.
+ * A Edge Function decide se o body é revelado; a origem estática, por si só,
+ * continua entregando os arquivos ao navegador (não é um firewall HTTP).
+ */
+function aplicarVpnGate(html, nome) {
+  let encontrouHtml = false;
+  let saida = html.replace(/<html\b[^>]*>/i, (abertura) => {
+    encontrouHtml = true;
+    const classe = abertura.match(/\sclass\s*=\s*(["'])([\s\S]*?)\1/i);
+    if (!classe) return abertura.slice(0, -1) + ' class="nexus-vpn-gate-checking">';
+    const partesClasse = classe[0].match(/^(\s*class\s*=\s*)(["'])([\s\S]*?)\2$/i);
+    if (!partesClasse) return abertura;
+    const nomes = partesClasse[3].trim().split(/\s+/).filter(Boolean);
+    if (nomes.includes('nexus-vpn-gate-checking')) return abertura;
+    const novoAtributo = `${partesClasse[1]}${partesClasse[2]}${[...nomes, 'nexus-vpn-gate-checking'].join(' ')}${partesClasse[2]}`;
+    return abertura.replace(classe[0], novoAtributo);
+  });
+  if (!encontrouHtml) throw new Error(`${nome}: tag <html> não encontrada para instalar o gate VPN.`);
+
+  const recursos = [
+    '  <link rel="stylesheet" href="css/vpn-gate.css?v=20261011" />',
+    '  <script defer src="js/vpn-gate.js?v=20261011"></script>'
+  ].join('\n');
+  if (!saida.includes('js/vpn-gate.js')) {
+    if (!/<\/head>/i.test(saida)) throw new Error(`${nome}: tag </head> não encontrada para instalar o gate VPN.`);
+    saida = saida.replace(/<\/head>/i, `${recursos}\n</head>`);
+  }
+
+  // about.html e a página pública de diagnóstico não usam o cliente Supabase,
+  // mas precisam da configuração no build para consultar esta mesma função.
+  if (!/<script\b[^>]*\bsrc=["']js\/config\.example\.js["']/i.test(saida)) {
+    const configuracaoPublica = [
+      '  <script src="js/config.example.js"></script>',
+      '  <script src="js/config.js" onerror="this.remove()"></script>'
+    ].join('\n');
+    if (!/<\/body>/i.test(saida)) throw new Error(`${nome}: tag </body> não encontrada para configurar o gate VPN.`);
+    saida = saida.replace(/<\/body>/i, `${configuracaoPublica}\n</body>`);
+  }
+  return saida;
+}
+
+/**
  * Gera a saída de produção. Retorna o registro de tamanhos (antes/depois) por tipo de arquivo.
  * Opções: saida (padrão: dist/). A saída é apagada e recriada.
  */
@@ -209,7 +251,8 @@ async function build(opcoes) {
       fs.writeFileSync(destino, r.styles, 'utf-8');
     } else if (ext === '.html') {
       const html = fs.readFileSync(origem, 'utf-8');
-      const comScriptsMinificados = await minificarScriptsInline(html, registro, rel);
+      const htmlComGateVpn = aplicarVpnGate(html, rel);
+      const comScriptsMinificados = await minificarScriptsInline(htmlComGateVpn, registro, rel);
       const comEstilosMinificados = minificarEstilosInline(comScriptsMinificados, registro, rel);
       registro.html.push({ arquivo: rel, antes: bytes(html), depois: bytes(comEstilosMinificados) });
       fs.writeFileSync(destino, comEstilosMinificados, 'utf-8');
