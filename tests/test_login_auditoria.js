@@ -198,6 +198,8 @@ function abrirTela({ relatorio, erro }) {
       !/create policy[^;]*on public\.tentativas_login/i.test(sql));
     check('os índices do painel existem',
       /idx_tentativas_login_chave_prefixo/.test(sql) && /idx_tentativas_login_ultima_tentativa/.test(sql));
+    check('recarrega o schema cache do PostgREST (evita PGRST202 na tela)',
+      /notify pgrst, 'reload schema'/.test(sql));
   }
 
   // 5. Acesso restrito aos cargos altos

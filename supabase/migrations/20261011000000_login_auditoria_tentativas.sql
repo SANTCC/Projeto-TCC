@@ -297,3 +297,25 @@ comment on column public.tentativas_login.total_falhas is
 
 comment on column public.tentativas_login.ultima_tentativa is
   'Horário da última tentativa errada do chave (inclusive as que já estavam bloqueadas).';
+
+-- ----------------------------------------------------------------
+-- 5) PostgREST: a função nova precisa entrar no schema cache, senão a
+--    tela responde PGRST202 ("function not found") mesmo com a migration
+--    aplicada. Mesmo padrão das migrations anteriores; se ainda assim
+--    reclamar, Settings → API → Restart server.
+-- ----------------------------------------------------------------
+notify pgrst, 'reload schema';
+
+-- Verificação: o que a migração deixou pronto (ler no SQL Editor).
+select 'public.tentativas_login' as objeto,
+       to_regclass('public.tentativas_login') is not null as existe,
+       (select count(*) from public.tentativas_login) as linhas,
+       (select count(*) from public.tentativas_login where chave like 'ip:%') as linhas_ip,
+       (select count(*) from public.tentativas_login where chave like 'cod:%') as linhas_codigo,
+       (
+         select count(*)
+           from pg_proc p
+           join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public'
+            and p.proname in ('login_funcionario', 'login_tentativas_relatorio')
+       ) as funcoes;
