@@ -47,12 +47,13 @@ function criarMockLeitor(estado, opcoes) {
 
 async function abrir(opcoes) {
   const o = opcoes || {};
+  const cargasTeste = o.cargas || [CARGA];
   const estado = { instancias: [], ultimo: null, starts: 0, stops: 0, ativos: 0, maxAtivos: 0 };
   const janela = criarJanela({
-    url: 'https://nexusport.test/inspecao.html',
+    url: o.url || 'https://nexusport.test/inspecao.html',
     html: htmlDaPagina('inspecao.html'),
     session: sessao('INSPETOR'),
-    storage: { nexus_cargas_fluxo: [CARGA], nexus_ghost_clean_v1: 'true' },
+    storage: { nexus_cargas_fluxo: cargasTeste, nexus_ghost_clean_v1: 'true' },
     scripts: [
       'js/security.js',
       'js/session-cookies.js',
@@ -137,6 +138,25 @@ async function main() {
     check('leitura seleciona a carga no seletor', doc(w).getElementById('inspecaoCargaSelect').value === 'CRG-2026-303',
       doc(w).getElementById('inspecaoCargaSelect').value);
     check('leitura fecha a área e libera a câmera', area(w).classList.contains('hidden') && estado.ativos === 0);
+    w.close();
+  }
+
+  log('\n[5] Carga entregue não é oferecida para inspeção');
+  {
+    const ENTREGUE = { id: 'CRG-ENTREGUE-1', rawDbId: '00000000-0000-4000-8000-000000000009', navio: 'Jaguar', status: 'ENTREGUE', tipo: 'Geral', natureza: 'Geral', portoDescarga: 'STS-01', qrCode: 'QR-CRG-ENTREGUE-1' };
+    const { w } = await abrir({ cargas: [CARGA, ENTREGUE] });
+    const valores = Array.from(doc(w).getElementById('inspecaoCargaSelect').options).map((o) => o.value);
+    check('seletor manual não lista a carga entregue', valores.indexOf('CRG-ENTREGUE-1') < 0, JSON.stringify(valores));
+    check('seletor manual continua listando cargas em andamento', valores.indexOf('CRG-2026-303') >= 0, JSON.stringify(valores));
+    w.close();
+  }
+  {
+    const ENTREGUE = { id: 'CRG-ENTREGUE-2', rawDbId: '00000000-0000-4000-8000-00000000000a', navio: 'Jaguar', status: 'ENTREGUE', tipo: 'Geral', natureza: 'Geral', portoDescarga: 'STS-01', qrCode: 'QR-CRG-ENTREGUE-2' };
+    const { w } = await abrir({ cargas: [CARGA, ENTREGUE], url: 'https://nexusport.test/inspecao.html?carga=CRG-ENTREGUE-2' });
+    check('abrir por QR/URL carga entregue: informa que não pode ser inspecionada',
+      (w.__feedbacks || []).some((f) => f.titulo === 'Carga Entregue'), JSON.stringify(w.__feedbacks || []));
+    check('abrir por QR/URL carga entregue: checklist não é carregado',
+      doc(w).getElementById('checklistItemsList').querySelectorAll('input[type="radio"]').length === 0);
     w.close();
   }
 

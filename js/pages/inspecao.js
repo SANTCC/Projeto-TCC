@@ -71,7 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
       cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     }
 
-    const cargasAtivas = cargas.filter(c => c.status !== 'CANCELADA' && Boolean(c.id));
+    // Cargas entregues (e canceladas) não são mais inspecionadas: não entram na lista.
+    const cargasAtivas = cargas.filter(c => !['CANCELADA', 'ENTREGUE'].includes(c.status) && Boolean(c.id));
 
     selectCarga.innerHTML = '<option value="">Selecione uma Carga para Vistoria...</option>';
     cargasAtivas.forEach(c => {
@@ -204,6 +205,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    if (cargaAtual.status === 'ENTREGUE') {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', `A carga ${cargaAtual.id} já foi entregue e não pode mais ser inspecionada.`);
+      return;
+    }
+
     if (cargaTag) cargaTag.textContent = `${cargaAtual.id} • ${cargaAtual.tipo} • Porto: ${cargaAtual.portoDescarga}`;
 
     const items = getChecklistTemplate(cargaAtual.tipo);
@@ -297,6 +303,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Aprovar Carga (RN 14)
   async function aprovarCargaAtual() {
+    if (cargaAtual && cargaAtual.status === 'ENTREGUE') {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', 'Cargas entregues não podem ter a inspeção alterada.');
+      return;
+    }
       if (!cargaAtual) return false;
 
       cargaAtual.status = 'ARMAZENAGEM';
@@ -434,6 +444,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Recusar Carga (RN 14 & Item 10: campo obrigatório de motivo de recusa)
   async function recusarCargaAtual(opcoes) {
+    if (cargaAtual && cargaAtual.status === 'ENTREGUE') {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', 'Cargas entregues não podem ter a inspeção alterada.');
+      return;
+    }
       if (!cargaAtual) return false;
 
       if (motivoBox) motivoBox.classList.remove('hidden');
