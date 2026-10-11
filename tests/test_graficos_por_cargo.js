@@ -81,11 +81,11 @@ const AGORA = Date.now();
 const iso = (diasAtras) => new Date(AGORA - diasAtras * 86400000).toISOString();
 
 const CARGAS = [
-  { status: 'ARMAZENAGEM', tipo: 'Grãos', valor: 100000, dataEntrada: iso(30), estivador: 'MAT-1040' },
-  { status: 'PRONTA_PARA_ENTREGA', tipo: 'Grãos', valor: 50000, dataEntrada: iso(12), dataSaida: iso(2), estivador: 'MAT-1040' },
-  { status: 'RECUSADA', tipo: 'Eletrônicos', valor: 0, dataEntrada: iso(3), resultadoInspecao: 'RECUSADA' },
-  { status: 'EM_TRANSITO', tipo: 'Líquidos', valor: 200000, dataEntrada: iso(40), dataSaida: iso(4) },
-  { status: 'ENTREGUE', tipo: 'Líquidos', valor: 80000, dataEntrada: iso(60), dataSaida: iso(20) }
+  { status: 'ARMAZENAGEM', tipo: 'Grãos', valor: 100000, dataEntrada: iso(30), dataCadastro: iso(30), estivador: 'MAT-1040' },
+  { status: 'PRONTA_PARA_ENTREGA', tipo: 'Grãos', valor: 50000, dataEntrada: iso(12), dataCadastro: iso(12), dataSaida: iso(2), estivador: 'MAT-1040' },
+  { status: 'RECUSADA', tipo: 'Eletrônicos', valor: 0, dataEntrada: iso(3), dataCadastro: iso(3), resultadoInspecao: 'RECUSADA' },
+  { status: 'EM_TRANSITO', tipo: 'Líquidos', valor: 200000, dataEntrada: iso(40), dataCadastro: iso(40), dataSaida: iso(4) },
+  { status: 'ENTREGUE', tipo: 'Líquidos', valor: 80000, dataEntrada: iso(60), dataCadastro: iso(60), dataSaida: iso(20) }
 ];
 
 const DADOS = {
@@ -185,8 +185,8 @@ async function verificarRenderizacaoPorCargo() {
     win.eval(fontes[1].codigo);
     win.eval(fontes[2].codigo);
     win.localStorage.setItem('nexus_cargas_fluxo', JSON.stringify([
-      { id: 'CRG-1', status: 'ARMAZENAGEM', tipo: 'Grãos', peso: '25 t', valor: 'R$ 100.000,00', dataChegada: new Date(Date.now() - 5 * 86400000).toISOString(), estivadorMatricula: cenario.cargo === 'ESTIVADOR' ? 'MAT-1040' : null },
-      { id: 'CRG-2', status: 'ENTREGUE', tipo: 'Grãos', peso: '10 t', valor: 'R$ 50.000,00', dataChegada: new Date(Date.now() - 20 * 86400000).toISOString(), data_saida: new Date(Date.now() - 3 * 86400000).toISOString() }
+      { id: 'CRG-1', status: 'ARMAZENAGEM', tipo: 'Grãos', peso: '25 t', valor: 'R$ 100.000,00', dataChegada: new Date(Date.now() - 5 * 86400000).toISOString(), data_cadastro: new Date(Date.now() - 5 * 86400000).toISOString(), estivadorMatricula: cenario.cargo === 'ESTIVADOR' ? 'MAT-1040' : null },
+      { id: 'CRG-2', status: 'ENTREGUE', tipo: 'Grãos', peso: '10 t', valor: 'R$ 50.000,00', dataChegada: new Date(Date.now() - 20 * 86400000).toISOString(), data_cadastro: new Date(Date.now() - 20 * 86400000).toISOString(), data_saida: new Date(Date.now() - 3 * 86400000).toISOString() }
     ]));
     win.localStorage.setItem('nexus_navios_list', JSON.stringify([{ nome: 'Alfa', localizacao: 'DENTRO_DO_PORTO', operacoes: 2 }]));
     win.localStorage.setItem('nexus_bercos_list', JSON.stringify([{ nome: 'B1', estado: 'OCUPADO' }, { nome: 'B2', estado: 'LIVRE' }]));
