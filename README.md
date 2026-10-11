@@ -97,14 +97,17 @@ Os gráficos são montados em tempo de execução recortados pela **camada de vi
 
 ---
 
-## 🚫 Bloqueio de IPs de VPN (`vpn-gate`)
+## 🚫 Bloqueio de IPs de VPN e geográfico (`vpn-gate`)
 
 - **Função:** `supabase/functions/vpn-gate` recebe uma chamada `GET`, obtém o IP dos cabeçalhos de proxy do Supabase e compara IPv4/IPv6 com listas CIDR públicas. Não aceita um IP enviado no corpo/query e não usa `service_role`.
-- **Fontes atualizadas pelo GitHub:**
+- **Fontes de VPN atualizadas pelo GitHub:**
   - [X4BNet/lists_vpn](https://github.com/X4BNet/lists_vpn), arquivos `output/vpn/ipv4.txt` e `output/vpn/ipv6.txt` (redes de VPNs comerciais comuns; não a lista separada e mais abrangente de datacenters; licença MIT).
   - [tn3w/ProtonVPN-IPs](https://github.com/tn3w/ProtonVPN-IPs), `protonvpn_ip_ranges.txt` (atualização diária; blocos IPv4 `/24` para cobrir a saída NAT da ProtonVPN; licença Apache-2.0).
   - [antonme/ipranges](https://github.com/antonme/ipranges), `protonvpn/ipv6_merged.txt` (redes IPv6 da ProtonVPN; CC0).
-- **Atualização:** a Edge Function baixa as quatro listas em paralelo e as mantém em cache por até 60 min por instância. Se uma atualização falhar, uma instância aquecida usa o último snapshot validado; sem snapshot, falha fechada com HTTP 503. A resposta de bloqueio é HTTP 403 `text/plain; charset=utf-8`, com o texto exato `AQUI NÃO!! TICO-TICO!!!!!!!!`.
+- **Geobloqueio dos EUA ligado por padrão:** a função consulta os feeds IPv4/IPv6 de [ipverse/geo-ip-blocks](https://github.com/ipverse/geo-ip-blocks), `country/us/us-ipv4.txt` e `country/us/us-ipv6.txt` (CC0). A decisão geográfica ocorre antes de carregar/verificar as listas VPN; um IP correspondente recebe HTTP 403 com o texto simples exato `AQUI NÃO!! TICO-TICO!!!!!!!!`.
+- **Toggle server-side:** se o secret `VPN_GATE_BLOCK_US` estiver ausente ou vazio, o bloqueio dos EUA fica ligado. Para desligar apenas o geobloqueio, defina `VPN_GATE_BLOCK_US=false` no projeto Supabase (por exemplo, `supabase secrets set VPN_GATE_BLOCK_US=false`). `false`, `0`, `off` e `no` desligam; definir `true` ou remover o secret restaura o padrão ligado. A verificação VPN continua ativa.
+- **Atualização e latência:** as listas VPN são atualizadas em cache por instância por até 60 min; o feed geográfico consultado para a família do IP é mantido em cache por até 24 h. Após o feed estar em cache, a checagem geográfica é feita primeiro e evita baixar as listas VPN quando o IP está em uma faixa dos EUA. Uma instância fria precisa buscar o feed geográfico no GitHub antes de decidir; se não houver snapshot válido e o feed estiver indisponível, a função falha fechada com HTTP 503 e a interface exibe somente a mesma mensagem simples. Falhas de atualização em instâncias aquecidas reutilizam o último snapshot validado.
+- **Precisão:** os CIDRs do ipverse são atribuídos a países usando registros de rede/subalocações; não são uma localização física em tempo real. Uma faixa registrada nos EUA pode ser usada fora do país, e um IP usado fisicamente nos EUA pode estar registrado em outro lugar. Portanto, o geobloqueio é uma aproximação por dados públicos de alocação, não uma garantia perfeita de localização.
 - **Deploy:**
   ```bash
   supabase functions deploy vpn-gate --no-verify-jwt

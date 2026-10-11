@@ -23,6 +23,7 @@ async function main() {
   const {
     MENSAGEM_BLOQUEIO,
     FONTES_LISTAS,
+    FONTES_GEO_EUA,
     parseIPAddress,
     parseCIDR,
     parseListaCIDR,
@@ -70,6 +71,10 @@ async function main() {
     FONTES_LISTAS.some((f) => f.url.includes('X4BNet/lists_vpn'))
     && FONTES_LISTAS.some((f) => f.url.includes('tn3w/ProtonVPN-IPs'))
     && FONTES_LISTAS.every((f) => f.url.startsWith('https://raw.githubusercontent.com/')));
+  check('base geográfica dos EUA usa feeds IPv4 e IPv6 do ipverse',
+    FONTES_GEO_EUA.length === 2
+    && FONTES_GEO_EUA.some((f) => f.familia === 4 && f.url.endsWith('/us-ipv4.txt'))
+    && FONTES_GEO_EUA.some((f) => f.familia === 6 && f.url.endsWith('/us-ipv6.txt')));
 
   const feedsTeste = [
     { nome: 'vpn-v4', url: 'https://github.test/vpn-v4.txt', minimo: 1 },
@@ -85,7 +90,7 @@ async function main() {
     if (!conteudos.has(url)) throw new Error('URL de teste desconhecida');
     return new Response(conteudos.get(url), { status: 200 });
   };
-  const handler = criarHandler({ fetchFn: fetchFonte, fontes: feedsTeste, now: () => 1_000_000 });
+  const handler = criarHandler({ fetchFn: fetchFonte, fontes: feedsTeste, getEnv: () => 'false', now: () => 1_000_000 });
 
   const criarReq = (ip) => new Request('https://nexus.test/functions/v1/vpn-gate', {
     method: 'GET',
@@ -120,6 +125,7 @@ async function main() {
       return new Response(conteudos.get(url), { status: 200 });
     },
     fontes: feedsTeste,
+    getEnv: () => 'false',
     now: () => instante,
     ttlMs: 1_000
   });
@@ -133,15 +139,85 @@ async function main() {
   console.log('\n[5] Indisponibilidade de feed sem snapshot');
   const handlerIndisponivel = criarHandler({
     fetchFn: async () => { throw new Error('GitHub fora do ar'); },
-    fontes: [feedsTeste[0]]
+    fontes: [feedsTeste[0]],
+    getEnv: () => 'false'
   });
   const falhaFonte = await handlerIndisponivel(criarReq('192.0.2.2'));
   check('sem snapshot e sem lista, não libera a página (HTTP 503)', falhaFonte.status === 503);
   check('falha de feed também retorna somente o texto definido', await falhaFonte.text() === MENSAGEM_BLOQUEIO);
 
-  console.log('\n[5] Integração do build e configuração Supabase');
+  console.log('\n[6] Geobloqueio dos EUA: padrão ligado, prioridade e toggle');
+  const fontesGeoTeste = [
+    { familia: 4, nome: 'eua-v4', url: 'https://github.test/eua-v4.txt', minimo: 1 },
+    { familia: 6, nome: 'eua-v6', url: 'https://github.test/eua-v6.txt', minimo: 1 }
+  ];
+  const conteudosGeo = new Map([
+    [fontesGeoTeste[0].url, '203.0.113.0/24\n'],
+    [fontesGeoTeste[1].url, '2001:db8:ffff::/48\n']
+  ]);
+  let chamadasGeo = 0;
+  let chamadasVpnGeo = 0;
+  const fetchGeo = async (url) => {
+    if (conteudosGeo.has(url)) {
+      chamadasGeo++;
+      return new Response(conteudosGeo.get(url), { status: 200 });
+    }
+    if (conteudos.has(url)) {
+      chamadasVpnGeo++;
+      return new Response(conteudos.get(url), { status: 200 });
+    }
+    throw new Error('URL de teste desconhecida');
+  };
+  const handlerGeoPadrao = criarHandler({
+    fetchFn: fetchGeo,
+    fontes: feedsTeste,
+    fontesGeoEua: fontesGeoTeste,
+    now: () => 2_000_000
+  });
+  const ipEuaV4 = await handlerGeoPadrao(criarReq('203.0.113.50'));
+  check('geobloqueio é ligado por padrão e bloqueia IPv4 dos EUA', ipEuaV4.status === 403
+    && await ipEuaV4.text() === MENSAGEM_BLOQUEIO);
+  check('decisão geográfica precede VPN e não carrega os feeds VPN', chamadasGeo === 1 && chamadasVpnGeo === 0);
+  const ipEuaV6 = await handlerGeoPadrao(criarReq('2001:db8:ffff::12'));
+  check('geobloqueio também reconhece IPv6 dos EUA', ipEuaV6.status === 403 && chamadasVpnGeo === 0);
+  const ipForaEua = await handlerGeoPadrao(criarReq('192.0.2.99'));
+  check('IP fora dos EUA continua para a verificação VPN', ipForaEua.status === 204
+    && chamadasVpnGeo === feedsTeste.length);
+
+  let chamadasGeoDesligado = 0;
+  const handlerGeoDesligado = criarHandler({
+    fetchFn: async (url) => {
+      if (conteudosGeo.has(url)) {
+        chamadasGeoDesligado++;
+        return new Response(conteudosGeo.get(url), { status: 200 });
+      }
+      return new Response(conteudos.get(url), { status: 200 });
+    },
+    fontes: feedsTeste,
+    fontesGeoEua: fontesGeoTeste,
+    getEnv: () => 'false',
+    now: () => 3_000_000
+  });
+  const ipEuaComToggleOff = await handlerGeoDesligado(criarReq('203.0.113.50'));
+  check('VPN_GATE_BLOCK_US=false desliga só o geobloqueio', ipEuaComToggleOff.status === 204
+    && chamadasGeoDesligado === 0);
+
+  const handlerGeoIndisponivel = criarHandler({
+    fetchFn: async () => { throw new Error('GitHub fora do ar'); },
+    fontes: feedsTeste,
+    fontesGeoEua: fontesGeoTeste,
+    now: () => 4_000_000
+  });
+  const erroGeo = await handlerGeoIndisponivel(criarReq('192.0.2.50'));
+  check('sem feed geográfico validado, a função falha fechada antes de liberar', erroGeo.status === 503
+    && await erroGeo.text() === MENSAGEM_BLOQUEIO);
+
+  console.log('\n[7] Integração do build e configuração Supabase');
   const configToml = fs.readFileSync(path.join(ROOT, 'supabase/config.toml'), 'utf8');
   check('vpn-gate está configurada sem validação JWT no gateway', /\[functions\.vpn-gate\][\s\S]*?verify_jwt\s*=\s*false/.test(configToml));
+  const edgeEntry = fs.readFileSync(path.join(ROOT, 'supabase/functions/vpn-gate/index.ts'), 'utf8');
+  check('Edge Function lê o toggle geográfico no servidor', edgeEntry.includes('Deno.env.get(nome)')
+    && edgeEntry.includes('VPN_GATE_BLOCK_US'));
   const build = fs.readFileSync(path.join(ROOT, 'tools/build.js'), 'utf8');
   check('build injeta o gate em todas as páginas estáticas', build.includes('aplicarVpnGate(html, rel)')
     && build.includes('css/vpn-gate.css') && build.includes('js/vpn-gate.js'));

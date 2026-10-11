@@ -43,6 +43,22 @@ export const FONTES_LISTAS = Object.freeze([
   }
 ]);
 
+/** Prefixos atribuídos a redes dos EUA, com subalocações publicadas pelo ipverse. */
+export const FONTES_GEO_EUA = Object.freeze([
+  {
+    familia: 4,
+    nome: 'Redes atribuídas aos EUA IPv4 (ipverse)',
+    url: 'https://raw.githubusercontent.com/ipverse/geo-ip-blocks/master/country/us/us-ipv4.txt',
+    minimo: 50_000
+  },
+  {
+    familia: 6,
+    nome: 'Redes atribuídas aos EUA IPv6 (ipverse)',
+    url: 'https://raw.githubusercontent.com/ipverse/geo-ip-blocks/master/country/us/us-ipv6.txt',
+    minimo: 10_000
+  }
+]);
+
 const CORS_HEADERS = Object.freeze({
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, x-client-info, content-type',
@@ -184,15 +200,41 @@ export function parseListaCIDR(texto, maximo = MAXIMO_CIDRS_POR_FONTE) {
   return redes;
 }
 
+const indicesRedes = new WeakMap();
+
+function indexarRedes(redes) {
+  const indice = new Map([[4, new Map()], [6, new Map()]]);
+  for (const rede of redes) {
+    if (!rede || (rede.familia !== 4 && rede.familia !== 6)) continue;
+    let prefixos = indice.get(rede.familia);
+    let valores = prefixos.get(rede.prefixo);
+    if (!valores) {
+      valores = new Set();
+      prefixos.set(rede.prefixo, valores);
+    }
+    valores.add(rede.valor);
+  }
+  return indice;
+}
+
 /** Retorna true se o IP pertence a qualquer rede do conjunto informado. */
 export function ipPertenceALista(ipTexto, redes) {
   const ip = typeof ipTexto === 'string' ? parseIPAddress(ipTexto) : ipTexto;
   if (!ip || !Array.isArray(redes)) return false;
-  return redes.some((rede) => {
-    if (!rede || rede.familia !== ip.familia) return false;
-    const deslocamento = BigInt(ip.bits - rede.prefixo);
-    return (ip.valor >> deslocamento) === rede.valor;
-  });
+  let indice = indicesRedes.get(redes);
+  if (!indice) {
+    indice = indexarRedes(redes);
+    indicesRedes.set(redes, indice);
+  }
+
+  const prefixos = indice.get(ip.familia);
+  if (!prefixos) return false;
+  for (let prefixo = 0; prefixo <= ip.bits; prefixo++) {
+    const valores = prefixos.get(prefixo);
+    const deslocamento = BigInt(ip.bits - prefixo);
+    if (valores && valores.has(ip.valor >> deslocamento)) return true;
+  }
+  return false;
 }
 
 /** Extrai o IP de origem dos cabeçalhos normalmente definidos pelo gateway/proxy. */
@@ -243,19 +285,13 @@ async function carregarFonte(fonte, fetchFn) {
   }
 }
 
-/** Cria o handler com dependências injetáveis para testes Node, sem Deno/Supabase. */
-export function criarHandler({
-  fetchFn = globalThis.fetch,
-  now = () => Date.now(),
-  ttlMs = CACHE_TTL_MS,
-  fontes = FONTES_LISTAS
-} = {}) {
+function criarCarregadorRedes({ fetchFn, now, ttlMs, fontes }) {
   let cache = null;
   let carregamento = null;
   let tentarNovamenteApos = 0;
   let ultimoErro = null;
 
-  async function obterRedes() {
+  return async function obterRedes() {
     const instante = now();
     if (cache && instante < cache.validoAte) return cache.redes;
     if (instante < tentarNovamenteApos) {
@@ -288,7 +324,43 @@ export function criarHandler({
       }
     })();
     return carregamento;
+  };
+}
+
+function geoEuaHabilitado(getEnv) {
+  try {
+    const valor = typeof getEnv === 'function' ? getEnv('VPN_GATE_BLOCK_US') : undefined;
+    if (valor == null || String(valor).trim() === '') return true;
+    return !['0', 'false', 'off', 'no'].includes(String(valor).trim().toLowerCase());
+  } catch (_erro) {
+    // Uma falha ao ler configuração não deve desligar o bloqueio por acidente.
+    return true;
   }
+}
+
+/** Cria o handler com dependências injetáveis para testes Node, sem Deno/Supabase. */
+export function criarHandler({
+  fetchFn = globalThis.fetch,
+  now = () => Date.now(),
+  ttlMs = CACHE_TTL_MS,
+  ttlGeoEuaMs = 24 * 60 * 60 * 1000,
+  fontes = FONTES_LISTAS,
+  fontesGeoEua = FONTES_GEO_EUA,
+  getEnv = () => undefined
+} = {}) {
+  const obterRedesVpn = criarCarregadorRedes({ fetchFn, now, ttlMs, fontes });
+  const carregadoresGeoEua = new Map([4, 6].map((familia) => [
+    familia,
+    criarCarregadorRedes({
+      fetchFn,
+      now,
+      ttlMs: ttlGeoEuaMs,
+      fontes: Array.isArray(fontesGeoEua)
+        ? fontesGeoEua.filter((fonte) => fonte.familia === familia)
+        : []
+    })
+  ]));
+  const bloquearEua = geoEuaHabilitado(getEnv);
 
   return async function handler(req) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -296,14 +368,29 @@ export function criarHandler({
 
     const ip = extrairIp(req.headers);
     if (!ip) return respostaTexto(MENSAGEM_BLOQUEIO, 503);
+    const ipValidado = parseIPAddress(ip);
+    if (!ipValidado) return respostaTexto(MENSAGEM_BLOQUEIO, 503);
+
+    // A geografia é verificada primeiro; um IP dos EUA nem precisa carregar os feeds VPN.
+    if (bloquearEua) {
+      try {
+        const obterRedesEua = carregadoresGeoEua.get(ipValidado.familia);
+        if (!obterRedesEua) throw new Error('Família IP sem fonte geográfica configurada.');
+        const redesEua = await obterRedesEua();
+        if (ipPertenceALista(ipValidado, redesEua)) return respostaTexto(MENSAGEM_BLOQUEIO, 403);
+      } catch (_erro) {
+        // Sem uma base geográfica validada e sem snapshot, mantém o fail-closed.
+        return respostaTexto(MENSAGEM_BLOQUEIO, 503);
+      }
+    }
 
     try {
-      const redes = await obterRedes();
-      if (ipPertenceALista(ip, redes)) return respostaTexto(MENSAGEM_BLOQUEIO, 403);
+      const redesVpn = await obterRedesVpn();
+      if (ipPertenceALista(ipValidado, redesVpn)) return respostaTexto(MENSAGEM_BLOQUEIO, 403);
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     } catch (_erro) {
-      // Fail-closed: se não for possível verificar uma fonte em uma instância
-      // sem cache, o conteúdo do app não deve ser liberado por engano.
+      // Se uma instância fria não conseguir validar as fontes, o conteúdo do app
+      // não deve ser liberado por engano.
       return respostaTexto(MENSAGEM_BLOQUEIO, 503);
     }
   };
