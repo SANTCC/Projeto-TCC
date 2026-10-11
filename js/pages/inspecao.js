@@ -89,39 +89,98 @@ document.addEventListener('DOMContentLoaded', () => {
 
   popularSeletor();
 
-  // Leitura de QR Code na mesma página de checklist (RN 17)
+  // Leitura de QR Code na mesma página de checklist (RN 17).
+  // Uma única sessão de câmera por vez: o botão abre/fecha, e fechar sempre libera a câmera.
   if (scanChecklistBtn && checklistQrViewport) {
-    scanChecklistBtn.addEventListener('click', async () => {
-      checklistQrViewport.classList.toggle('hidden');
-      if (checklistQrViewport.classList.contains('hidden')) return;
-      // A biblioteca de leitura é local (vendor/) e só é baixada ao abrir a câmera (js/asset-loader.js).
+    const qrStatusEl = document.getElementById('inspecaoQrStatus');
+    const rotuloBotaoQr = scanChecklistBtn.querySelector('span:last-child');
+    let scannerQr = null;
+    let iniciandoQr = false;
+    let leitorDesejado = false; // intenção do usuário: aberto ou fechado
+
+    const mostrarStatusQr = (msg) => { if (qrStatusEl) qrStatusEl.textContent = msg || ''; };
+    const atualizarBotaoQr = (aberto) => {
+      scanChecklistBtn.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+      if (rotuloBotaoQr) rotuloBotaoQr.textContent = aberto ? 'Fechar leitor' : 'Escanear QR Code';
+    };
+
+    async function pararLeitorQr() {
+      leitorDesejado = false;
+      const atual = scannerQr;
+      scannerQr = null;
+      if (atual) {
+        try { await atual.stop(); } catch (e) { /* já parado */ }
+        try { atual.clear(); } catch (e) { /* área já limpa */ }
+      }
+      checklistQrViewport.classList.add('hidden');
+      atualizarBotaoQr(false);
+    }
+
+    async function abrirLeitorQr() {
+      leitorDesejado = true;
+      checklistQrViewport.classList.remove('hidden');
+      atualizarBotaoQr(true);
+      mostrarStatusQr('Carregando leitor de QR Code...');
+
+      // A biblioteca é local (vendor/) e só é baixada ao abrir a câmera (js/asset-loader.js).
       const disponivel = window.NexusAssets
         ? await window.NexusAssets.carregar('html5-qrcode')
         : typeof Html5Qrcode !== 'undefined';
-      if (disponivel && typeof Html5Qrcode !== 'undefined') {
-        const scanner = new Html5Qrcode("inspecaoQrReader");
-        scanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 200, height: 200 } },
+      if (!disponivel || typeof Html5Qrcode === 'undefined') {
+        mostrarStatusQr('Não foi possível carregar o leitor de QR Code. Selecione a carga manualmente abaixo.');
+        return;
+      }
+      // O usuário pode ter fechado enquanto a biblioteca carregava: nesse caso a câmera não é ligada.
+      if (!leitorDesejado || scannerQr || iniciandoQr) return;
+
+      iniciandoQr = true;
+      const scanner = new Html5Qrcode('inspecaoQrReader');
+      scannerQr = scanner;
+      try {
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            // Quadro de leitura proporcional à área disponível (funciona em telas estreitas)
+            qrbox: (largura, altura) => {
+              const lado = Math.max(120, Math.floor(Math.min(largura, altura) * 0.7));
+              return { width: lado, height: lado };
+            }
+          },
           (decodedText) => {
-            let rawCode = decodedText;
+            let rawCode = String(decodedText || '');
             if (rawCode.includes('?carga=')) {
               try {
                 const url = new URL(rawCode, window.location.origin);
                 rawCode = url.searchParams.get('carga') || rawCode;
-              } catch (e) {}
+              } catch (e) { /* mantém o texto lido */ }
             }
             rawCode = rawCode.replace('QR-', '');
             selectCarga.value = rawCode;
             carregarChecklistParaCarga(rawCode);
-            scanner.stop();
-            checklistQrViewport.classList.add('hidden');
+            pararLeitorQr();
           },
           () => {}
-        ).catch(err => {
-          console.warn("Câmera indisponível no checklist:", err);
-        });
+        );
+        if (!leitorDesejado || scannerQr !== scanner) {
+          // Usuário fechou o leitor enquanto a câmera iniciava: libera a câmera agora.
+          if (scannerQr === scanner) scannerQr = null;
+          try { await scanner.stop(); } catch (e) { /* já parado */ }
+        } else {
+          mostrarStatusQr('Aponte a câmera para a etiqueta da carga.');
+        }
+      } catch (err) {
+        console.warn('Câmera indisponível no checklist:', err);
+        if (scannerQr === scanner) scannerQr = null;
+        mostrarStatusQr('Câmera indisponível. Verifique a permissão do navegador ou selecione a carga manualmente abaixo.');
+      } finally {
+        iniciandoQr = false;
       }
+    }
+
+    scanChecklistBtn.addEventListener('click', () => {
+      if (checklistQrViewport.classList.contains('hidden')) abrirLeitorQr();
+      else pararLeitorQr();
     });
   }
 
