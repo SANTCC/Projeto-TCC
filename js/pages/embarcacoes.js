@@ -629,11 +629,14 @@ document.addEventListener('DOMContentLoaded', () => {
             n.localizacao = novaLocalizacao;
             localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
             if (window.nexusSupabase) {
-              window.nexusSupabase.from('navios')
-                .update({ localizacao: novaLocalizacao })
-                .eq('numero_imo', n.imo)
-                .then(() => {})
-                .catch(err => console.warn('Erro ao atualizar chegada ao destino no Supabase:', err));
+              let arrQuery = window.nexusSupabase.from('navios')
+                .update({ localizacao: novaLocalizacao });
+              if (n.id && UUID_NAVIO_RE.test(n.id)) {
+                arrQuery = arrQuery.eq('id', n.id);
+              } else {
+                arrQuery = arrQuery.eq('numero_imo', n.imo);
+              }
+              arrQuery.select().then(() => {}).catch(err => console.warn('Erro ao atualizar chegada ao destino no Supabase:', err));
             }
             if (window.NexusRepository && window.NexusRepository.notifyChange) {
               window.NexusRepository.notifyChange('navios');
@@ -1015,9 +1018,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('navios')
-            .update({ localizacao: 'FORA_DO_PORTO', data_saida: horaSaida })
-            .eq('numero_imo', imo);
+          let navUpdate = window.nexusSupabase.from('navios')
+            .update({ localizacao: 'FORA_DO_PORTO', data_saida: horaSaida });
+
+          if (navio.id && UUID_NAVIO_RE.test(navio.id)) {
+            navUpdate = navUpdate.eq('id', navio.id);
+          } else {
+            navUpdate = navUpdate.eq('numero_imo', imo);
+          }
+          const { data: updatedNav, error: errNav } = await navUpdate.select();
+          if (errNav || !updatedNav || updatedNav.length === 0) {
+            await window.nexusSupabase.from('navios')
+              .update({ localizacao: 'FORA_DO_PORTO', data_saida: horaSaida })
+              .eq('numero_imo', imo)
+              .select();
+          }
 
           if (navio.id) {
             await window.nexusSupabase.from('cargas')
@@ -1096,14 +1111,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
-          await window.nexusSupabase.from('navios')
+          let retQuery = window.nexusSupabase.from('navios')
             .update({
               porto_origem: navio.origem,
               porto_destino: navio.destino,
               localizacao: 'FORA_DO_PORTO',
               data_saida: navio.dataSaida
-            })
-            .eq('numero_imo', imo);
+            });
+
+          if (navio.id && UUID_NAVIO_RE.test(navio.id)) {
+            retQuery = retQuery.eq('id', navio.id);
+          } else {
+            retQuery = retQuery.eq('numero_imo', imo);
+          }
+          const { data: resRet, error: errRet } = await retQuery.select();
+          if (errRet || !resRet || resRet.length === 0) {
+            await window.nexusSupabase.from('navios')
+              .update({
+                porto_origem: navio.origem,
+                porto_destino: navio.destino,
+                localizacao: 'FORA_DO_PORTO',
+                data_saida: navio.dataSaida
+              })
+              .eq('numero_imo', imo)
+              .select();
+          }
 
           if (idsCargasDesvinc.length > 0) {
             await window.nexusSupabase.from('cargas')

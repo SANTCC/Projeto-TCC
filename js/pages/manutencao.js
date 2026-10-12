@@ -388,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
               prioridade = matchDesc[2];
               descLimpa = matchDesc[3];
             }
-            let equipMatch = descLimpa.match(/^(Navio|Guindaste|Contêiner|Container)[:\s]+([^\-]+?)(?:\s*-|$)/i);
+            let equipMatch = descLimpa.match(/^(Navio|Guindaste|Contêiner|Container)[:\s]+(.+?)(?:\s+-\s+|$)/i);
             if (equipMatch) {
               const tipoEquip = equipMatch[1].charAt(0).toUpperCase() + equipMatch[1].slice(1).toLowerCase();
               equip = `${tipoEquip} ${equipMatch[2]}`;
@@ -748,9 +748,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         await qStatus;
 
-        let limpaNome = (os.equipamento || '').replace(/^(Navio|Guindaste|Contêiner|Container)[:\s]*/i, '').replace(/\s*-.*/, '').trim();
+        let limpaNome = (os.equipamento || '').replace(/^(Navio|Guindaste|Contêiner|Container)[:\s]*/i, '').trim();
+        if (limpaNome.includes(' | ')) limpaNome = limpaNome.split(' | ')[0].trim();
+        if (limpaNome.includes(' (')) limpaNome = limpaNome.split(' (')[0].trim();
         if (!limpaNome || limpaNome === 'GND' || limpaNome === 'CRG' || limpaNome.length <= 2) {
-          const matchCode = (os.descricao || '').match(/(?:Navio|Guindaste|Contêiner|Container)[:\s]*([^\s-]+)/i);
+          const matchCode = (os.descricao || '').match(/(?:Navio|Guindaste|Contêiner|Container)[:\s]*([A-Z0-9-]+)/i);
           if (matchCode) {
             limpaNome = matchCode[1].replace(/^(Navio|Guindaste|Contêiner|Container)[:\s]*/i, '').trim();
           }

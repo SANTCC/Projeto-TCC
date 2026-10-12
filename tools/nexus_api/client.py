@@ -86,10 +86,11 @@ class NexusClient:
             if params:
                 filtered = list(table_data)
                 for k, v in params.items():
-                    if k.endswith("=eq."):
-                        col = k[:-4]
-                        val = v[4:] if isinstance(v, str) and v.startswith("eq.") else v
-                        filtered = [r for r in filtered if str(r.get(col, "")) == str(val)]
+                    if k == "select":
+                        continue
+                    col = k[:-4] if k.endswith("=eq.") else k
+                    val = v[3:] if (isinstance(v, str) and v.startswith("eq.")) else v
+                    filtered = [r for r in filtered if str(r.get(col, "")) == str(val)]
                 return filtered
             return list(table_data)
 
