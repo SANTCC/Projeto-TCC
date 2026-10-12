@@ -12,6 +12,36 @@
   // portanto jamais devem ser interpolados crus em innerHTML.
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
 
+  /* ------------------------------------------------------------------
+   * Menu oculto: "Auditoria de Login" (seguranca.html)
+   * ------------------------------------------------------------------
+   * O item de auditoria é a exceção da barra lateral: ele NÃO aparece por
+   * padrão, mesmo para Direção/Supervisor. Só entra no menu depois do gesto de
+   * desbloqueio — 5 cliques no nome do usuário no Painel Geral
+   * (js/pages/dashboard.js). O estado do gesto fica no sessionStorage, ou seja,
+   * vale para a aba/sessão atual e volta a ficar oculto quando o terminal é
+   * reaberto (e no logout). A página continua protegida pelo auth-guard: o
+   * gesto revela o atalho, não concede permissão.
+   * ------------------------------------------------------------------ */
+  const CHAVE_GESTO_AUDITORIA = 'nexus_auditoria_login_liberada';
+
+  // Preenchidos por initLayout: se o cargo da sessão pode ver o painel e a
+  // função que redesenha a navegação da barra lateral sem recarregar a página.
+  let cargoAutorizadoAuditoria = false;
+  let renderizarMenuLateral = null;
+
+  function auditoriaLiberada() {
+    try { return sessionStorage.getItem(CHAVE_GESTO_AUDITORIA) === '1'; } catch (e) { return false; }
+  }
+
+  function liberarAuditoria() {
+    try { sessionStorage.setItem(CHAVE_GESTO_AUDITORIA, '1'); } catch (e) {}
+  }
+
+  function esquecerGestoAuditoria() {
+    try { sessionStorage.removeItem(CHAVE_GESTO_AUDITORIA); } catch (e) {}
+  }
+
   function initLayout() {
     const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null);
 
@@ -33,6 +63,8 @@
     const userMatricula = session.matricula || '--';
 
     const isDiretor = ['DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
+    // Cargo que pode ver o painel de auditoria (regra do auth-guard para seguranca.html)
+    cargoAutorizadoAuditoria = isDiretor || session.cargo === 'SUPERVISOR_GERENTE_OPERACOES';
     const isOperacionalSupervisor = ['INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES'].includes(session.cargo);
     const isTecnico = session.cargo === 'TECNICO_PORTOS';
     const isSupervisor = session.cargo === 'SUPERVISOR_GERENTE_OPERACOES';
@@ -49,29 +81,40 @@
     // Determina link ativo baseado na URL
     const activePage = currentPath.split('/').pop() || 'dashboard.html';
 
+    // Matriz do menu lateral. `visible` é uma FUNÇÃO porque o item de auditoria
+    // depende do gesto de desbloqueio (avaliado de novo quando o gesto acontece).
     const menuItems = [
-      { id: 'dashboard.html', label: 'Painel Geral', icon: 'dashboard', href: 'dashboard.html', visible: true },
-      { id: 'cargas.html', label: 'Cargas & Pátio', icon: 'inventory_2', href: 'cargas.html', visible: isDiretor || isSupervisor || isInspetor || isEstivador || isConferente || isArrumador },
-      { id: 'inspecao.html', label: 'Inspeção & Checklist', icon: 'fact_check', href: 'inspecao.html', visible: isDiretor || isSupervisor || isInspetor || isConferente },
-      { id: 'scanner.html', label: 'Scanner QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: isDiretor || isSupervisor || isInspetor || isEstivador || isConferente || isArrumador },
-      { id: 'embarcacoes.html', label: 'Embarcações & GPS', icon: 'directions_boat', href: 'embarcacoes.html', visible: isDiretor || isSupervisor || isInspetor || isPlanejador },
-      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: isDiretor || isSupervisor || isInspetor || isArrumador },
-      { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: isDiretor || isSupervisor },
-      { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: isTecnico || isDiretor },
-      { id: 'seguranca.html', label: 'Auditoria de Login', icon: 'shield_lock', href: 'seguranca.html', visible: isDiretor || isSupervisor },
-      { id: 'relatorios.html', label: 'Relatórios & PDF', icon: 'assessment', href: 'relatorios.html', visible: isDiretor || isSupervisor || isInspetor || isConferente }
+      { id: 'dashboard.html', label: 'Painel Geral', icon: 'dashboard', href: 'dashboard.html', visible: () => true },
+      { id: 'cargas.html', label: 'Cargas & Pátio', icon: 'inventory_2', href: 'cargas.html', visible: () => isDiretor || isSupervisor || isInspetor || isEstivador || isConferente || isArrumador },
+      { id: 'inspecao.html', label: 'Inspeção & Checklist', icon: 'fact_check', href: 'inspecao.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente },
+      { id: 'scanner.html', label: 'Scanner QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: () => isDiretor || isSupervisor || isInspetor || isEstivador || isConferente || isArrumador },
+      { id: 'embarcacoes.html', label: 'Embarcações & GPS', icon: 'directions_boat', href: 'embarcacoes.html', visible: () => isDiretor || isSupervisor || isInspetor || isPlanejador },
+      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador },
+      { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: () => isDiretor || isSupervisor },
+      { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: () => isTecnico || isDiretor },
+      // Item oculto por padrão: só aparece depois dos 5 cliques no nome do
+      // usuário no Painel Geral (ver bloco do menu oculto no topo do arquivo)
+      { id: 'seguranca.html', label: 'Auditoria de Login', icon: 'shield_lock', href: 'seguranca.html', visible: () => (isDiretor || isSupervisor) && auditoriaLiberada() },
+      { id: 'relatorios.html', label: 'Relatórios & PDF', icon: 'assessment', href: 'relatorios.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente }
     ];
 
-    // Montagem prévia dos itens de menu (cada interpolação é codificada aqui)
-    const navItemsHtml = menuItems.filter(item => item.visible).map(item => {
-      const isActive = activePage === item.id;
-      return `
+    // Montagem prévia dos itens de menu (cada interpolação é codificada aqui).
+    // O HTML fica na variável `navItemsHtml` (convenção do scanner Anti-XSS) e é
+    // recalculado sempre que o menu precisa ser redesenhado.
+    let navItemsHtml = '';
+    function montarNavItemsHtml() {
+      navItemsHtml = menuItems.filter(item => item.visible()).map(item => {
+        const isActive = activePage === item.id;
+        return `
         <a href="${esc(item.href)}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
           <span class="material-symbols-outlined text-[20px]">${esc(item.icon)}</span>
           <span>${esc(item.label)}</span>
         </a>
       `;
-    }).join('');
+      }).join('');
+      return navItemsHtml;
+    }
+    montarNavItemsHtml();
 
     // Injeta Topbar com Posicionamento Fixo e Z-Index Elevado (Item 7)
     const topbarElem = document.getElementById('appTopbar') || document.querySelector('header');
@@ -227,6 +270,15 @@
 
       const navLinks = sidebarElem.querySelectorAll('.sidebar-nav-item');
       navLinks.forEach(link => link.addEventListener('click', fecharSidebarMobile));
+
+      // Redesenha SÓ a lista de navegação: usado quando o gesto de desbloqueio
+      // libera o item "Auditoria de Login" sem recarregar a página.
+      renderizarMenuLateral = function () {
+        const nav = sidebarElem.querySelector('nav');
+        if (!nav) return;
+        nav.innerHTML = montarNavItemsHtml();
+        nav.querySelectorAll('.sidebar-nav-item').forEach(link => link.addEventListener('click', fecharSidebarMobile));
+      };
     }
 
     // Nº de usuários on-line (Backlog 3, item E): presença por codigo_individual no Supabase Realtime.
@@ -258,6 +310,8 @@
       logoutBtnElem.addEventListener('click', async () => {
         if (await window.nexusConfirm('Encerrar Sessão', 'Deseja encerrar sua sessão operacional no terminal STS-01?')) {
           if (window.NexusAnalytics) window.NexusAnalytics.track('logout');
+          // O menu de auditoria volta a ficar oculto para o próximo operador do terminal.
+          esquecerGestoAuditoria();
           if (window.NexusAuth) window.NexusAuth.logout();
           else window.location.href = 'index.html';
         }
@@ -720,6 +774,24 @@
       return localStorage.getItem('nexus_emergency_active') === 'true';
     } catch (e) {
       return false;
+    }
+  };
+
+  /**
+   * Gesto de desbloqueio do painel de auditoria (seguranca.html).
+   * A home (js/pages/dashboard.js) chama `liberar()` no 5º clique no nome do
+   * usuário: o item entra na barra lateral desta aba. `permitido()` repete a
+   * regra do auth-guard (Direção/Conselho/Supervisor) — para os demais cargos o
+   * gesto é ignorado em silêncio, sem revelar que o painel existe.
+   */
+  window.NexusAuditoriaLogin = {
+    permitido: function () { return cargoAutorizadoAuditoria; },
+    liberado: auditoriaLiberada,
+    liberar: function () {
+      if (!cargoAutorizadoAuditoria) return false;
+      liberarAuditoria();
+      if (renderizarMenuLateral) renderizarMenuLateral();
+      return true;
     }
   };
 
