@@ -417,6 +417,60 @@
     </div>
   </div>
 
+  <!-- Modal de Seleção de Rota Marítima do Navio (Tarefas 2 e 3) -->
+  <div id="selecionarRotaNavioModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-indigo-600">alt_route</span>
+          Selecionar Rota Marítima do Navio
+        </h2>
+        <button type="button" id="closeSelecionarRotaNavioBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+      <p class="text-xs text-slate-700 dark:text-slate-200">Navio: <strong id="selecionarRotaNavioLabel" class="font-mono">--</strong></p>
+      <div>
+        <label for="selecionarRotaNavioSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1 text-xs">Selecione a Nova Rota Marítima:</label>
+        <select id="selecionarRotaNavioSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-xs">
+          <option value="">Carregando rotas...</option>
+        </select>
+        <p id="selecionarRotaNavioAviso" class="text-[11px] text-slate-600 mt-1"></p>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-nexus-border dark:border-nexus-dark-border">
+        <button type="button" id="cancelarSelecionarRotaNavioBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs">Cancelar</button>
+        <button type="button" id="confirmarSelecionarRotaNavioBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs">Confirmar Rota</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Vinculação de Contêiner a Navio (Tarefa 7) -->
+  <div id="vincularContainerModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
+          <span class="material-symbols-outlined text-indigo-600">directions_boat</span>
+          Vincular Contêiner a Navio
+        </h2>
+        <button type="button" id="closeVincularContainerBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+      <p class="text-xs text-slate-700 dark:text-slate-200">Contêiner: <strong id="vincularContainerLabel" class="font-mono">--</strong></p>
+      <div>
+        <label for="vincularContainerNavioSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1 text-xs">Selecione a Embarcação (Porto de Santos):</label>
+        <select id="vincularContainerNavioSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-xs font-mono">
+          <option value="">Selecione o navio...</option>
+        </select>
+        <p id="vincularContainerAviso" class="text-[11px] text-slate-600 mt-1">Apenas navios atracados no Porto de Santos podem receber contêineres.</p>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-nexus-border dark:border-nexus-dark-border">
+        <button type="button" id="cancelarVincularContainerBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs">Cancelar</button>
+        <button type="button" id="confirmarVincularContainerBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs">Confirmar Vinculação</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal de Vinculação de Navio a Berço (seleção; berços ocupados ficam desabilitados) -->
   <div id="vincularBercoModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">

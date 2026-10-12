@@ -388,12 +388,16 @@ document.addEventListener('DOMContentLoaded', () => {
               prioridade = matchDesc[2];
               descLimpa = matchDesc[3];
             }
-            if (m.entidade_tipo === 'NAVIO') equip = 'Navio';
+            let equipMatch = descLimpa.match(/^(Navio|Guindaste|Contêiner|Container)[:\s]+([^\-]+?)(?:\s*-|$)/i);
+            if (equipMatch) {
+              const tipoEquip = equipMatch[1].charAt(0).toUpperCase() + equipMatch[1].slice(1).toLowerCase();
+              equip = `${tipoEquip} ${equipMatch[2]}`;
+            } else if (m.entidade_tipo === 'NAVIO') equip = 'Navio';
             else if (m.entidade_tipo === 'GUINDASTE') equip = 'Guindaste';
             else if (m.entidade_tipo === 'CONTAINER') equip = 'Contêiner';
 
             return {
-              id: m.id ? `OS-${m.id.substring(0, 8)}` : `OS-${Date.now()}`,
+              id: m.id ? `OS-${m.id.slice(-8)}` : `OS-${Date.now()}`,
               equipamento: equip,
               prioridade: prioridade,
               descricao: descLimpa,
@@ -744,33 +748,74 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         await qStatus;
 
-        const limpaNome = os.equipamento.replace(/^(Navio|Guindaste|Contêiner)\s+/, '').trim();
+        let limpaNome = (os.equipamento || '').replace(/^(Navio|Guindaste|Contêiner|Container)[:\s]*/i, '').replace(/\s*-.*/, '').trim();
+        if (!limpaNome || limpaNome === 'GND' || limpaNome === 'CRG' || limpaNome.length <= 2) {
+          const matchCode = (os.descricao || '').match(/(?:Navio|Guindaste|Contêiner|Container)[:\s]*([^\s-]+)/i);
+          if (matchCode) {
+            limpaNome = matchCode[1].replace(/^(Navio|Guindaste|Contêiner|Container)[:\s]*/i, '').trim();
+          }
+        }
 
-        if (os.equipamento.startsWith('Navio')) {
-          if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).ilike('nome', limpaNome);
-          } else if (acao === 'CONCLUIR' || acao === 'REPROVAR') {
-            // Backlog3: ao REPROVAR a OS, o navio também precisa sair do estado
-            // AGENDADO_PARA_REFORMA/EM_REFORMA, senão fica preso no contador de
-            // "Manutenção" do dashboard sem nunca ter sido atendido.
-            await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).ilike('nome', limpaNome);
+        const descCompleta = `${os.equipamento || ''} ${os.descricao || ''}`;
+        const isNavio = /navio/i.test(descCompleta) || os.entidade_tipo === 'NAVIO';
+        const isGuindaste = /guindaste/i.test(descCompleta) || os.entidade_tipo === 'GUINDASTE';
+        const isContainer = /contêiner|container/i.test(descCompleta) || os.entidade_tipo === 'CONTAINER';
+
+        if (isNavio) {
+          const novoEstadoNavio = (acao === 'APROVAR') ? 'EM_REFORMA' : 'OPERANTE';
+          let navList = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+          navList.forEach(n => {
+            if (limpaNome && (n.nome || '').toLowerCase().includes(limpaNome.toLowerCase())) {
+              n.estado_operacional = novoEstadoNavio;
+              n.estado = novoEstadoNavio;
+            }
+          });
+          localStorage.setItem('nexus_navios_list', JSON.stringify(navList));
+
+          if (window.nexusSupabase) {
+            if (acao === 'APROVAR') {
+              await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).ilike('nome', `%${limpaNome}%`);
+            } else if (acao === 'CONCLUIR' || acao === 'REPROVAR') {
+              await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).ilike('nome', `%${limpaNome}%`);
+            }
           }
-        } else if (os.equipamento.startsWith('Guindaste')) {
-          if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'REPROVAR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', limpaNome);
+        } else if (isGuindaste) {
+          const novoEstadoGnd = (acao === 'APROVAR') ? 'EM_MANUTENCAO' : 'OPERANTE';
+          let gndList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+          gndList.forEach(g => {
+            if (limpaNome && (g.identificacao || g.id || '').toLowerCase().includes(limpaNome.toLowerCase())) {
+              g.estado = novoEstadoGnd;
+            }
+          });
+          localStorage.setItem('nexus_guindastes_list', JSON.stringify(gndList));
+
+          if (window.nexusSupabase) {
+            if (acao === 'APROVAR') {
+              await window.nexusSupabase.from('guindastes').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', `%${limpaNome}%`);
+            } else if (acao === 'CONCLUIR') {
+              await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', `%${limpaNome}%`);
+            } else if (acao === 'REPROVAR') {
+              await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', `%${limpaNome}%`);
+            }
           }
-        } else if (os.equipamento.startsWith('Contêiner')) {
-          if (acao === 'APROVAR') {
-            // estado_container_enum não tem EM_MANUTENCAO: o valor válido é EM_REFORMA
-            await window.nexusSupabase.from('containers').update({ estado: 'EM_REFORMA' }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'REPROVAR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', limpaNome);
+        } else if (isContainer) {
+          const novoEstadoCont = (acao === 'APROVAR') ? 'EM_REFORMA' : 'OPERANTE';
+          let contList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+          contList.forEach(c => {
+            if (limpaNome && (c.identificacao || c.id || '').toLowerCase().includes(limpaNome.toLowerCase())) {
+              c.estado = novoEstadoCont;
+            }
+          });
+          localStorage.setItem('nexus_containers_list', JSON.stringify(contList));
+
+          if (window.nexusSupabase) {
+            if (acao === 'APROVAR') {
+              await window.nexusSupabase.from('containers').update({ estado: 'EM_REFORMA' }).ilike('numero_identificacao', `%${limpaNome}%`);
+            } else if (acao === 'CONCLUIR') {
+              await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', `%${limpaNome}%`);
+            } else if (acao === 'REPROVAR') {
+              await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', `%${limpaNome}%`);
+            }
           }
         }
 

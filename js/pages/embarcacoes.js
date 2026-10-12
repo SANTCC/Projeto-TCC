@@ -490,11 +490,12 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // C10 & RN 12: só as cargas vinculadas ao navio que chegou ao porto de destino viram ENTREGUE.
-    // A gravação no Supabase é feita por id de carga, nunca por status (não atinge outras cargas).
+    // C10 & RN 12 & Tarefa 1: só as cargas vinculadas ao navio que chegou ao porto de destino viram ENTREGUE.
+    // Quando a carga chega ao destino (ENTREGUE), ela se desvincula do navio (navio_id = null).
     const UUID_CARGA_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     const idsRemotosEntregues = [];
+    const idsRemotosDesvinculados = [];
     let cargasAtualizadas = false;
 
     const cargaPertenceAoNavio = (c, n) => {
@@ -505,11 +506,25 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     cargasFluxo.forEach((c) => {
-      if (!c || (!c.navio && !c.navioId && !c.navio_id)) return;
-      if (['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)) return;
+      if (!c) return;
+      if (['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)) {
+        // Tarefa 1: se a carga já está ENTREGUE mas ainda continua vinculada a um navio, desvincula
+        if (c.status === 'ENTREGUE' && (c.navio || c.navioId || c.navio_id)) {
+          c.navio = '';
+          c.navioId = null;
+          c.navio_id = null;
+          cargasAtualizadas = true;
+          const idBanco = String(c.rawDbId || '');
+          if (UUID_CARGA_RE.test(idBanco)) idsRemotosDesvinculados.push(idBanco);
+        }
+        return;
+      }
       const navio = naviosList.find((n) => n.localizacao === 'NO_PORTO_DE_DESTINO' && cargaPertenceAoNavio(c, n));
       if (!navio) return;
       c.status = 'ENTREGUE';
+      c.navio = '';
+      c.navioId = null;
+      c.navio_id = null;
       cargasAtualizadas = true;
       const idBanco = String(c.rawDbId || '');
       if (UUID_CARGA_RE.test(idBanco)) idsRemotosEntregues.push(idBanco);
@@ -517,14 +532,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (cargasAtualizadas) {
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
-      if (window.nexusSupabase && idsRemotosEntregues.length > 0) {
-        window.nexusSupabase.from('cargas')
-          .update({ status_fluxo: 'ENTREGUE' })
-          .in('id', idsRemotosEntregues)
-          .then(({ error }) => {
-            if (error) console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
-          })
-          .catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
+      if (window.nexusSupabase) {
+        if (idsRemotosEntregues.length > 0) {
+          window.nexusSupabase.from('cargas')
+            .update({ status_fluxo: 'ENTREGUE', navio_id: null })
+            .in('id', idsRemotosEntregues)
+            .then(({ error }) => {
+              if (error) console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
+            })
+            .catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
+        }
+        if (idsRemotosDesvinculados.length > 0) {
+          window.nexusSupabase.from('cargas')
+            .update({ navio_id: null })
+            .in('id', idsRemotosDesvinculados)
+            .then(({ error }) => {
+              if (error) console.warn('[NexusPort] Erro ao desvincular cargas entregues no Supabase:', error);
+            })
+            .catch(e => console.warn('[NexusPort] Erro ao desvincular entregue no Supabase:', e));
+        }
       }
     }
 
@@ -663,6 +689,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
+          // Botão Selecionar Rota Marítima (Tarefas 2 e 3)
+          acoesHtml += `<button type="button" onclick="window.selecionarRotaNavio(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white font-bold flex items-center gap-1" title="Selecionar nova rota marítima/destino"><span class="material-symbols-outlined text-[13px]">alt_route</span><span>Rota</span></button>`;
+
           if (emergenciaAtiva) {
             acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 font-bold cursor-not-allowed opacity-70" title="Emergência ativa: operações do pátio bloqueadas temporariamente">Liberar Saída</button>`;
           } else {
@@ -885,11 +914,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!navio) return;
 
     // Navio já no Porto de Santos com destino Santos não tem próxima viagem definida:
-    // liberar a saída o faria "navegar" de volta ao próprio porto.
+    // abre o seletor para cadastrar a nova rota do navio (Tarefas 2 e 3).
     if (navio.localizacao === 'DENTRO_DO_PORTO' && ehPortoSantos(navio.destino)) {
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('alerta', 'Próximo Destino Não Definido', `O navio ${navio.nome} está no Porto de Santos, que também é o destino cadastrado. Informe o próximo destino da embarcação antes de liberar a saída.`);
+        window.mostrarFeedback('alerta', 'Próximo Destino Não Definido', `O navio ${navio.nome} está no Porto de Santos e seu destino cadastrado é Santos. Selecione a nova rota marítima para a embarcação antes de liberar a saída.`);
       }
+      window.selecionarRotaNavio(imo);
       return;
     }
 
@@ -963,6 +993,26 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
 
       // Sincroniza Supabase
+      // Tarefa 1: Ao autorizar o retorno, garante que qualquer carga vinculada a esta embarcação seja desvinculada
+      const cargasFluxoRetorno = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      let cargasDesvinculadasRetorno = false;
+      const idsCargasDesvinc = [];
+      cargasFluxoRetorno.forEach(c => {
+        if (cargaPertenceAoNavio(c, navio)) {
+          c.status = 'ENTREGUE';
+          c.navio = '';
+          c.navioId = null;
+          c.navio_id = null;
+          cargasDesvinculadasRetorno = true;
+          const idBanco = String(c.rawDbId || '');
+          if (UUID_CARGA_RE.test(idBanco)) idsCargasDesvinc.push(idBanco);
+        }
+      });
+
+      if (cargasDesvinculadasRetorno) {
+        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoRetorno));
+      }
+
       if (window.nexusSupabase) {
         try {
           await window.nexusSupabase.from('navios')
@@ -1054,6 +1104,12 @@ document.addEventListener('DOMContentLoaded', () => {
               data_saida: navio.dataSaida
             })
             .eq('numero_imo', imo);
+
+          if (idsCargasDesvinc.length > 0) {
+            await window.nexusSupabase.from('cargas')
+              .update({ status_fluxo: 'ENTREGUE', navio_id: null })
+              .in('id', idsCargasDesvinc);
+          }
         } catch (err) { console.warn('Erro ao atualizar retorno do navio no Supabase:', err); }
       }
 
@@ -1089,6 +1145,124 @@ document.addEventListener('DOMContentLoaded', () => {
     refletirBercoLocal(nomeBerco, reserva.payload);
     return { ok: true };
   }
+
+  // ------------------------------------------------------------------
+  // Selecionar / Alterar Rota Marítima do Navio (Tarefas 2 e 3)
+  // ------------------------------------------------------------------
+  const selecionarRotaNavioModal = document.getElementById('selecionarRotaNavioModal');
+  const selecionarRotaNavioSelect = document.getElementById('selecionarRotaNavioSelect');
+  const selecionarRotaNavioLabel = document.getElementById('selecionarRotaNavioLabel');
+  const selecionarRotaNavioAviso = document.getElementById('selecionarRotaNavioAviso');
+  const confirmarSelecionarRotaNavioBtn = document.getElementById('confirmarSelecionarRotaNavioBtn');
+  const cancelarSelecionarRotaNavioBtn = document.getElementById('cancelarSelecionarRotaNavioBtn');
+  const closeSelecionarRotaNavioBtn = document.getElementById('closeSelecionarRotaNavioBtn');
+  let navioPendenteRota = null;
+
+  function fecharSelecionarRotaNavioModal() {
+    if (selecionarRotaNavioModal) selecionarRotaNavioModal.classList.add('hidden');
+    navioPendenteRota = null;
+  }
+
+  window.selecionarRotaNavio = async function(imo, opcoes) {
+    const navio = naviosList.find(n => n.imo === imo);
+    if (!navio) return;
+
+    if (!Array.isArray(rotasMaritimasList) || rotasMaritimasList.length === 0) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Nenhuma Rota Cadastrada', 'Não há rotas marítimas registradas no sistema. Cadastre uma rota em "Gestão de Rotas Marítimas".');
+      }
+      return;
+    }
+
+    if (opcoes && opcoes.rotaIndex !== undefined) {
+      const idx = parseInt(opcoes.rotaIndex, 10);
+      if (!isNaN(idx) && rotasMaritimasList[idx]) {
+        await aplicarNovaRotaNavio(navio, rotasMaritimasList[idx]);
+      }
+      return;
+    }
+
+    if (!selecionarRotaNavioModal || !selecionarRotaNavioSelect) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Tela Incompleta', 'Modal de seleção de rota não encontrado.');
+      return;
+    }
+
+    navioPendenteRota = navio;
+    if (selecionarRotaNavioLabel) selecionarRotaNavioLabel.textContent = `${navio.nome} (${navio.imo})`;
+
+    selecionarRotaNavioSelect.innerHTML = '<option value="">Selecione a Rota Marítima...</option>' +
+      rotasMaritimasList.map((r, idx) => {
+        const dist = parseFloat(r.distancia_km);
+        const distHtml = dist > 0 ? ` (${dist.toLocaleString('pt-BR')} km)` : '';
+        return `<option value="${idx}">${esc(r.origem)} ➔ ${esc(r.destino)}${esc(distHtml)}</option>`;
+      }).join('');
+
+    if (selecionarRotaNavioAviso) {
+      selecionarRotaNavioAviso.textContent = `Rota atual: ${navio.origem || 'Porto de Santos'} ➔ ${navio.destino || 'Não definido'}`;
+    }
+
+    selecionarRotaNavioModal.classList.remove('hidden');
+  };
+
+  async function aplicarNovaRotaNavio(navio, rota) {
+    if (!navio || !rota) return false;
+
+    const novaOrigem = (rota.origem || 'Porto de Santos').trim();
+    const novoDestino = (rota.destino || '').trim();
+    const novaDistancia = parseFloat(rota.distancia_km) || null;
+
+    navio.origem = novaOrigem;
+    navio.destino = novoDestino;
+    navio.distancia = novaDistancia;
+
+    localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+
+    if (window.nexusSupabase) {
+      try {
+        let query = window.nexusSupabase.from('navios').update({
+          porto_origem: novaOrigem,
+          porto_destino: novoDestino
+        });
+        if (UUID_NAVIO_RE.test(navio.id)) {
+          query = query.eq('id', navio.id);
+        } else {
+          query = query.eq('numero_imo', navio.imo);
+        }
+        await query;
+      } catch (e) {
+        console.warn('Erro ao atualizar rota do navio no Supabase:', e);
+      }
+    }
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Rota do navio ${navio.nome} alterada para ${novaOrigem} ➔ ${novoDestino}`);
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('navios');
+    }
+
+    renderGpsTable();
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Rota Atualizada', `Rota do navio ${navio.nome} atualizada para ${novaOrigem} ➔ ${novoDestino} (${novaDistancia || '—'} km).`);
+    }
+    return true;
+  }
+
+  if (confirmarSelecionarRotaNavioBtn) {
+    confirmarSelecionarRotaNavioBtn.addEventListener('click', async () => {
+      if (!navioPendenteRota) return;
+      const idxStr = selecionarRotaNavioSelect ? selecionarRotaNavioSelect.value : '';
+      const idx = parseInt(idxStr, 10);
+      if (isNaN(idx) || !rotasMaritimasList[idx]) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Obrigatória', 'Selecione uma rota marítima válida.');
+        return;
+      }
+      const ok = await aplicarNovaRotaNavio(navioPendenteRota, rotasMaritimasList[idx]);
+      if (ok) fecharSelecionarRotaNavioModal();
+    });
+  }
+  if (cancelarSelecionarRotaNavioBtn) cancelarSelecionarRotaNavioBtn.addEventListener('click', fecharSelecionarRotaNavioModal);
+  if (closeSelecionarRotaNavioBtn) closeSelecionarRotaNavioBtn.addEventListener('click', fecharSelecionarRotaNavioModal);
 
   // Preenche o seletor de berço do formulário de cadastro com os berços LIVRES do banco.
   // Sem consulta bem-sucedida, o seletor não oferece berço algum.
@@ -1323,7 +1497,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.excluirNavio = async function(imo, opcoes) {
     const navio = naviosList.find(n => n.imo === imo);
-    if (!navio) return;
+    if (!navio) {
+      avisoExclusao('alerta', 'Navio Não Encontrado', `O navio com IMO ${imo} não consta na lista local do sistema. Atualize a página.`);
+      return;
+    }
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Navio', `Tem certeza que deseja EXCLUIR o navio ${navio.nome} (${navio.imo})? Os berços dele serão liberados e os contêineres vinculados serão desvinculados. O navio sai do banco de dados.`)
@@ -1383,9 +1560,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // 4) Exclui no banco. Só depois disso a interface é alterada.
-      const { error: errDel } = await window.nexusSupabase.from('navios').delete().eq('id', busca.id);
+      const { data: delData, error: errDel } = await window.nexusSupabase.from('navios').delete().eq('id', busca.id).select();
       if (errDel) {
         avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do navio ${navio.nome} (${errDel.message}). Nada foi alterado.`);
+        return;
+      }
+      if (!delData || delData.length === 0) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Nenhum registro do navio ${navio.nome} foi removido do banco. Verifique se o registro existe ou se há políticas RLS impedindo a exclusão.`);
         return;
       }
     }
@@ -1815,28 +1996,66 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const optionsText = naviosElegiveis.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo})`).join('\n');
-    let selecao;
+    let navioAlvo = null;
     if (opcoes && opcoes.navioImo !== undefined) {
-      // Uso do agente WebMCP: escolhe o navio pelo IMO, sem diálogo.
-      // O filtro do Backlog3 vale também aqui: IMO de navio fora do Porto
-      // de Santos não entra na lista de elegíveis e a vinculação é recusada.
-      const idxNavio = naviosElegiveis.findIndex((n) => n.imo === opcoes.navioImo);
-      selecao = idxNavio >= 0 ? String(idxNavio + 1) : '';
-      if (!selecao && window.mostrarFeedback) {
+      // Uso de agente ou automação: escolhe pelo IMO diretamente
+      navioAlvo = naviosElegiveis.find((n) => n.imo === opcoes.navioImo) || null;
+      if (!navioAlvo && window.mostrarFeedback) {
         const navioPedido = naviosList.find((n) => n.imo === opcoes.navioImo);
         const nomePedido = navioPedido ? `${navioPedido.nome} (${navioPedido.imo})` : `IMO ${opcoes.navioImo}`;
         window.mostrarFeedback('alerta', 'Navio Fora do Porto', `A embarcação ${nomePedido} não está atracada no Porto de Santos (situação: ${navioPedido ? localizacaoInfo(navioPedido.localizacao).txt : 'não encontrada'}) e não pode receber contêineres.`);
       }
     } else {
-      selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao} (apenas embarcações no Porto de Santos):\n${optionsText}`);
+      const modal = document.getElementById('vincularContainerModal');
+      const select = document.getElementById('vincularContainerNavioSelect');
+      const label = document.getElementById('vincularContainerLabel');
+
+      if (modal && select) {
+        if (label) label.textContent = `${cont.identificacao} (${cont.tipo || 'Padrão'})`;
+        select.innerHTML = '<option value="">-- Selecione o Navio Alvo --</option>' +
+          naviosElegiveis.map(n => `<option value="${esc(n.imo)}">${esc(n.nome)} (${esc(n.imo)})</option>`).join('');
+
+        modal.classList.remove('hidden');
+
+        const navioImoSelecionado = await new Promise((resolve) => {
+          const btnConfirmar = document.getElementById('confirmarVincularContainerBtn');
+          const btnCancelar = document.getElementById('cancelarVincularContainerBtn');
+          const btnFechar = document.getElementById('closeVincularContainerBtn');
+
+          function fechar(valor) {
+            modal.classList.add('hidden');
+            if (btnConfirmar) btnConfirmar.removeEventListener('click', onConfirmar);
+            if (btnCancelar) btnCancelar.removeEventListener('click', onCancelar);
+            if (btnFechar) btnFechar.removeEventListener('click', onCancelar);
+            resolve(valor);
+          }
+
+          function onConfirmar() {
+            fechar(select.value || null);
+          }
+          function onCancelar() {
+            fechar(null);
+          }
+
+          if (btnConfirmar) btnConfirmar.addEventListener('click', onConfirmar);
+          if (btnCancelar) btnCancelar.addEventListener('click', onCancelar);
+          if (btnFechar) btnFechar.addEventListener('click', onCancelar);
+        });
+
+        if (!navioImoSelecionado) return;
+        navioAlvo = naviosElegiveis.find(n => n.imo === navioImoSelecionado) || null;
+      } else {
+        // Fallback em código legado sem modal na árvore DOM
+        const optionsText = naviosElegiveis.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo})`).join('\n');
+        const selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao} (apenas embarcações no Porto de Santos):\n${optionsText}`);
+        if (!selecao) return;
+        const idxSel = parseInt(selecao, 10) - 1;
+        if (!isNaN(idxSel)) navioAlvo = naviosElegiveis[idxSel] || null;
+      }
     }
 
-    if (!selecao) return;
-
-    const idxSel = parseInt(selecao, 10) - 1;
-    if (!isNaN(idxSel) && naviosElegiveis[idxSel]) {
-      const navioAlvo = naviosElegiveis[idxSel];
+    if (!navioAlvo) return;
+    if (navioAlvo) {
 
       // Validação de Capacidade Rígida (OBS Tarefa 8): max 15.000 toneladas e ~300 metros de espaço
       // Calcula peso e quantidade de contêineres atualmente alocados ao navioAlvo
@@ -1904,7 +2123,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Excluir Contêiner (Tarefa 8)
   window.excluirContainer = async function(contIdentificacao, opcoes) {
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
-    if (!cont) return;
+    if (!cont) {
+      avisoExclusao('alerta', 'Contêiner Não Encontrado', `O contêiner ${contIdentificacao} não consta na lista local do sistema. Atualize a página.`);
+      return;
+    }
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Contêiner', `Tem certeza que deseja EXCLUIR o contêiner ${cont.identificacao}? Essa ação o removerá do sistema.`)
@@ -1941,9 +2163,13 @@ document.addEventListener('DOMContentLoaded', () => {
       cargasDesvinc = cargas.contagem;
 
       // As cargas NÃO são apagadas: o banco apenas as desvincula (ON DELETE SET NULL)
-      const { error: errDel } = await window.nexusSupabase.from('containers').delete().eq('id', busca.id);
+      const { data: delData, error: errDel } = await window.nexusSupabase.from('containers').delete().eq('id', busca.id).select();
       if (errDel) {
         avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do contêiner ${cont.identificacao} (${errDel.message}). Nada foi alterado.`);
+        return;
+      }
+      if (!delData || delData.length === 0) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Nenhum registro do contêiner ${cont.identificacao} foi removido do banco. Verifique se o registro existe ou se há políticas RLS impedindo a exclusão.`);
         return;
       }
     }
@@ -2158,7 +2384,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Excluir Guindaste (Item 6)
   window.excluirGuindaste = async function(gndIdentificacao, opcoes) {
     const guindaste = guindastesList.find(g => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(gndIdentificacao));
-    if (!guindaste) return;
+    if (!guindaste) {
+      avisoExclusao('alerta', 'Guindaste Não Encontrado', `O guindaste ${gndIdentificacao} não consta na lista local do sistema. Atualize a página.`);
+      return;
+    }
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Guindaste', `Tem certeza que deseja EXCLUIR o guindaste ${guindaste.identificacao}? Esta ação o removerá do sistema.`)
@@ -2186,9 +2415,13 @@ document.addEventListener('DOMContentLoaded', () => {
         avisoExclusao('alerta', 'Exclusão Bloqueada', `O guindaste ${guindaste.identificacao} possui ${hist.total} registro(s) de manutenção/histórico vinculados. Excluí-lo apagaria esse histórico; a exclusão foi cancelada.`);
         return;
       }
-      const { error: errDel } = await window.nexusSupabase.from('guindastes').delete().eq('id', busca.id);
+      const { data: delData, error: errDel } = await window.nexusSupabase.from('guindastes').delete().eq('id', busca.id).select();
       if (errDel) {
         avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do guindaste ${guindaste.identificacao} (${errDel.message}). Nada foi alterado.`);
+        return;
+      }
+      if (!delData || delData.length === 0) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `Nenhum registro do guindaste ${guindaste.identificacao} foi removido do banco. Verifique se o registro existe ou se há políticas RLS impedindo a exclusão.`);
         return;
       }
     }

@@ -503,6 +503,44 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elCargasRecusadas) elCargasRecusadas.textContent = `${indic.recusadas.totalRecusadas} (${indic.recusadas.totalCanceladas} Canc.)`;
     if (elOcupacao) elOcupacao.textContent = `${indic.ocupacaoPatio.taxa}% (${indic.ocupacaoPatio.ocupados}/${indic.ocupacaoPatio.capacidade})`;
     if (elPreventiva) elPreventiva.textContent = `${indic.preventiva.total} Equipamento(s)`;
+
+    aplicarVisibilidadeCardsPorCargo();
+  }
+
+  function aplicarVisibilidadeCardsPorCargo() {
+    const session = window.currentUserSession || (window.NexusAuth && window.NexusAuth.getSession());
+    if (!session || !session.cargo) return;
+
+    const cargo = session.cargo;
+    const btnNaviosManut = document.querySelector('button[onclick*="NAVIOS_MANUTENCAO"]');
+    const btnNaviosFora = document.querySelector('button[onclick*="NAVIOS_FORA"]');
+    const btnCargasArmaz = document.querySelector('button[onclick*="CARGAS_ARMAZENAGEM"]');
+    const btnCargasProntas = document.querySelector('button[onclick*="CARGAS_PRONTAS"]');
+    const btnCargasRecusadas = document.querySelector('button[onclick*="CARGAS_RECUSADAS"]');
+    const btnOcupacaoPatio = document.querySelector('button[onclick*="OCUPACAO_PATIO"]');
+    const btnPreventiva = document.querySelector('button[onclick*="PREVENTIVA_SUGERIDA"]');
+
+    if (cargo === 'ESTIVADOR') {
+      // Tarefa 13: Deixar apenas os dashboards referentes às cargas e o dashboard referente ao pátio
+      if (btnNaviosManut) btnNaviosManut.style.display = 'none';
+      if (btnNaviosFora) btnNaviosFora.style.display = 'none';
+      if (btnPreventiva) btnPreventiva.style.display = 'none';
+
+      if (btnCargasArmaz) btnCargasArmaz.style.display = '';
+      if (btnCargasProntas) btnCargasProntas.style.display = '';
+      if (btnCargasRecusadas) btnCargasRecusadas.style.display = '';
+      if (btnOcupacaoPatio) btnOcupacaoPatio.style.display = '';
+    } else if (cargo === 'PLANEJADOR_PATIO_NAVIOS') {
+      // Tarefa 16: Apenas dashboards referentes a navios e contêineres
+      if (btnCargasArmaz) btnCargasArmaz.style.display = 'none';
+      if (btnCargasProntas) btnCargasProntas.style.display = 'none';
+      if (btnCargasRecusadas) btnCargasRecusadas.style.display = 'none';
+      if (btnPreventiva) btnPreventiva.style.display = 'none';
+
+      if (btnNaviosManut) btnNaviosManut.style.display = '';
+      if (btnNaviosFora) btnNaviosFora.style.display = '';
+      if (btnOcupacaoPatio) btnOcupacaoPatio.style.display = '';
+    }
   }
 
   renderCardsOperacionais();
@@ -580,7 +618,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (tipo === 'OCUPACAO_PATIO') {
       titulo = 'Taxa de Ocupação do Pátio STS-01';
       icone = 'pie_chart';
-      detalhe = `Capacidade Máxima Regulamentar: ${indic.ocupacaoPatio.capacidade} posições (100 Hectares / 1.000.000 m²)\nCargas em Armazenagem Ativa: ${indic.ocupacaoPatio.ocupados}\nTaxa de Ocupação Atual: ${indic.ocupacaoPatio.taxa}%`;
+      const patioCargas = (indic.ocupacaoPatio.lista || []).map(c => `• Carga ${c.qr_code_url ? c.qr_code_url.replace('QR-', '') : (c.id || c.codigo)}: ${c.natureza || c.tipo || 'Geral'} [${c.porto_descarga || c.portoDescarga || 'Setor Pátio'}] (${c.status_fluxo || c.status || 'PÁTIO'})`);
+      const detalheLista = patioCargas.length > 0 ? `\n\nCargas Ocupando o Pátio:\n${patioCargas.join('\n')}` : '\n\nNenhuma carga ocupando o pátio no momento.';
+      detalhe = `Capacidade Máxima Regulamentar: ${indic.ocupacaoPatio.capacidade} posições (100 Hectares / 1.000.000 m²)\nCargas Ocupando o Pátio: ${indic.ocupacaoPatio.ocupados}\nTaxa de Ocupação Atual: ${indic.ocupacaoPatio.taxa}%${detalheLista}`;
     } else if (tipo === 'PREVENTIVA_SUGERIDA') {
       // Item 1.8: Usa O MESMO RETORNO de buscarEquipamentosPreventivaSugerida()
       titulo = 'Manutenções Preventivas Sugeridas (> 3 Anos de Uso)';

@@ -974,6 +974,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function aplicarRestricoesTecnicoPortos() {
+    if (session.cargo === 'TECNICO_PORTOS') {
+      // Tarefa 17: Técnico em Portos só poderá ter acesso à parte de visitantes e histórico (Seções 3 e 4)
+      const secCodigos = document.getElementById('empMatriculaSearch')?.closest('.bg-white');
+      const secFuncionarios = document.getElementById('toggleFuncFormBtn')?.closest('.bg-white');
+      if (secCodigos) secCodigos.style.display = 'none';
+      if (secFuncionarios) secFuncionarios.style.display = 'none';
+    }
+  }
+  aplicarRestricoesTecnicoPortos();
+
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {
     carregarFuncionariosCompleto();

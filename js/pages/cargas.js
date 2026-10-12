@@ -215,6 +215,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     locais.forEach((t) => {
       t.carga.status = t.statusNovo;
+      if (t.statusNovo === 'ENTREGUE') {
+        t.carga.navio = '';
+        t.carga.navioId = null;
+        t.carga.navio_id = null;
+      }
     });
 
     remotas.forEach((t) => {
@@ -244,9 +249,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (requestRevision !== undefined && requestRevision !== cargasLoadRevision) {
           return { ok: false, obsoleta: true, atualizados: new Set() };
         }
+        const updatePayload = { status_fluxo: grupo.statusNovo };
+        if (grupo.statusNovo === 'ENTREGUE') {
+          updatePayload.navio_id = null;
+        }
         const { data, error } = await client
           .from('cargas')
-          .update({ status_fluxo: grupo.statusNovo })
+          .update(updatePayload)
           .in('id', ids)
           .eq('status_fluxo', grupo.statusAnterior)
           .select('id');
@@ -283,6 +292,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const resultado = resultadoPorPromessa.get(promessasPorChave.get(chave));
       if (resultado && resultado.atualizados && resultado.atualizados.has(id)) {
         t.carga.status = t.statusNovo;
+        if (t.statusNovo === 'ENTREGUE') {
+          t.carga.navio = '';
+          t.carga.navioId = null;
+          t.carga.navio_id = null;
+        }
         houveGravacaoRemota = true;
       }
     });
@@ -358,6 +372,33 @@ document.addEventListener('DOMContentLoaded', () => {
       window.NexusRepository.invalidarLeiturasCargas();
     }
   });
+
+  // Renderização de cargas entregues na Tabela de Cargas Entregues (verde - Tarefa 6)
+  function renderCargasEntreguesTable(cargasEntregues = []) {
+    const entreguesTableBody = document.getElementById('cargasEntreguesTableBody');
+    if (!entreguesTableBody) return;
+
+    if (!cargasEntregues || cargasEntregues.length === 0) {
+      entreguesTableBody.innerHTML = `
+        <tr>
+          <td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhuma carga entregue no sistema.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    entreguesTableBody.innerHTML = cargasEntregues.map(c => `
+      <tr class="hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 transition-colors">
+        <td class="p-3 font-mono font-bold text-emerald-950 dark:text-emerald-200">${esc(c.id)}</td>
+        <td class="p-3 font-bold">${esc(c.tipo || c.natureza || 'Carga Geral')}</td>
+        <td class="p-3 font-mono text-xs">${esc(c.destino || c.portoDescarga || 'Porto de Destino')}</td>
+        <td class="p-3 font-mono text-xs">${esc(c.container || 'Sem contêiner')} / ${esc(c.navio || 'Desvinculado')}</td>
+        <td class="p-3">
+          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100">ENTREGUE</span>
+        </td>
+      </tr>
+    `).join('');
+  }
 
   // Renderização de cargas canceladas na Tabela de Cargas Canceladas (cinza)
   function renderCargasCanceladasTable(cargasCanceladas = []) {
@@ -540,13 +581,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterDataFimVal = (document.getElementById('filterDataFim')?.value || '').trim();
     const filterBuscaVal = (document.getElementById('filterBusca')?.value || '').trim().toLowerCase();
 
-    // A tabela principal exibe apenas cargas pendentes no fluxo; canceladas e
-    // recusadas ficam nas tabelas próprias (cinza e vermelha).
+    // A tabela principal exibe apenas cargas pendentes no fluxo; entregues, canceladas e
+    // recusadas ficam nas tabelas próprias (verde, cinza e vermelha - Tarefa 6).
     // Exibe cargas ativas aplicando Visão Própria / Visão Operacional (RF 1.3)
-    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA');
+    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA' && c.status !== 'ENTREGUE');
     if (window.NexusVision && window.NexusVision.filterCargasForUser) {
       cargasAtivas = window.NexusVision.filterCargasForUser(cargasAtivas, session);
     }
+    const cargasEntregues = cargasFluxoList.filter(c => c.status === 'ENTREGUE');
     const cargasCanceladas = cargasFluxoList.filter(c => c.status === 'CANCELADA');
     const cargasRecusadas = cargasFluxoList.filter(c => c.status === 'RECUSADA');
 
@@ -584,6 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     });
 
+    renderCargasEntreguesTable(cargasEntregues);
     renderCargasCanceladasTable(cargasCanceladas);
     renderCargasRecusadasTable(cargasRecusadas);
 
@@ -630,8 +673,8 @@ document.addEventListener('DOMContentLoaded', () => {
         actionButtonsHtml += `<button type="button" title="Confirmar recebimento no porto" aria-label="Receber carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'RECEBER')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">download</span><span class="hidden sm:inline">Receber</span></button>`;
       }
 
-      if (c.status === 'RECEBIMENTO_INSPECAO' && isInspetor) {
-        actionButtonsHtml += `<button type="button" title="Abrir inspeção formal da carga" aria-label="Inspecionar carga" onclick="window.location.href=${jsArg('inspecao.html?carga=' + encodeURIComponent(c.id || ''))}" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">fact_check</span><span class="hidden sm:inline">Inspecionar</span></button>`;
+      if (c.status === 'RECEBIMENTO_INSPECAO' && (isInspetor || isConferente)) {
+        actionButtonsHtml += `<button type="button" title="Abrir inspeção e checklist formal da carga" aria-label="Inspecionar carga" onclick="window.location.href=${jsArg('inspecao.html?carga=' + encodeURIComponent(c.id || ''))}" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">fact_check</span><span class="hidden sm:inline">Checklist</span></button>`;
       }
 
       if (c.status === 'ARMAZENAGEM') {
@@ -901,6 +944,29 @@ document.addEventListener('DOMContentLoaded', () => {
           window.mostrarFeedback('alerta', 'Capacidade Máxima do Pátio Excedida', `BLOQUEIO DE CAPACIDADE REGULAMENTAR (Regra 2.9): O pátio atingiu o limite operacional máximo de 100 hectares (1.000.000 m² / ${CAPACIDADE_MAXIMA_PATIO_HA} cargas em fluxo ativo)! Não é permitido agendar novas cargas até a liberação de espaço.`);
         }
         return;
+      }
+
+      // Tarefa 8: Carga vinculada a contêiner ou navio em manutenção fica com a movimentação bloqueada
+      if (carga.container) {
+        const contsList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+        const contObj = contsList.find(c => NexusCodigos.chave(c.identificacao || c.id) === NexusCodigos.chave(carga.container));
+        if (contObj && (contObj.estado === 'EM_REFORMA' || contObj.estado === 'EM_MANUTENCAO')) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('alerta', 'Contêiner em Manutenção', `A carga ${idCarga} está alocada no contêiner ${contObj.identificacao}, que está em manutenção/reforma. A movimentação fica bloqueada.`);
+          }
+          return;
+        }
+      }
+
+      if (carga.navio) {
+        const navsList = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+        const navObj = navsList.find(n => (n.nome || '').toLowerCase() === (carga.navio || '').toLowerCase());
+        if (navObj && (navObj.estado_operacional === 'EM_REFORMA' || navObj.estado_operacional === 'EM_MANUTENCAO' || navObj.estado === 'EM_REFORMA' || navObj.estado === 'EM_MANUTENCAO')) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('alerta', 'Navio em Manutenção', `A carga ${idCarga} está vinculada ao navio ${navObj.nome}, que está em manutenção/reforma. A movimentação fica bloqueada.`);
+          }
+          return;
+        }
       }
 
       const idNum = Math.floor(100 + Math.random() * 900);
@@ -1506,8 +1572,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Guindaste Indisponível', `O guindaste ${gnd.identificacao} está em "${gnd.estado}" e não pode executar a tarefa. Escolha um guindaste OPERANTE.`);
       return false;
     }
-    if (!SETORES_PATIO.includes(setorDestino)) {
-      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Setor Inválido', 'Selecione um setor de destino válido do pátio.');
+    const isDestinoContainer = setorDestino.startsWith('Contêiner') || setorDestino.startsWith('Conteiner');
+    if (!SETORES_PATIO.includes(setorDestino) && !isDestinoContainer) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Setor Inválido', 'Selecione um setor de destino válido do pátio ou o contêiner vinculado.');
       return false;
     }
     if (setorDestino === carga.portoDescarga) {
@@ -1586,7 +1653,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!targetCargaMovimentacao || !movimentarModal) return;
     if (movimentarCargaIdLabel) movimentarCargaIdLabel.textContent = targetCargaMovimentacao.id;
     if (movimentarSetorAtualLabel) movimentarSetorAtualLabel.textContent = targetCargaMovimentacao.portoDescarga || '—';
-    if (movimentarSetorSelect) movimentarSetorSelect.value = '';
+
+    if (movimentarSetorSelect) {
+      let htmlOptions = '<option value="">Selecione o setor de destino...</option>' +
+        SETORES_PATIO.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+
+      // Tarefa 11: A opção de movimentar a carga para o contêiner vinculado só aparece se a carga estiver vinculada a um contêiner
+      const contVinculado = targetCargaMovimentacao.container || targetCargaMovimentacao.container_id;
+      if (contVinculado) {
+        const destCont = `Contêiner ${contVinculado}`;
+        htmlOptions += `<option value="${esc(destCont)}">📦 ${esc(destCont)} (Embarque em Contêiner Vinculado)</option>`;
+      }
+
+      movimentarSetorSelect.innerHTML = htmlOptions;
+      movimentarSetorSelect.value = '';
+    }
+
     if (movimentarInstrucaoBox) movimentarInstrucaoBox.classList.add('hidden');
     movimentarModal.classList.remove('hidden');
     renderSelectGuindastesMovimentacao();
