@@ -3,8 +3,13 @@
  *
  * A biblioteca PDF é injetada ({ PDFDocument, StandardFonts, rgb }): na Edge Function vem de
  * `npm:pdf-lib`; nos testes Node, de `pdf-lib`. O conteúdo vem de `secoesDoRelatorio` (relatorio.js).
+ *
+ * Backlog 001 (C15): o cabeçalho traz a data REAL de emissão (relógio do servidor), no fuso de
+ * Brasília — antes o documento não tinha data alguma e a única referência de tempo era o rótulo
+ * fixo da tela. A emissão fica FORA do modelo/hash: o cache por conteúdo continua valendo para o
+ * mesmo dado, e o rodapé segue identificando o conteúdo pelo SHA-256.
  */
-import { secoesDoRelatorio } from './relatorio.js';
+import { formatarDataHora, secoesDoRelatorio } from './relatorio.js';
 
 const A4 = { largura: 595.28, altura: 841.89 };
 const MARGEM = { esquerda: 40, direita: 40, topo: 40, inferior: 64 };
@@ -59,9 +64,11 @@ function quebrar(texto, fonte, tamanho, largura) {
 
 /**
  * Gera o PDF (Uint8Array). `hash` é impresso no rodapé de cada página: conferência do conteúdo.
+ * `opcoes.emitidoEm` (ISO) imprime a data real de emissão no cabeçalho; sem ele, o PDF sai como antes.
  */
-export async function gerarPdfRelatorio(modelo, hash, lib) {
+export async function gerarPdfRelatorio(modelo, hash, lib, opcoes) {
   const { PDFDocument, StandardFonts, rgb } = lib;
+  const emitidoEm = opcoes && opcoes.emitidoEm ? String(opcoes.emitidoEm) : '';
   const doc = await PDFDocument.create({ updateMetadata: false });
   doc.setTitle(`Relatório operacional de carga ${modelo.carga.id}`);
   doc.setAuthor('NexusPort — Terminal STS-01');
@@ -87,6 +94,16 @@ export async function gerarPdfRelatorio(modelo, hash, lib) {
       pagina.drawText('Relatório operacional integrado de carga (formato A4)', {
         x: MARGEM.esquerda, y: A4.altura - 46, size: 9.5, font: regular, color: cor(COR.branco)
       });
+      if (emitidoEm) {
+        const textoEmissao = sanitizar(`Emitido em ${formatarDataHora(emitidoEm)} (Brasília)`, regular);
+        pagina.drawText(textoEmissao, {
+          x: A4.largura - MARGEM.direita - regular.widthOfTextAtSize(textoEmissao, 8),
+          y: A4.altura - 28,
+          size: 8,
+          font: regular,
+          color: cor(COR.branco)
+        });
+      }
       y = A4.altura - 62 - 26;
     } else {
       pagina.drawText(sanitizar(`Relatório operacional de carga · ${modelo.carga.id}`, regular), {

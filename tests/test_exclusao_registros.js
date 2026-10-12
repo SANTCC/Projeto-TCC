@@ -4,10 +4,12 @@
  *
  * Usa embarcacoes.html + js/pages/embarcacoes.js em jsdom com um banco Supabase simulado
  * (tests/fake-supabase-db.js). Verifica:
- *   - a exclusão só altera a interface depois que o banco confirma;
+ *   - a exclusão só altera a interface depois que o banco confirma a linha removida
+ *     (.select('id')); um DELETE aceito sem afetar linha nenhuma não é tratado como sucesso;
  *   - falha de leitura ou de DELETE no banco não remove nada da interface;
  *   - histórico de manutenção ligado ao registro bloqueia a exclusão (sem cascata);
  *   - cargas não são apagadas ao excluir contêiner/navio (apenas desvinculadas pelo banco);
+ *   - registro que não está na tela avisa o operador (não falha em silêncio);
  *   - berços do navio excluído são liberados no banco;
  *   - a tabela é atualizada sem recarregar a página.
  *
@@ -248,6 +250,78 @@ async function cenarioGuindasteBloqueado() {
   check('falha de DELETE: erro informado', ultimo(w2).tipo === 'erro', JSON.stringify(ultimo(w2)));
 }
 
+async function cenarioDeleteSemLinhaAfetada() {
+  log('\n11. DELETE aceito pelo banco sem excluir linha (RLS/registro já removido): nada muda e o usuário é avisado');
+
+  // Navio: o banco responde sem erro, mas nenhuma linha é removida.
+  const banco = bancoBase({ deleteSemEfeito: ['navios'] });
+  const { w } = await carregar(banco);
+  const antes = linhas(w, 'embarcacoesGpsTableBody');
+  await w.excluirNavio('IMO9999999', { confirmado: true });
+  await aguardar(50);
+  check('navio segue no banco', banco.tabelas.navios.some(n => n.numero_imo === 'IMO9999999'));
+  check('tabela não mudou', linhas(w, 'embarcacoesGpsTableBody') === antes);
+  check('berço continua ocupado', banco.tabelas.bercos[0].estado === 'OCUPADO');
+  check('cache local preservado (não finge que excluiu)', JSON.parse(w.localStorage.getItem('nexus_navios_list') || '[]').some(n => n.imo === 'IMO9999999'));
+  check('erro informado com o motivo do banco', ultimo(w).tipo === 'erro' && /nenhuma linha/.test(ultimo(w).msg || ''), JSON.stringify(ultimo(w)));
+  check('nenhum feedback de sucesso', !(w.__feedbacks || []).some(f => f.tipo === 'sucesso'));
+
+  // Contêiner
+  const banco2 = bancoBase({ deleteSemEfeito: ['containers'] });
+  const { w: w2 } = await carregar(banco2);
+  const antes2 = linhas(w2, 'containersTableBody');
+  await w2.excluirContainer('CONT-2', { confirmado: true });
+  await aguardar(50);
+  check('contêiner segue no banco', banco2.tabelas.containers.some(c => c.numero_identificacao === 'CONT-2'));
+  check('tabela de contêineres não mudou', linhas(w2, 'containersTableBody') === antes2);
+  check('erro informado para o contêiner', ultimo(w2).tipo === 'erro' && /nenhuma linha/.test(ultimo(w2).msg || ''), JSON.stringify(ultimo(w2)));
+
+  // Guindaste
+  const banco3 = bancoBase({ deleteSemEfeito: ['guindastes'] });
+  const { w: w3 } = await carregar(banco3);
+  const antes3 = linhas(w3, 'guindastesTableBody');
+  await w3.excluirGuindaste('GND-1', { confirmado: true });
+  await aguardar(50);
+  check('guindaste segue no banco', banco3.tabelas.guindastes.some(g => g.numero_identificacao === 'GND-1'));
+  check('tabela de guindastes não mudou', linhas(w3, 'guindastesTableBody') === antes3);
+  check('erro informado para o guindaste', ultimo(w3).tipo === 'erro' && /nenhuma linha/.test(ultimo(w3).msg || ''), JSON.stringify(ultimo(w3)));
+}
+
+async function cenarioRegistroNaoEncontradoNaTela() {
+  log('\n12. Registro fora da tela: o operador recebe o motivo (nunca silêncio)');
+  const banco = bancoBase({ falharOp: { navios: ['delete', 'select'] } });
+  const { w } = await carregar(banco);
+  const antes = (w.__feedbacks || []).length;
+  await w.excluirNavio('IMO-0000000', { confirmado: true });
+  await aguardar(30);
+  check('navio inexistente na tela avisa o operador', (w.__feedbacks || []).length === antes + 1 && ultimo(w).titulo === 'Navio Não Encontrado', JSON.stringify(ultimo(w)));
+
+  await w.excluirContainer('CONT-NAO-EXISTE', { confirmado: true });
+  await aguardar(30);
+  check('contêiner inexistente na tela avisa o operador', ultimo(w).titulo === 'Contêiner Não Encontrado', JSON.stringify(ultimo(w)));
+
+  await w.excluirGuindaste('GND-NAO-EXISTE', { confirmado: true });
+  await aguardar(30);
+  check('guindaste inexistente na tela avisa o operador', ultimo(w).titulo === 'Guindaste Não Encontrado', JSON.stringify(ultimo(w)));
+
+  // Mesma classe de defeito nas demais ações do operador: nenhuma some em silêncio.
+  await w.liberarNavioPeloDiretor('IMO-0000000', { confirmado: true });
+  await aguardar(30);
+  check('liberar saída de navio fora da tela avisa o operador', ultimo(w).titulo === 'Navio Não Encontrado', JSON.stringify(ultimo(w)));
+
+  await w.autorizarRetornoNavio('IMO-0000000', { confirmado: true });
+  await aguardar(30);
+  check('autorizar retorno de navio fora da tela avisa o operador', ultimo(w).titulo === 'Navio Não Encontrado', JSON.stringify(ultimo(w)));
+
+  await w.vincularNavioABerco('IMO-0000000');
+  await aguardar(30);
+  check('vincular berço de navio fora da tela avisa o operador', ultimo(w).titulo === 'Navio Não Encontrado', JSON.stringify(ultimo(w)));
+
+  await w.vincularContainerANavio('CONT-NAO-EXISTE');
+  await aguardar(30);
+  check('vincular navio de contêiner fora da tela avisa o operador', ultimo(w).titulo === 'Contêiner Não Encontrado', JSON.stringify(ultimo(w)));
+}
+
 async function main() {
   await cenarioNavio();
   await cenarioNavioCargaEmTransito();
@@ -260,6 +334,8 @@ async function main() {
   await cenarioContainerBloqueado();
   await cenarioGuindaste();
   await cenarioGuindasteBloqueado();
+  await cenarioDeleteSemLinhaAfetada();
+  await cenarioRegistroNaoEncontradoNaTela();
   janelas.forEach(j => { try { j.w.close(); } catch (e) { /* já fechada */ } });
   process.exit(resumo().falhas > 0 ? 1 : 0);
 }

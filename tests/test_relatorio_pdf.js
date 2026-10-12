@@ -112,6 +112,38 @@ function criarClienteFalso(cenario) {
   return cliente;
 }
 
+/**
+ * Texto realmente desenhado no PDF (Backlog 001, C15): o pdf-lib grava os fluxos de conteúdo
+ * comprimidos (Flate) e cada trecho como string hexadecimal — aqui os dois são desfeitos para
+ * conferir o que o documento mostra. Sem isso, só metadados e contagem de páginas são visíveis.
+ */
+function textoDoPdf(bytes) {
+  const zlib = require('zlib');
+  const buf = Buffer.from(bytes);
+  const latin = buf.toString('latin1');
+  const trechos = [];
+  const reStream = /stream\r?\n/g;
+  let m;
+  while ((m = reStream.exec(latin)) !== null) {
+    const fim = latin.indexOf('endstream', m.index);
+    if (fim < 0) break;
+    let conteudo = '';
+    try {
+      conteudo = zlib.inflateSync(buf.subarray(m.index + m[0].length, fim)).toString('latin1');
+    } catch (e) {
+      continue; // fluxo binário (fonte/metadados): não é texto de página
+    }
+    if (conteudo.indexOf('BT') < 0 || (conteudo.indexOf('Tj') < 0 && conteudo.indexOf('TJ') < 0)) continue;
+    Array.from(conteudo.matchAll(/<([0-9A-Fa-f\s]+)>/g)).forEach((h) => {
+      trechos.push(Buffer.from(h[1].replace(/\s+/g, ''), 'hex').toString('latin1'));
+    });
+    Array.from(conteudo.matchAll(/\(((?:\\.|[^()\\])*)\)/g)).forEach((t) => {
+      trechos.push(t[1].replace(/\\([()\\])/g, '$1'));
+    });
+  }
+  return trechos.join('\n');
+}
+
 function criarRequisicao(corpo, metodo) {
   return new Request('https://projeto.supabase.co/functions/v1/relatorio-pdf', {
     method: metodo || 'POST',
@@ -250,6 +282,17 @@ async function testarPdf() {
     const docEstranho = await pdfLib.PDFDocument.load(bytesEstranho);
     check('PDF com texto estranho carrega', docEstranho.getPageCount() >= 1);
   }
+
+  // Backlog 001 (C15): a data REAL de emissão vai no cabeçalho, fora do conteúdo auditado.
+  const bytesComData = await gerarPdfRelatorio(modelo, hash, pdfLib, { emitidoEm: '2026-10-11T20:32:00Z' });
+  const textoComData = textoDoPdf(bytesComData);
+  check('cabeçalho traz a data real de emissão no fuso de Brasília',
+    textoComData.includes('Emitido em 11/10/2026 17:32'), textoComData.split('\n').filter((l) => /Emitido/.test(l))[0] || '(sem linha de emissão)');
+  check('a data de emissão não entra no conteúdo auditado (hash e metadados iguais)',
+    (await pdfLib.PDFDocument.load(bytesComData)).getKeywords().includes(hash));
+  check('sem a opção de emissão o PDF continua igual ao anterior', !/Emitido em/.test(textoDoPdf(bytes)));
+  check('relógios diferentes: mesmo dado, mesmo hash (cache por conteúdo preservado)',
+    (await relatorio.hashModelo(relatorio.montarModelo(linhaCarga()))) === hash);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,6 +371,9 @@ async function testarHandler() {
   const hashCabecalho = primeira.headers.get('x-relatorio-hash');
   check('cabeçalho traz o hash do conteúdo', /^[0-9a-f]{64}$/.test(hashCabecalho || ''));
   check('PDF devolvido é válido', Buffer.from(bytes1.slice(0, 5)).toString() === '%PDF-');
+  check('PDF da função sai com a data REAL de emissão (relógio do servidor)',
+    /Emitido em \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/.test(textoDoPdf(bytes1)),
+    textoDoPdf(bytes1).split('\n').filter((l) => /Emitido/.test(l))[0] || '(sem linha de emissão)');
   check('nome do arquivo usa o código da carga', (primeira.headers.get('content-disposition') || '').includes(`Relatorio_A4_${ID_CARGA}.pdf`));
   check('arquivo gravado com o hash no bucket relatorios-pdf',
     cliente.registro.uploads.length === 1 && cliente.registro.uploads[0].caminho === `${hashCabecalho}.pdf`

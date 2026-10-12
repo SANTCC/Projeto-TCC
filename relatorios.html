@@ -70,14 +70,17 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="flex flex-col gap-1">
               <label class="block text-xs font-bold uppercase text-slate-600">Período de Referência</label>
+              <!-- Backlog 001 (C15): sem data fixa no HTML — js/periodo-referencia.js escreve
+                   aqui os rótulos com a data REAL no carregamento da página. -->
               <select id="relatorioPeriodoSelect" aria-label="Período do relatório" class="w-full px-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-bold">
                 <option value="HOJE">Hoje</option>
                 <option value="7D">Últimos 7 dias</option>
                 <option value="30D" selected>Últimos 30 dias</option>
                 <option value="MENSAL">Este mês</option>
-                <option value="TRIMESTRAL">3º Trimestre de 2026</option>
-                <option value="ANUAL">Ano Atual (2026)</option>
+                <option value="TRIMESTRAL">Trimestre atual</option>
+                <option value="ANUAL">Ano atual</option>
               </select>
+              <p id="relatorioPeriodoIntervalo" class="text-[11px] font-mono text-slate-600 dark:text-slate-400" role="status" aria-live="polite">Período aplicado: --</p>
               <!-- Backlog 3 (7g): atalhos rápidos de período -->
               <div id="relatorioPeriodoChips" class="flex flex-wrap items-center gap-1.5 mt-1.5" role="group" aria-label="Atalhos de período">
                 <button type="button" data-periodo="HOJE" aria-pressed="false" class="periodo-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-nexus-border dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">Hoje</button>
@@ -196,7 +199,7 @@
               </button>
             </div>
           </div>
-          <p class="text-[11px] text-slate-600 dark:text-slate-500 -mt-2">O <strong>Período de Referência</strong> (topo da página) também filtra os gráficos. Os filtros ativos aparecem no rodapé do painel.</p>
+          <p class="text-[11px] text-slate-600 dark:text-slate-500 -mt-2">O <strong>Período de Referência</strong> (topo da página) recorta a tabela de produtividade <strong>e</strong> os gráficos pelas datas reais de cadastro/registro — o intervalo em vigor aparece logo abaixo do seletor. Os demais filtros ativos aparecem no rodapé do painel.</p>
 
           <div id="relatoriosChartsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
 
@@ -258,6 +261,7 @@
   <script src="js/data-repository.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
+  <script src="js/periodo-referencia.js"></script>
   <script src="js/pages/charts.js"></script>
   <script src="js/pages/relatorios.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->

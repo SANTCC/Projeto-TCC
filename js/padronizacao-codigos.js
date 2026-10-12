@@ -7,10 +7,12 @@
  *   guindaste  ABC-123-DEF    3 letras, 3 números, 3 letras     (guindaste)
  *   matricula  MAT-2001       prefixo MAT + 4 números           (funcionário)
  *   carga      CRG-2026-303   prefixo CRG + ano + sequência     (pesquisa de cargas)
+ *   codigo     NX-2001-SP     prefixo NX + números da matrícula + sufixo (acesso)
  *
  * Princípios:
  *   - Formatação durante a digitação: o hífen é inserido automaticamente.
  *   - Colagem de código completo ou sem hífen é aceita e normalizada.
+ *   - Só números ganham o prefixo (IMO-1234567, MAT-2001): é o que o operador digita.
  *   - Valores fora do padrão NÃO são reescritos: a formatação devolve o texto como foi
  *     digitado e a validação recusa (para novos cadastros). Registros existentes não são alterados.
  *   - Comparação (duplicidade/busca) usa a chave: sem hífen, sem espaços e em maiúsculas.
@@ -92,15 +94,55 @@
     if (/^M(A(T)?)?$/.test(up)) return up;
     const m = up.match(/^MAT(\d+)$/);
     if (m) return `MAT-${m[1]}`;
+    // Número de 4 dígitos é o padrão sem o prefixo: o operador digita "2001" e o campo
+    // passa a mostrar "MAT-2001" (mesma ideia do IMO com só números). Matrícula legada
+    // de outro tamanho (ex.: 888001) NÃO é reescrita — princípio deste módulo.
+    if (/^\d{4}$/.test(up)) return `MAT-${up}`;
     return String(bruto).trim().toUpperCase();
   }
 
   function validarMatricula(bruto) {
     const valor = formatarMatricula(bruto);
+    const cru = alnum(bruto);
     const padrao = /^MAT-\d{4}$/.test(valor);
-    const legado = /^(MAT-)?\d+$/.test(valor);                  // matrícula legada já cadastrada
+    // Legado: matrícula antiga gravada sem o prefixo (ex.: 888001) continua aceita.
+    const legado = !padrao && /^(MAT)?\d+$/.test(cru);
     const ok = padrao || legado;
     return { ok, valor, legado: ok && !padrao, erro: ok ? null : 'A matrícula deve seguir o formato MAT-2001 (prefixo MAT, hífen e 4 números).' };
+  }
+
+  /**
+   * Chave de UNICIDADE da matrícula (Backlog C26, F1): "MAT-2001", "mat2001" e a matrícula
+   * legada "2001" identificam a MESMA pessoa — sem isso um cadastro novo podia duplicar
+   * alguém gravado sem o prefixo.
+   */
+  function chaveMatricula(valor) {
+    const up = alnum(valor);
+    const m = /^MAT(\d+)$/.exec(up);
+    return m ? m[1] : up;
+  }
+
+  /**
+   * Formas em que a matrícula pode estar GRAVADA no banco (novas com prefixo, legadas sem):
+   * usadas na busca e na conferência de duplicidade. Devolve [] quando o texto não é matrícula
+   * (nome, CPF longo) — assim quem consulta nunca monta filtro com texto livre do operador.
+   */
+  function variacoesMatricula(valor) {
+    const up = alnum(valor);
+    if (up === '') return [];
+    const m = /^MAT(\d+)$/.exec(up);
+    if (m) return [`MAT-${m[1]}`, m[1]];
+    if (/^\d+$/.test(up)) return [up, `MAT-${up}`];
+    return [];
+  }
+
+  /** Código individual de acesso a partir da matrícula: NX-2001-SP (ou sufixo informado). */
+  function codigoIndividual(matricula, sufixo) {
+    const digitos = chaveMatricula(matricula);
+    if (!digitos) return '';
+    const fim = String(sufixo === undefined || sufixo === null || sufixo === '' ? 'SP' : sufixo)
+      .toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return fim ? `NX-${digitos}-${fim}` : `NX-${digitos}`;
   }
 
   // ---------- Código de carga (pesquisa): CRG-2026-303 ----------
@@ -138,7 +180,8 @@
     formatarImo, validarImo,
     formatarConteiner, validarConteiner,
     formatarGuindaste, validarGuindaste,
-    formatarMatricula, validarMatricula,
+    formatarMatricula, validarMatricula, chaveMatricula, variacoesMatricula,
+    codigoIndividual,
     formatarCarga,
     vincularFormatacao
   };

@@ -174,7 +174,10 @@
           return { ok: false, bloqueio: true, erro: 'o funcionário participa de ' + delegacoes + ' delegação(ões) de supervisão. Encerre as delegações antes de excluí-lo.' };
         }
 
-        const { error } = await client.from('funcionarios').delete().eq('id', id);
+        // .select() é obrigatório: sem ele o PostgREST não devolve as linhas removidas e
+        // um DELETE que não afeta linha nenhuma (RLS, registro já removido) passaria como
+        // sucesso — a tela diria "excluído" com o funcionário ainda no banco.
+        const { data, error } = await client.from('funcionarios').delete().eq('id', id).select('id');
         if (error) {
           // Vínculos RESTRICT (agendamentos, inspeções, movimentações, logs) impedem a exclusão no banco.
           const restrito = error.code === '23503' || /foreign key|violates/i.test(String(error.message || ''));
@@ -185,6 +188,11 @@
               ? 'o funcionário possui registros vinculados (agendamentos, inspeções, movimentações ou logs) e não pode ser excluído.'
               : 'o banco de dados recusou a exclusão (' + (error.message || 'erro') + ').'
           };
+        }
+        if (!Array.isArray(data) || data.length === 0) {
+          // Sem confirmação de linha removida o cache local NÃO é limpo: o funcionário
+          // continua aparecendo e o operador é informado de que nada foi excluído.
+          return { ok: false, erro: 'o banco de dados não confirmou nenhuma linha excluída (o funcionário pode ter sido removido por outro operador ou a exclusão não é permitida).' };
         }
         this._removerFuncionarioLocal(matricula);
         return { ok: true, removido: 1 };
@@ -245,6 +253,9 @@
             const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0
               ? c.estivador_cargas[0]
               : null;
+            // A1: carga ENTREGUE já desembarcou — o vínculo com o navio não é projetado
+            // na leitura (as páginas de Cargas e Embarcações reparam cargas.navio_id por id).
+            const entregue = String(c.status_fluxo || '').toUpperCase() === 'ENTREGUE';
             return {
               id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
               tipo: c.natureza || 'Carga Geral',
@@ -256,8 +267,8 @@
               destino: c.destino || 'Destino Geral',
               status: c.status_fluxo || 'AGENDAMENTO',
               container: c.container_id || '',
-              navio: (c.navios && c.navios.nome) ? c.navios.nome : '',
-              navioId: c.navio_id || null,
+              navio: (!entregue && c.navios && c.navios.nome) ? c.navios.nome : '',
+              navioId: entregue ? null : (c.navio_id || null),
               qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
               motivoCancelamento: c.motivo_recusa || null,
               rawDbId: c.id,
@@ -431,8 +442,9 @@
               imo: n.numero_imo || n.imo,
               estado: n.estado_operacional || n.estado || 'OPERANTE',
               localizacao: n.localizacao || 'DENTRO_DO_PORTO',
-              origem: n.porto_origem || n.origem || 'Porto de Santos',
-              destino: n.porto_destino || n.destino || 'Destino',
+              // A2: nada de origem presumida (o porto de origem é sempre escolhido).
+              origem: n.porto_origem || n.origem || '',
+              destino: n.porto_destino || n.destino || '',
               operacoes: n.quantidade_cargas_realizadas || n.operacoes || 0,
               data_saida: n.data_saida || null
             }));
@@ -658,6 +670,76 @@
       };
     },
 
+    // -----------------------------------------------------------------------
+    // Ocupação do pátio (G1) — FONTE ÚNICA do cálculo
+    // -----------------------------------------------------------------------
+    //
+    // Antes existiam DOIS números para o mesmo pátio:
+    //   • o card "Ocupação do Pátio" do painel contava só status_fluxo === 'ARMAZENAGEM';
+    //   • o bloqueio de capacidade do agendamento (Regra 2.9) contava AGENDAMENTO +
+    //     RECEBIMENTO_INSPECAO + ARMAZENAGEM + PRONTA_PARA_ENTREGA.
+    // Uma carga movimentada para o contêiner (C2) liberava o painel mas continuava
+    // segurando vaga no bloqueio. Agora as duas telas e o agente usam o cálculo abaixo.
+
+    /** Capacidade regulamentar do pátio (Regra 2.9): 100 posições ativas (100 ha). */
+    CAPACIDADE_PATIO: 100,
+
+    /**
+     * Status em que a carga OCUPA uma posição física do pátio:
+     *   • RECEBIMENTO_INSPECAO — a carga já está no pátio, aguardando inspeção;
+     *   • ARMAZENAGEM — está armazenada no pátio.
+     * NÃO ocupam: AGENDAMENTO (ainda não chegou), PRONTA_PARA_ENTREGA (C2: já foi
+     * movimentada para o contêiner vinculado e liberou a posição), SAIDA, EM_TRANSITO,
+     * ENTREGUE, CANCELADA e RECUSADA.
+     */
+    STATUS_OCUPA_PATIO: ['RECEBIMENTO_INSPECAO', 'ARMAZENAGEM'],
+
+    /** Uma carga ocupa o pátio? Aceita a linha do banco (`status_fluxo`) ou a da página (`status`). */
+    statusOcupaPatio: function (cargaOuStatus) {
+      const bruto = (cargaOuStatus && typeof cargaOuStatus === 'object')
+        ? (cargaOuStatus.status || cargaOuStatus.status_fluxo)
+        : cargaOuStatus;
+      return this.STATUS_OCUPA_PATIO.indexOf(String(bruto || '').toUpperCase()) !== -1;
+    },
+
+    /**
+     * Ocupação do pátio a partir de uma lista de cargas — usada pelo painel (card e
+     * detalhamento), pelo agente (webmcp-dashboard) e pelo bloqueio de capacidade do
+     * agendamento (Regra 2.9), para que os três números sejam sempre o mesmo.
+     * Aceita tanto a linha do banco (status_fluxo/qr_code_url/porto_descarga) quanto a
+     * linha já mapeada pela página (status/qrCode/portoDescarga) e devolve, para cada
+     * carga que ocupa posição, sempre o mesmo resumo: { id, codigo, status, setor, bruto }.
+     */
+    calcularOcupacaoPatio: function (cargas) {
+      const lista = (Array.isArray(cargas) ? cargas : [])
+        .filter((c) => this.statusOcupaPatio(c))
+        .map((c) => {
+          const qr = c.qr_code_url || c.qrCode || c.codigo_qr || '';
+          const setor = c.portoDescarga || c.porto_descarga || 'Setor não informado';
+          return {
+            id: c.id || c.rawDbId || null,
+            codigo: qr ? String(qr).replace(/^QR-/, '') : (c.id || c.rawDbId || '—'),
+            status: String(c.status || c.status_fluxo || '').toUpperCase(),
+            setor,
+            bruto: c
+          };
+        });
+      const porSetor = {};
+      lista.forEach((item) => {
+        porSetor[item.setor] = (porSetor[item.setor] || 0) + 1;
+      });
+      const capacidade = this.CAPACIDADE_PATIO;
+      const ocupados = lista.length;
+      return {
+        capacidade,
+        ocupados,
+        livres: Math.max(0, capacidade - ocupados),
+        taxa: Math.min(100, Math.round((ocupados / capacidade) * 100)),
+        porSetor,
+        lista
+      };
+    },
+
     /**
      * BUSCAR INDICADORES OPERACIONAIS CONSOLIDADOS (Função Única - Item 1.1)
      */
@@ -690,8 +772,9 @@
       // Um equipamento conta uma única vez (ver derivarEquipamentosEmManutencao)
       const emManutencao = this.derivarEquipamentosEmManutencao(navios, osList);
 
-      const CAPACIDADE_MAXIMA_PATIO = 100;
-      const taxaOcupacao = Math.min(100, Math.round((cargasArmazenagem.length / CAPACIDADE_MAXIMA_PATIO) * 100));
+      // G1: a ocupação do pátio sai do MESMO cálculo usado pelo bloqueio de capacidade do
+      // agendamento (Regra 2.9) e pela mensagem do C2 em Cargas — um número, três telas.
+      const ocupacaoPatio = this.calcularOcupacaoPatio(cargas);
 
       return {
         recusadas: recusadasObj,
@@ -704,11 +787,7 @@
           ordens: emManutencao.ordens,
           total: emManutencao.total
         },
-        ocupacaoPatio: {
-          capacidade: CAPACIDADE_MAXIMA_PATIO,
-          ocupados: cargasArmazenagem.length,
-          taxa: taxaOcupacao
-        }
+        ocupacaoPatio
       };
     },
 

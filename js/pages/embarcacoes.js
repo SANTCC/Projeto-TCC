@@ -13,6 +13,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
   const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
 
+  // ------------------------------------------------------------------
+  // Permissões por cargo (RF 1 / js/auth-guard.js → ACTION_PERMISSIONS)
+  //
+  // A tela é aberta também pelo Planejador de Pátio e Navios, cuja atribuição
+  // é REGISTRAR dados operacionais dos navios/contêineres — não cadastrar nem
+  // excluir. Cadastro é do Inspetor (CADASTRAR_NAVIO/CONTAINER/GUINDASTE) e a
+  // liberação de saída é do Supervisor (LIBERAR_NAVIO); a matriz de ações é a
+  // fonte única, a mesma consultada pelo agente WebMCP (que já recusa a
+  // exclusão a cargos fora dela com PERMISSAO_NEGADA).
+  // ------------------------------------------------------------------
+  function temPermissao(acao) {
+    return Boolean(window.NexusAuth && typeof window.NexusAuth.hasPermission === 'function' && window.NexusAuth.hasPermission(acao));
+  }
+  const podeExcluirEmbarcacao = ['CADASTRAR_NAVIO', 'CADASTRAR_CONTAINER', 'CADASTRAR_GUINDASTE', 'LIBERAR_NAVIO'].some(temPermissao);
+  const podeCadastrarRotaMaritima = temPermissao('CADASTRAR_ROTA');
+  // Mensagens de recusa (mesmo texto para a tela e para o agente, se houver).
+  const AVISO_ACESSO_RESTRITO = 'Excluir embarcações é ação do Inspetor, do Supervisor e da Direção (Spec.md RF 1).';
+  const AVISO_ROTA_RESTRITA = 'Cadastrar rota marítima é ação do Supervisor e da Direção (Spec.md RF 1.6).';
+
   const gpsTableBody = document.getElementById('embarcacoesGpsTableBody');
   const toggleNavioBtn = document.getElementById('toggleNavioFormBtn');
   const navioForm = document.getElementById('navioForm');
@@ -433,10 +452,312 @@ document.addEventListener('DOMContentLoaded', () => {
     return /santos/i.test(String(nomePorto || ''));
   }
 
+  // ------------------------------------------------------------------
+  // A2 (Backlog NexusPort) — rota marítima da PRÓXIMA viagem
+  //
+  // O destino do navio não é fixo: cada viagem usa uma rota de `rotas_maritimas`
+  // do Supabase, com origem e destino ESCOLHIDOS pelo operador no botão "Rota".
+  // Nada é presumido — o sistema nunca assume que a origem é o porto onde o navio
+  // está sem que essa escolha tenha sido feita (por isso o trecho já concluído,
+  // ex.: Paranaguá ➔ Santos, não vale como próxima viagem de um navio em Santos).
+  // ------------------------------------------------------------------
+
+  /** Mesmo porto, tolerando variações de grafia do Porto de Santos. */
+  function mesmaReferenciaPorto(a, b) {
+    const x = String(a || '').trim().toLowerCase();
+    const y = String(b || '').trim().toLowerCase();
+    if (!x || !y) return false;
+    return x === y || (ehPortoSantos(x) && ehPortoSantos(y));
+  }
+
+  /** Porto onde a embarcação está agora (o terminal STS-01 fica no Porto de Santos). */
+  function portoAtualDoNavio(navio) {
+    if (!navio) return 'Porto de Santos';
+    if (navio.localizacao === 'NO_PORTO_DE_DESTINO') return String(navio.destino || '').trim() || 'Porto de destino';
+    if (navio.localizacao === 'DENTRO_DO_PORTO') {
+      return ehPortoSantos(navio.origem) ? String(navio.origem).trim() : 'Porto de Santos';
+    }
+    // Em viagem: o último porto conhecido é o de saída da viagem atual.
+    return String(navio.origem || '').trim();
+  }
+
+  /**
+   * A2: a PRÓXIMA viagem está definida? Exige origem escolhida igual ao porto onde o
+   * navio está, destino diferente dele e a rota marítima registrada que a saída exige
+   * (RN 9). Um navio em trânsito cumpre a viagem atual: não há próxima rota em edição.
+   */
+  function proximaRotaDefinida(navio) {
+    if (!navio || navio.localizacao === 'FORA_DO_PORTO') return false;
+    const origem = String(navio.origem || '').trim();
+    const destino = String(navio.destino || '').trim();
+    const portoAtual = portoAtualDoNavio(navio);
+    if (!origem || !destino || !portoAtual) return false;
+    if (!mesmaReferenciaPorto(origem, portoAtual)) return false;
+    if (mesmaReferenciaPorto(destino, portoAtual)) return false;
+    return !!rotaEntrePortos(origem, destino);
+  }
+
+  /** Portos distintos das rotas cadastradas — opções do select de origem (A2). */
+  function portosDasRotas() {
+    const porChave = new Map();
+    (Array.isArray(rotasMaritimasList) ? rotasMaritimasList : []).forEach((r) => {
+      [r && r.origem, r && r.destino].forEach((p) => {
+        const nome = String(p || '').trim();
+        if (nome) porChave.set(nome.toLowerCase(), nome);
+      });
+    });
+    return Array.from(porChave.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }
+
+  /**
+   * Destinos com rota cadastrada a partir do porto de origem escolhido (nos dois
+   * sentidos: a RN 9 usa a mesma distância na ida e na volta) — select de destino (A2).
+   */
+  function destinosParaPortoDeOrigem(origem) {
+    const porChave = new Map();
+    (Array.isArray(rotasMaritimasList) ? rotasMaritimasList : []).forEach((r) => {
+      const o = String((r && r.origem) || '').trim();
+      const d = String((r && r.destino) || '').trim();
+      if (!o || !d) return;
+      if (mesmaReferenciaPorto(o, origem) && !mesmaReferenciaPorto(d, origem)) porChave.set(d.toLowerCase(), d);
+      else if (mesmaReferenciaPorto(d, origem) && !mesmaReferenciaPorto(o, origem)) porChave.set(o.toLowerCase(), o);
+    });
+    return Array.from(porChave.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }
+
   function distanciaDoNavio(navio) {
     const km = parseFloat(navio && navio.distancia);
     if (km > 0) return km;
     return distanciaDaRota(navio && navio.origem, navio && navio.destino);
+  }
+
+  // ======================================================================
+  // A1 (Backlog NexusPort) — carga entregue NÃO permanece vinculada ao navio
+  //
+  // Ao chegar ao porto de destino, a carga é ENTREGUE (status_fluxo) e
+  // DESVINCULADA da embarcação (cargas.navio_id = null): o navio volta livre
+  // para o Porto de Santos, sem cargas de viagens anteriores.
+  //
+  // Toda gravação no banco é feita POR ID DE CARGA — nunca por status — para
+  // não atingir cargas de outras embarcações.
+  // ======================================================================
+  const CARGA_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const STATUS_CARGA_TERMINAL = ['ENTREGUE', 'CANCELADA', 'RECUSADA'];
+
+  /** Vínculo da carga com o navio: pelo id (preferencial) ou pelo nome (legado). */
+  function cargaVinculadaAoNavio(carga, navio) {
+    const navioIdCarga = carga.navioId || carga.navio_id;
+    if (navioIdCarga && navio.id) return String(navioIdCarga) === String(navio.id);
+    const nomeNavio = String(navio && navio.nome || '').trim().toLowerCase();
+    return !!nomeNavio && String(carga.navio || '').trim().toLowerCase() === nomeNavio;
+  }
+
+  /** Cache local de cargas (nexus_cargas_fluxo); nunca lança. */
+  function lerCargasLocais() {
+    try {
+      const lista = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      return Array.isArray(lista) ? lista : [];
+    } catch (error) {
+      console.warn('[NexusPort] Cache local de cargas inválido:', error);
+      return [];
+    }
+  }
+
+  function salvarCargasLocais(cargas) {
+    localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
+  }
+
+  /**
+   * A1 (cache local): entrega e desvincula as cargas dos navios que já chegaram
+   * ao porto de destino. Cargas canceladas/recusadas apenas perdem o vínculo.
+   * Idempotente: depois da primeira passagem não há mais vínculo a remover.
+   * Retorna true quando o cache local foi alterado.
+   */
+  function entregarCargasNoCacheLocal(naviosNoDestino) {
+    const navios = Array.isArray(naviosNoDestino) ? naviosNoDestino : [];
+    if (navios.length === 0) return false;
+    const cargas = lerCargasLocais();
+    let alterou = false;
+    cargas.forEach((c) => {
+      if (!c || (!c.navio && !c.navioId && !c.navio_id)) return;
+      const navio = navios.find((n) => cargaVinculadaAoNavio(c, n));
+      if (!navio) return;
+      const statusAtual = String(c.status || '').toUpperCase();
+      // Cancelada/recusada não vira entregue: apenas deixa de estar no navio.
+      if (statusAtual !== 'CANCELADA' && statusAtual !== 'RECUSADA' && statusAtual !== 'ENTREGUE') {
+        c.status = 'ENTREGUE';
+      }
+      c.navio = '';
+      c.navio_nome = null;
+      c.navioId = null;
+      c.navio_id = null;
+      alterou = true;
+    });
+    if (alterou) salvarCargasLocais(cargas);
+    return alterou;
+  }
+
+  /**
+   * A1: ids (de banco) das cargas que o cache local aponta como vinculadas ao navio.
+   * Precisa ser lido ANTES de limpar o vínculo no cache, senão a informação se perde.
+   */
+  function idsDeCargasVinculadasNoCache(navio) {
+    const idsEntrega = [];
+    const idsDesvinculo = [];
+    lerCargasLocais().forEach((c) => {
+      if (!c || !cargaVinculadaAoNavio(c, navio)) return;
+      const idBanco = String(c.rawDbId || '');
+      if (!CARGA_UUID_RE.test(idBanco)) return;
+      if (['CANCELADA', 'RECUSADA'].includes(String(c.status || '').toUpperCase())) idsDesvinculo.push(idBanco);
+      else idsEntrega.push(idBanco);
+    });
+    return { idsEntrega, idsDesvinculo };
+  }
+
+  /**
+   * A1 (banco): grava a entrega + a desvinculação das cargas de um navio que
+   * chegou ao porto de destino. Une o que o cache local apontava como vinculado
+   * (snapshot por id) ao que o próprio banco ainda registra em cargas.navio_id
+   * (fonte de verdade — inclusive cargas que não estão no cache desta máquina).
+   */
+  async function entregarCargasDoNavioNoBanco(navio, idsDoCache) {
+    if (!window.nexusSupabase || !navio) return 0;
+    const idsEntrega = new Set((idsDoCache && idsDoCache.idsEntrega) || []);
+    const idsDesvinculo = new Set((idsDoCache && idsDoCache.idsDesvinculo) || []);
+    const terminal = (status) => ['CANCELADA', 'RECUSADA'].includes(String(status || '').toUpperCase());
+
+    if (navio.id) {
+      try {
+        const { data, error } = await window.nexusSupabase
+          .from('cargas')
+          .select('id, navio_id, status_fluxo')
+          .eq('navio_id', navio.id);
+        if (error) {
+          console.warn('[NexusPort] Não foi possível consultar as cargas do navio no banco:', error.message || error);
+        } else {
+          (Array.isArray(data) ? data : []).forEach((linha) => {
+            const idBanco = String((linha && linha.id) || '');
+            if (!CARGA_UUID_RE.test(idBanco)) return;
+            if (terminal(linha.status_fluxo)) idsDesvinculo.add(idBanco);
+            else idsEntrega.add(idBanco);
+          });
+        }
+      } catch (e) {
+        console.warn('[NexusPort] Erro ao consultar as cargas do navio no banco:', e);
+      }
+    }
+
+    idsDesvinculo.forEach((id) => idsEntrega.delete(id));
+
+    let gravadas = 0;
+    if (idsEntrega.size > 0) {
+      const { error } = await window.nexusSupabase
+        .from('cargas')
+        .update({ status_fluxo: 'ENTREGUE', navio_id: null })
+        .in('id', Array.from(idsEntrega));
+      if (error) {
+        console.warn('[NexusPort] Erro ao entregar/desvincular as cargas do navio no Supabase:', error.message || error);
+      } else {
+        gravadas += idsEntrega.size;
+      }
+    }
+    if (idsDesvinculo.size > 0) {
+      const { error } = await window.nexusSupabase
+        .from('cargas')
+        .update({ navio_id: null })
+        .in('id', Array.from(idsDesvinculo));
+      if (error) {
+        console.warn('[NexusPort] Erro ao desvincular cargas canceladas/recusadas do navio:', error.message || error);
+      } else {
+        gravadas += idsDesvinculo.size;
+      }
+    }
+
+    if (gravadas > 0 && window.NexusRepository && typeof window.NexusRepository.notifyChange === 'function') {
+      window.NexusRepository.notifyChange('cargas');
+    }
+    return gravadas;
+  }
+
+  /** A1: entrega + desvinculação completa (cache local e banco) das cargas do navio. */
+  async function entregarCargasDoNavio(navio) {
+    if (!navio) return 0;
+    const idsDoCache = idsDeCargasVinculadasNoCache(navio);
+    entregarCargasNoCacheLocal([navio]);
+    return entregarCargasDoNavioNoBanco(navio, idsDoCache);
+  }
+
+  /**
+   * A1 (reconciliação): uma carga ENTREGUE nunca permanece vinculada a um navio.
+   * Corrige vínculos antigos (registros entregues antes desta regra) no cache
+   * local e no banco, sempre por id de carga.
+   */
+  let reparoCargasEntreguesConcluido = false;
+  async function desvincularCargasEntregues() {
+    if (reparoCargasEntreguesConcluido) return false;
+    const cargas = lerCargasLocais();
+    let alterouLocal = false;
+    const ids = new Set();
+    cargas.forEach((c) => {
+      if (!c || String(c.status || '').toUpperCase() !== 'ENTREGUE') return;
+      if (!c.navio && !c.navioId && !c.navio_id) return;
+      c.navio = '';
+      c.navio_nome = null;
+      c.navioId = null;
+      c.navio_id = null;
+      alterouLocal = true;
+      const idBanco = String(c.rawDbId || '');
+      if (CARGA_UUID_RE.test(idBanco)) ids.add(idBanco);
+    });
+    if (alterouLocal) salvarCargasLocais(cargas);
+    if (!window.nexusSupabase) return alterouLocal;
+
+    try {
+      const { data, error } = await window.nexusSupabase
+        .from('cargas')
+        .select('id, navio_id, status_fluxo')
+        .eq('status_fluxo', 'ENTREGUE');
+      if (error) {
+        console.warn('[NexusPort] Não foi possível reconciliar as cargas entregues vinculadas:', error.message || error);
+        return alterouLocal;
+      }
+      reparoCargasEntreguesConcluido = true;
+      (Array.isArray(data) ? data : []).forEach((linha) => {
+        const idBanco = String((linha && linha.id) || '');
+        if (linha && linha.navio_id && CARGA_UUID_RE.test(idBanco)) ids.add(idBanco);
+      });
+      if (ids.size > 0) {
+        const { error: erroUpdate } = await window.nexusSupabase
+          .from('cargas')
+          .update({ navio_id: null })
+          .in('id', Array.from(ids));
+        if (erroUpdate) {
+          console.warn('[NexusPort] Erro ao desvincular as cargas entregues no Supabase:', erroUpdate.message || erroUpdate);
+          reparoCargasEntreguesConcluido = false;
+        } else if (window.NexusRepository && typeof window.NexusRepository.notifyChange === 'function') {
+          window.NexusRepository.notifyChange('cargas');
+        }
+      }
+    } catch (e) {
+      console.warn('[NexusPort] Erro ao reconciliar as cargas entregues:', e);
+    }
+    return alterouLocal;
+  }
+
+  /**
+   * A1: consistência ao abrir a página — navios já no porto de destino entregam
+   * as cargas pendentes (a página pode ter sido recarregada durante a viagem) e,
+   * em seguida, nenhuma carga ENTREGUE permanece vinculada a uma embarcação.
+   */
+  async function reconciliarCargasDeNavios() {
+    // Navios no porto de destino: entrega pendente (a página pode ter recarregado na viagem).
+    // Depois da primeira gravação as cargas já não aparecem em cargas.navio_id, então a
+    // verificação seguinte é idempotente e não gera notificações em cadeia.
+    const noDestino = naviosList.filter((n) => n.localizacao === 'NO_PORTO_DE_DESTINO');
+    for (const navio of noDestino) {
+      await entregarCargasDoNavio(navio);
+    }
+    await desvincularCargasEntregues();
   }
 
   // Carrega navios mantendo persistência rigorosa do Supabase / Local
@@ -453,13 +774,19 @@ document.addEventListener('DOMContentLoaded', () => {
             nome: n.nome,
             imo: n.numero_imo || n.imo,
             localizacao: n.localizacao || 'DENTRO_DO_PORTO',
-            origem: n.porto_origem || 'Porto de Santos',
+            // A2: sem origem cadastrada o campo fica vazio — o sistema não presume
+            // que o porto de origem seja o porto onde a embarcação está.
+            origem: n.porto_origem || '',
             destino: n.porto_destino || '',
             // A distância não é gravada no navio: vem da rota marítima cadastrada (distanciaDoNavio)
             distancia: null,
             dataSaida: n.data_saida || (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null)
           }));
           localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+          // A1: navio que já está no porto de destino entrega/desvincula suas cargas
+          // (a página pode ter sido recarregada durante a viagem) e nenhuma carga
+          // ENTREGUE continua vinculada a uma embarcação.
+          reconciliarCargasDeNavios().catch(e => console.warn('[NexusPort] Reconciliação de cargas entregues falhou:', e));
           renderGpsTable();
           liberarBercosOrfaos().catch(e => console.warn('[NexusPort] Verificação de berços órfãos falhou:', e));
           return;
@@ -470,6 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const savedNaviosRaw = localStorage.getItem('nexus_navios_list');
     naviosList = savedNaviosRaw ? JSON.parse(savedNaviosRaw) : [];
+    reconciliarCargasDeNavios().catch(e => console.warn('[NexusPort] Reconciliação de cargas entregues falhou:', e));
     renderGpsTable();
   }
 
@@ -490,43 +818,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // C10 & RN 12: só as cargas vinculadas ao navio que chegou ao porto de destino viram ENTREGUE.
-    // A gravação no Supabase é feita por id de carga, nunca por status (não atinge outras cargas).
-    const UUID_CARGA_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-    const idsRemotosEntregues = [];
-    let cargasAtualizadas = false;
-
-    const cargaPertenceAoNavio = (c, n) => {
-      const navioIdCarga = c.navioId || c.navio_id;
-      if (navioIdCarga && n.id) return String(navioIdCarga) === String(n.id);
-      const nomeNavio = String(n.nome || '').trim().toLowerCase();
-      return !!nomeNavio && String(c.navio || '').trim().toLowerCase() === nomeNavio;
-    };
-
-    cargasFluxo.forEach((c) => {
-      if (!c || (!c.navio && !c.navioId && !c.navio_id)) return;
-      if (['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)) return;
-      const navio = naviosList.find((n) => n.localizacao === 'NO_PORTO_DE_DESTINO' && cargaPertenceAoNavio(c, n));
-      if (!navio) return;
-      c.status = 'ENTREGUE';
-      cargasAtualizadas = true;
-      const idBanco = String(c.rawDbId || '');
-      if (UUID_CARGA_RE.test(idBanco)) idsRemotosEntregues.push(idBanco);
-    });
-
-    if (cargasAtualizadas) {
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
-      if (window.nexusSupabase && idsRemotosEntregues.length > 0) {
-        window.nexusSupabase.from('cargas')
-          .update({ status_fluxo: 'ENTREGUE' })
-          .in('id', idsRemotosEntregues)
-          .then(({ error }) => {
-            if (error) console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
-          })
-          .catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
-      }
-    }
+    // C10 & RN 12 + A1: só as cargas vinculadas ao navio que chegou ao porto de
+    // destino viram ENTREGUE e, ao chegarem, são DESVINCULADAS dele
+    // (cargas.navio_id = null), de modo que o navio volte a Santos livre.
+    // Esta passagem é síncrona/idempotente (alimenta a interface na hora); a
+    // gravação no banco é feita na chegada ao destino e na abertura da página
+    // (reconciliarCargasDeNavios), sempre por id de carga — nunca por status.
+    const naviosNoDestino = naviosList.filter((n) => n.localizacao === 'NO_PORTO_DE_DESTINO');
+    entregarCargasNoCacheLocal(naviosNoDestino);
+    // Lido já depois da entrega/desvinculação: a tabela mostra o navio livre.
+    const cargasFluxo = lerCargasLocais();
 
     // Exibe todos os navios cadastrados no terminal (Tarefa 5.2 - RF 1.9, RF 2.1)
 
@@ -612,6 +913,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (window.NexusRepository && window.NexusRepository.notifyChange) {
               window.NexusRepository.notifyChange('navios');
             }
+            // A1: na chegada ao porto de destino, as cargas vinculadas são entregues e
+            // desvinculadas do navio (cache local e banco) — o navio volta livre a Santos.
+            if (novaLocalizacao === 'NO_PORTO_DE_DESTINO') {
+              entregarCargasDoNavio(n).catch(e => console.warn('[NexusPort] Erro ao entregar as cargas do navio no destino:', e));
+            }
           }
 
           const diasRestantes = Math.floor(msRestantes / (1000 * 60 * 60 * 24));
@@ -638,8 +944,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Busca cargas do localstorage ou Supabase associadas a este navio (C2, C3)
-      const cargasDoNavio = cargasFluxo.filter(c => c.navio && c.navio.toLowerCase() === n.nome.toLowerCase());
+      // Busca cargas do localstorage ou Supabase associadas a este navio (C2, C3).
+      // A1: carga ENTREGUE/cancelada/recusada não está mais na embarcação.
+      const cargasDoNavio = cargasFluxo.filter(c =>
+        c.navio && c.navio.toLowerCase() === n.nome.toLowerCase() &&
+        !STATUS_CARGA_TERMINAL.includes(String(c.status || '').toUpperCase()));
 
       let bercosInfoHtml = '<span class="text-slate-600 italic text-[11px]">Sem carga vinculada</span>';
       if (cargasDoNavio.length > 0) {
@@ -660,6 +969,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Botão Vincular a Berço (Tarefa 6)
       acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+
+      // Botão Rota (A2): escolhe a rota marítima da PRÓXIMA viagem (origem + destino).
+      // Fica habilitado com a embarcação atracada no terminal — é quando a próxima
+      // viagem é decidida; em viagem ou no porto de destino, explica o motivo.
+      if (n.localizacao === 'DENTRO_DO_PORTO') {
+        acoesHtml += `<button type="button"
+          title="Definir a rota da próxima viagem"
+          aria-label="Definir a rota da próxima viagem do navio ${esc(n.nome)}"
+          onclick="window.definirRotaNavio(${jsArg(n.imo)})"
+          class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-800 text-white font-bold flex items-center gap-1">
+          <span class="material-symbols-outlined text-[13px]">alt_route</span><span>Rota</span>
+        </button>`;
+      } else {
+        acoesHtml += `<button type="button" disabled aria-disabled="true"
+          title="A rota da próxima viagem é definida com a embarcação atracada no Porto de Santos"
+          aria-label="Definir a rota da próxima viagem do navio ${esc(n.nome)} (indisponível)"
+          class="px-2 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold cursor-not-allowed opacity-70 flex items-center gap-1">
+          <span class="material-symbols-outlined text-[13px]">alt_route</span><span>Rota</span>
+        </button>`;
+      }
 
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
@@ -682,8 +1011,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Botão Excluir Navio (Tarefa 6) — ação secundária, separada por divisor
-      acoesHtml += `<span class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1"></span>
+      // Botão Excluir Navio (Tarefa 6) — ação secundária, separada por divisor.
+      // Só para os cargos que administram embarcações (matriz de ações): o
+      // Planejador registra dados operacionais e não recebe ação destrutiva.
+      if (podeExcluirEmbarcacao) {
+        acoesHtml += `<span class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1"></span>
         <button type="button"
           title="Excluir navio"
           aria-label="Excluir navio ${esc(n.nome)}"
@@ -691,8 +1023,23 @@ document.addEventListener('DOMContentLoaded', () => {
           class="p-1.5 rounded bg-red-50 hover:bg-red-600 text-red-600 hover:text-white focus-visible:ring-2 focus-visible:ring-nexus-500 focus-visible:outline-none transition-colors">
           <span class="material-symbols-outlined text-[16px]">delete</span>
         </button>`;
+      }
 
       acoesHtml += '</div>';
+
+      // A2: a coluna de rota mostra a PRÓXIMA viagem — só quando ela foi escolhida.
+      // Em viagem, mostra o trecho em andamento; atracado sem escolha, informa que a
+      // próxima rota não está definida (nunca presume a origem como o porto atual).
+      let rotaHtml;
+      if (n.localizacao === 'FORA_DO_PORTO') {
+        rotaHtml = `<span class="font-bold">${esc(n.origem || '—')}</span> → <strong class="text-nexus-900 dark:text-white">${esc(n.destino || 'Destino não informado')}</strong><span class="block text-[10px] text-slate-600">Viagem em andamento</span>`;
+      } else if (proximaRotaDefinida(n)) {
+        const kmProxima = distanciaDoNavio(n);
+        const kmProximaHtml = kmProxima ? ` (${esc(String(kmProxima))} km)` : '';
+        rotaHtml = `<span class="font-bold">${esc(n.origem)}</span> → <strong class="text-nexus-900 dark:text-white">${esc(n.destino)}</strong><span class="block text-[10px] text-slate-600">Próxima viagem${kmProximaHtml}</span>`;
+      } else {
+        rotaHtml = '<span class="block font-bold text-amber-700 dark:text-amber-400">Próxima rota não definida</span><span class="block text-[10px] text-slate-600">Escolha origem e destino no botão Rota.</span>';
+      }
 
       const localizacaoHtml = localizacaoBadgeHtml(n.localizacao);
 
@@ -704,7 +1051,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td class="p-3 font-mono text-xs">${bercosInfoHtml}</td>
           <td class="p-3">${localizacaoHtml}</td>
-          <td class="p-3 text-xs">${esc(n.origem)} → <strong class="text-nexus-900 dark:text-white">${esc(n.destino || 'Destino não informado')}</strong></td>
+          <td class="p-3 text-xs">${rotaHtml}</td>
           <td class="p-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">${esc(etaText)}${etaExtraHtml}</td>
           <td class="p-3 font-mono text-xs font-bold ${n.localizacao === 'NO_PORTO_DE_DESTINO' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600'}">${esc(tempoForaText)}</td>
           <td class="p-3 text-right whitespace-nowrap">${acoesHtml}</td>
@@ -820,12 +1167,29 @@ document.addEventListener('DOMContentLoaded', () => {
   carregarRotasMaritimas();
 
   if (toggleRotaBtn && rotaForm) {
-    toggleRotaBtn.addEventListener('click', () => rotaForm.classList.toggle('hidden'));
+    // Cadastro de rota marítima é ação do Supervisor (CADASTRAR_ROTA, RF 1.6):
+    // os demais cargos que abrem a tela leem as rotas, sem o formulário.
+    if (!podeCadastrarRotaMaritima) toggleRotaBtn.classList.add('hidden');
+    toggleRotaBtn.addEventListener('click', () => {
+      if (!podeCadastrarRotaMaritima) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', `Cadastrar rota marítima: ${AVISO_ROTA_RESTRITA}`);
+        }
+        return;
+      }
+      rotaForm.classList.toggle('hidden');
+    });
   }
 
   if (rotaForm) {
     rotaForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!podeCadastrarRotaMaritima) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Restrito', `Cadastrar rota marítima: ${AVISO_ROTA_RESTRITA}`);
+        }
+        return;
+      }
       const origem = document.getElementById('rotaOrigem').value.trim();
       const destino = document.getElementById('rotaDestino').value.trim();
       const distancia_km = parseFloat(document.getElementById('rotaDistancia').value);
@@ -882,14 +1246,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const navio = naviosList.find(n => n.imo === imo);
-    if (!navio) return;
-
-    // Navio já no Porto de Santos com destino Santos não tem próxima viagem definida:
-    // liberar a saída o faria "navegar" de volta ao próprio porto.
-    if (navio.localizacao === 'DENTRO_DO_PORTO' && ehPortoSantos(navio.destino)) {
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('alerta', 'Próximo Destino Não Definido', `O navio ${navio.nome} está no Porto de Santos, que também é o destino cadastrado. Informe o próximo destino da embarcação antes de liberar a saída.`);
-      }
+    if (!navio) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Navio Não Encontrado', `Nenhuma embarcação com o IMO ${imo} está carregada nesta tela. Recarregue a página e tente novamente.`);
       return;
     }
 
@@ -901,6 +1259,39 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // A2/A3: a saída só é liberada com o DESTINO da próxima viagem escolhido
+    // (origem E destino). O sistema nunca presume que a origem é o porto onde o
+    // navio está: sem escolha explícita, a próxima viagem aparece como não definida.
+    if (!proximaRotaDefinida(navio)) {
+      const portoAtual = portoAtualDoNavio(navio);
+      const origemAtual = String(navio.origem || '').trim();
+      const destinoAtual = String(navio.destino || '').trim();
+      const destinoPendente = !destinoAtual || mesmaReferenciaPorto(destinoAtual, portoAtual);
+      const origemPendente = !mesmaReferenciaPorto(origemAtual, portoAtual);
+
+      if (destinoPendente || origemPendente) {
+        // A3: em vez de apenas recusar, o fluxo abre a definição da rota da próxima
+        // viagem (dados do Supabase). A saída continua bloqueada até a escolha ser
+        // gravada e o operador clicar em "Liberar Saída" novamente.
+        const navioParaEscolha = await prepararRotaDaProximaViagem(imo);
+        const seletorAberto = !!navioParaEscolha && abrirSeletorRotaDaProximaViagem(navioParaEscolha);
+        if (window.mostrarFeedback) {
+          if (seletorAberto) {
+            window.mostrarFeedback('alerta', 'Próximo Destino Não Definido', `A saída do navio ${navio.nome} só é liberada com o destino da próxima viagem escolhido. Escolha a origem (${portoAtual}) e o destino no seletor aberto pelo botão "Rota" e confirme; depois clique em "Liberar Saída" novamente.`);
+          } else if (navioParaEscolha) {
+            // Sem o modal na tela, o caminho do botão "Rota" continua sendo informado.
+            window.mostrarFeedback('alerta', 'Próximo Destino Não Definido', `A saída do navio ${navio.nome} só é liberada com o destino da próxima viagem escolhido. Use o botão "Rota" na linha da embarcação para escolher a origem (${portoAtual}) e o destino, e clique em "Liberar Saída" novamente.`);
+          }
+        }
+        return;
+      }
+
+      // RN 9: origem e destino escolhidos, mas a rota marítima não está cadastrada.
+      const msgErro = `REGRA DE NEGÓCIO (RN 9): A saída do navio "${navio.nome}" foi BLOQUEADA pois não existe uma rota marítima cadastrada entre "${origemAtual}" e "${destinoAtual}". O Supervisor deve cadastrar a rota na seção "Gestão de Rotas Marítimas" antes da liberação!`;
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Não Encontrada', msgErro);
+      return;
+    }
+
     // Item 6 (backlog): operações do pátio bloqueadas com o alarme de emergência ativo
     if (typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva()) {
       if (window.mostrarFeedback) {
@@ -909,15 +1300,12 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // RN 9: Bloqueia saída se NÃO houver rota cadastrada entre a origem e o destino
-    // do navio (qualquer sentido: ida e volta usam a mesma distância oficial).
-    const rotaCadastrada = rotaEntrePortos(navio.origem || 'Porto de Santos', navio.destino || '');
-
+    // RN 9: distância oficial da rota cadastrada entre a origem e o destino da
+    // próxima viagem (o trecho vale nos dois sentidos: ida e volta usam a mesma).
+    const rotaCadastrada = rotaEntrePortos(navio.origem, navio.destino);
     if (!rotaCadastrada) {
-      const msgErro = `REGRA DE NEGÓCIO (RN 9): A saída do navio "${navio.nome}" foi BLOQUEADA pois não existe uma rota marítima cadastrada entre "${navio.origem || 'Porto de Santos'}" e "${navio.destino}". O Supervisor deve cadastrar a rota na seção "Gestão de Rotas Marítimas" antes da liberação!`;
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('atencao', 'Rota Não Encontrada', msgErro);
-      }
+      // Salvaguarda: a validação anterior (proximaRotaDefinida) já garante a rota.
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Não Encontrada', 'A rota cadastrada da próxima viagem não está mais disponível. Reabra o botão "Rota" e escolha novamente.');
       return;
     }
 
@@ -1011,7 +1399,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const navio = naviosList.find(n => n.imo === imo);
-    if (!navio) return;
+    if (!navio) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Navio Não Encontrado', `Nenhuma embarcação com o IMO ${imo} está carregada nesta tela. Recarregue a página e tente novamente.`);
+      return;
+    }
 
     // Trava de regra de negócio: o navio precisa ter chegado ao porto de destino
     if (navio.localizacao !== 'NO_PORTO_DE_DESTINO') {
@@ -1075,6 +1466,264 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   };
+
+  // ------------------------------------------------------------------
+  // A2 — botão "Rota": escolhe a ORIGEM e o DESTINO da PRÓXIMA viagem
+  // entre as rotas marítimas cadastradas no Supabase. É o único caminho
+  // para trocar a rota de uma embarcação: nada é presumido, nem o porto
+  // onde o navio está nem uma rota automática de retorno.
+  // ------------------------------------------------------------------
+  const definirRotaModal = document.getElementById('definirRotaModal');
+  const definirRotaNavioLabel = document.getElementById('definirRotaNavioLabel');
+  const definirRotaSituacao = document.getElementById('definirRotaSituacao');
+  const definirRotaOrigemSelect = document.getElementById('definirRotaOrigemSelect');
+  const definirRotaDestinoSelect = document.getElementById('definirRotaDestinoSelect');
+  const definirRotaAviso = document.getElementById('definirRotaAviso');
+  const confirmarDefinirRotaBtn = document.getElementById('confirmarDefinirRotaBtn');
+  const cancelarDefinirRotaBtn = document.getElementById('cancelarDefinirRotaBtn');
+  const closeDefinirRotaBtn = document.getElementById('closeDefinirRotaBtn');
+  let navioPendenteRota = null;
+
+  // Cargos que definem a rota da próxima viagem (SPEC: o Inspetor cadastra o navio;
+  // o Planejador atualiza os dados operacionais; Supervisor/Direção decidem a saída).
+  const CARGOS_QUE_DEFINEM_ROTA = ['INSPETOR', 'PLANEJADOR_PATIO_NAVIOS', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'];
+
+  function fecharDefinirRota() {
+    if (definirRotaModal) definirRotaModal.classList.add('hidden');
+    navioPendenteRota = null;
+  }
+
+  /** Opções de origem: TODOS os portos das rotas; nada pré-selecionado (A2). */
+  function preencherOrigemRotaSelect() {
+    if (!definirRotaOrigemSelect) return;
+    const portos = portosDasRotas();
+    definirRotaOrigemSelect.innerHTML = '<option value="">Selecione o porto de origem...</option>' +
+      portos.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    definirRotaOrigemSelect.value = '';
+  }
+
+  /** Opções de destino: portos com rota cadastrada a partir da origem escolhida. */
+  function preencherDestinoRotaSelect(origem) {
+    if (!definirRotaDestinoSelect) return;
+    const portoOrigem = String(origem || '').trim();
+    if (!portoOrigem) {
+      definirRotaDestinoSelect.innerHTML = '<option value="">Selecione primeiro o porto de origem...</option>';
+      definirRotaDestinoSelect.value = '';
+      definirRotaDestinoSelect.disabled = true;
+      return;
+    }
+    const destinos = destinosParaPortoDeOrigem(portoOrigem);
+    definirRotaDestinoSelect.disabled = false;
+    definirRotaDestinoSelect.innerHTML = '<option value="">Selecione o porto de destino...</option>' + destinos.map((d) => {
+      const rota = rotaEntrePortos(portoOrigem, d);
+      const km = rota ? parseFloat(rota.distancia_km) : NaN;
+      const detalheHtml = km > 0 ? ` (${esc(km.toLocaleString('pt-BR'))} km)` : ' (distância não cadastrada)';
+      return `<option value="${esc(d)}">${esc(d)}${detalheHtml}</option>`;
+    }).join('');
+    definirRotaDestinoSelect.value = '';
+  }
+
+  /** Aviso do modal: situação da embarcação e o que a escolha atual representa. */
+  function atualizarAvisoRota() {
+    if (!definirRotaAviso) return;
+    const origem = definirRotaOrigemSelect ? definirRotaOrigemSelect.value : '';
+    const destino = definirRotaDestinoSelect ? definirRotaDestinoSelect.value : '';
+    const partes = [];
+    const origemEhPortoAtual = !navioPendenteRota || mesmaReferenciaPorto(origem, portoAtualDoNavio(navioPendenteRota));
+    if (navioPendenteRota) partes.push(`A embarcação está no ${portoAtualDoNavio(navioPendenteRota)}.`);
+    if (!origem) {
+      partes.push('Escolha o porto de origem e o porto de destino da próxima viagem.');
+    } else if (!origemEhPortoAtual) {
+      partes.push('A origem escolhida não é o porto onde a embarcação está: a próxima viagem parte do porto atual.');
+    } else if (!destino) {
+      partes.push(destinosParaPortoDeOrigem(origem).length === 0
+        ? `Não há rota marítima cadastrada a partir de ${origem}. Peça ao Supervisor o registro em "Gestão de Rotas Marítimas".`
+        : 'Escolha o porto de destino entre os portos com rota cadastrada a partir da origem.');
+    } else {
+      const rota = rotaEntrePortos(origem, destino);
+      const km = rota ? parseFloat(rota.distancia_km) : NaN;
+      if (rota && km > 0) partes.push(`Rota "${rota.origem} ➔ ${rota.destino}" — ${km.toLocaleString('pt-BR')} km (${calcularETA(km)}).`);
+      else if (rota) partes.push('Esta rota está cadastrada sem distância válida: corrija o cadastro antes de confirmar.');
+      else partes.push(`Não existe rota marítima cadastrada entre ${origem} e ${destino} (RN 9).`);
+    }
+    definirRotaAviso.textContent = partes.join(' ');
+  }
+
+  /**
+   * Aplica a rota escolhida ao navio (origem, destino e distância da rota).
+   * O banco é gravado ANTES da tela: sem confirmação de ao menos uma linha
+   * atualizada, nada muda — a rota é dado compartilhado entre os cargos.
+   * Retorna true somente quando a rota foi gravada.
+   */
+  async function aplicarRotaDaProximaViagem(navio, origem, destino) {
+    if (!navio) return false;
+    const portoOrigem = String(origem || '').trim();
+    const portoDestino = String(destino || '').trim();
+    if (!portoOrigem || !portoDestino) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Incompleta', 'Escolha o porto de origem e o porto de destino da próxima viagem.');
+      return false;
+    }
+    if (mesmaReferenciaPorto(portoOrigem, portoDestino)) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Inválida', 'O porto de destino da próxima viagem precisa ser diferente do porto de origem.');
+      return false;
+    }
+    // A origem é escolhida pelo operador e precisa ser o porto onde a embarcação
+    // está: o sistema não infere a origem, mas também não aceita um trecho que a
+    // embarcação não pode cumprir.
+    const portoAtual = portoAtualDoNavio(navio);
+    if (portoAtual && !mesmaReferenciaPorto(portoOrigem, portoAtual)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', 'Origem Inválida', `A próxima viagem do navio ${navio.nome} parte do ${portoAtual}, onde a embarcação está. Escolha "${portoAtual}" como porto de origem.`);
+      }
+      return false;
+    }
+    // Revalida na lista de rotas carregada do Supabase (nunca no cache local): RN 9.
+    const rota = rotaEntrePortos(portoOrigem, portoDestino);
+    if (!rota) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Não Cadastrada', `Não existe rota marítima cadastrada entre "${portoOrigem}" e "${portoDestino}" (RN 9). Cadastre a rota em "Gestão de Rotas Marítimas" e tente novamente.`);
+      return false;
+    }
+    const km = parseFloat(rota.distancia_km);
+    if (!(km > 0)) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Sem Distância', `A rota ${rota.origem} ➔ ${rota.destino} não tem distância válida cadastrada. Corrija o cadastro da rota antes de definir a próxima viagem.`);
+      return false;
+    }
+    if (!window.nexusSupabase) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Sem Conexão', 'A rota da próxima viagem só pode ser definida com conexão ao Supabase. Nada foi alterado.');
+      return false;
+    }
+    // Banco primeiro: a tela só reflete a rota depois de o banco confirmar a linha alterada.
+    const usaId = UUID_NAVIO_RE.test(String(navio.id || ''));
+    const { data, error } = await window.nexusSupabase.from('navios')
+      .update({ porto_origem: portoOrigem, porto_destino: portoDestino })
+      .eq(usaId ? 'id' : 'numero_imo', usaId ? navio.id : navio.imo)
+      .select('id');
+    if (error) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Rota Não Salva', `O banco de dados recusou a alteração da rota do navio ${navio.nome} (${error.message || 'erro desconhecido'}). Nada foi alterado.`);
+      return false;
+    }
+    if (!Array.isArray(data) || data.length === 0) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Rota Não Salva', `O banco de dados não confirmou a alteração do navio ${navio.nome} (nenhuma linha foi atualizada). Nada foi alterado.`);
+      return false;
+    }
+
+    navio.origem = portoOrigem;
+    navio.destino = portoDestino;
+    navio.distancia = km;
+    localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { porto_origem: portoOrigem, porto_destino: portoDestino });
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('navios');
+    }
+    renderGpsTable();
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Rota Definida', `Próxima viagem do navio ${navio.nome}: ${portoOrigem} ➔ ${portoDestino} (${km} km). A saída já pode ser liberada.`);
+    }
+    return true;
+  }
+
+  /**
+   * Valida permissão, existência do navio e situação da embarcação e carrega as
+   * rotas marítimas do Supabase (dado compartilhado, nunca o cache local).
+   * Retorna o navio pronto para a escolha da rota ou null quando a definição não
+   * pode seguir — nesse caso a mensagem do motivo já foi mostrada ao usuário.
+   */
+  async function prepararRotaDaProximaViagem(imo) {
+    if (!CARGOS_QUE_DEFINEM_ROTA.includes(session.cargo)) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Negado', 'Apenas Inspetor, Planejador, Supervisor ou Direção podem definir a rota da próxima viagem.');
+      return null;
+    }
+    const navio = naviosList.find(n => n.imo === imo);
+    if (!navio) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Navio Não Encontrado', `Nenhuma embarcação com o IMO ${imo} está carregada na tela. Recarregue a página e tente novamente.`);
+      return null;
+    }
+    if (navio.localizacao === 'FORA_DO_PORTO') {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Embarcação em Viagem', `O navio ${navio.nome} está em trânsito cumprindo a viagem atual. A rota da próxima viagem é definida quando a embarcação estiver atracada no Porto de Santos.`);
+      return null;
+    }
+    if (navio.localizacao === 'NO_PORTO_DE_DESTINO') {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', 'Embarcação no Porto de Destino', `O navio ${navio.nome} está no porto de destino (${portoAtualDoNavio(navio)}). Autorize o retorno ao porto de origem; a rota da próxima viagem é definida com a embarcação atracada no Porto de Santos.`);
+      }
+      return null;
+    }
+
+    // A fonte das rotas é o Supabase (dado compartilhado), nunca o cache local.
+    if (!window.nexusSupabase) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Sem Conexão', 'Não foi possível ler as rotas marítimas no Supabase. A rota não foi alterada; tente novamente.');
+      return null;
+    }
+    await carregarRotasMaritimas();
+    if (rotasCarregamentoFalhou) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Rotas Não Carregadas', 'Não foi possível ler as rotas marítimas no Supabase. A rota não foi alterada; tente novamente.');
+      return null;
+    }
+    if (!Array.isArray(rotasMaritimasList) || rotasMaritimasList.length === 0) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Sem Rotas Cadastradas', 'Nenhuma rota marítima está cadastrada no sistema. Peça ao Supervisor o registro em "Gestão de Rotas Marítimas".');
+      return null;
+    }
+    return navio;
+  }
+
+  /** Abre o modal do seletor de rota (A2) para o navio. Retorna true quando abriu. */
+  function abrirSeletorRotaDaProximaViagem(navio) {
+    if (!navio || !definirRotaModal) return false;
+    navioPendenteRota = navio;
+    if (definirRotaNavioLabel) definirRotaNavioLabel.textContent = `${navio.nome} (${navio.imo})`;
+    if (definirRotaSituacao) {
+      const definida = proximaRotaDefinida(navio);
+      const kmAtual = definida ? distanciaDoNavio(navio) : null;
+      definirRotaSituacao.textContent = `Situação atual: ${localizacaoInfo(navio.localizacao).txt} no ${portoAtualDoNavio(navio)}. ` + (definida
+        ? `Próxima viagem definida: ${navio.origem} ➔ ${navio.destino}${kmAtual ? ` (${kmAtual} km)` : ''}.`
+        : 'Nenhuma próxima viagem definida — escolha a origem e o destino.');
+    }
+    preencherOrigemRotaSelect();
+    preencherDestinoRotaSelect('');
+    atualizarAvisoRota();
+    definirRotaModal.classList.remove('hidden');
+    return true;
+  }
+
+  /**
+   * A2/A3: abre a escolha da rota da PRÓXIMA viagem (origem e destino selecionados
+   * entre as rotas marítimas do Supabase). Também aceita `opcoes.origem` e
+   * `opcoes.destino` para aplicar a rota sem abrir o modal (uso programático).
+   */
+  window.definirRotaNavio = async function(imo, opcoes) {
+    const op = opcoes || {};
+    const navio = await prepararRotaDaProximaViagem(imo);
+    if (!navio) return;
+
+    if (op.origem || op.destino) {
+      await aplicarRotaDaProximaViagem(navio, op.origem, op.destino);
+      return;
+    }
+    abrirSeletorRotaDaProximaViagem(navio);
+  };
+
+  if (definirRotaOrigemSelect) {
+    definirRotaOrigemSelect.addEventListener('change', () => {
+      preencherDestinoRotaSelect(definirRotaOrigemSelect.value);
+      atualizarAvisoRota();
+    });
+  }
+  if (definirRotaDestinoSelect) definirRotaDestinoSelect.addEventListener('change', atualizarAvisoRota);
+  if (confirmarDefinirRotaBtn) {
+    confirmarDefinirRotaBtn.addEventListener('click', async () => {
+      const navio = navioPendenteRota;
+      if (!navio) return;
+      const origem = definirRotaOrigemSelect ? definirRotaOrigemSelect.value : '';
+      const destino = definirRotaDestinoSelect ? definirRotaDestinoSelect.value : '';
+      const aplicou = await aplicarRotaDaProximaViagem(navio, origem, destino);
+      if (aplicou) fecharDefinirRota();
+    });
+  }
+  if (cancelarDefinirRotaBtn) cancelarDefinirRotaBtn.addEventListener('click', fecharDefinirRota);
+  if (closeDefinirRotaBtn) closeDefinirRotaBtn.addEventListener('click', fecharDefinirRota);
 
   // Ocupa um berço com o navio no cadastro (revalidação e gravação condicional no banco).
   // Retorna { ok, motivo? }.
@@ -1173,7 +1822,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Vincular Navio a um dos 15 Berços: abre a seleção (somente berços livres habilitados)
   window.vincularNavioABerco = async function(imo, opcoes) {
     const navio = naviosList.find(n => n.imo === imo);
-    if (!navio) return;
+    if (!navio) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Navio Não Encontrado', `Nenhuma embarcação com o IMO ${imo} está carregada nesta tela. Recarregue a página e tente novamente.`);
+      return;
+    }
 
     const atual = await lerBercosAtuais();
     if (!atual.ok) {
@@ -1307,6 +1959,20 @@ document.addEventListener('DOMContentLoaded', () => {
     return { ok: true, id: (data && data[0] && data[0].id) || null };
   }
 
+  // Exclui a linha e CONFIRMA a exclusão: com .select(), o PostgREST devolve as linhas
+  // removidas. Um DELETE que não afeta linha nenhuma (RLS ou registro já removido) chega
+  // sem erro — sem esta confirmação a tela diria "excluído" com o registro ainda no banco.
+  // Retorna { ok, removidas?, motivo? }.
+  async function excluirNoBanco(tabela, coluna, valor) {
+    const { data, error } = await window.nexusSupabase.from(tabela).delete().eq(coluna, valor).select('id');
+    if (error) return { ok: false, removidas: 0, motivo: `o banco de dados recusou a exclusão (${(error && error.message) || 'erro desconhecido'})` };
+    const removidas = Array.isArray(data) ? data.length : 0;
+    if (removidas === 0) {
+      return { ok: false, removidas: 0, motivo: 'o banco de dados não excluiu nenhuma linha (o registro pode ter sido removido por outro operador ou a exclusão não é permitida)' };
+    }
+    return { ok: true, removidas };
+  }
+
   // Histórico de manutenção ligado ao registro seria apagado em cascata (ON DELETE CASCADE).
   // Retorna { ok, erro?, total }.
   async function contarHistoricoManutencao(coluna, idBanco) {
@@ -1322,8 +1988,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.excluirNavio = async function(imo, opcoes) {
+    if (!podeExcluirEmbarcacao) {
+      avisoExclusao('erro', 'Acesso Restrito', `Excluir navio: ${AVISO_ACESSO_RESTRITO}`);
+      return;
+    }
+
     const navio = naviosList.find(n => n.imo === imo);
-    if (!navio) return;
+    if (!navio) {
+      avisoExclusao('erro', 'Navio Não Encontrado', `Nenhuma embarcação com o IMO ${imo} está carregada nesta tela. Recarregue a página e tente novamente.`);
+      return;
+    }
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Navio', `Tem certeza que deseja EXCLUIR o navio ${navio.nome} (${navio.imo})? Os berços dele serão liberados e os contêineres vinculados serão desvinculados. O navio sai do banco de dados.`)
@@ -1382,10 +2056,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // 4) Exclui no banco. Só depois disso a interface é alterada.
-      const { error: errDel } = await window.nexusSupabase.from('navios').delete().eq('id', busca.id);
-      if (errDel) {
-        avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do navio ${navio.nome} (${errDel.message}). Nada foi alterado.`);
+      // 4) Exclui no banco e CONFIRMA a linha removida. Só depois disso a interface é
+      //    alterada: sem confirmação do banco, o navio continua como está na tela.
+      const delNavio = await excluirNoBanco('navios', 'id', busca.id);
+      if (!delNavio.ok) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `O navio ${navio.nome} não foi excluído: ${delNavio.motivo}. Nada foi alterado.`);
         return;
       }
     }
@@ -1517,8 +2192,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Não Selecionada', msg);
         return;
       }
-      const origem = (rota.origem || 'Porto de Santos').trim();
-      const destino = (rota.destino || '').trim();
+      // A2: origem e destino vêm da rota escolhida, sem valor presumido (a rota
+      // cadastrada em rotas_maritimas exige os dois portos).
+      const origem = String(rota.origem || '').trim();
+      const destino = String(rota.destino || '').trim();
+      if (!origem || !destino) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Rota Incompleta', 'A rota selecionada não tem porto de origem e/ou destino cadastrados. Corrija o cadastro em Gestão de Rotas Marítimas.');
+        }
+        return;
+      }
       const distancia = parseFloat(rota.distancia_km);
       if (!(distancia > 0)) {
         if (window.mostrarFeedback) {
@@ -1625,8 +2308,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!resOcupacao.ok) {
           let desfeito = true;
           if (insertedId && window.nexusSupabase) {
-            const { error: errDesfazer } = await window.nexusSupabase.from('navios').delete().eq('id', insertedId);
-            if (errDesfazer) desfeito = false;
+            // O desfazer só é informado como concluído quando o banco confirma a linha removida.
+            const desfazer = await excluirNoBanco('navios', 'id', insertedId);
+            if (!desfazer.ok) desfeito = false;
           }
           if (window.mostrarFeedback) {
             window.mostrarFeedback('alerta', 'Navio Não Cadastrado', desfeito
@@ -1730,7 +2414,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let contAcoesHtml = `
         <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
           <button type="button" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>
-          <button type="button" onclick="window.excluirContainer(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+          ${podeExcluirEmbarcacao ? `<button type="button" onclick="window.excluirContainer(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>` : ''}
         </div>
       `;
 
@@ -1793,118 +2477,243 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
+  // A4: a escolha do navio é uma SELEÇÃO (modal com select). O operador não digita
+  // número nenhum; embarcações indisponíveis aparecem desabilitadas com o motivo.
+  const vincularContainerModal = document.getElementById('vincularContainerModal');
+  const vincularContainerLabel = document.getElementById('vincularContainerLabel');
+  const vincularContainerNavioSelect = document.getElementById('vincularContainerNavioSelect');
+  const vincularContainerAviso = document.getElementById('vincularContainerAviso');
+  const confirmarVincularContainerBtn = document.getElementById('confirmarVincularContainerBtn');
+  const cancelarVincularContainerBtn = document.getElementById('cancelarVincularContainerBtn');
+  const closeVincularContainerBtn = document.getElementById('closeVincularContainerBtn');
+  let containerPendenteVinculo = null;
+
+  const LIMITE_PESO_TONS = 15000;
+  const LIMITE_ESPACO_METROS = 300;
+  const COMPRIMENTO_CONTAINER_M = 12; // ~12 m por contêiner => até 25 no navio
+  const PESO_MEDIO_CONTAINER_T = 25;
+
+  /**
+   * Lista de navios para o vínculo, lida do repositório (Supabase) quando disponível.
+   * Sem leitura fresca, usa o estado já carregado na página — nunca inventa navio.
+   */
+  async function carregarNaviosParaVinculoContainer() {
+    if (window.NexusRepository && typeof window.NexusRepository.getNavios === 'function') {
+      try {
+        const lista = await window.NexusRepository.getNavios();
+        if (Array.isArray(lista) && lista.length > 0) return lista;
+      } catch (e) {
+        console.warn('[NexusPort] Falha ao carregar navios para vinculação de contêiner:', e);
+      }
+    }
+    if (Array.isArray(naviosList) && naviosList.length > 0) return naviosList;
+    return JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+  }
+
+  /** Motivo pelo qual o navio não pode receber contêiner agora (null = apto). */
+  function motivoNavioInaptoParaContainer(navio) {
+    if (!navio) return 'não foi encontrado no cadastro de navios';
+    const loc = navio.localizacao || 'DENTRO_DO_PORTO';
+    if (loc === 'FORA_DO_PORTO') return 'está em trânsito (fora do porto)';
+    if (loc === 'NO_PORTO_DE_DESTINO') return 'está no porto de destino (já descarregado)';
+    if (loc !== 'DENTRO_DO_PORTO') return 'está com localização desconhecida';
+    const estadosOperacionais = ['OPERANTE', 'AGENDADO_PARA_REFORMA', 'EM_REFORMA', 'APROVADO_PARA_REFORMA'];
+    const estado = String(navio.estado_operacional || (estadosOperacionais.includes(navio.estado) ? navio.estado : '') || 'OPERANTE').toUpperCase();
+    if (estado !== 'OPERANTE') return `não está operante (${estado.replace(/_/g, ' ').toLowerCase()})`;
+    return null;
+  }
+
+  /** Motivo pelo qual a capacidade do navio seria excedida por este contêiner (null = cabe). */
+  function motivoCapacidadeNavioParaContainer(navio, cont) {
+    const chaveNavio = String((navio && navio.nome) || '').trim().toLowerCase();
+    const contsDoNavio = containersList.filter(c => (!chaveNavio || String(c.navio || '').trim().toLowerCase() === chaveNavio)
+      || (navio && navio.id && (c.navio_id === navio.id || c.navioId === navio.id)));
+    // Revínculo do mesmo contêiner não conta duas vezes
+    const jaConta = contsDoNavio.some(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(cont.identificacao));
+    const totalConts = contsDoNavio.length + (jaConta ? 0 : 1);
+    if (totalConts * COMPRIMENTO_CONTAINER_M > LIMITE_ESPACO_METROS) {
+      return `capacidade de espaço excedida (${totalConts} contêineres; o limite é ${Math.floor(LIMITE_ESPACO_METROS / COMPRIMENTO_CONTAINER_M)})`;
+    }
+    const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    let pesoTotalTons = 0;
+    cargasFluxo.filter(crg => chaveNavio && String(crg.navio || '').trim().toLowerCase() === chaveNavio)
+      .forEach(crg => { pesoTotalTons += parseFloat(crg.peso) || 0; });
+    if (!jaConta) pesoTotalTons += PESO_MEDIO_CONTAINER_T;
+    if (pesoTotalTons > LIMITE_PESO_TONS) {
+      return `capacidade de peso excedida (${pesoTotalTons.toLocaleString('pt-BR')} t; o limite é ${LIMITE_PESO_TONS.toLocaleString('pt-BR')} t)`;
+    }
+    return null;
+  }
+
+  /** Opções do select: navios indisponíveis ficam desabilitados, com o motivo na opção. */
+  function preencherSelectVincularContainer(navios, cont) {
+    if (!vincularContainerNavioSelect) return;
+    const opcoes = (navios || []).map(n => {
+      const motivo = motivoNavioInaptoParaContainer(n) || motivoCapacidadeNavioParaContainer(n, cont);
+      const situacao = motivo ? ` — indisponível: ${motivo}` : ' — no Porto de Santos';
+      return `<option value="${esc(n.imo || '')}" ${motivo ? 'disabled' : ''}>${esc(n.nome || 'Sem nome')} (IMO ${esc(n.imo || '—')})${esc(situacao)}</option>`;
+    }).join('');
+    vincularContainerNavioSelect.innerHTML = '<option value="">Selecione o navio...</option>' + opcoes;
+  }
+
+  function fecharVincularContainer() {
+    if (vincularContainerModal) vincularContainerModal.classList.add('hidden');
+    containerPendenteVinculo = null;
+  }
+
+  /**
+   * Efetiva o vínculo após revalidar a situação do navio (o navio pode ter saído do
+   * porto com o modal aberto). Retorna true quando o vínculo foi registrado.
+   */
+  async function aplicarVinculoContainerNavio(cont, navioAlvo) {
+    if (!cont || !navioAlvo) return false;
+
+    // Revalidação com dados frescos (a página recarrega a lista antes de cada vínculo)
+    const navios = await carregarNaviosParaVinculoContainer();
+    const fresco = navios.find(n => String(n.imo || '') === String(navioAlvo.imo || '')) || null;
+    const motivoBloqueio = motivoNavioInaptoParaContainer(fresco || navioAlvo);
+    if (motivoBloqueio) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Vinculação Bloqueada', `O navio ${(fresco || navioAlvo).nome || ''} ${motivoBloqueio}. Contêineres só podem ser vinculados a embarcações atracadas no Porto de Santos e operantes.`);
+      }
+      return false;
+    }
+
+    const motivoCapacidade = motivoCapacidadeNavioParaContainer(fresco || navioAlvo, cont);
+    if (motivoCapacidade) {
+      const msgErro = `BLOQUEIO DE CAPACIDADE (Tarefa 8): O navio "${navioAlvo.nome}" não possui suporte para vincular este contêiner! ${motivoCapacidade}.`;
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Capacidade Excedida', msgErro);
+      return false;
+    }
+
+    cont.navio = navioAlvo.nome;
+    cont.navio_id = navioAlvo.id;
+    cont.navio_nome = navioAlvo.nome;
+
+    localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+
+    if (window.nexusSupabase) {
+      try {
+        await window.nexusSupabase.from('containers')
+          .update({ navio_id: navioAlvo.id })
+          .eq('numero_identificacao', cont.identificacao);
+      } catch (e) {
+        console.warn('Erro ao atualizar vinculação de contêiner no Supabase:', e);
+      }
+    }
+
+    // As cargas do contêiner com herança ativa passam a exibir o navio
+    const cargasHerdadas = await propagarNavioParaCargasDoContainer(cont.identificacao, navioAlvo);
+
+    if (window.registrarLogAlteracao) {
+      await window.registrarLogAlteracao('EDICAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} vinculado ao navio ${navioAlvo.nome}${cargasHerdadas > 0 ? `; ${cargasHerdadas} carga(s) herdaram o navio` : ''}`);
+    }
+
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('containers');
+    }
+
+    renderContainersTable();
+    if (window.mostrarFeedback) {
+      const msgHeranca = cargasHerdadas > 0 ? ` ${cargasHerdadas} carga(s) do contêiner herdaram o navio automaticamente.` : '';
+      window.mostrarFeedback('sucesso', 'Contêiner Vinculado', `Contêiner ${cont.identificacao} vinculado com sucesso ao navio ${navioAlvo.nome}!${msgHeranca}`);
+    }
+    return true;
+  }
+
   window.vincularContainerANavio = async function(contIdentificacao, opcoes) {
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
-    if (!cont) return;
+    if (!cont) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Contêiner Não Encontrado', `Nenhum contêiner com a identificação ${contIdentificacao} está carregado nesta tela. Recarregue a página e tente novamente.`);
+      return;
+    }
 
-    if (naviosList.length === 0) {
+    // Somente embarcações ATRACADAS no Porto de Santos e operantes podem receber contêineres
+    // (navios em trânsito ou já no porto de destino não entram na seleção).
+    const navios = await carregarNaviosParaVinculoContainer();
+    if (navios.length === 0) {
       if (window.mostrarFeedback) {
         window.mostrarFeedback('alerta', 'Navios Indisponíveis', 'Nenhum navio cadastrado no sistema para vinculação de contêiner.');
       }
       return;
     }
 
-    // Backlog3: somente embarcações ATRACADAS no Porto de Santos podem
-    // receber contêineres. Navios em trânsito (FORA_DO_PORTO) ou já no
-    // porto de destino ficam fora da lista de vínculo.
-    const naviosElegiveis = naviosList.filter(n => (n.localizacao || 'DENTRO_DO_PORTO') === 'DENTRO_DO_PORTO');
-    if (naviosElegiveis.length === 0) {
-      if (window.mostrarFeedback) {
-        window.mostrarFeedback('atencao', 'Nenhum Navio no Porto', 'Não há embarcações atracadas no Porto de Santos disponíveis para vinculação. Navios em trânsito ou no porto de destino não podem receber contêineres.');
-      }
-      return;
-    }
-
-    const optionsText = naviosElegiveis.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo})`).join('\n');
-    let selecao;
+    // Uso do agente WebMCP: navio informado pelo IMO, validado no mesmo caminho da interface.
     if (opcoes && opcoes.navioImo !== undefined) {
-      // Uso do agente WebMCP: escolhe o navio pelo IMO, sem diálogo.
-      // O filtro do Backlog3 vale também aqui: IMO de navio fora do Porto
-      // de Santos não entra na lista de elegíveis e a vinculação é recusada.
-      const idxNavio = naviosElegiveis.findIndex((n) => n.imo === opcoes.navioImo);
-      selecao = idxNavio >= 0 ? String(idxNavio + 1) : '';
-      if (!selecao && window.mostrarFeedback) {
-        const navioPedido = naviosList.find((n) => n.imo === opcoes.navioImo);
-        const nomePedido = navioPedido ? `${navioPedido.nome} (${navioPedido.imo})` : `IMO ${opcoes.navioImo}`;
-        window.mostrarFeedback('alerta', 'Navio Fora do Porto', `A embarcação ${nomePedido} não está atracada no Porto de Santos (situação: ${navioPedido ? localizacaoInfo(navioPedido.localizacao).txt : 'não encontrada'}) e não pode receber contêineres.`);
+      const imoAlvo = String(opcoes.navioImo || '').trim();
+      const navioPedido = navios.find((n) => String(n.imo || '') === imoAlvo)
+        || naviosList.find((n) => n.imo === imoAlvo) || null;
+      if (!navioPedido) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Navio Não Encontrado', `Nenhuma embarcação com o IMO ${imoAlvo} está cadastrada no sistema.`);
+        return;
       }
-    } else {
-      selecao = await window.nexusPrompt('Vincular Contêiner a Navio', `Selecione um Navio para o contêiner ${cont.identificacao} (apenas embarcações no Porto de Santos):\n${optionsText}`);
-    }
-
-    if (!selecao) return;
-
-    const idxSel = parseInt(selecao, 10) - 1;
-    if (!isNaN(idxSel) && naviosElegiveis[idxSel]) {
-      const navioAlvo = naviosElegiveis[idxSel];
-
-      // Validação de Capacidade Rígida (OBS Tarefa 8): max 15.000 toneladas e ~300 metros de espaço
-      // Calcula peso e quantidade de contêineres atualmente alocados ao navioAlvo
-      const contsDoNavio = containersList.filter(c => (c.navio || '').toLowerCase() === navioAlvo.nome.toLowerCase() || c.navio_id === navioAlvo.id);
-
-      const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-      let pesoTotalNavioTons = 0;
-
-      cargasFluxo.filter(crg => crg.navio && crg.navio.toLowerCase() === navioAlvo.nome.toLowerCase()).forEach(crg => {
-        pesoTotalNavioTons += parseFloat(crg.peso) || 0;
-      });
-
-      // Cada contêiner ocupa aproximadamente 12m de comprimento e em média 25t
-      const espacoOcupadoMetros = (contsDoNavio.length + 1) * 12; // 300m max => aprox 25 contêineres
-      const pesoEstimadoComNovo = pesoTotalNavioTons + 25; // 25t por contêiner padrão
-
-      const LIMITE_PESO_TONS = 15000;
-      const LIMITE_ESPACO_METROS = 300;
-
-      if (pesoEstimadoComNovo > LIMITE_PESO_TONS || espacoOcupadoMetros > LIMITE_ESPACO_METROS) {
-        const msgErro = `BLOQUEIO DE CAPACIDADE (Tarefa 8): O navio "${navioAlvo.nome}" não possui suporte para vincular este contêiner! Capacidade limite excedida: O navio suporta no máximo 15.000 toneladas e 300 metros de espaço.`;
+      const motivo = motivoNavioInaptoParaContainer(navioPedido);
+      if (motivo) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('atencao', 'Capacidade Excedida', msgErro);
+          window.mostrarFeedback('alerta', 'Navio Fora do Porto', `A embarcação ${navioPedido.nome} (${navioPedido.imo}) ${motivo} e não pode receber contêineres.`);
         }
         return;
       }
-
-      cont.navio = navioAlvo.nome;
-      cont.navio_id = navioAlvo.id;
-      cont.navio_nome = navioAlvo.nome;
-
-      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
-
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('containers')
-            .update({ navio_id: navioAlvo.id })
-            .eq('numero_identificacao', cont.identificacao);
-        } catch (e) {
-          console.warn('Erro ao atualizar vinculação de contêiner no Supabase:', e);
-        }
-      }
-
-      // As cargas do contêiner com herança ativa passam a exibir o navio
-      const cargasHerdadas = await propagarNavioParaCargasDoContainer(cont.identificacao, navioAlvo);
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} vinculado ao navio ${navioAlvo.nome}${cargasHerdadas > 0 ? `; ${cargasHerdadas} carga(s) herdaram o navio` : ''}`);
-      }
-
-      if (window.NexusRepository && window.NexusRepository.notifyChange) {
-        window.NexusRepository.notifyChange('containers');
-      }
-
-      renderContainersTable();
-      if (window.mostrarFeedback) {
-        const msgHeranca = cargasHerdadas > 0 ? ` ${cargasHerdadas} carga(s) do contêiner herdaram o navio automaticamente.` : '';
-        window.mostrarFeedback('sucesso', 'Contêiner Vinculado', `Contêiner ${cont.identificacao} vinculado com sucesso ao navio ${navioAlvo.nome}!${msgHeranca}`);
-      }
-    } else {
-      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Seleção de navio inválida.');
+      await aplicarVinculoContainerNavio(cont, navioPedido);
+      return;
     }
+
+    // Interface: seleção do navio em modal (A4) — nada de digitar o número do navio.
+    if (!vincularContainerModal || !vincularContainerNavioSelect) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Tela Incompleta', 'Seletor de navios não encontrado nesta página.');
+      return;
+    }
+    containerPendenteVinculo = cont;
+    if (vincularContainerLabel) {
+      const navioAtual = String(cont.navio || '').trim();
+      vincularContainerLabel.textContent = `${cont.identificacao}${navioAtual ? ` — hoje vinculado ao ${navioAtual}` : ''}`;
+    }
+    preencherSelectVincularContainer(navios, cont);
+    vincularContainerNavioSelect.value = '';
+    if (vincularContainerAviso) {
+      const aptos = navios.filter(n => !motivoNavioInaptoParaContainer(n) && !motivoCapacidadeNavioParaContainer(n, cont)).length;
+      vincularContainerAviso.textContent = aptos > 0
+        ? `${aptos} navio(s) disponível(is) para receber este contêiner. Navios em viagem, no porto de destino ou sem capacidade aparecem desabilitados com o motivo.`
+        : 'Nenhum navio pode receber este contêiner agora: veja o motivo em cada opção desabilitada.';
+    }
+    vincularContainerModal.classList.remove('hidden');
   };
+
+  if (confirmarVincularContainerBtn) {
+    confirmarVincularContainerBtn.addEventListener('click', async () => {
+      if (!containerPendenteVinculo) return;
+      const imoEscolhido = vincularContainerNavioSelect ? vincularContainerNavioSelect.value : '';
+      if (!imoEscolhido) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Navio Obrigatório', 'Selecione um navio disponível para vincular o contêiner.');
+        return;
+      }
+      const cont = containerPendenteVinculo;
+      const navios = await carregarNaviosParaVinculoContainer();
+      const navioEscolhido = navios.find(n => String(n.imo || '') === imoEscolhido)
+        || naviosList.find(n => n.imo === imoEscolhido) || null;
+      if (!navioEscolhido) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Navio Não Encontrado', `O navio selecionado (IMO ${imoEscolhido}) não está mais na lista de embarcações. Escolha outro.`);
+        return;
+      }
+      const ok = await aplicarVinculoContainerNavio(cont, navioEscolhido);
+      if (ok) fecharVincularContainer();
+    });
+  }
+  if (cancelarVincularContainerBtn) cancelarVincularContainerBtn.addEventListener('click', fecharVincularContainer);
+  if (closeVincularContainerBtn) closeVincularContainerBtn.addEventListener('click', fecharVincularContainer);
 
   // Excluir Contêiner (Tarefa 8)
   window.excluirContainer = async function(contIdentificacao, opcoes) {
+    if (!podeExcluirEmbarcacao) {
+      avisoExclusao('erro', 'Acesso Restrito', `Excluir contêiner: ${AVISO_ACESSO_RESTRITO}`);
+      return;
+    }
+
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
-    if (!cont) return;
+    if (!cont) {
+      avisoExclusao('erro', 'Contêiner Não Encontrado', `Nenhum contêiner com a identificação ${contIdentificacao} está carregado nesta tela. Recarregue a página e tente novamente.`);
+      return;
+    }
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Contêiner', `Tem certeza que deseja EXCLUIR o contêiner ${cont.identificacao}? Essa ação o removerá do sistema.`)
@@ -1941,9 +2750,9 @@ document.addEventListener('DOMContentLoaded', () => {
       cargasDesvinc = cargas.contagem;
 
       // As cargas NÃO são apagadas: o banco apenas as desvincula (ON DELETE SET NULL)
-      const { error: errDel } = await window.nexusSupabase.from('containers').delete().eq('id', busca.id);
-      if (errDel) {
-        avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do contêiner ${cont.identificacao} (${errDel.message}). Nada foi alterado.`);
+      const delCont = await excluirNoBanco('containers', 'id', busca.id);
+      if (!delCont.ok) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `O contêiner ${cont.identificacao} não foi excluído: ${delCont.motivo}. Nada foi alterado.`);
         return;
       }
     }
@@ -2147,7 +2956,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="material-symbols-outlined text-[13px]">task</span>
                 <span>Tarefas (${tarefasAtivas.length})</span>
               </button>
-              <button type="button" onclick="window.excluirGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+              ${podeExcluirEmbarcacao ? `<button type="button" onclick="window.excluirGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>` : ''}
             </div>
           </td>
         </tr>
@@ -2157,8 +2966,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Excluir Guindaste (Item 6)
   window.excluirGuindaste = async function(gndIdentificacao, opcoes) {
+    if (!podeExcluirEmbarcacao) {
+      avisoExclusao('erro', 'Acesso Restrito', `Excluir guindaste: ${AVISO_ACESSO_RESTRITO}`);
+      return;
+    }
+
     const guindaste = guindastesList.find(g => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(gndIdentificacao));
-    if (!guindaste) return;
+    if (!guindaste) {
+      avisoExclusao('erro', 'Guindaste Não Encontrado', `Nenhum guindaste com a identificação ${gndIdentificacao} está carregado nesta tela. Recarregue a página e tente novamente.`);
+      return;
+    }
 
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
       ? await window.nexusConfirm('Excluir Guindaste', `Tem certeza que deseja EXCLUIR o guindaste ${guindaste.identificacao}? Esta ação o removerá do sistema.`)
@@ -2186,9 +3003,9 @@ document.addEventListener('DOMContentLoaded', () => {
         avisoExclusao('alerta', 'Exclusão Bloqueada', `O guindaste ${guindaste.identificacao} possui ${hist.total} registro(s) de manutenção/histórico vinculados. Excluí-lo apagaria esse histórico; a exclusão foi cancelada.`);
         return;
       }
-      const { error: errDel } = await window.nexusSupabase.from('guindastes').delete().eq('id', busca.id);
-      if (errDel) {
-        avisoExclusao('erro', 'Exclusão Não Realizada', `O banco de dados recusou a exclusão do guindaste ${guindaste.identificacao} (${errDel.message}). Nada foi alterado.`);
+      const delGnd = await excluirNoBanco('guindastes', 'id', busca.id);
+      if (!delGnd.ok) {
+        avisoExclusao('erro', 'Exclusão Não Realizada', `O guindaste ${guindaste.identificacao} não foi excluído: ${delGnd.motivo}. Nada foi alterado.`);
         return;
       }
     }
