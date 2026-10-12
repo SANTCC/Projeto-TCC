@@ -356,6 +356,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (welcomeAvatar) welcomeAvatar.textContent = initials;
   if (welcomeName) welcomeName.textContent = session.nome || 'Operador Porto';
+
+  // ------------------------------------------------------------------
+  // Menu oculto: "Auditoria de Login" (seguranca.html)
+  // ------------------------------------------------------------------
+  // O item não existe na barra lateral por padrão. Ele é liberado quando o
+  // operador clica 5 vezes no próprio nome neste Painel Geral. A liberação vale
+  // para a aba/sessão atual (sessionStorage, ver js/layout.js) e volta a ficar
+  // oculta ao reabrir o terminal ou ao sair da sessão. Cargos que não podem ver
+  // o painel (fora da Direção/Supervisor) não recebem nada: o gesto é ignorado
+  // em silêncio, para não revelar que a tela existe.
+  const CLIQUES_AUDITORIA = 5;
+  let cliquesNoNome = 0;
+
+  if (welcomeName) {
+    welcomeName.addEventListener('click', () => {
+      cliquesNoNome += 1;
+      if (cliquesNoNome < CLIQUES_AUDITORIA) return;
+      cliquesNoNome = 0;
+
+      const auditoria = window.NexusAuditoriaLogin;
+      if (!auditoria) return;
+
+      const jaEstavaLiberado = auditoria.liberado();
+      if (!auditoria.liberar() || jaEstavaLiberado) return;
+
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('info', 'Auditoria de Login',
+          'O painel de auditoria das tentativas de login foi liberado no menu lateral desta sessão.');
+      }
+    });
+  }
   if (welcomeRoleBadge) welcomeRoleBadge.textContent = session.cargo_nome || session.cargo;
   if (welcomeContext) welcomeContext.textContent = `Matrícula ${session.matricula} • Terminal STS-01 Santos`;
   if (welcomeCode) welcomeCode.textContent = session.codigo_individual || session.codigo || '--';

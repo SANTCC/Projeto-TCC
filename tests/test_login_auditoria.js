@@ -20,8 +20,9 @@ const ROOT = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 let JSDOM;
+let VirtualConsole;
 try {
-  ({ JSDOM } = require('jsdom'));
+  ({ JSDOM, VirtualConsole } = require('jsdom'));
 } catch (e) {
   throw new Error('jsdom não instalado (rode npm install).');
 }
@@ -126,6 +127,51 @@ function abrirTela({ relatorio, erro }) {
   return { w, chamadas };
 }
 
+/**
+ * Abre o Painel Geral (dashboard.html) em jsdom com o layout real injetado, para
+ * exercitar o gesto que revela o item "Auditoria de Login" na barra lateral.
+ * `gestoLiberado` simula a liberação já feita nesta aba (sessionStorage).
+ */
+function abrirPainel({ cargo = 'SUPERVISOR_GERENTE_OPERACOES', gestoLiberado = false } = {}) {
+  const virtualConsole = new VirtualConsole();
+  ['jsdomError', 'error', 'warn', 'log'].forEach((evento) => virtualConsole.on(evento, () => {}));
+
+  const dom = new JSDOM(read('dashboard.html'), {
+    url: 'https://nexus.test/dashboard.html',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole
+  });
+  const w = dom.window;
+
+  if (typeof w.matchMedia !== 'function') {
+    w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+  }
+  if (gestoLiberado) w.sessionStorage.setItem('nexus_auditoria_login_liberada', '1');
+
+  w.currentUserSession = {
+    cargo,
+    cargo_nome: cargo,
+    nome: 'Operadora de Teste',
+    matricula: 'MAT-0001',
+    codigo_individual: 'SUP-0001'
+  };
+
+  // Os <script src> do HTML não são baixados pelo jsdom: o ambiente é montado aqui.
+  w.eval(read('js/security.js'));
+  w.eval(read('js/session-cookies.js'));
+  w.eval(read('js/auth-guard.js'));
+  w.eval(read('js/layout.js'));
+  w.eval(read('js/pages/dashboard.js'));
+
+  // o DOMContentLoaded da página já passou no parse: dispara de novo para os
+  // módulos que esperam o evento (mesma abordagem de tests/test_backlog3_correcoes.js)
+  w.document.dispatchEvent(new w.Event('DOMContentLoaded', { bubbles: true }));
+  return { dom, w };
+}
+
+const itemAuditoria = (doc) => doc.querySelector('#appSidebar a[href="seguranca.html"]');
+
 (async () => {
   console.log('\n=== Auditoria das tentativas de login ===');
 
@@ -217,10 +263,77 @@ function abrirTela({ relatorio, erro }) {
       /'seguranca\.html': \[/.test(guard));
     check('o guard lista os mesmos cargos da tela',
       cargos.every((c) => /'seguranca\.html': \[[^\]]*\]/.test(guard) && guard.match(/'seguranca\.html': \[[^\]]*\]/)[0].includes(c)));
-    check('o item da sidebar só aparece para Direção/Supervisor',
-      /id: 'seguranca\.html'[\s\S]*?visible: isDiretor \|\| isSupervisor/.test(layout));
+    check('o item da sidebar fica oculto por padrão e só aparece para Direção/Supervisor depois do gesto',
+      /id: 'seguranca\.html'[\s\S]*?visible: \(\) => \(isDiretor \|\| isSupervisor\) && auditoriaLiberada\(\)/.test(layout));
     check('a sidebar usa um ícone já presente no subconjunto da fonte',
       /id: 'seguranca\.html', label: 'Auditoria de Login', icon: 'shield_lock'/.test(layout));
+  }
+
+  // 5.1 O menu oculto só entra na barra lateral depois dos 5 cliques no nome
+  {
+    console.log('\n5.1 Menu oculto (5 cliques no nome do usuário)');
+
+    const { dom, w } = abrirPainel();
+    const doc = w.document;
+
+    check('o módulo do gesto está exposto (window.NexusAuditoriaLogin)',
+      Boolean(w.NexusAuditoriaLogin) && typeof w.NexusAuditoriaLogin.liberar === 'function');
+    check('o gesto não está liberado por padrão', w.NexusAuditoriaLogin.liberado() === false);
+    check('a barra lateral NÃO traz o item "Auditoria de Login"',
+      itemAuditoria(doc) === null && !doc.getElementById('appSidebar').textContent.includes('Auditoria de Login'));
+    check('os demais itens do menu continuam no lugar (Painel Geral/Cargas & Pátio)',
+      doc.getElementById('appSidebar').textContent.includes('Painel Geral') &&
+      doc.getElementById('appSidebar').textContent.includes('Cargas & Pátio'));
+
+    const nome = doc.getElementById('welcomeName');
+    check('o nome do usuário é renderizado no Painel Geral',
+      Boolean(nome) && nome.textContent === 'Operadora de Teste', nome && nome.textContent);
+
+    const itensAntesDoGesto = doc.querySelectorAll('#appSidebar .sidebar-nav-item').length;
+
+    const clicarNoNome = (vezes) => {
+      for (let i = 0; i < vezes; i++) nome.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+    };
+
+    clicarNoNome(4);
+    check('4 cliques ainda não revelam o item', itemAuditoria(doc) === null);
+    check('o gesto só se completa no 5º clique', w.NexusAuditoriaLogin.liberado() === false);
+
+    clicarNoNome(1);
+    const item = itemAuditoria(doc);
+    check('o 5º clique faz o item aparecer na barra lateral', Boolean(item));
+    check('o item aponta para o painel de auditoria com o rótulo/ícone esperados',
+      Boolean(item) && item.textContent.includes('Auditoria de Login') &&
+      item.querySelector('.material-symbols-outlined').textContent === 'shield_lock' &&
+      item.classList.contains('sidebar-nav-item'),
+      item && item.textContent.trim());
+    check('a liberação fica registrada na sessão da aba', w.NexusAuditoriaLogin.liberado() === true);
+    check('o operador é avisado de que o painel foi liberado',
+      !doc.getElementById('globalFeedbackModal').classList.contains('hidden') &&
+      doc.getElementById('globalFeedbackMsg').textContent.includes('auditoria'),
+      doc.getElementById('globalFeedbackMsg') && doc.getElementById('globalFeedbackMsg').textContent);
+    check('os itens que já existiam permanecem no menu (nada é substituído)',
+      doc.getElementById('appSidebar').textContent.includes('Painel Geral') &&
+      doc.querySelectorAll('#appSidebar .sidebar-nav-item').length === itensAntesDoGesto + 1,
+      `${itensAntesDoGesto} → ${doc.querySelectorAll('#appSidebar .sidebar-nav-item').length}`);
+    dom.window.close();
+
+    // A liberação vale para as outras telas da mesma aba (mesmo sessionStorage)
+    const outra = abrirPainel({ gestoLiberado: true });
+    check('o item já liberado continua visível quando o layout é montado de novo',
+      Boolean(itemAuditoria(outra.w.document)));
+    outra.dom.window.close();
+
+    // Cargo operacional: o gesto é ignorado em silêncio (não revela o painel)
+    const estivador = abrirPainel({ cargo: 'ESTIVADOR', gestoLiberado: true });
+    const docEst = estivador.w.document;
+    check('cargo operacional não vê o item nem com o gesto liberado',
+      itemAuditoria(docEst) === null && estivador.w.NexusAuditoriaLogin.permitido() === false);
+    const nomeEst = docEst.getElementById('welcomeName');
+    for (let i = 0; i < 5; i++) nomeEst.dispatchEvent(new estivador.w.MouseEvent('click', { bubbles: true }));
+    check('5 cliques no nome não liberam nada para cargo sem permissão',
+      itemAuditoria(docEst) === null && estivador.w.NexusAuditoriaLogin.liberar() === false);
+    estivador.dom.window.close();
   }
 
   // 6. A tela consome o relatório e desenha o painel
