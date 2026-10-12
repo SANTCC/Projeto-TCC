@@ -7,8 +7,6 @@
  *   - Dados: lidos no banco pelo servidor; o cliente não envia valores do relatório.
  *   - Cache: o arquivo é `<sha256 do modelo>.pdf` no bucket privado relatorios-pdf. Mesmo conteúdo,
  *     mesmo arquivo (X-Relatorio-Cache: HIT). Se a gravação falhar, o PDF é entregue assim mesmo.
- *   - Data real (Backlog 001, C15): o PDF sai com a data/hora de emissão do relógio do servidor,
- *     impressa fora do modelo — assim o cache por conteúdo continua valendo para o mesmo dado.
  */
 import { BUCKET, CARGOS_PERMITIDOS, ehUuid, hashModelo, montarModelo } from './relatorio.js';
 import { gerarPdfRelatorio } from './pdf.js';
@@ -94,8 +92,7 @@ export function criarHandler({ criarCliente, lib, env }) {
       cache = 'HIT';
     }
     if (!bytes) {
-      // Backlog 001 (C15): o documento recebe a data REAL de emissão (relógio do servidor).
-      bytes = await gerarPdfRelatorio(modelo, hash, lib, { emitidoEm: new Date().toISOString() });
+      bytes = await gerarPdfRelatorio(modelo, hash, lib);
       const { error: erroGravacao } = await armazenamento.upload(caminho, bytes, {
         contentType: 'application/pdf',
         upsert: true

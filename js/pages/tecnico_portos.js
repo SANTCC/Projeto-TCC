@@ -13,50 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
   const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
 
-  // ---------------------------------------------------------------------------
-  // Padronização de matrícula e código (Backlog F1)
-  // ---------------------------------------------------------------------------
-  // A fonte única é js/padronizacao-codigos.js (o mesmo módulo usado em Embarcações,
-  // Delegação e Manutenção). Antes esta página fazia a própria conta — cada trecho
-  // prefixava "MAT-" de um jeito, o campo de matrícula não tinha máscara e a busca não
-  // encontrava matrícula digitada em outra grafia. Sem o módulo, cada função abaixo
-  // mantém o comportamento anterior para a página não perder funcionalidade.
-  const Codigos = window.NexusCodigos || null;
-
-  function formatarMatricula(valor) {
-    if (Codigos) return Codigos.formatarMatricula(valor);
-    const up = String(valor == null ? '' : valor).trim().toUpperCase();
-    if (up === '') return '';
-    return up.startsWith('MAT-') ? up : `MAT-${up}`;
-  }
-
-  /** Formas em que a matrícula pode estar gravada (nova com prefixo, legada sem). */
-  function variacoesMatricula(valor) {
-    if (Codigos) return Codigos.variacoesMatricula(valor);
-    const up = String(valor == null ? '' : valor).toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const m = /^MAT(\d+)$/.exec(up);
-    if (m) return [`MAT-${m[1]}`, m[1]];
-    if (/^\d+$/.test(up)) return [up, `MAT-${up}`];
-    return [];
-  }
-
-  /** Chave de unicidade: MAT-2001, mat2001 e 2001 são a mesma pessoa. */
-  function chaveMatricula(valor) {
-    if (Codigos) return Codigos.chaveMatricula(valor);
-    const up = String(valor == null ? '' : valor).toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const m = /^MAT(\d+)$/.exec(up);
-    return m ? m[1] : up;
-  }
-
-  function codigoIndividual(matricula, sufixo) {
-    if (Codigos) return Codigos.codigoIndividual(matricula, sufixo);
-    const digitos = chaveMatricula(matricula);
-    if (!digitos) return '';
-    const fim = String(sufixo === undefined || sufixo === null || sufixo === '' ? 'SP' : sufixo)
-      .toUpperCase().replace(/[^A-Z0-9]/g, '');
-    return fim ? `NX-${digitos}-${fim}` : `NX-${digitos}`;
-  }
-
   const searchInput = document.getElementById('empMatriculaSearch');
   const searchBtn = document.getElementById('searchEmpBtn');
   const regenBtn = document.getElementById('regenCodeBtn');
@@ -133,26 +89,22 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
       }
 
-      // F1: a busca aceita a matrícula em qualquer grafia ("1040", "MAT-1040", "mat1040").
-      // As variações saem do módulo de padronização e só têm A-Z/0-9 — nunca vai texto
-      // livre do operador para o filtro da consulta.
-      const chaveBuscaMatricula = chaveMatricula(q);
-      const grafiasBusca = variacoesMatricula(q);
+      const formattedMatricula = q.startsWith('MAT-') ? q : `MAT-${q}`;
       const storedOverrides = JSON.parse(localStorage.getItem('nexus_code_overrides') || '{}');
       let found = null;
 
       // 1. Busca assíncrona na tabela 'funcionarios' do Supabase
-      if (grafiasBusca.length > 0 && window.nexusSupabase) {
+      if (window.nexusSupabase) {
         try {
           const { data, error } = await window.nexusSupabase
             .from('funcionarios')
             .select('*')
-            .or(grafiasBusca.map((grafia) => `matricula.eq.${grafia}`).join(','))
+            .or(`matricula.eq.${q},matricula.eq.${formattedMatricula}`)
             .maybeSingle();
 
           if (!error && data) {
             found = {
-              codigo: data.codigo_individual || codigoIndividual(data.matricula),
+              codigo: data.codigo_individual || `NX-${data.matricula.replace('MAT-', '')}-SP`,
               matricula: data.matricula,
               nome: data.nome,
               cargo: data.cargo,
@@ -177,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!errCpf && Array.isArray(porCpf) && porCpf.length === 1) {
             const data = porCpf[0];
             found = {
-              codigo: data.codigo_individual || codigoIndividual(data.matricula),
+              codigo: data.codigo_individual || `NX-${String(data.matricula || '').replace('MAT-', '')}-SP`,
               matricula: data.matricula,
               nome: data.nome,
               cargo: data.cargo,
@@ -192,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dynamicFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
         const qNorm = normalizarBuscaFuzzy(q);
         const dyn = dynamicFuncs.find(f => {
-          if (f.matricula && chaveBuscaMatricula && chaveMatricula(f.matricula) === chaveBuscaMatricula) return true;
+          if (f.matricula && (f.matricula.toUpperCase() === q || f.matricula.toUpperCase() === formattedMatricula)) return true;
           if (digitosBusca.length >= 3 && fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === digitosBusca) return true;
           if (qNorm.length >= 3 && normalizarBuscaFuzzy(f.nome) === qNorm) return true;
           return false;
@@ -301,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (confirmou) {
         const suffix = Math.floor(1000 + Math.random() * 9000);
-        const newCode = codigoIndividual(selectedEmp.matricula, suffix);
+        const newCode = `NX-${selectedEmp.matricula.replace('MAT-', '')}-${suffix}`;
 
         const storedOverrides = JSON.parse(localStorage.getItem('nexus_code_overrides') || '{}');
         storedOverrides[selectedEmp.matricula] = {
@@ -315,17 +267,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (window.nexusSupabase) {
           try {
-            // A reemissão atinge o registro em QUALQUER grafia da matrícula (com/sem prefixo):
-            // antes, um registro legado sem "MAT-" recebia o novo código e continuava valendo
-            // o antigo no banco.
-            const grafiasMat = variacoesMatricula(selectedEmp.matricula);
-            const consultaReemissao = window.nexusSupabase.from('funcionarios')
-              .update({ codigo_individual: newCode });
-            if (grafiasMat.length > 1) {
-              await consultaReemissao.in('matricula', grafiasMat);
-            } else {
-              await consultaReemissao.eq('matricula', selectedEmp.matricula);
-            }
+            const rawMat = selectedEmp.matricula;
+            const formattedMat = rawMat.startsWith('MAT-') ? rawMat : `MAT-${rawMat}`;
+            const unformattedMat = rawMat.replace('MAT-', '');
+
+            await window.nexusSupabase.from('funcionarios')
+              .update({ codigo_individual: newCode })
+              .or(`matricula.eq.${rawMat},matricula.eq.${formattedMat},matricula.eq.${unformattedMat}`);
 
             if (window.registrarLogAlteracao) {
               await window.registrarLogAlteracao('EDICAO', 'funcionarios', null, { matricula: selectedEmp.matricula, novo_codigo: newCode, motivo: 'Reemissão de código pelo Técnico em Portos' });
@@ -384,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
             matricula: s.matricula,
             nome: s.nome,
             cargo: s.cargo_nome || s.cargo,
-            codigo: s.codigo_individual || codigoIndividual(s.matricula),
+            codigo: s.codigo_individual || `NX-${String(s.matricula || '').replace('MAT-', '')}-SP`,
             cpf: s.cpf || '',
             data_nascimento: s.data_nascimento || '',
             doc: s.ativo ? 'Ativo no Supabase' : 'Inativo no Supabase',
@@ -510,22 +458,6 @@ document.addEventListener('DOMContentLoaded', () => {
     funcCpfInput.addEventListener('input', () => aplicarMascaraCpf(funcCpfInput));
   }
 
-  // Máscara da matrícula (F1): quem digita "2001" vê "MAT-2001" durante a digitação e no
-  // blur. Vale também para colar o código sem hífen ("mat2001" → "MAT-2001").
-  const funcMatriculaInput = document.getElementById('funcMatricula');
-  if (funcMatriculaInput) {
-    if (Codigos) {
-      Codigos.vincularFormatacao(funcMatriculaInput, Codigos.formatarMatricula);
-    } else {
-      const aplicarMascaraMatricula = () => {
-        const formatado = formatarMatricula(funcMatriculaInput.value);
-        if (formatado !== funcMatriculaInput.value) funcMatriculaInput.value = formatado;
-      };
-      funcMatriculaInput.addEventListener('input', aplicarMascaraMatricula);
-      funcMatriculaInput.addEventListener('blur', aplicarMascaraMatricula);
-    }
-  }
-
   if (funcForm) {
     funcForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -565,9 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // F1: a matrícula é normalizada pela regra única (js/padronizacao-codigos.js) —
-      // mesma grafia em qualquer tela, sem prefixo duplicado ("mat-1234" → "MAT-1234").
-      const formattedMatricula = formatarMatricula(matriculaRaw);
+      const formattedMatricula = matriculaRaw.toUpperCase().startsWith('MAT-') ? matriculaRaw.toUpperCase() : `MAT-${matriculaRaw.toUpperCase()}`;
 
       // Tarefa 4: Padronizar a matrícula de funcionários no padrão MAT-4 números (ex: MAT-1234)
       const matriculaPattern = /^MAT-\d{4}$/;
@@ -577,10 +507,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Validação de Duplicidade Rígida: bloqueia a mesma pessoa em qualquer grafia da
-      // matrícula (C26/F1): MAT-2001, mat2001 e o registro legado "2001" são a mesma matrícula.
-      const chaveNova = chaveMatricula(formattedMatricula);
-      const funcionarioExistente = mergedFuncList.find(f => chaveMatricula(f.matricula) === chaveNova);
+      // Validação de Duplicidade Rígida: Bloqueia qualquer cadastro com a mesma matrícula
+      const funcionarioExistente = mergedFuncList.find(f => f.matricula.toUpperCase() === formattedMatricula);
       if (funcionarioExistente) {
         const msg = `BLOQUEIO DE DUPLICIDADE: A matrícula "${formattedMatricula}" já está cadastrada no sistema para o funcionário "${funcionarioExistente.nome}". Não é permitido cadastrar mais de uma pessoa com a mesma matrícula!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Matrícula Duplicada', msg);
@@ -595,18 +523,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Validação assíncrona adicional no Supabase. F1: consulta TODAS as grafias em que a
-      // matrícula pode estar gravada (com e sem o prefixo MAT-) — um registro legado sem
-      // prefixo deixava a duplicidade passar.
-      const grafiasMatricula = variacoesMatricula(formattedMatricula);
+      // Validação assíncrona adicional no Supabase
       if (window.nexusSupabase) {
         try {
-          const consultaMatricula = window.nexusSupabase
+          const { data: dupData } = await window.nexusSupabase
             .from('funcionarios')
-            .select('nome, matricula');
-          const { data: dupData } = grafiasMatricula.length > 1
-            ? await consultaMatricula.in('matricula', grafiasMatricula).maybeSingle()
-            : await consultaMatricula.eq('matricula', formattedMatricula).maybeSingle();
+            .select('nome, matricula')
+            .eq('matricula', formattedMatricula)
+            .maybeSingle();
 
           if (dupData) {
             const msg = `BLOQUEIO DE DUPLICIDADE (Supabase): A matrícula "${formattedMatricula}" já pertence ao funcionário "${dupData.nome}". Não é permitido cadastrar duplicidades!`;
@@ -635,7 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const suffix = Math.floor(1000 + Math.random() * 9000);
-      const codigo = codigoIndividual(formattedMatricula, suffix);
+      const codigo = `NX-${formattedMatricula.replace('MAT-', '')}-${suffix}`;
 
       const novoFuncionario = {
         matricula: formattedMatricula,

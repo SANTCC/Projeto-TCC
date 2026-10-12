@@ -169,33 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const transicoesStatusEmVoo = new Map();
   const CARGA_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  /**
-   * Ocupação do pátio (G1) — o MESMO cálculo do painel (card "Ocupação do Pátio") e do
-   * agente (webmcp-dashboard), feito por NexusRepository.calcularOcupacaoPatio. Lê os
-   * dados compartilhados do Supabase e, como reserva, a lista já espelhada localmente.
-   * Devolve null somente se o módulo de dados não estiver carregado.
-   */
-  async function obterOcupacaoDoPatio() {
-    const repo = window.NexusRepository;
-    if (!repo || typeof repo.calcularOcupacaoPatio !== 'function') return null;
-    if (repo.getSupabase && repo.getSupabase()) {
-      try {
-        const doBanco = await repo.getCargas();
-        if (Array.isArray(doBanco)) return repo.calcularOcupacaoPatio(doBanco);
-      } catch (error) {
-        console.warn('[NexusPort] Não foi possível ler a ocupação do pátio no Supabase; usando a lista local:', error);
-      }
-    }
-    return repo.calcularOcupacaoPatio(cargasFluxoList);
-  }
-
-  /** Ocupação do pátio calculada da lista já carregada na página (mesma regra compartilhada). */
-  function obterOcupacaoDoPatioLocal() {
-    const repo = window.NexusRepository;
-    if (!repo || typeof repo.calcularOcupacaoPatio !== 'function') return null;
-    return repo.calcularOcupacaoPatio(cargasFluxoList);
-  }
-
   function obterTransicoesAutomaticas(cargas) {
     let naviosLocais = [];
     try {
@@ -224,16 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (localizacao === 'FORA_DO_PORTO' && !['EM_TRANSITO', 'ENTREGUE'].includes(carga.status)) {
         statusNovo = 'EM_TRANSITO';
       }
-      if (statusNovo) {
-        // A1: ao chegar ao destino a carga é entregue E desvinculada do navio
-        // (cargas.navio_id = null) — o navio volta a Santos sem cargas antigas.
-        transicoes.push({
-          carga,
-          statusAnterior: carga.status,
-          statusNovo,
-          desvincularNavio: statusNovo === 'ENTREGUE'
-        });
-      }
+      if (statusNovo) transicoes.push({ carga, statusAnterior: carga.status, statusNovo });
     });
     return transicoes;
   }
@@ -249,33 +213,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const promessasPorChave = new Map();
     const gruposNovos = new Map();
 
-    // A1: além do status, a transição para ENTREGUE remove o vínculo com o navio.
-    const desvincular = (carga) => {
-      carga.navio = '';
-      carga.navio_nome = null;
-      carga.navioId = null;
-      carga.navio_id = null;
-    };
-
     locais.forEach((t) => {
       t.carga.status = t.statusNovo;
-      if (t.desvincularNavio) desvincular(t.carga);
     });
 
     remotas.forEach((t) => {
       const id = String(t.carga.rawDbId);
-      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo, !!t.desvincularNavio]);
+      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo]);
       const existente = transicoesStatusEmVoo.get(chave);
       if (existente) {
         promessasPorChave.set(chave, existente);
         return;
       }
-      const chaveGrupo = JSON.stringify([t.statusAnterior, t.statusNovo, !!t.desvincularNavio]);
+      const chaveGrupo = JSON.stringify([t.statusAnterior, t.statusNovo]);
       if (!gruposNovos.has(chaveGrupo)) {
         gruposNovos.set(chaveGrupo, {
           statusAnterior: t.statusAnterior,
           statusNovo: t.statusNovo,
-          desvincularNavio: !!t.desvincularNavio,
           ids: new Set(),
           chaves: new Set()
         });
@@ -290,13 +244,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (requestRevision !== undefined && requestRevision !== cargasLoadRevision) {
           return { ok: false, obsoleta: true, atualizados: new Set() };
         }
-        // A1: entregar implica desvincular do navio no mesmo update (por id).
-        const payload = grupo.desvincularNavio
-          ? { status_fluxo: grupo.statusNovo, navio_id: null }
-          : { status_fluxo: grupo.statusNovo };
         const { data, error } = await client
           .from('cargas')
-          .update(payload)
+          .update({ status_fluxo: grupo.statusNovo })
           .in('id', ids)
           .eq('status_fluxo', grupo.statusAnterior)
           .select('id');
@@ -329,11 +279,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     remotas.forEach((t) => {
       const id = String(t.carga.rawDbId);
-      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo, !!t.desvincularNavio]);
+      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo]);
       const resultado = resultadoPorPromessa.get(promessasPorChave.get(chave));
       if (resultado && resultado.atualizados && resultado.atualizados.has(id)) {
         t.carga.status = t.statusNovo;
-        if (t.desvincularNavio) desvincular(t.carga);
         houveGravacaoRemota = true;
       }
     });
@@ -355,59 +304,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // mas sem salvá-la no cache compartilhado nem notificar um novo carregamento.
     remotas.forEach((t) => {
       const id = String(t.carga.rawDbId);
-      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo, !!t.desvincularNavio]);
+      const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo]);
       const resultado = resultadoPorPromessa.get(promessasPorChave.get(chave));
-      if (resultado && resultado.erro && !resultado.obsoleta) {
-        t.carga.status = t.statusNovo;
-        if (t.desvincularNavio) desvincular(t.carga);
-      }
+      if (resultado && resultado.erro && !resultado.obsoleta) t.carga.status = t.statusNovo;
     });
 
     return true;
-  }
-
-  /**
-   * A1 (reparo best-effort): carga já ENTREGUE no banco não pode continuar apontando para
-   * um navio. Corrige vínculos anteriores a esta regra, sempre por id de carga, sem alterar
-   * status nem o cache local. Falha aqui não bloqueia a listagem (a leitura já projeta o
-   * desvínculo) e o reparo volta a ser tentado na próxima sincronização.
-   */
-  let reparoCargasEntreguesConcluido = false;
-  async function repararCargasEntreguesVinculadas() {
-    // Uma consulta por carregamento da página: depois de conferido, o vínculo de cargas
-    // entregues já não precisa ser reverificado a cada atualização.
-    if (reparoCargasEntreguesConcluido) return 0;
-    const client = window.nexusSupabase;
-    if (!client || typeof client.from !== 'function') return 0;
-    let consulta = null;
-    try {
-      consulta = client.from('cargas');
-    } catch (e) {
-      return 0;
-    }
-    if (!consulta || typeof consulta.select !== 'function') return 0;
-    try {
-      const { data, error } = await consulta.select('id, navio_id, status_fluxo').eq('status_fluxo', 'ENTREGUE');
-      if (error) {
-        console.warn('[NexusPort] Não foi possível conferir os vínculos das cargas entregues:', error.message || error);
-        return 0;
-      }
-      reparoCargasEntreguesConcluido = true;
-      const ids = (Array.isArray(data) ? data : [])
-        .filter((linha) => linha && linha.navio_id && CARGA_UUID_RE.test(String(linha.id || '')))
-        .map((linha) => String(linha.id));
-      if (ids.length === 0) return 0;
-      const { error: erroUpdate } = await client.from('cargas').update({ navio_id: null }).in('id', ids);
-      if (erroUpdate) {
-        console.warn('[NexusPort] Erro ao reparar os vínculos das cargas entregues:', erroUpdate.message || erroUpdate);
-        reparoCargasEntreguesConcluido = false;
-        return 0;
-      }
-      return ids.length;
-    } catch (e) {
-      console.warn('[NexusPort] Erro ao reparar os vínculos das cargas entregues:', e);
-      return 0;
-    }
   }
 
   async function carregarCargasSupabase(revision) {
@@ -434,13 +336,6 @@ document.addEventListener('DOMContentLoaded', () => {
       console.warn('[NexusPort] Erro ao sincronizar status automático das cargas:', err);
     }
     if (requestRevision !== cargasLoadRevision) return;
-    // A1: repara vínculos antigos de cargas já entregues (por id, sem bloquear a listagem).
-    try {
-      await repararCargasEntreguesVinculadas();
-    } catch (err) {
-      console.warn('[NexusPort] Erro ao reparar vínculos de cargas entregues:', err);
-    }
-    if (requestRevision !== cargasLoadRevision) return;
     renderTable();
   }
 
@@ -463,64 +358,6 @@ document.addEventListener('DOMContentLoaded', () => {
       window.NexusRepository.invalidarLeiturasCargas();
     }
   });
-
-  // Renderização de cargas entregues na Tabela de Cargas Entregues (C1, verde).
-  // A carga entregue saiu do fluxo (já desembarcou no destino): ela não aparece
-  // na tabela principal, que exibe apenas cargas não entregues.
-  function renderCargasEntreguesTable(cargasEntregues = []) {
-    const entreguesTableBody = document.getElementById('cargasEntreguesTableBody');
-    const entreguesCounter = document.getElementById('cargasEntreguesCounter');
-    if (entreguesCounter) {
-      entreguesCounter.textContent = `${cargasEntregues.length} carga(s) entregue(s)`;
-    }
-    if (!entreguesTableBody) return;
-
-    if (!cargasEntregues || cargasEntregues.length === 0) {
-      entreguesTableBody.innerHTML = `
-        <tr>
-          <td colspan="6" class="p-4 text-center text-slate-600 italic">Nenhuma carga entregue no sistema.</td>
-        </tr>
-      `;
-      return;
-    }
-
-    entreguesTableBody.innerHTML = cargasEntregues.map(c => {
-      const observacaoHtml = c.navio
-        ? `Navio: ${esc(c.navio)}`
-        : 'Navio desvinculado na entrega';
-      return `
-      <tr class="hover:bg-emerald-100/60 dark:hover:bg-emerald-950/40 transition-colors">
-        <td class="p-3 font-mono font-bold text-emerald-800 dark:text-emerald-300">
-          ${esc(c.id)}
-          <span class="block text-[10px] text-slate-600 font-normal">${esc(c.qrCode || '')}</span>
-        </td>
-        <td class="p-3 font-bold">${esc(c.tipo || 'Carga Geral')} <span class="block text-[10px] text-slate-600 font-normal">${esc(c.natureza || '')}</span></td>
-        <td class="p-3 font-mono">${esc(c.peso || '—')} / ${esc(c.volume || '—')}</td>
-        <td class="p-3 font-bold">${esc(c.portoDescarga || 'Porto de destino')}</td>
-        <td class="p-3 text-xs">
-          <span class="block font-mono ${c.container ? '' : 'text-slate-600 italic'}">${c.container ? esc(c.container) : 'Contêiner: não vinculado'}</span>
-          <span class="block text-[10px] text-slate-600">${observacaoHtml}</span>
-        </td>
-        <td class="p-3">
-          <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-green-600 text-white dark:bg-green-800 dark:text-green-100">ENTREGUE</span>
-        </td>
-      </tr>
-      `;
-    }).join('');
-  }
-
-  /** C1: destaca a Tabela de Cargas Entregues quando o filtro de status é ENTREGUE. */
-  let focarTabelaEntreguesTimer = null;
-  function focarTabelaEntregues() {
-    const card = document.getElementById('cargasEntreguesCard');
-    if (!card) return;
-    // Já destacada: não rola a página de novo a cada nova renderização com o mesmo filtro.
-    if (card.classList.contains('ring-2')) return;
-    try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { /* ambiente sem scroll */ }
-    card.classList.add('ring-2', 'ring-emerald-400');
-    if (focarTabelaEntreguesTimer) clearTimeout(focarTabelaEntreguesTimer);
-    focarTabelaEntreguesTimer = setTimeout(() => card.classList.remove('ring-2', 'ring-emerald-400'), 2000);
-  }
 
   // Renderização de cargas canceladas na Tabela de Cargas Canceladas (cinza)
   function renderCargasCanceladasTable(cargasCanceladas = []) {
@@ -597,8 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
     let alterado = false;
     cargasFluxoList.forEach(c => {
-      // A1: carga ENTREGUE já saiu do navio — não volta a herdar vínculo do contêiner.
-      if (!c || c.status === 'CANCELADA' || c.status === 'RECUSADA' || c.status === 'ENTREGUE') return;
+      if (!c || c.status === 'CANCELADA' || c.status === 'RECUSADA') return;
       // Herdam: cargas marcadas com a opção de herança OU (legado) cargas com
       // contêiner e sem navio vinculado.
       const deveHerdar = c.herdarNavioDoContainer === true || (c.container && !c.navio);
@@ -704,27 +540,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterDataFimVal = (document.getElementById('filterDataFim')?.value || '').trim();
     const filterBuscaVal = (document.getElementById('filterBusca')?.value || '').trim().toLowerCase();
 
-    // A tabela principal exibe apenas cargas NÃO ENTREGUES e pendentes no fluxo;
-    // entregues (verde, C1), canceladas (cinza) e recusadas (vermelha) ficam nas
-    // tabelas próprias da mesma página.
-    // H1: a carga em fluxo é visível para todos os cargos — inclusive a registrada pela
-    // Direção, que precisa aparecer para o Estivador que vai trabalhar nela. Quem
-    // restringe é a permissão da ação (botões), não a visibilidade da tela.
-    const cargasVisiveisNaTela = (lista) => {
-      const visao = window.NexusVision;
-      if (visao && typeof visao.visibilidadeDeCargas === 'function') {
-        return visao.visibilidadeDeCargas(lista, session);
-      }
-      // Sem o módulo de visão carregado, a tela não esconde cargas.
-      return lista;
-    };
-
-    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA' && c.status !== 'ENTREGUE');
-    cargasAtivas = cargasVisiveisNaTela(cargasAtivas);
-    // C1: cargas entregues têm tabela própria; o histórico segue a Visão Própria (RF 1.3)
-    // — a mesma função aplica essa regra, então as duas tabelas nunca divergem.
-    let cargasEntregues = cargasFluxoList.filter(c => c.status === 'ENTREGUE');
-    cargasEntregues = cargasVisiveisNaTela(cargasEntregues);
+    // A tabela principal exibe apenas cargas pendentes no fluxo; canceladas e
+    // recusadas ficam nas tabelas próprias (cinza e vermelha).
+    // Exibe cargas ativas aplicando Visão Própria / Visão Operacional (RF 1.3)
+    let cargasAtivas = cargasFluxoList.filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA');
+    if (window.NexusVision && window.NexusVision.filterCargasForUser) {
+      cargasAtivas = window.NexusVision.filterCargasForUser(cargasAtivas, session);
+    }
     const cargasCanceladas = cargasFluxoList.filter(c => c.status === 'CANCELADA');
     const cargasRecusadas = cargasFluxoList.filter(c => c.status === 'RECUSADA');
 
@@ -762,13 +584,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     });
 
-    renderCargasEntreguesTable(cargasEntregues);
     renderCargasCanceladasTable(cargasCanceladas);
     renderCargasRecusadasTable(cargasRecusadas);
-
-    // C1: o filtro de status ENTREGUE aponta para a Tabela de Cargas Entregues
-    // (a tabela principal não exibe cargas já entregues).
-    if (filterStatusVal === 'ENTREGUE') focarTabelaEntregues();
 
     // Contador "Exibindo X de Y" (Backlog 3 - 7b)
     const cargasCounterEl = document.getElementById('cargasCounter');
@@ -806,20 +623,6 @@ document.addEventListener('DOMContentLoaded', () => {
           actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else {
           actionButtonsHtml += `<button type="button" title="Movimentar carga no pátio" aria-label="Movimentar carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
-        }
-      }
-
-      // C2 (Backlog NexusPort): somente DEPOIS que a carga tem contêiner vinculado
-      // aparece o botão de movimentá-la para dentro dele. Enquanto está em
-      // ARMAZENAGEM a carga continua ocupando o pátio; ao movimentar para o
-      // contêiner ela passa a PRONTA_PARA_ENTREGA e o pátio é liberado (a
-      // ocupação é derivada do status_fluxo, no banco e no módulo de dados).
-      if (isEstivador && c.status === 'ARMAZENAGEM' && (c.container || c.container_id)) {
-        const contVinculado = c.container || c.container_id;
-        if (emergenciaAtiva) {
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">deployed_code</span><span class="hidden sm:inline">P/ Contêiner</span></button>`;
-        } else {
-          actionButtonsHtml += `<button type="button" title="Movimentar a carga para o contêiner vinculado ${esc(contVinculado)} — a carga deixa de ocupar o pátio" aria-label="Movimentar carga para o contêiner vinculado" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR_CONTAINER')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">deployed_code</span><span class="hidden sm:inline">P/ Contêiner</span></button>`;
         }
       }
 
@@ -1090,15 +893,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Regra 2.9 (Área do pátio / Capacidade máxima): mesmo cálculo do painel (G1).
-      // A posição do pátio é ocupada por carga em recebimento/inspeção e em armazenagem;
-      // a carga movimentada para o contêiner (PRONTA_PARA_ENTREGA) já liberou a posição (C2).
-      const ocupacaoPatio = await obterOcupacaoDoPatio();
-      if (!ocupacaoPatio) {
-        console.warn('[NexusPort] Módulo de dados ausente: o limite de capacidade do pátio (Regra 2.9) não pôde ser avaliado.');
-      } else if (ocupacaoPatio.ocupados >= ocupacaoPatio.capacidade) {
+      // Regra 2.9 (Área do pátio / Capacidade máxima): Limite regulamentar de 100 ha (1.000.000 m² / 100 posições ativas)
+      const CAPACIDADE_MAXIMA_PATIO_HA = 100;
+      const cargasAtivasPatio = cargasFluxoList.filter(c => ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'].includes(c.status));
+      if (cargasAtivasPatio.length >= CAPACIDADE_MAXIMA_PATIO_HA) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Capacidade Máxima do Pátio Excedida', `BLOQUEIO DE CAPACIDADE REGULAMENTAR (Regra 2.9): O pátio atingiu o limite operacional máximo de 100 hectares (1.000.000 m² / ${ocupacaoPatio.capacidade} posições ativas)! Não é permitido agendar novas cargas até a liberação de espaço.`);
+          window.mostrarFeedback('alerta', 'Capacidade Máxima do Pátio Excedida', `BLOQUEIO DE CAPACIDADE REGULAMENTAR (Regra 2.9): O pátio atingiu o limite operacional máximo de 100 hectares (1.000.000 m² / ${CAPACIDADE_MAXIMA_PATIO_HA} cargas em fluxo ativo)! Não é permitido agendar novas cargas até a liberação de espaço.`);
         }
         return;
       }
@@ -1888,55 +1688,6 @@ document.addEventListener('DOMContentLoaded', () => {
       // Interface: abre o modal com setor de destino + guindaste.
       window.abrirModalMovimentacao(idCarga);
       return;
-    } else if (acao === 'MOVIMENTAR_CONTAINER') {
-      // C2 (Backlog NexusPort): movimenta a carga para DENTRO do contêiner já
-      // vinculado. Continua ocupando o pátio enquanto está em ARMAZENAGEM; com a
-      // movimentação a carga passa a PRONTA_PARA_ENTREGA e deixa de ocupar o pátio
-      // (G1: a ocupação é derivada de NexusRepository.calcularOcupacaoPatio — o mesmo
-      // número do card do painel e do bloqueio de capacidade do agendamento).
-      if (!isEstivadorRole) {
-        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Estivadores (ou superiores) podem movimentar a carga para o contêiner vinculado!');
-        return;
-      }
-
-      if (carga.status !== 'ARMAZENAGEM') {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Regra de Negócio', `A movimentação para o contêiner só é permitida para cargas em ARMAZENAGEM (ocupando o pátio). A carga ${idCarga} está em "${carga.status}".`);
-        }
-        return;
-      }
-
-      // Vínculo obrigatório: sem contêiner não existe destino para a movimentação.
-      if (!carga.container && !carga.container_id) {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', `A carga ${idCarga} ainda não tem contêiner vinculado. Use o botão "Vincular" antes de movimentá-la para o contêiner.`);
-        }
-        return;
-      }
-
-      // Item 6 (backlog): operações do pátio bloqueadas enquanto o alarme de emergência estiver ativo
-      if (typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva()) {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Emergência Ativa', 'Operações do pátio bloqueadas temporariamente enquanto o alarme de emergência estiver ativo.');
-        }
-        return;
-      }
-
-      const contDestino = carga.container || carga.container_id;
-      carga.status = 'PRONTA_PARA_ENTREGA';
-
-      if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao(idCarga, 'EDICAO', `Carga movimentada para o contêiner ${contDestino} pelo Estivador — deixou de ocupar o pátio (PRONTA_PARA_ENTREGA)`);
-      }
-      if (window.mostrarFeedback) {
-        // G1: o número sai do MESMO cálculo do painel ("Ocupação do Pátio"), já sem esta
-        // carga — ela acabou de passar a PRONTA_PARA_ENTREGA e liberou a posição.
-        const ocupacao = obterOcupacaoDoPatioLocal();
-        const detalhePatio = ocupacao
-          ? ` ${ocupacao.ocupados} de ${ocupacao.capacidade} posições do pátio seguem ocupadas.`
-          : '';
-        window.mostrarFeedback('sucesso', 'Carga no Contêiner', `Carga ${idCarga} movimentada para o contêiner ${contDestino}. A carga deixou de ocupar o pátio.${detalhePatio}`);
-      }
     } else if (acao === 'RECEBER') {
       if (!isConferenteRole) {
         if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Conferentes de Carga podem registrar o recebimento físico!');

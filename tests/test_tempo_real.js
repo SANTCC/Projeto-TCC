@@ -331,12 +331,8 @@ function testarConfiguracao() {
 
   log('\n7. Código: manutenção, embarcações e Relatórios');
   const manut = read('js/pages/manutencao.js');
-  // A gravação é centralizada em aplicarEstadoEquipamentoDaOs (update por id); a regra do
-  // estado de cada tipo de equipamento vive em estadoDoEquipamento. O que não pode existir é
-  // EM_MANUTENCAO para contêiner (estado_container_enum não tem esse valor).
-  const blocoEstadoContainer = (manut.match(/if \(tipo === 'CONTAINER'\) \{[\s\S]*?\n    \}/) || [''])[0];
   check('manutenção de contêiner grava EM_REFORMA (não EM_MANUTENCAO)',
-    /EM_REFORMA/.test(blocoEstadoContainer) && !/EM_MANUTENCAO/.test(blocoEstadoContainer), blocoEstadoContainer.replace(/\s+/g, ' ').slice(0, 140));
+    /from\('containers'\)\.update\(\{ estado: 'EM_REFORMA' \}\)/.test(manut) && !/from\('containers'\)\.update\(\{ estado: 'EM_MANUTENCAO' \}\)/.test(manut));
   check('OS de navio grava navio_id (UUID validado)', /navio_id:\s*navioUuid/.test(manut) && /navioUuid\s*=.*test\(/.test(manut));
   check('listener nexus_data_changed de manutenção recarrega do Supabase (carregarOsSupabase)',
     /addEventListener\('nexus_data_changed'[\s\S]*?carregarOsSupabase\(\)/.test(manut));

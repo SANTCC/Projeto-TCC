@@ -74,7 +74,7 @@ npm run test:about         # Conteúdo, imagens e links do about.html
 
 ---
 
-## 📊 Gráficos e Camadas de Visão (js/pages/charts.js · js/vision-layer.js)
+## 📊 Gráficos e Camadas de Visão (js/charts.js)
 
 Os gráficos são montados em tempo de execução recortados pela **camada de visão do cargo autenticado** (RF 1):
 
@@ -86,7 +86,6 @@ Os gráficos são montados em tempo de execução recortados pela **camada de vi
 
 - **Atualização:** Atualização automática a cada 60 s e suporte a recarga manual sem cache local (`#chartsRefreshBtn`).
 - **Privacidade:** Indicadores financeiros (valor declarado) são restritos à Visão Estratégica. Dados pessoais de funcionários/visitantes não são expostos a cargos táticos.
-- **Mesmo recorte nas tabelas do Painel de Comando:** o **Log Geral de Alterações** e o **Trail de Decisões Críticas** usam a mesma regra de visão — cargos de Visão Própria (Estivador, Conferente, Arrumador, Planejador e Técnico em Portos) leem apenas os próprios registros (o contador da tabela indica "Visão Própria"), enquanto Inspetor, Supervisor e Direção leem o histórico operacional completo (RF 1.1/1.2/1.3). A regra é única em `NexusVision.filtrarRegistrosDeVisaoPropria` e é reaproveitada pelos gráficos.
 
 ---
 

@@ -31,7 +31,6 @@ console.log('\n1. Módulo carregado');
 verificar('expõe window.NexusCodigos com as funções esperadas',
   C && ['chave', 'formatarImo', 'validarImo', 'formatarConteiner', 'validarConteiner',
     'formatarGuindaste', 'validarGuindaste', 'formatarMatricula', 'validarMatricula',
-    'chaveMatricula', 'variacoesMatricula', 'codigoIndividual',
     'formatarCarga', 'vincularFormatacao'].every((f) => typeof C[f] === 'function'));
 
 console.log('\n2. Formatação com hífen (digitação e colagem)');
