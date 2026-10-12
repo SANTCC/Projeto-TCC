@@ -133,6 +133,52 @@
     });
   }
 
+  function autoAtivarGlobal() {
+    function escanear() {
+      if (typeof document === 'undefined') return;
+      const inputs = document.querySelectorAll('input[type="text"], input[type="search"], input:not([type])');
+      inputs.forEach(input => {
+        const str = `${input.id || ''} ${input.name || ''} ${input.placeholder || ''} ${input.className || ''}`.toLowerCase();
+
+        if (str.includes('matricula') || str.includes('matr') || str.includes('mat_')) {
+          vincularFormatacao(input, formatarMatricula);
+        } else if (str.includes('imo')) {
+          vincularFormatacao(input, formatarImo);
+        } else if (str.includes('container') || str.includes('conteiner')) {
+          vincularFormatacao(input, formatarConteiner);
+        } else if (str.includes('guindaste') || str.includes('gnd')) {
+          vincularFormatacao(input, formatarGuindaste);
+        } else if (str.includes('carga') || str.includes('codigo') || str.includes('busca') || str.includes('search') || str.includes('filter')) {
+          vincularFormatacao(input, function(v) {
+            const up = String(v || '').toUpperCase();
+            if (/^MAT\d/i.test(up)) return formatarMatricula(up);
+            if (/^IMO\d/i.test(up)) return formatarImo(up);
+            if (/^CRG\d/i.test(up)) return formatarCarga(up);
+            if (/^[A-Z]{4}\d/i.test(up)) return formatarConteiner(up);
+            if (/^[A-Z]{3}\d/i.test(up)) return formatarGuindaste(up);
+            return up;
+          });
+        }
+      });
+    }
+
+    if (typeof document !== 'undefined') {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', escanear);
+      } else {
+        escanear();
+      }
+      try {
+        if (document.body) {
+          const observer = new MutationObserver(() => escanear());
+          observer.observe(document.body, { childList: true, subtree: true });
+        }
+      } catch (e) {}
+    }
+  }
+
+  autoAtivarGlobal();
+
   global.NexusCodigos = {
     chave,
     formatarImo, validarImo,
@@ -140,6 +186,7 @@
     formatarGuindaste, validarGuindaste,
     formatarMatricula, validarMatricula,
     formatarCarga,
-    vincularFormatacao
+    vincularFormatacao,
+    autoAtivarGlobal
   };
 })(typeof window !== 'undefined' ? window : globalThis);

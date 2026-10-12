@@ -76,15 +76,8 @@
 
       const userMat = session.matricula || session.codigo_individual;
 
-      // Visão Própria (Cargos Operacionais): enxergam apenas cargas de sua responsabilidade/atribuição
-      if (cargo === 'ESTIVADOR') {
-        return cargasList.filter(c => c.estivador_id === userMat || c.estivadorMatricula === userMat || c.estivador === session.nome || c.status === 'ARMAZENAGEM' || c.status === 'RECEBIMENTO_INSPECAO');
-      } else if (cargo === 'CONFERENTE_CARGA') {
-        return cargasList.filter(c => c.conferente_id === userMat || c.conferenteMatricula === userMat || c.conferente === session.nome || c.status === 'AGENDAMENTO' || c.status === 'RECEBIMENTO_INSPECAO');
-      } else if (cargo === 'ARRUMADOR_CONSERTADOR') {
-        return cargasList.filter(c => c.arrumador_id === userMat || c.arrumadorMatricula === userMat || c.arrumador === session.nome || c.status === 'ARMAZENAGEM' || c.status === 'PRONTA_PARA_ENTREGA');
-      }
-
+      // Tarefa 12: Cargas cadastradas por diretores ou outros cargos devem aparecer para todos os cargos
+      // com acesso à página. As restrições de permissão aplicam-se apenas às AÇÕES sobre as cargas.
       return cargasList;
     },
 
@@ -111,12 +104,9 @@
 
       // Visão Própria (Cargos Operacionais)
       const userMatricula = session.matricula;
-      if (cargo === 'ESTIVADOR' && entityType === 'cargas') {
-        return queryBuilder.eq('estivador_id', userMatricula);
-      } else if (cargo === 'CONFERENTE_CARGA' && entityType === 'cargas') {
-        return queryBuilder.eq('conferente_id', userMatricula);
-      } else if (cargo === 'ARRUMADOR_CONSERTADOR' && entityType === 'cargas') {
-        return queryBuilder.eq('arrumador_id', userMatricula);
+      if (entityType === 'cargas') {
+        // Tarefa 12: Não filtra cargas por criador no banco, garantindo visibilidade entre cargos
+        return queryBuilder;
       } else if (cargo === 'TECNICO_PORTOS' && entityType === 'visitantes') {
         return queryBuilder.eq('registrado_por', session.id || userMatricula);
       }

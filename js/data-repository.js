@@ -174,7 +174,7 @@
           return { ok: false, bloqueio: true, erro: 'o funcionário participa de ' + delegacoes + ' delegação(ões) de supervisão. Encerre as delegações antes de excluí-lo.' };
         }
 
-        const { error } = await client.from('funcionarios').delete().eq('id', id);
+        const { data, error } = await client.from('funcionarios').delete().eq('id', id).select();
         if (error) {
           // Vínculos RESTRICT (agendamentos, inspeções, movimentações, logs) impedem a exclusão no banco.
           const restrito = error.code === '23503' || /foreign key|violates/i.test(String(error.message || ''));
@@ -184,6 +184,12 @@
             erro: restrito
               ? 'o funcionário possui registros vinculados (agendamentos, inspeções, movimentações ou logs) e não pode ser excluído.'
               : 'o banco de dados recusou a exclusão (' + (error.message || 'erro') + ').'
+          };
+        }
+        if (!data || data.length === 0) {
+          return {
+            ok: false,
+            erro: 'o banco de dados não removeu nenhuma linha (nenhum registro afetado ou bloqueio por política RLS).'
           };
         }
         this._removerFuncionarioLocal(matricula);
@@ -245,6 +251,7 @@
             const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0
               ? c.estivador_cargas[0]
               : null;
+            const isEntregue = (c.status_fluxo === 'ENTREGUE' || c.status_fluxo === 'CANCELADA' || c.status_fluxo === 'RECUSADA');
             return {
               id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
               tipo: c.natureza || 'Carga Geral',
@@ -256,8 +263,8 @@
               destino: c.destino || 'Destino Geral',
               status: c.status_fluxo || 'AGENDAMENTO',
               container: c.container_id || '',
-              navio: (c.navios && c.navios.nome) ? c.navios.nome : '',
-              navioId: c.navio_id || null,
+              navio: isEntregue ? '' : ((c.navios && c.navios.nome) ? c.navios.nome : ''),
+              navioId: isEntregue ? null : (c.navio_id || null),
               qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
               motivoCancelamento: c.motivo_recusa || null,
               rawDbId: c.id,
@@ -680,18 +687,35 @@
         }
       }
 
+      if (cargas.length === 0) {
+        cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      }
+      if (navios.length === 0) {
+        navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+      }
+      if (osList.length === 0) {
+        osList = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
+      }
+
       const recusadasObj = await this.buscarCargasRecusadas();
       const preventivaObj = await this.buscarEquipamentosPreventivaSugerida();
 
       const naviosFora = navios.filter(n => n.localizacao === 'FORA_DO_PORTO' || n.localizacao === 'NO_PORTO_DE_DESTINO');
-      const cargasArmazenagem = cargas.filter(c => c.status_fluxo === 'ARMAZENAGEM');
-      const cargasProntas = cargas.filter(c => c.status_fluxo === 'PRONTA_PARA_ENTREGA');
+      const cargasArmazenagem = cargas.filter(c => c.status_fluxo === 'ARMAZENAGEM' || c.status === 'ARMAZENAGEM');
+      const cargasProntas = cargas.filter(c => c.status_fluxo === 'PRONTA_PARA_ENTREGA' || c.status === 'PRONTA_PARA_ENTREGA');
+
+      // Cargas efetivamente ocupando o pátio (armazenadas, em inspeção ou prontas no pátio - Tarefa 10)
+      const cargasNoPatio = cargas.filter(c => {
+        const st = String(c.status_fluxo || c.status || '').toUpperCase();
+        return ['RECEBIMENTO_INSPECAO', 'INSPECAO', 'ARMAZENAGEM', 'ARMAZENADA', 'PRONTA_PARA_ENTREGA'].includes(st) ||
+               (st !== '' && st !== 'AGENDAMENTO' && st !== 'EM_TRANSITO' && st !== 'ENTREGUE' && st !== 'CANCELADA' && st !== 'RECUSADA');
+      });
 
       // Um equipamento conta uma única vez (ver derivarEquipamentosEmManutencao)
       const emManutencao = this.derivarEquipamentosEmManutencao(navios, osList);
 
       const CAPACIDADE_MAXIMA_PATIO = 100;
-      const taxaOcupacao = Math.min(100, Math.round((cargasArmazenagem.length / CAPACIDADE_MAXIMA_PATIO) * 100));
+      const taxaOcupacao = Math.min(100, Math.round((cargasNoPatio.length / CAPACIDADE_MAXIMA_PATIO) * 100));
 
       return {
         recusadas: recusadasObj,
@@ -706,8 +730,9 @@
         },
         ocupacaoPatio: {
           capacidade: CAPACIDADE_MAXIMA_PATIO,
-          ocupados: cargasArmazenagem.length,
-          taxa: taxaOcupacao
+          ocupados: cargasNoPatio.length,
+          taxa: taxaOcupacao,
+          lista: cargasNoPatio
         }
       };
     },

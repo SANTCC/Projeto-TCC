@@ -1065,6 +1065,10 @@ video {
   border-top-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));
   border-bottom-width: calc(1px * var(--tw-divide-y-reverse));
 }
+.divide-emerald-200 > :not([hidden]) ~ :not([hidden]) {
+  --tw-divide-opacity: 1;
+  border-color: rgb(167 243 208 / var(--tw-divide-opacity, 1));
+}
 .divide-nexus-border > :not([hidden]) ~ :not([hidden]) {
   --tw-divide-opacity: 1;
   border-color: rgb(225 229 237 / var(--tw-divide-opacity, 1));
@@ -1384,6 +1388,10 @@ video {
 .bg-slate-950\/60 {
   background-color: rgb(2 6 23 / 0.6);
 }
+.bg-teal-600 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(13 148 136 / var(--tw-bg-opacity, 1));
+}
 .bg-white {
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
@@ -1565,9 +1573,6 @@ video {
 .text-\[14px\] {
   font-size: 14px;
 }
-.text-\[15px\] {
-  font-size: 15px;
-}
 .text-\[16px\] {
   font-size: 16px;
 }
@@ -1693,6 +1698,10 @@ video {
   --tw-text-opacity: 1;
   color: rgb(16 185 129 / var(--tw-text-opacity, 1));
 }
+.text-emerald-600 {
+  --tw-text-opacity: 1;
+  color: rgb(5 150 105 / var(--tw-text-opacity, 1));
+}
 .text-emerald-700 {
   --tw-text-opacity: 1;
   color: rgb(4 120 87 / var(--tw-text-opacity, 1));
@@ -1704,6 +1713,10 @@ video {
 .text-emerald-900 {
   --tw-text-opacity: 1;
   color: rgb(6 78 59 / var(--tw-text-opacity, 1));
+}
+.text-emerald-950 {
+  --tw-text-opacity: 1;
+  color: rgb(2 44 34 / var(--tw-text-opacity, 1));
 }
 .text-green-800 {
   --tw-text-opacity: 1;
@@ -1783,6 +1796,10 @@ video {
 .text-rose-800 {
   --tw-text-opacity: 1;
   color: rgb(159 18 57 / var(--tw-text-opacity, 1));
+}
+.text-slate-200 {
+  --tw-text-opacity: 1;
+  color: rgb(226 232 240 / var(--tw-text-opacity, 1));
 }
 .text-slate-300 {
   --tw-text-opacity: 1;
@@ -2054,6 +2071,9 @@ html.dark :focus-visible {
   --tw-bg-opacity: 1;
   background-color: rgb(29 78 216 / var(--tw-bg-opacity, 1));
 }
+.hover\:bg-emerald-100\/60:hover {
+  background-color: rgb(209 250 229 / 0.6);
+}
 .hover\:bg-emerald-700:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(4 120 87 / var(--tw-bg-opacity, 1));
@@ -2132,6 +2152,10 @@ html.dark :focus-visible {
   --tw-bg-opacity: 1;
   background-color: rgb(15 23 42 / var(--tw-bg-opacity, 1));
 }
+.hover\:bg-teal-700:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(15 118 110 / var(--tw-bg-opacity, 1));
+}
 .hover\:text-nexus-900:hover {
   --tw-text-opacity: 1;
   color: rgb(30 41 59 / var(--tw-text-opacity, 1));
@@ -2208,6 +2232,9 @@ html.dark :focus-visible {
   content: var(--tw-content);
   --tw-translate-x: 100%;
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+.dark\:divide-emerald-800\/60:is(.dark *) > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgb(6 95 70 / 0.6);
 }
 .dark\:divide-red-900\/60:is(.dark *) > :not([hidden]) ~ :not([hidden]) {
   border-color: rgb(127 29 29 / 0.6);
@@ -2293,9 +2320,16 @@ html.dark :focus-visible {
 .dark\:bg-blue-950\/60:is(.dark *) {
   background-color: rgb(23 37 84 / 0.6);
 }
+.dark\:bg-emerald-800:is(.dark *) {
+  --tw-bg-opacity: 1;
+  background-color: rgb(6 95 70 / var(--tw-bg-opacity, 1));
+}
 .dark\:bg-emerald-900:is(.dark *) {
   --tw-bg-opacity: 1;
   background-color: rgb(6 78 59 / var(--tw-bg-opacity, 1));
+}
+.dark\:bg-emerald-900\/60:is(.dark *) {
+  background-color: rgb(6 78 59 / 0.6);
 }
 .dark\:bg-emerald-950:is(.dark *) {
   --tw-bg-opacity: 1;
@@ -2418,6 +2452,10 @@ html.dark :focus-visible {
   --tw-text-opacity: 1;
   color: rgb(209 250 229 / var(--tw-text-opacity, 1));
 }
+.dark\:text-emerald-200:is(.dark *) {
+  --tw-text-opacity: 1;
+  color: rgb(167 243 208 / var(--tw-text-opacity, 1));
+}
 .dark\:text-emerald-300:is(.dark *) {
   --tw-text-opacity: 1;
   color: rgb(110 231 183 / var(--tw-text-opacity, 1));
@@ -2504,6 +2542,9 @@ html.dark :focus-visible {
 }
 .dark\:opacity-10:is(.dark *) {
   opacity: 0.1;
+}
+.dark\:hover\:bg-emerald-900\/40:hover:is(.dark *) {
+  background-color: rgb(6 78 59 / 0.4);
 }
 .dark\:hover\:bg-red-900\/60:hover:is(.dark *) {
   background-color: rgb(127 29 29 / 0.6);

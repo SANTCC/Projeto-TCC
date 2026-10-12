@@ -10,7 +10,15 @@ function criarBancoFalso(tabelas, opcoes) {
 
   function executar(tabela, op, filtros, payload, opts, retorno) {
     const rows = tabelas[tabela] || (tabelas[tabela] = []);
-    const casa = (r) => filtros.every(([c, v]) => r[c] !== undefined && r[c] !== null && (v && v.__in ? v.__in.indexOf(String(r[c])) >= 0 : String(r[c]) === String(v)));
+    const casa = (r) => filtros.every(([c, v]) => {
+      if (r[c] === undefined || r[c] === null) return false;
+      if (v && v.__in) return v.__in.indexOf(String(r[c])) >= 0;
+      if (v && v.__ilike) {
+        const pat = String(v.__ilike).replace(/%/g, '').toLowerCase();
+        return String(r[c]).toLowerCase().includes(pat);
+      }
+      return String(r[c]) === String(v);
+    });
     const falhar = config.falhar || [];
     const falharOp = config.falharOp || {};
     if (falhar.indexOf(tabela) >= 0) {
@@ -25,7 +33,7 @@ function criarBancoFalso(tabelas, opcoes) {
       const removidas = rows.filter(casa);
       removidas.forEach((r) => rows.splice(rows.indexOf(r), 1));
       log.push({ tabela, op, filtros, afetadas: removidas.length });
-      return { data: null, error: null };
+      return { data: retorno ? removidas.map((r) => Object.assign({}, r)) : null, error: null };
     }
     if (op === 'select') {
       return { data: rows.filter(casa).map((r) => Object.assign({}, r)), error: null };
@@ -59,7 +67,8 @@ function criarBancoFalso(tabelas, opcoes) {
       select() { estado.retorno = true; return b; },
       order() { return b; },
       limit() { return b; },
-      ilike() { return b; },
+      range() { return b; },
+      ilike(c, v) { estado.filtros.push([c, { __ilike: v }]); return b; },
       or() { return b; },
       maybeSingle() { return b; },
       single() { return b; },

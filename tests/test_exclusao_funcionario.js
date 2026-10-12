@@ -88,7 +88,7 @@ async function main() {
   banco.from = (tabela) => {
     const b = origFrom(tabela);
     if (tabela !== 'funcionarios') return b;
-    return { ...b, select: b.select, eq: b.eq, delete: () => ({ eq: async () => ({ data: null, error: { code: '23503', message: 'update or delete violates foreign key constraint' } }) }) };
+    return { ...b, select: b.select, eq: b.eq, delete: () => ({ eq: () => ({ select: async () => ({ data: null, error: { code: '23503', message: 'update or delete violates foreign key constraint' } }) }) }) };
   };
   r = await w.NexusRepository.deleteFuncionario('MAT-0004');
   check('retorna erro com bloqueio', r.ok === false && r.bloqueio === true, JSON.stringify(r));

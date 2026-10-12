@@ -47,34 +47,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function popularCargas() {
     if (!selectCarga) return;
+    let cargasRaw = [];
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase.from('cargas').select('*');
         if (!error && Array.isArray(data)) {
-          cargas = data.map(c => ({
-            id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
-            tipo: c.natureza || 'Não informado',
-            status: c.status_fluxo || 'AGENDAMENTO',
-            navio: c.navio || '',
-            container: c.container_id || '',
-            destino: c.destino || '',
-            portoDescarga: c.porto_descarga || '',
-            rawDbId: c.id
-          }));
+          cargasRaw = data;
         }
       } catch (e) {
         console.warn('Erro ao carregar cargas para relatório:', e);
       }
     }
-    if (cargas.length === 0 && window.NexusRepository) {
-      try { cargas = await window.NexusRepository.getCargas(); } catch (e) {}
+    if (cargasRaw.length === 0 && window.NexusRepository) {
+      try { cargasRaw = await window.NexusRepository.getCargas(); } catch (e) {}
     }
+
+    cargas = cargasRaw.map(c => ({
+      id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : (c.codigo || `CRG-${c.id}`),
+      tipo: c.natureza || c.tipo || 'Não informado',
+      status: c.status_fluxo || c.status || 'AGENDAMENTO',
+      navio: c.navio || '',
+      container: c.container_id || c.container || '',
+      destino: c.destino || '',
+      portoDescarga: c.porto_descarga || '',
+      created_at: c.created_at || c.data_cadastro || c.dataCadastro || c.data_entrada || c.dataEntrada || c.data_agendamento || c.dataAgendamento || null,
+      rawDbId: c.id
+    }));
+
+    const inicio = inicioDoPeriodo(periodoRelatorioAtual);
+    const cargasFiltradas = cargas.filter(c => {
+      if (!inicio) return true;
+      if (!c.created_at) return true;
+      const d = new Date(c.created_at);
+      return !Number.isNaN(d.getTime()) && d >= inicio;
+    });
+
     selectCarga.innerHTML = '<option value="">Selecione a Carga para Emitir PDF A4...</option>';
-    if (cargas.length === 0) {
-      selectCarga.innerHTML = '<option value="" disabled>Nenhuma carga cadastrada no sistema</option>';
+    if (cargasFiltradas.length === 0) {
+      selectCarga.innerHTML = '<option value="" disabled>Nenhuma carga cadastrada neste período de referência</option>';
       return;
     }
-    cargas.forEach(c => {
+    cargasFiltradas.forEach(c => {
       selectCarga.innerHTML += `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.tipo)} (${esc(c.status)})</option>`;
     });
   }
@@ -108,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (periodoSelect && periodoSelect.value !== novoPeriodo) periodoSelect.value = novoPeriodo;
       sincronizarChips();
       renderProdutividadeTable();
+      popularCargas();
       // O período filtra os GRÁFICOS de verdade (não só a tabela)
       if (window.NexusCharts && typeof window.NexusCharts.definirFiltros === 'function') {
         window.NexusCharts.definirFiltros({ periodo: novoPeriodo });
