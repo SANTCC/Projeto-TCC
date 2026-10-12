@@ -33,6 +33,22 @@ document.addEventListener('DOMContentLoaded', () => {
   let targetRedirectUrl = 'cargas.html';
   let targetChecklistUrl = 'inspecao.html';
 
+  /**
+   * A matriz de acesso por página vive em js/auth-guard.js (PAGE_PERMISSIONS).
+   * O scanner só oferece atalhos para telas que o cargo do usuário realmente
+   * pode abrir: um botão que cai no "Acesso Restrito" do guard é um caminho
+   * sem saída para o operador (Backlog — permissões/visual por cargo).
+   */
+  function podeAbrirPagina(pagina) {
+    if (!window.NexusAuth || typeof window.NexusAuth.canAccessPage !== 'function') return true;
+    return window.NexusAuth.canAccessPage(pagina);
+  }
+  const podeAbrirChecklist = podeAbrirPagina('inspecao.html');
+
+  // O checklist técnico é do Inspetor (e cargos superiores): quem não pode abrir
+  // inspecao.html não recebe o atalho verde na tela do scanner.
+  if (irChecklistBtn && !podeAbrirChecklist) irChecklistBtn.classList.add('hidden');
+
   if (iniciarCameraBtn) {
     iniciarCameraBtn.addEventListener('click', () => {
       iniciarCamera();
@@ -235,6 +251,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (cargo === 'SUPERVISOR_GERENTE_OPERACOES') {
       msgAcao = 'Redirecionamento para o Painel de Cargas Vinculadas do Contêiner.';
       targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
+    } else if (!podeAbrirPagina('cargas.html')) {
+      // Técnico em Portos (e qualquer cargo sem "Cargas & Pátio"): o código lido
+      // fica registrado na auditoria e o operador volta ao Painel Geral — a
+      // "tela de ação do cargo" não pode ser uma página negada pelo guard.
+      msgAcao = 'Código registrado. Redirecionamento para o Painel Geral (o seu cargo não opera cargas).';
+      targetRedirectUrl = 'dashboard.html';
     } else {
       msgAcao = 'Redirecionamento para o Painel Geral de Cargas.';
       targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
@@ -268,7 +290,11 @@ document.addEventListener('DOMContentLoaded', () => {
       container: displayContainer,
       navio: displayNavio,
       status: displayStatus,
-      acao_sugerida: msgAcao
+      acao_sugerida: msgAcao,
+      // Destino do botão "Ir para Tela de Ação do Cargo" e disponibilidade do
+      // atalho de checklist para o cargo da sessão (mesma matriz do guard).
+      destino_acao: targetRedirectUrl,
+      checklist_disponivel: podeAbrirChecklist
     };
   }
   window.nexusScannerProcessar = processarScan;

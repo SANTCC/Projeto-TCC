@@ -402,7 +402,10 @@ async function testesInspecao() {
 // ------------------------------------------------------------------
 async function testesEmbarcacoes() {
   log('\n[3] Embarcações & GPS (embarcacoes.html)');
-  const rotasSupabase = [{ origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }];
+  const rotasSupabase = [
+    { origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 },
+    { origem: 'Porto de Santos', destino: 'Porto de Paranaguá', distancia_km: 400 }
+  ];
   const supaRotas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasSupabase); };
   const navios = [
     { id: 'n1', nome: 'MV Santos Star', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia: 10200, gps: '-23.9608, -46.3022', dataSaida: null },
@@ -470,6 +473,30 @@ async function testesEmbarcacoes() {
   r = await w.NexusWebMCP.executar('liberar_saida_navio', { imo: 'ABC1234567' });
   check('planejador não libera saída de navio', r.codigo === 'PERMISSAO_NEGADA', JSON.stringify(r));
   w.close();
+
+  // A4: vínculo contêiner ➜ navio também é validado pelo agente (navio atracado)
+  const storageTransito = Object.assign({}, storage, {
+    nexus_navios_list: [{ id: 'n9', nome: 'MV Em Viagem', imo: 'JKL7654321', localizacao: 'FORA_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia: 10200, gps: '-23.9608, -46.3022', dataSaida: null }]
+  });
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: storageTransito, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
+  r = await w.NexusWebMCP.executar('vincular_container_navio', { identificacao: 'MSCU1234567', imo: 'JKL7654321' });
+  check('vincular contêiner (agente): navio em viagem é recusado antes da confirmação',
+    r.codigo === 'ESTADO_INVALIDO' && /não está atracado/.test(r.mensagem || ''), JSON.stringify(r));
+  check('vincular contêiner (agente): recusa não pede confirmação', w.__pedidos.length === 0);
+  w.close();
+
+  // A3: para o agente também vale o DESTINO da próxima viagem — a rota do trecho já
+  // concluído (Paranaguá ➔ Santos) não libera nova saída: a página abre o seletor.
+  const storageVolta = Object.assign({}, storage, {
+    nexus_navios_list: [{ id: 'n3', nome: 'MV Voltou', imo: 'GHI7654321', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Paranaguá', destino: 'Porto de Santos', distancia: 400, gps: '-23.9608, -46.3022', dataSaida: null }]
+  });
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage: storageVolta, scriptsPagina: ['js/supabase-client.js', supaRotas].concat(scr), adaptadores: adapt }));
+  r = await w.NexusWebMCP.executar('liberar_saida_navio', { imo: 'GHI7654321' });
+  check('liberar (agente): trecho já concluído (destino = porto onde o navio está) é recusado antes da confirmação',
+    r.codigo === 'ROTA_NAO_DEFINIDA' && /botão "Rota"/.test(r.mensagem || ''), JSON.stringify(r));
+  check('liberar (agente): recusa não abre confirmação nem altera o estado', w.__pedidos.length === 0
+    && JSON.parse(w.localStorage.getItem('nexus_navios_list'))[0].localizacao === 'DENTRO_DO_PORTO');
+  w.close();
 }
 
 // ------------------------------------------------------------------
@@ -517,7 +544,9 @@ async function testesRotasMaritimas() {
   // Gravação com falha: a rota NÃO aparece na tela (a lista é a do banco)
   const antes = rotas.length;
   const falha = (win) => { win.nexusSupabase = supabaseRotasFalso(rotas, { falharInsert: true }); };
-  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', falha].concat(scr), adaptadores: adapt }));
+  // O cadastro de rota marítima é do Supervisor (matriz CADASTRAR_ROTA / RF 1.6):
+  // o Inspetor abre a tela e lê as rotas, mas não recebe o formulário de cadastro.
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', falha].concat(scr), adaptadores: adapt }));
   w.document.getElementById('rotaOrigem').value = 'Porto de Santos';
   w.document.getElementById('rotaDestino').value = 'Porto de Xangai';
   w.document.getElementById('rotaDistancia').value = '18500';
@@ -528,7 +557,7 @@ async function testesRotasMaritimas() {
   w.close();
 
   // Gravação com sucesso: a rota aparece na tabela (distância e ETA) e na lista de seleção
-  w = await pronta(pagina('embarcacoes.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/supabase-client.js', vazio].concat(scr), adaptadores: adapt }));
+  w = await pronta(pagina('embarcacoes.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/supabase-client.js', vazio].concat(scr), adaptadores: adapt }));
   w.document.getElementById('rotaOrigem').value = 'Porto de Santos';
   w.document.getElementById('rotaDestino').value = 'Porto de Xangai';
   w.document.getElementById('rotaDistancia').value = '18500';

@@ -62,8 +62,69 @@
       return true;
     },
 
+    // -----------------------------------------------------------------------
+    // CARGAS: VISIBILIDADE DE TELA × PERMISSÃO DE AÇÃO × ESCOPO DE INDICADORES
+    // (H1 — Backlog NexusPort)
+    // -----------------------------------------------------------------------
+    // Eram três regras diferentes para "o que este cargo enxerga": a página Cargas
+    // filtrava, o Painel e Embarcações mostravam tudo, o agente filtrava de outro jeito —
+    // e uma carga registrada pela Direção (ou atribuída a ela, o padrão do formulário)
+    // simplesmente não aparecia para o Estivador que precisa trabalhar nela.
+    //
+    // Decisão de produto (H1): a carga EM FLUXO é visível para todos os cargos. Quem
+    // restringe é a PERMISSÃO da ação (botões e ferramentas) e o ESCOPO dos indicadores
+    // ("minhas operações"), nunca a visibilidade da tela.
+    // O histórico segue a Visão Própria do RF 1.3: a carga ENTREGUE de outro operador não
+    // aparece para quem não participou dela.
+
+    /** Cargos cuja visão é limitada ao próprio escopo operacional. */
+    CARGOS_OPERACIONAIS: ['ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR'],
+
+    /** Campo da carga que guarda o responsável de cada cargo operacional. */
+    CAMPO_RESPONSAVEL: { ESTIVADOR: 'estivador', CONFERENTE_CARGA: 'conferente', ARRUMADOR_CONSERTADOR: 'arrumador' },
+
+    /** Status em que a carga está na mão de cada cargo operacional. */
+    STATUS_DO_CARGO: {
+      ESTIVADOR: ['ARMAZENAGEM', 'RECEBIMENTO_INSPECAO'],
+      CONFERENTE_CARGA: ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO'],
+      ARRUMADOR_CONSERTADOR: ['ARMAZENAGEM', 'PRONTA_PARA_ENTREGA']
+    },
+
+    /** A carga está atribuída ao usuário logado? (id, matrícula ou nome — como no cadastro) */
+    pertenceAoUsuario: function (carga, session) {
+      if (!carga || !session || !session.cargo) return false;
+      const campo = this.CAMPO_RESPONSAVEL[session.cargo];
+      if (!campo) return true;
+      const matricula = session.matricula || session.codigo_individual;
+      return carga[`${campo}_id`] === matricula
+        || carga[`${campo}Matricula`] === matricula
+        || carga[campo] === session.nome;
+    },
+
+    /** A carga está em um status que este cargo operacional trabalha. */
+    statusDoCargo: function (carga, session) {
+      if (!carga || !session || !session.cargo) return false;
+      const status = (this.STATUS_DO_CARGO[session.cargo] || []);
+      return status.indexOf(String(carga.status || carga.status_fluxo || '').toUpperCase()) !== -1;
+    },
+
     /**
-     * Filtra lista de cargas para o usuário ativo com base no perfil de visão (RF 1.3 Visão Própria)
+     * Cargas que as TELAS e o agente podem exibir para esta sessão (H1).
+     * Visibilidade ampla no fluxo ativo; Visão Própria apenas no histórico (ENTREGUE).
+     * Diferente de filterCargasForUser, que é o ESCOPO DE INDICADORES ("minhas operações").
+     */
+    visibilidadeDeCargas: function (cargasList, session) {
+      if (!Array.isArray(cargasList)) return cargasList;
+      if (!session || !session.cargo) return cargasList;
+      if (this.CARGOS_OPERACIONAIS.indexOf(session.cargo) === -1) return cargasList;
+      return cargasList.filter((c) => String(c && (c.status || c.status_fluxo) || '').toUpperCase() !== 'ENTREGUE'
+        || this.pertenceAoUsuario(c, session));
+    },
+
+    /**
+     * Filtra lista de cargas para o usuário ativo com base no perfil de visão (RF 1.3 Visão Própria).
+     * Uso: ESCOPO DE INDICADORES — "meus indicadores", produtividade e produtividade por cargo.
+     * Para o que aparece na tela, use visibilidadeDeCargas.
      */
     filterCargasForUser: function (cargasList, session) {
       if (!session || !session.cargo) return cargasList;
@@ -74,22 +135,62 @@
         return cargasList;
       }
 
-      const userMat = session.matricula || session.codigo_individual;
-
-      // Visão Própria (Cargos Operacionais): enxergam apenas cargas de sua responsabilidade/atribuição
-      if (cargo === 'ESTIVADOR') {
-        return cargasList.filter(c => c.estivador_id === userMat || c.estivadorMatricula === userMat || c.estivador === session.nome || c.status === 'ARMAZENAGEM' || c.status === 'RECEBIMENTO_INSPECAO');
-      } else if (cargo === 'CONFERENTE_CARGA') {
-        return cargasList.filter(c => c.conferente_id === userMat || c.conferenteMatricula === userMat || c.conferente === session.nome || c.status === 'AGENDAMENTO' || c.status === 'RECEBIMENTO_INSPECAO');
-      } else if (cargo === 'ARRUMADOR_CONSERTADOR') {
-        return cargasList.filter(c => c.arrumador_id === userMat || c.arrumadorMatricula === userMat || c.arrumador === session.nome || c.status === 'ARMAZENAGEM' || c.status === 'PRONTA_PARA_ENTREGA');
-      }
-
-      return cargasList;
+      // Visão Própria (Cargos Operacionais): apenas as cargas de sua responsabilidade/atribuição
+      // ou as que estão no status que o cargo trabalha.
+      return cargasList.filter((c) => this.pertenceAoUsuario(c, session) || this.statusDoCargo(c, session));
     },
 
     /**
-     * Aplica o filtro de Visão no Supabase (Própria, Operacional ou Estratégica)
+     * Filtro de Visão Própria para REGISTROS DE AUDITORIA (log de alterações e
+     * trail de decisões) — RF 1.1. Cada funcionário operacional (Técnico em
+     * Portos incluído) vê os próprios registros; Inspetor, Supervisor e Direção
+     * leem a trilha completa (RF 1.2/1.3).
+     *
+     * Sem isso, o Painel Geral mostrava a um Estivador as liberações,
+     * cancelamentos e aprovações de toda a operação, enquanto os gráficos da
+     * mesma página (js/pages/charts.js) já recortavam os logs por Visão Própria.
+     *
+     * Aceita as grafias usadas pelas telas: codigo/codigo_individual/codigo_usuario,
+     * matricula, funcionario_id e o código embutido no campo `responsavel` do
+     * trail ("Nome (Cargo) - CODIGO").
+     */
+    filtrarRegistrosDeVisaoPropria: function (registros, session) {
+      const lista = Array.isArray(registros) ? registros : [];
+      if (!session || !session.cargo) return lista;
+
+      const cargo = String(session.cargo).toUpperCase();
+      const visaoPropria = (this.CARGOS_OPERACIONAIS || []).indexOf(cargo) !== -1 || cargo === 'TECNICO_PORTOS';
+      if (!visaoPropria) return lista;
+
+      const identificadores = [session.id, session.codigo_individual, session.codigo, session.matricula]
+        .filter(Boolean).map((v) => String(v));
+      const codigoDoResponsavel = (texto) => {
+        const partes = String(texto || '').split(' - ');
+        return partes.length > 1 ? partes[partes.length - 1].trim() : '';
+      };
+
+      return lista.filter((registro) => {
+        if (!registro) return false;
+        const chaves = [
+          registro.codigo,
+          registro.codigo_individual,
+          registro.codigo_usuario,
+          registro.codigo_usuario_individual,
+          registro.matricula,
+          registro.funcionario_id,
+          registro.funcionarioId,
+          codigoDoResponsavel(registro.responsavel)
+        ].filter(Boolean).map((v) => String(v));
+        return chaves.some((chave) => identificadores.indexOf(chave) !== -1);
+      });
+    },
+
+    /**
+     * Aplica o filtro de Visão no Supabase (Própria, Operacional ou Estratégica).
+     * H1: para CARGAS não há filtro de visibilidade — a carga em fluxo é visível para
+     * todos (o que restringe é a permissão da ação). Antes daqui saía
+     * `.eq('estivador_id', matrícula)`, que escondia a carga do pátio e contradizia a tela.
+     * As restrições que continuam valendo são de DADOS PESSOAIS (visitantes e documentos).
      */
     applyVisaoFilter: function (queryBuilder, entityType, session) {
       if (!session || !session.cargo) return queryBuilder;
@@ -109,16 +210,9 @@
         return queryBuilder;
       }
 
-      // Visão Própria (Cargos Operacionais)
-      const userMatricula = session.matricula;
-      if (cargo === 'ESTIVADOR' && entityType === 'cargas') {
-        return queryBuilder.eq('estivador_id', userMatricula);
-      } else if (cargo === 'CONFERENTE_CARGA' && entityType === 'cargas') {
-        return queryBuilder.eq('conferente_id', userMatricula);
-      } else if (cargo === 'ARRUMADOR_CONSERTADOR' && entityType === 'cargas') {
-        return queryBuilder.eq('arrumador_id', userMatricula);
-      } else if (cargo === 'TECNICO_PORTOS' && entityType === 'visitantes') {
-        return queryBuilder.eq('registrado_por', session.id || userMatricula);
+      // Visão Própria (Cargos Operacionais): só os dados pessoais são restritos ao próprio registro.
+      if (cargo === 'TECNICO_PORTOS' && entityType === 'visitantes') {
+        return queryBuilder.eq('registrado_por', session.id || session.matricula);
       }
 
       return queryBuilder;

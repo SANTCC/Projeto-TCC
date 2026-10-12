@@ -2,7 +2,8 @@
  * WebMCP — página Cargas & Pátio (js/webmcp/webmcp-cargas.js) — NexusPort
  *
  * Ferramentas de leitura (listar, obter, etiquetas, cadastros de apoio) e de ação
- * (agendar, receber, movimentar, pronta para entrega, vincular, liberar, cancelar).
+ * (agendar, receber, movimentar no pátio, movimentar para o contêiner vinculado, pronta
+ * para entrega, vincular, liberar, cancelar).
  * Cada ação consequente:
  *   1) valida o estado da carga ANTES de pedir confirmação (precondicao);
  *   2) mostra o impacto ao operador (resumo) e só executa após confirmação;
@@ -269,7 +270,17 @@
         return { ok: false, codigo: 'FORMULARIO_INVALIDO', mensagem: `Campos inválidos: ${invalidos.join(', ') || 'verifique o formulário'}.` };
       }
       form.requestSubmit();
-      const nova = D.lerLista('nexus_cargas_fluxo').find((c) => !antes.has(c.id));
+      // O envio da página é assíncrono (valida a capacidade do pátio na fonte única, G1):
+      // o agente espera a carga aparecer em vez de ler a lista no mesmo instante do submit.
+      let nova = null;
+      if (D.esperar) {
+        await D.esperar(() => {
+          nova = D.lerLista('nexus_cargas_fluxo').find((c) => !antes.has(c.id)) || null;
+          return Boolean(nova);
+        }, 4000);
+      } else {
+        nova = D.lerLista('nexus_cargas_fluxo').find((c) => !antes.has(c.id)) || null;
+      }
       if (!nova) return falhaNaoConcluida('O agendamento não foi registrado. Veja a mensagem exibida ao operador.');
       return { mensagem: `Carga ${nova.id} agendada. A etiqueta QR foi exibida para o operador.`, dados: D.resumirCarga(nova) };
     }
@@ -359,6 +370,43 @@
       const tarefaCriada = tarefas.some((t) => t.cargaId === args.id && t.guindasteId === args.guindaste && (!t.status || t.status === 'PENDENTE'));
       if (c && c.guindasteDesignado === args.guindaste && c.movimentacaoPendente === setorDestino && tarefaCriada) {
         return { mensagem: `Carga ${args.id} associada ao guindaste ${args.guindaste}. Tarefa de movimentação para "${setorDestino}" criada (pendente em Embarcações & GPS).`, dados: D.resumirCarga(c) };
+      }
+      return falhaNaoConcluida();
+    }
+  };
+
+  const moverParaContainer = {
+    nome: 'mover_carga_container',
+    titulo: 'Movimentar carga para o contêiner',
+    descricao: 'Movimenta a carga em ARMAZENAGEM para DENTRO do contêiner já vinculado: a carga passa a PRONTA_PARA_ENTREGA e deixa de ocupar o pátio. Exige contêiner vinculado (use vincular_carga_container antes). Bloqueado em emergência. Exige confirmação.',
+    anotacoes: { consequentialHint: true },
+    cargos: ['ESTIVADOR', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    permissao: 'MOVIMENTAR_CARGA',
+    bloqueiaEmergencia: true,
+    esquema: { type: 'object', properties: { id: ESQUEMA_ID }, required: ['id'], additionalProperties: false },
+    precondicao: async (args) => {
+      const carga = await cargaDoOperador(args.id);
+      if (!carga) return naoEncontrada(args.id);
+      const estado = estadoEsperado(carga, ['ARMAZENAGEM']);
+      if (estado) return estado;
+      if (!carga.container && !carga.container_id) {
+        return { codigo: 'VINCULO_OBRIGATORIO', mensagem: `A carga ${args.id} não tem contêiner vinculado. Use vincular_carga_container antes de movimentá-la para o contêiner.` };
+      }
+      return null;
+    },
+    resumo: async (args) => {
+      const c = await cargaDoOperador(args.id);
+      const cont = c ? (c.container || c.container_id || 'contêiner vinculado') : 'contêiner vinculado';
+      return [
+        `Movimentar a carga ${args.id} para o contêiner vinculado ${cont}.`,
+        'Status: ARMAZENAGEM → PRONTA_PARA_ENTREGA; a carga deixa de ocupar o pátio.'
+      ];
+    },
+    executar: async (args) => {
+      await window.executarAcaoCarga(args.id, 'MOVIMENTAR_CONTAINER');
+      const c = cargaLocal(args.id);
+      if (c && c.status === 'PRONTA_PARA_ENTREGA') {
+        return { mensagem: `Carga ${args.id} movimentada para o contêiner ${c.container || c.container_id}. A carga deixou de ocupar o pátio.`, dados: D.resumirCarga(c) };
       }
       return falhaNaoConcluida();
     }
@@ -532,7 +580,7 @@
     }
   };
 
-  const ACOES_DA_CARGA = [receber, movimentar, prontaEntrega, vincular, liberar, cancelar];
+  const ACOES_DA_CARGA = [receber, movimentar, moverParaContainer, prontaEntrega, vincular, liberar, cancelar];
 
   /** Ações consequentes que o operador pode pedir AGORA para esta carga. */
   async function acoesDisponiveis(carga) {
@@ -547,7 +595,7 @@
 
   const ferramentas = [
     listarCargas, obterCarga, exibirEtiqueta, listarGuindastes, listarContainers, listarTipos,
-    agendar, receber, movimentar, prontaEntrega, vincular, liberar, cancelar
+    agendar, receber, movimentar, moverParaContainer, prontaEntrega, vincular, liberar, cancelar
   ];
 
   D.quandoPronto(() => W.registrarPagina({ id: 'cargas', arquivo: 'cargas.html', ferramentas }));

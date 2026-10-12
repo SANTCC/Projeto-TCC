@@ -21,22 +21,41 @@ document.addEventListener('DOMContentLoaded', () => {
   let funcionariosList = [];
   let logsList = [];
 
-  // Backlog 3 (7g): período de referência selecionado — os atalhos do topo
-  // (Hoje / 7 dias / 30 dias / Este mês) e o select compartilham este estado e
-  // filtram o histórico de operações da tabela de produtividade.
-  let periodoRelatorioAtual = (document.getElementById('relatorioPeriodoSelect') || { value: '30D' }).value || '30D';
+  // Backlog 3 (7g) + Backlog 001 (C15): o período de referência é ÚNICO para a tabela e os
+  // gráficos e vem de js/periodo-referencia.js, sempre calculado a partir do relógio real.
+  // Antes o HTML trazia rótulos com data fixa ("3º Trimestre de 2026") e cada tela fazia a
+  // própria conta do mesmo período, mostrando janelas diferentes para a mesma seleção.
+  const periodoRef = window.NexusPeriodo || null;
+  const periodoSelectEl = document.getElementById('relatorioPeriodoSelect');
+  const periodoChipsEl = document.getElementById('relatorioPeriodoChips');
+  const periodoIntervaloEl = document.getElementById('relatorioPeriodoIntervalo');
+
+  let periodoRelatorioAtual = (periodoSelectEl || { value: '30D' }).value || '30D';
 
   function inicioDoPeriodo(periodo) {
+    if (periodoRef && typeof periodoRef.inicioDoPeriodo === 'function') return periodoRef.inicioDoPeriodo(periodo);
+    // Sem o módulo não existe janela confiável: melhor não recortar do que inventar uma data fixa.
+    console.warn('[NexusPort] js/periodo-referencia.js não carregado — o período de referência fica sem recorte de data.');
+    return null;
+  }
+
+  /**
+   * Escreve no seletor e na linha de intervalo as DATAS REAIS do período em vigor.
+   * Roda a cada renderização da tabela: se a página atravessar a virada do dia, os
+   * rótulos acompanham o relógio em vez de repetir a data em que a página foi aberta.
+   */
+  function atualizarRotulosPeriodo() {
     const agora = new Date();
-    if (periodo === 'HOJE') {
-      const d = new Date(agora); d.setHours(0, 0, 0, 0); return d;
+    if (!periodoRef) {
+      if (periodoIntervaloEl) periodoIntervaloEl.textContent = 'Período de referência indisponível: js/periodo-referencia.js não foi carregado.';
+      return;
     }
-    if (periodo === '7D')  { const d = new Date(agora); d.setDate(d.getDate() - 7);  d.setHours(0, 0, 0, 0); return d; }
-    if (periodo === '30D') { const d = new Date(agora); d.setDate(d.getDate() - 30); d.setHours(0, 0, 0, 0); return d; }
-    if (periodo === 'MENSAL') { return new Date(agora.getFullYear(), agora.getMonth(), 1); }
-    if (periodo === 'TRIMESTRAL') { return new Date(agora.getFullYear(), agora.getMonth() - 3, 1); }
-    if (periodo === 'ANUAL') { return new Date(agora.getFullYear(), 0, 1); }
-    return null; // 'TODOS' ou valor desconhecido: sem corte de data
+    if (periodoSelectEl) periodoRef.aplicarRotulosAoSelect(periodoSelectEl, agora);
+    if (periodoIntervaloEl) {
+      const intervalo = periodoRef.intervaloPeriodo(periodoRelatorioAtual, agora);
+      periodoIntervaloEl.textContent = `Período aplicado: ${intervalo.texto}`;
+      periodoIntervaloEl.setAttribute('title', `Período aplicado à tabela de produtividade e aos gráficos: ${intervalo.texto}`);
+    }
   }
 
   function logDentroDoPeriodo(l, inicio) {
@@ -83,13 +102,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Backlog 3 (7g): ligação dos atalhos de período com o select e a tabela
   (function ligarAtalhosPeriodo() {
-    const periodoSelect = document.getElementById('relatorioPeriodoSelect');
-    const chipsWrap = document.getElementById('relatorioPeriodoChips');
-    if (!periodoSelect && !chipsWrap) return;
+    if (!periodoSelectEl && !periodoChipsEl) return;
 
     function sincronizarChips() {
-      if (!chipsWrap) return;
-      chipsWrap.querySelectorAll('.periodo-chip').forEach(chip => {
+      if (!periodoChipsEl) return;
+      periodoChipsEl.querySelectorAll('.periodo-chip').forEach(chip => {
         const ativo = chip.getAttribute('data-periodo') === periodoRelatorioAtual;
         chip.classList.toggle('bg-nexus-500', ativo);
         chip.classList.toggle('border-nexus-500', ativo);
@@ -104,25 +121,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function aplicarPeriodo(novoPeriodo) {
+      // Período desconhecido não pode virar "sem recorte" escondido: mantém o que está em vigor.
+      if (periodoRef && !periodoRef.periodoValido(novoPeriodo)) return;
+      if (!novoPeriodo) return;
       periodoRelatorioAtual = novoPeriodo;
-      if (periodoSelect && periodoSelect.value !== novoPeriodo) periodoSelect.value = novoPeriodo;
+      if (periodoSelectEl && periodoSelectEl.value !== novoPeriodo) periodoSelectEl.value = novoPeriodo;
       sincronizarChips();
+      atualizarRotulosPeriodo();
       renderProdutividadeTable();
-      // O período filtra os GRÁFICOS de verdade (não só a tabela)
+      // O período filtra os GRÁFICOS de verdade (não só a tabela), pela mesma janela real
       if (window.NexusCharts && typeof window.NexusCharts.definirFiltros === 'function') {
         window.NexusCharts.definirFiltros({ periodo: novoPeriodo });
       }
     }
 
-    if (chipsWrap) {
-      chipsWrap.querySelectorAll('.periodo-chip').forEach(chip => {
+    if (periodoChipsEl) {
+      periodoChipsEl.querySelectorAll('.periodo-chip').forEach(chip => {
         chip.addEventListener('click', () => aplicarPeriodo(chip.getAttribute('data-periodo')));
       });
     }
-    if (periodoSelect) {
-      periodoSelect.addEventListener('change', () => aplicarPeriodo(periodoSelect.value));
+    if (periodoSelectEl) {
+      periodoSelectEl.addEventListener('change', () => aplicarPeriodo(periodoSelectEl.value));
     }
     sincronizarChips();
+    atualizarRotulosPeriodo();
   })();
 
   const loadingStatus = document.getElementById('pdfLoadingStatus');
@@ -258,6 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.nexusRelatorioGerarPdf = gerarRelatorioPdfA4;
 
   async function renderProdutividadeTable() {
+    atualizarRotulosPeriodo();
     if (!prodTableBody) return;
 
     // Backlog 3 (tempo real): leitura COMPLETA e paginada. O PostgREST corta cada resposta em
@@ -302,6 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Com o banco disponível, a contagem vem SOMENTE dele: cada alteração também fica no cache
     // local e somá-la duas vezes inflava a produtividade. O cache local só é usado sem banco.
     const localLogs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+    // Janela REAL do período (js/periodo-referencia.js) — a MESMA que os gráficos usam.
     const inicioPeriodo = inicioDoPeriodo(periodoRelatorioAtual);
     const todosLogs = (logsDoBanco ? logsList : [...logsList, ...localLogs]).filter(l => logDentroDoPeriodo(l, inicioPeriodo));
 

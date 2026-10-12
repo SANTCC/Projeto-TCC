@@ -273,11 +273,14 @@ document.addEventListener('DOMContentLoaded', () => {
           .update({ estado: 'EM_MANUTENCAO' })
           .eq('numero_identificacao', identificacao);
 
-        await window.nexusSupabase.from('manutencoes').insert({
+        const vinculoGnd = await resolverVinculoEquipamento(`Guindaste ${identificacao}`);
+        const payloadManut = {
           entidade_tipo: 'GUINDASTE',
           descricao: `[${newOsId}][ALTA] Guindaste: ${identificacao} - ${descricao}`,
           status: 'APROVADA'
-        });
+        };
+        if (vinculoGnd.id) payloadManut.guindaste_id = vinculoGnd.id;
+        await window.nexusSupabase.from('manutencoes').insert(payloadManut);
 
         if (window.registrarTrailDecisao) {
           await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_CONTAINER', 'guindastes', null, `Solicitou manutenção do Guindaste ${identificacao}: ${descricao}`);
@@ -368,9 +371,236 @@ document.addEventListener('DOMContentLoaded', () => {
   // lista para evitar erro de TDZ quando carregarOsSupabase renderiza primeiro).
   let filtroStatusOsAtual = '';
 
+  // ------------------------------------------------------------------
+  // D (Backlog): a OS guarda QUAL equipamento deve entrar em manutenção.
+  // O estado é aplicado na tabela do próprio equipamento (navios/containers/
+  // guindastes) preferindo o VÍNCULO POR ID — um nome genérico ("Guindaste")
+  // não casa nenhuma linha do banco e a manutenção acabava não valendo.
+  // ------------------------------------------------------------------
+  const TABELA_EQUIPAMENTO = { NAVIO: 'navios', GUINDASTE: 'guindastes', CONTAINER: 'containers' };
+  const ROTULO_EQUIPAMENTO = { NAVIO: 'Navio', GUINDASTE: 'Guindaste', CONTAINER: 'Contêiner' };
+  const CHAVE_CACHE_EQUIPAMENTO = { NAVIO: 'nexus_navios_list', GUINDASTE: 'nexus_guindastes_list', CONTAINER: 'nexus_containers_list' };
+  const COLUNA_NOME_EQUIPAMENTO = { navios: 'nome', guindastes: 'numero_identificacao', containers: 'numero_identificacao' };
+
+  /**
+   * Identificação do equipamento como o próprio sistema a gravou na descrição da OS:
+   * "[OS-2026-123][ALTA] Guindaste: GND-01-STS - motivo" e o formato
+   * "[OS-2026-123][ALTA] Equipamento: Guindaste GND-01-STS - motivo".
+   * A identificação pode conter hífen (GND-01-STS), por isso o corte é no " - ".
+   */
+  function identificacaoDaDescricaoOs(descricao) {
+    const texto = String(descricao || '');
+    const rotulado = texto.match(/(?:Navio|Guindaste|Cont[eê]iner|Container)\s*:\s*(.+?)(?:\s+[\-\u2013\u2014]\s+|$)/i);
+    if (rotulado && rotulado[1]) return rotulado[1].trim();
+    const generico = texto.match(/Equipamento\s*:\s*(.+?)(?:\s+[\-\u2013\u2014]\s+|$)/i);
+    if (generico && generico[1]) {
+      return generico[1].trim().replace(/^(Navio|Guindaste|Cont[eê]iner|Container)\s+/i, '').trim();
+    }
+    return '';
+  }
+
+  /** id do ativo → identificação (nome/numero_identificacao). Lido do banco e do cache. */
+  let ativosPorId = { NAVIO: new Map(), GUINDASTE: new Map(), CONTAINER: new Map() };
+
+  async function carregarAtivosParaOs() {
+    const mapa = { NAVIO: new Map(), GUINDASTE: new Map(), CONTAINER: new Map() };
+    const doCache = (chave, tipo, campo) => {
+      let lista = [];
+      try { lista = JSON.parse(localStorage.getItem(chave) || '[]'); } catch (e) { lista = []; }
+      (Array.isArray(lista) ? lista : []).forEach(x => {
+        if (x && x.id) mapa[tipo].set(String(x.id), x[campo] || x.identificacao || x.nome || '');
+      });
+    };
+    doCache('nexus_navios_list', 'NAVIO', 'nome');
+    doCache('nexus_guindastes_list', 'GUINDASTE', 'identificacao');
+    doCache('nexus_containers_list', 'CONTAINER', 'identificacao');
+
+    const client = window.nexusSupabase;
+    if (client) {
+      const doBanco = async (tabela, tipo) => {
+        try {
+          const { data, error } = await client.from(tabela).select('*');
+          if (error || !Array.isArray(data)) return;
+          const campo = COLUNA_NOME_EQUIPAMENTO[tabela];
+          data.forEach(x => { if (x && x.id) mapa[tipo].set(String(x.id), x[campo] || ''); });
+        } catch (e) { /* a identificação cai para a descrição da OS */ }
+      };
+      await doBanco('navios', 'NAVIO');
+      await doBanco('guindastes', 'GUINDASTE');
+      await doBanco('containers', 'CONTAINER');
+    }
+    ativosPorId = mapa;
+    return mapa;
+  }
+
+  /**
+   * Equipamento de uma OS persistida: tipo, vínculo (id no banco) e identificação.
+   * Ordem de resolução: vínculo por id → cache local → descrição gravada na OS.
+   */
+  function equipamentoDaOs(m) {
+    const tipoBruto = String((m && m.entidade_tipo) || '').toUpperCase();
+    const tipo = ['NAVIO', 'GUINDASTE', 'CONTAINER'].includes(tipoBruto) ? tipoBruto : '';
+    const idVinculo = tipo === 'NAVIO' ? m.navio_id : tipo === 'GUINDASTE' ? m.guindaste_id : tipo === 'CONTAINER' ? m.container_id : null;
+    const mapa = ativosPorId[tipo];
+    const doVinculo = (idVinculo && mapa) ? (mapa.get(String(idVinculo)) || '') : '';
+    const identificacao = doVinculo || identificacaoDaDescricaoOs(m && m.descricao);
+    return { tipo, rotulo: ROTULO_EQUIPAMENTO[tipo] || 'Equipamento', id: idVinculo || null, identificacao: identificacao || '' };
+  }
+
+  /**
+   * Vínculo (id no banco) de um equipamento escolhido no formulário ("Guindaste GND-01-STS").
+   * Sem vínculo, a OS continua identificando o equipamento pelo texto — a ação então
+   * atualiza pela identificação exata e confere as linhas afetadas.
+   */
+  async function resolverVinculoEquipamento(textoEquipamento) {
+    const texto = String(textoEquipamento || '').trim();
+    const tipo = /^Navio\s+/i.test(texto) ? 'NAVIO'
+      : /^Guindaste\s+/i.test(texto) ? 'GUINDASTE'
+      : /^Cont[eê]iner\s+/i.test(texto) ? 'CONTAINER' : '';
+    const identificacao = texto.replace(/^(Navio|Guindaste|Cont[eê]iner)\s+/i, '').trim();
+    const resultado = { tipo, identificacao, id: null };
+    if (!tipo || !identificacao) return resultado;
+    const mapa = await carregarAtivosParaOs();
+    for (const entrada of mapa[tipo].entries()) {
+      if (String(entrada[1]).toUpperCase() === identificacao.toUpperCase()) { resultado.id = entrada[0]; break; }
+    }
+    return resultado;
+  }
+
+  /**
+   * Completa os campos do equipamento de uma OS criada NESTA sessão (ainda sem os
+   * campos do banco) a partir do texto "Guindaste GND-01-STS". Sem isso uma OS
+   * recém-aberta não encontraria o equipamento para entrar em manutenção.
+   */
+  function normalizarEquipamentoDaOs(os) {
+    if (!os || os.equipamentoTipo) return os;
+    const texto = String(os.equipamento || '').trim();
+    const tipo = /^Navio\s+/i.test(texto) ? 'NAVIO'
+      : /^Guindaste\s+/i.test(texto) ? 'GUINDASTE'
+      : /^Cont[eê]iner\s+/i.test(texto) ? 'CONTAINER' : '';
+    if (!tipo) return os;
+    os.equipamentoTipo = tipo;
+    os.equipamentoId = os.equipamentoId || null;
+    os.equipamentoIdentificacao = os.equipamentoIdentificacao || texto.replace(/^(Navio|Guindaste|Cont[eê]iner)\s+/i, '').trim();
+    return os;
+  }
+
+  /** Novo estado do equipamento conforme o tipo e a decisão da OS (null = não se aplica). */
+  function estadoDoEquipamento(tipo, acao) {
+    const hoje = new Date().toISOString().split('T')[0];
+    if (tipo === 'NAVIO') {
+      return { APROVAR: { estado_operacional: 'EM_REFORMA' } }[acao] || { estado_operacional: 'OPERANTE' };
+    }
+    if (tipo === 'GUINDASTE') {
+      if (acao === 'APROVAR') return { estado: 'EM_MANUTENCAO' };
+      if (acao === 'CONCLUIR') return { estado: 'OPERANTE', data_ultima_manutencao: hoje };
+      return { estado: 'OPERANTE' };
+    }
+    if (tipo === 'CONTAINER') {
+      if (acao === 'APROVAR') return { estado: 'EM_REFORMA' };
+      if (acao === 'CONCLUIR') return { estado: 'OPERANTE', data_ultima_manutencao: hoje };
+      return { estado: 'OPERANTE' };
+    }
+    return null;
+  }
+
+  function estadoTextoDoEquipamento(tipo, dados) {
+    if (!dados) return '';
+    return tipo === 'NAVIO' ? (dados.estado_operacional || '') : (dados.estado || '');
+  }
+
+  /** Chave comparável da identificação (ignora separadores: GND-01-STS = gnd01sts). */
+  function chaveEquipamento(valor) {
+    if (window.NexusCodigos && typeof window.NexusCodigos.chave === 'function') {
+      return window.NexusCodigos.chave(valor);
+    }
+    return String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  /**
+   * Localiza o equipamento da OS no banco: pelo id do vínculo; sem vínculo, pela
+   * identificação — aceitando a mesma chave sem separadores e exigindo candidato
+   * ÚNICO (nunca altera duas linhas por um match parcial).
+   */
+  async function localizarEquipamentoDaOs(os) {
+    const client = window.nexusSupabase;
+    const tabela = TABELA_EQUIPAMENTO[os.equipamentoTipo];
+    if (!client || !tabela) return { ok: false, motivo: 'equipamento não identificado na OS' };
+    if (os.equipamentoId) return { ok: true, id: os.equipamentoId, tabela: tabela };
+
+    const identificacao = os.equipamentoIdentificacao || '';
+    if (!identificacao) {
+      return { ok: false, motivo: 'a OS não registra o equipamento (nem vínculo no banco, nem identificação)' };
+    }
+    try {
+      const coluna = COLUNA_NOME_EQUIPAMENTO[tabela];
+      const { data, error } = await client.from(tabela).select(`id, ${coluna}`);
+      if (error || !Array.isArray(data)) {
+        return { ok: false, motivo: 'não foi possível ler o cadastro de ' + tabela };
+      }
+      const chave = chaveEquipamento(identificacao);
+      const exatos = data.filter(x => String(x[coluna] || '').toUpperCase() === String(identificacao).toUpperCase());
+      const porChave = exatos.length ? exatos : data.filter(x => chave && chaveEquipamento(x[coluna]) === chave);
+      if (porChave.length === 1) return { ok: true, id: porChave[0].id, tabela: tabela };
+      if (porChave.length > 1) {
+        return { ok: false, motivo: `o cadastro de ${tabela} tem mais de um registro com "${identificacao}" (${porChave.length})` };
+      }
+      return { ok: false, motivo: `nenhum registro em ${tabela} corresponde a "${identificacao}"` };
+    } catch (e) {
+      return { ok: false, motivo: e && e.message ? e.message : String(e) };
+    }
+  }
+
+  /**
+   * Aplica o novo estado no BANCO e confere as linhas afetadas: sem linha alterada a
+   * manutenção NÃO pode ser anunciada como válida (o pátio seguiria liberando o ativo).
+   */
+  async function aplicarEstadoEquipamentoDaOs(os, dados) {
+    if (!dados) return { ok: false, motivo: 'equipamento não identificado na OS' };
+    const alvo = await localizarEquipamentoDaOs(os);
+    if (!alvo.ok) return alvo;
+    try {
+      const { data, error } = await window.nexusSupabase
+        .from(alvo.tabela)
+        .update(dados)
+        .eq('id', alvo.id)
+        .select('id');
+      if (error) return { ok: false, motivo: error.message || 'erro ao gravar no banco' };
+      const linhas = Array.isArray(data) ? data.length : 0;
+      if (linhas === 0) return { ok: false, motivo: `o equipamento ${os.equipamento} não foi encontrado no banco para atualizar` };
+      return { ok: true, linhas: linhas, id: alvo.id, tabela: alvo.tabela };
+    } catch (e) {
+      return { ok: false, motivo: e && e.message ? e.message : String(e) };
+    }
+  }
+
+  /** Espelha o novo estado no cache local, para as telas que leem nexus_*_list. */
+  function espelharEstadoDoEquipamento(os, dados) {
+    const chave = CHAVE_CACHE_EQUIPAMENTO[os.equipamentoTipo];
+    if (!chave || !dados) return;
+    let lista = [];
+    try { lista = JSON.parse(localStorage.getItem(chave) || '[]'); } catch (e) { lista = []; }
+    if (!Array.isArray(lista)) lista = [];
+    const identificacao = String(os.equipamentoIdentificacao || '').toUpperCase();
+    let mudou = false;
+    lista.forEach(x => {
+      const casaId = os.equipamentoId && String(x.id) === String(os.equipamentoId);
+      const casaNome = identificacao && String(x.identificacao || x.nome || '').toUpperCase() === identificacao;
+      if (casaId || casaNome) { Object.assign(x, dados); mudou = true; }
+    });
+    if (mudou) {
+      localStorage.setItem(chave, JSON.stringify(lista));
+      if (os.equipamentoTipo === 'GUINDASTE') guindastesList = lista;
+      else if (os.equipamentoTipo === 'NAVIO') naviosListLocal = lista;
+    }
+  }
+
   async function carregarOsSupabase() {
     if (window.nexusSupabase) {
       try {
+        // A identificação (id → nome) é lida antes de projetar as OS: sem ela a OS
+        // persistida vira um "Guindaste" genérico e nenhuma ação acha o equipamento.
+        await carregarAtivosParaOs();
         const { data, error } = await window.nexusSupabase.from('manutencoes').select('*');
         if (!error && Array.isArray(data)) {
           osList = data.map(m => {
@@ -379,8 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (m.status === 'RECUSADA') statusLocal = 'REPROVADA';
             else if (m.status === 'CONCLUIDA') statusLocal = 'CONCLUIDA';
 
-            // Extrai equipamento e prioridade da descrição se houver formato [ID][PRIORIDADE]
-            let equip = 'Equipamento Geral';
+            // Extrai prioridade e a descrição sem os prefixos [ID][PRIORIDADE]
             let prioridade = 'MEDIA';
             let descLimpa = m.descricao || '';
             const matchDesc = m.descricao ? m.descricao.match(/^\[(.*?)\]\[(.*?)\]\s*(.*)$/) : null;
@@ -388,13 +617,18 @@ document.addEventListener('DOMContentLoaded', () => {
               prioridade = matchDesc[2];
               descLimpa = matchDesc[3];
             }
-            if (m.entidade_tipo === 'NAVIO') equip = 'Navio';
-            else if (m.entidade_tipo === 'GUINDASTE') equip = 'Guindaste';
-            else if (m.entidade_tipo === 'CONTAINER') equip = 'Contêiner';
+
+            // D: o equipamento é identificado de verdade (GND-01-STS, Jaguar, MSCU-...),
+            // pelo vínculo de id do banco, pelo cache local ou pela descrição da OS.
+            const eq = equipamentoDaOs(m);
+            const equip = eq.identificacao ? `${eq.rotulo} ${eq.identificacao}` : (eq.tipo ? eq.rotulo : 'Equipamento Geral');
 
             return {
               id: m.id ? `OS-${m.id.substring(0, 8)}` : `OS-${Date.now()}`,
               equipamento: equip,
+              equipamentoTipo: eq.tipo || null,
+              equipamentoId: eq.id || null,
+              equipamentoIdentificacao: eq.identificacao || '',
               prioridade: prioridade,
               descricao: descLimpa,
               status: statusLocal,
@@ -669,11 +903,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
-          const { data: insOs } = await window.nexusSupabase.from('manutencoes').insert({
+          // D: guarda o vínculo do equipamento (navio_id/guindaste_id/container_id) já na
+          // abertura da OS — a aprovação passa a atualizar o equipamento pelo id.
+          const vinculoEquip = await resolverVinculoEquipamento(equipamento);
+          const payloadOs = {
             entidade_tipo: entidadeTipo,
             descricao: `[${newId}][${prioridade}] Equipamento: ${equipamento} - ${descricao}`,
             status: 'SOLICITADA'
-          }).select('id').single();
+          };
+          const COLUNA_VINCULO = { NAVIO: 'navio_id', GUINDASTE: 'guindaste_id', CONTAINER: 'container_id' };
+          if (vinculoEquip.id && COLUNA_VINCULO[vinculoEquip.tipo]) {
+            payloadOs[COLUNA_VINCULO[vinculoEquip.tipo]] = vinculoEquip.id;
+          }
+          const { data: insOs } = await window.nexusSupabase.from('manutencoes').insert(payloadOs).select('id').single();
 
           if (window.registrarLogAlteracao) {
             await window.registrarLogAlteracao('CRIACAO', 'manutencoes', insOs ? insOs.id : null, { equipamento, prioridade, descricao });
@@ -705,30 +947,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const os = osList.find(o => o.id === idOS);
     if (!os) return;
+    // OS aberta nesta sessão: o tipo/o vínculo do equipamento vêm do próprio texto.
+    normalizarEquipamentoDaOs(os);
 
     let supabaseStatus = 'SOLICITADA';
     let feedbackTitulo = '';
     let feedbackMsg = '';
     let tipoTrail = 'APROVOU_MANUTENCAO';
+    // Resultado real da mudança de estado do equipamento (D): sem isso a tela
+    // anunciava "em manutenção" mesmo quando nenhuma linha do banco foi alterada.
+    let estadoAplicado = '';
+    let motivoFalhaEquipamento = '';
 
     if (acao === 'APROVAR') {
       os.status = 'EM_MANUTENCAO';
       supabaseStatus = 'APROVADA';
       tipoTrail = 'APROVOU_MANUTENCAO';
       feedbackTitulo = 'OS Aprovada';
-      feedbackMsg = `Ordem de Serviço ${idOS} APROVADA pelo Supervisor! Equipamento ${os.equipamento} no estado EM_MANUTENCAO.`;
+      feedbackMsg = `Ordem de Serviço ${idOS} APROVADA pelo Supervisor! ${os.equipamento} com a manutenção aprovada.`;
     } else if (acao === 'REPROVAR') {
       os.status = 'REPROVADA';
       supabaseStatus = 'RECUSADA';
       tipoTrail = 'RECUSOU_MANUTENCAO';
       feedbackTitulo = 'OS Reprovada';
-      feedbackMsg = `Ordem de Serviço ${idOS} REPROVADA pelo Supervisor.`;
+      feedbackMsg = `Ordem de Serviço ${idOS} REPROVADA pelo Supervisor. ${os.equipamento} mantido em operação.`;
     } else if (acao === 'CONCLUIR') {
       os.status = 'CONCLUIDA';
       supabaseStatus = 'CONCLUIDA';
       tipoTrail = 'APROVOU_MANUTENCAO';
       feedbackTitulo = 'Manutenção Concluída';
-      feedbackMsg = `Manutenção da OS ${idOS} CONCLUÍDA! Equipamento ${os.equipamento} reativado e no estado OPERANTE.`;
+      feedbackMsg = `Manutenção da OS ${idOS} CONCLUÍDA! ${os.equipamento} liberado para operar.`;
     }
 
     localStorage.setItem('nexus_os_list', JSON.stringify(osList));
@@ -736,7 +984,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.nexusSupabase) {
       try {
         const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-        let qStatus = window.nexusSupabase.from('manutencoes').update({ status: supabaseStatus });
+        // Decisão registrada com data (e responsável, quando a sessão traz o uuid real).
+        const camposStatus = { status: supabaseStatus };
+        if (acao === 'APROVAR') {
+          camposStatus.data_aprovacao = new Date().toISOString();
+          if (isUuid(session.id)) camposStatus.aprovado_por = session.id;
+        } else if (acao === 'CONCLUIR') {
+          camposStatus.data_conclusao = new Date().toISOString();
+        }
+        let qStatus = window.nexusSupabase.from('manutencoes').update(camposStatus);
         if (os.rawDbId && isUuid(os.rawDbId)) {
           qStatus = qStatus.eq('id', os.rawDbId);
         } else {
@@ -744,34 +1000,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         await qStatus;
 
-        const limpaNome = os.equipamento.replace(/^(Navio|Guindaste|Contêiner)\s+/, '').trim();
-
-        if (os.equipamento.startsWith('Navio')) {
-          if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).ilike('nome', limpaNome);
-          } else if (acao === 'CONCLUIR' || acao === 'REPROVAR') {
-            // Backlog3: ao REPROVAR a OS, o navio também precisa sair do estado
-            // AGENDADO_PARA_REFORMA/EM_REFORMA, senão fica preso no contador de
-            // "Manutenção" do dashboard sem nunca ter sido atendido.
-            await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).ilike('nome', limpaNome);
-          }
-        } else if (os.equipamento.startsWith('Guindaste')) {
-          if (acao === 'APROVAR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'EM_MANUTENCAO' }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'REPROVAR') {
-            await window.nexusSupabase.from('guindastes').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', limpaNome);
-          }
-        } else if (os.equipamento.startsWith('Contêiner')) {
-          if (acao === 'APROVAR') {
-            // estado_container_enum não tem EM_MANUTENCAO: o valor válido é EM_REFORMA
-            await window.nexusSupabase.from('containers').update({ estado: 'EM_REFORMA' }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'CONCLUIR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE', data_ultima_manutencao: new Date().toISOString().split('T')[0] }).ilike('numero_identificacao', limpaNome);
-          } else if (acao === 'REPROVAR') {
-            await window.nexusSupabase.from('containers').update({ estado: 'OPERANTE' }).ilike('numero_identificacao', limpaNome);
-          }
+        // D: o estado vai para a tabela do equipamento, pelo ID do vínculo (e pela
+        // identificação exata nas OS antigas). O retorno confirma as linhas afetadas.
+        const dadosEquipamento = estadoDoEquipamento(os.equipamentoTipo, acao);
+        const atualizacao = await aplicarEstadoEquipamentoDaOs(os, dadosEquipamento);
+        if (atualizacao.ok) {
+          espelharEstadoDoEquipamento(os, dadosEquipamento);
+          estadoAplicado = estadoTextoDoEquipamento(os.equipamentoTipo, dadosEquipamento);
+        } else {
+          motivoFalhaEquipamento = atualizacao.motivo;
+          console.warn('[NexusPort] Estado do equipamento da OS não atualizado:', atualizacao.motivo);
         }
 
         if (acao === 'CONCLUIR') {
@@ -802,7 +1040,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderOsTable();
     if (window.mostrarFeedback) {
-      window.mostrarFeedback('sucesso', feedbackTitulo, feedbackMsg);
+      if (motivoFalhaEquipamento) {
+        // A OS foi decidida, mas o equipamento não mudou de estado no banco: avisar
+        // em vez de anunciar uma manutenção que não existe (o pátio seguiria liberado).
+        window.mostrarFeedback('atencao', `${feedbackTitulo} — equipamento não atualizado`,
+          `${feedbackMsg} ATENÇÃO: o estado do equipamento não pôde ser gravado no banco (${motivoFalhaEquipamento}). Enquanto isso o equipamento continua disponível para operar.`);
+      } else {
+        const estadoTxt = estadoAplicado ? ` Estado no banco: ${estadoAplicado}.` : '';
+        window.mostrarFeedback('sucesso', feedbackTitulo, feedbackMsg + estadoTxt);
+      }
     }
   };
 

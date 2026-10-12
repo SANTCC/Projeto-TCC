@@ -7,6 +7,9 @@
  * cadastro (data_cadastro / created_at). Cargas sem data de cadastro saem do
  * recorte quando há período ativo.
  *
+ * O recorte pela JANELA REAL do período (rótulos, intervalo e fim do recorte, Backlog C15)
+ * é verificado em tests/test_periodo_referencia_real.js (npm run test:periodo-referencia).
+ *
  * Executar: node tests/test_relatorios_periodo.js   (ou: npm run test:relatorios-periodo)
  */
 const fs = require('fs');
