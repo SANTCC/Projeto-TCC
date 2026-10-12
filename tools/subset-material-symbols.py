@@ -12,13 +12,18 @@ Como funciona:
      em tempo de execução como `light_mode` no botão de tema.
   2. Lê a tabela GSUB da fonte para descobrir o glifo que cada ligadura produz (a sequência de
      componentes usa letras maiúsculas na fonte; aqui ela é normalizada para minúsculas).
-  3. Gera `fonts/material-symbols-outlined-v2.woff2` com `fontTools.subset`, mantendo os eixos
+  3. Gera `fonts/material-symbols-outlined-v3.woff2` com `fontTools.subset`, mantendo os eixos
      variáveis (FILL/wght/GRAD/opsz) e a feature de ligaduras. A expansão automática de layout é
      desligada (`--no-layout-closure`), senão o subconjunto voltaria a incluir todos os ícones.
 
 Requisitos: `pip install fonttools brotli` (uma vez). O arquivo gerado é versionado no repositório;
 rode este script quando ícones forem adicionados ou removidos das telas. `--check` confere se a fonte
 versionada contém todos os ícones detectados sem regravá-la.
+
+As fontes são servidas com `Cache-Control: immutable` (vercel.json), então ampliar o subconjunto exige
+trocar o número da versão no nome do arquivo — aqui, em `tools/assets.js` (`FONTE_ICONES`, que gera
+`css/fonts.css`) e no `?v=` com que as páginas pedem esse CSS. Sem isso, quem já baixou a fonte antiga
+continua vendo os nomes dos ícones como texto.
 
 Uso: python3 tools/subset-material-symbols.py [--check]
 """
@@ -36,7 +41,7 @@ except ImportError:  # pragma: no cover - verificação do ambiente ao gerar a f
 
 RAIZ = Path(__file__).resolve().parent.parent
 FONTE_COMPLETA = RAIZ / 'node_modules' / 'material-symbols' / 'material-symbols-outlined.woff2'
-FONTE_SUBCONJUNTO = RAIZ / 'fonts' / 'material-symbols-outlined-v2.woff2'
+FONTE_SUBCONJUNTO = RAIZ / 'fonts' / 'material-symbols-outlined-v3.woff2'
 
 # <span class="material-symbols-outlined ...">nome_do_icone</span>
 PADRAO_MARCAÇÃO = re.compile(r'material-symbols-outlined[^>]*>\s*([a-z0-9_]+)', re.IGNORECASE)
