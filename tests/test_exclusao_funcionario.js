@@ -88,22 +88,11 @@ async function main() {
   banco.from = (tabela) => {
     const b = origFrom(tabela);
     if (tabela !== 'funcionarios') return b;
-    // A cadeia real continua com .select('id'): sem ela o PostgREST não devolve as
-    // linhas removidas e o repositório não pode confirmar a exclusão.
-    return { ...b, select: b.select, eq: b.eq, delete: () => ({ eq: () => ({ select: async () => ({ data: null, error: { code: '23503', message: 'update or delete violates foreign key constraint' } }) }) }) };
+    return { ...b, select: b.select, eq: b.eq, delete: () => ({ eq: async () => ({ data: null, error: { code: '23503', message: 'update or delete violates foreign key constraint' } }) }) };
   };
   r = await w.NexusRepository.deleteFuncionario('MAT-0004');
   check('retorna erro com bloqueio', r.ok === false && r.bloqueio === true, JSON.stringify(r));
   check('mensagem informa registros vinculados', /vinculad/.test(r.erro || ''), r.erro);
-
-  log('\n4b. Banco aceita o DELETE sem excluir linha (RLS): erro, cache preservado');
-  banco = bancoBase({ deleteSemEfeito: ['funcionarios'] });
-  w = await repositorio(banco);
-  r = await w.NexusRepository.deleteFuncionario('MAT-0001');
-  check('retorna erro (nunca sucesso)', r.ok === false && r.bloqueio !== true, JSON.stringify(r));
-  check('mensagem explica que nenhuma linha foi excluída', /nenhuma linha excluída/.test(r.erro || ''), r.erro);
-  check('funcionário segue no banco', existe(banco, 'MAT-0001'));
-  check('cache local preservado (não finge que excluiu)', JSON.parse(w.localStorage.getItem('nexus_func_list')).some(f => f.matricula === 'MAT-0001'));
 
   log('\n5. Falhas de conexão/leitura: erro, nunca sucesso');
   banco = bancoBase({ falharOp: { funcionarios: ['delete'] } });

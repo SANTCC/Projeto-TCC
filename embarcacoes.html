@@ -444,68 +444,6 @@
     </div>
   </div>
 
-  <!-- A2: rota marítima da PRÓXIMA viagem — origem e destino são escolhidos entre as
-       rotas cadastradas no Supabase; nada vem pré-selecionado (nem o porto atual). -->
-  <!-- A4: vínculo contêiner → navio por SELEÇÃO (o operador não digita o número do navio) -->
-  <div id="vincularContainerModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
-      <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-indigo-600">link</span>
-          Vincular Contêiner a Navio
-        </h2>
-        <button type="button" id="closeVincularContainerBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
-        </button>
-      </div>
-      <p class="text-xs text-slate-700 dark:text-slate-200">Contêiner: <strong id="vincularContainerLabel" class="font-mono">--</strong></p>
-      <div>
-        <label for="vincularContainerNavioSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1 text-xs">Navio de destino:</label>
-        <select id="vincularContainerNavioSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-xs">
-          <option value="">Selecione o navio...</option>
-        </select>
-        <p id="vincularContainerAviso" class="text-[11px] text-slate-600 mt-1"></p>
-      </div>
-      <div class="flex items-center justify-end gap-2 pt-2 border-t border-nexus-border dark:border-nexus-dark-border">
-        <button type="button" id="cancelarVincularContainerBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs">Cancelar</button>
-        <button type="button" id="confirmarVincularContainerBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs">Confirmar vinculação</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="definirRotaModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
-      <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-        <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-indigo-600">alt_route</span>
-          Definir Rota da Próxima Viagem
-        </h2>
-        <button type="button" id="closeDefinirRotaBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200" aria-label="Fechar">
-          <span class="material-symbols-outlined text-xl">close</span>
-        </button>
-      </div>
-      <p class="text-xs text-slate-700 dark:text-slate-200">Navio: <strong id="definirRotaNavioLabel" class="font-mono">--</strong></p>
-      <p id="definirRotaSituacao" class="text-[11px] text-slate-600 dark:text-slate-400"></p>
-      <div>
-        <label for="definirRotaOrigemSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1 text-xs">Porto de origem:</label>
-        <select id="definirRotaOrigemSelect" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-xs">
-          <option value="">Selecione o porto de origem...</option>
-        </select>
-      </div>
-      <div>
-        <label for="definirRotaDestinoSelect" class="block font-bold text-slate-700 dark:text-slate-200 mb-1 text-xs">Porto de destino:</label>
-        <select id="definirRotaDestinoSelect" disabled class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold text-xs disabled:opacity-60">
-          <option value="">Selecione primeiro o porto de origem...</option>
-        </select>
-        <p id="definirRotaAviso" class="text-[11px] text-slate-600 dark:text-slate-400 mt-1"></p>
-      </div>
-      <div class="flex items-center justify-end gap-2 pt-2 border-t border-nexus-border dark:border-nexus-dark-border">
-        <button type="button" id="cancelarDefinirRotaBtn" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs">Cancelar</button>
-        <button type="button" id="confirmarDefinirRotaBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs">Confirmar rota</button>
-      </div>
-    </div>
-  </div>
-
   <script src="vendor/supabase-js.min.js"></script>
   <script src="js/config.example.js"></script>
   <script src="js/config.js" onerror="this.remove()"></script>

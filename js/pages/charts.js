@@ -573,14 +573,9 @@
   /**
    * Escopo dos logs de auditoria: Visão Própria filtra pelo próprio código;
    * Inspetor/Supervisor/Direção leem os logs operacionais completos (RF 1).
-   * A regra é única na Vision Layer (mesma usada pelo Painel Geral); o bloco
-   * local é a contingência quando o módulo de visão não está carregado.
    */
   function filtrarLogsPorVisao(logs, sessao) {
     if (!sessao || !ehVisaoPropria(sessao)) return logs;
-    if (window.NexusVision && typeof window.NexusVision.filtrarRegistrosDeVisaoPropria === 'function') {
-      return window.NexusVision.filtrarRegistrosDeVisaoPropria(logs, sessao);
-    }
     const identificadores = [sessao.codigo_individual, sessao.codigo, sessao.matricula, sessao.id]
       .filter(Boolean).map(v => String(v));
     return logs.filter(l => {
@@ -769,20 +764,6 @@
   };
 
   function inicioDoPeriodoGraficos(periodo) {
-    // Backlog 001 (C15): a MESMA janela real usada pela tabela de produtividade
-    // (js/periodo-referencia.js). Antes, cada tela fazia a própria conta e o mesmo
-    // período selecionado recortava janelas diferentes na tabela e nos gráficos.
-    if (window.NexusPeriodo && typeof window.NexusPeriodo.inicioDoPeriodo === 'function') {
-      return window.NexusPeriodo.inicioDoPeriodo(periodo);
-    }
-    return inicioDoPeriodoReserva(periodo);
-  }
-
-  /**
-   * Reserva usada só quando js/periodo-referencia.js não está presente (ex.: testes do
-   * módulo isolado). Mantém a mesma regra do módulo: trimestre CIVIL real, nunca data fixa.
-   */
-  function inicioDoPeriodoReserva(periodo) {
     const agora = new Date();
     if (periodo === 'HOJE') {
       const d = new Date(agora); d.setHours(0, 0, 0, 0); return d;
@@ -790,7 +771,7 @@
     if (periodo === '7D')  { const d = new Date(agora); d.setDate(d.getDate() - 7);  d.setHours(0, 0, 0, 0); return d; }
     if (periodo === '30D') { const d = new Date(agora); d.setDate(d.getDate() - 30); d.setHours(0, 0, 0, 0); return d; }
     if (periodo === 'MENSAL') { return new Date(agora.getFullYear(), agora.getMonth(), 1); }
-    if (periodo === 'TRIMESTRAL') { return new Date(agora.getFullYear(), Math.floor(agora.getMonth() / 3) * 3, 1); }
+    if (periodo === 'TRIMESTRAL') { return new Date(agora.getFullYear(), agora.getMonth() - 2, 1); }
     if (periodo === 'ANUAL') { return new Date(agora.getFullYear(), 0, 1); }
     return null; // 'TODOS' ou valor desconhecido: sem corte de data
   }
@@ -857,16 +838,7 @@
   }
 
   function resumoFiltrosAtivos() {
-    // Rótulo com a data REAL: "4º trimestre de 2026 (01/10/2026 até 11/10/2026)".
-    const periodoRef = window.NexusPeriodo;
-    const rotuloBase = ROTULOS_PERIODO[filtrosGraficos.periodo] || filtrosGraficos.periodo;
-    const rotulo = periodoRef && typeof periodoRef.rotuloPeriodo === 'function'
-      ? periodoRef.rotuloPeriodo(filtrosGraficos.periodo)
-      : rotuloBase;
-    const intervalo = periodoRef && typeof periodoRef.intervaloPeriodo === 'function'
-      ? periodoRef.intervaloPeriodo(filtrosGraficos.periodo).texto
-      : '';
-    const partes = [`período: ${rotulo}${intervalo ? ` (${intervalo})` : ''}`];
+    const partes = [`período: ${ROTULOS_PERIODO[filtrosGraficos.periodo] || filtrosGraficos.periodo}`];
     if (filtrosGraficos.status && String(filtrosGraficos.status).toUpperCase() !== FILTRO_GERAL) {
       partes.push(`status: ${filtrosGraficos.status}`);
     }

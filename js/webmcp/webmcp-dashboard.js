@@ -45,13 +45,7 @@
           navios_fora_do_porto: totalDe(ind.naviosFora),
           manutencoes_em_andamento: ind.manutencao ? ind.manutencao.total : null,
           ocupacao_patio: ind.ocupacaoPatio ? {
-            ocupados: ind.ocupacaoPatio.ocupados,
-            capacidade: ind.ocupacaoPatio.capacidade,
-            livres: ind.ocupacaoPatio.livres,
-            taxa_pct: ind.ocupacaoPatio.taxa,
-            // G1: mesma regra do painel — ocupam a posição as cargas em recebimento/inspeção
-            // e em armazenagem; PRONTA_PARA_ENTREGA já liberou a posição (C2).
-            ocupa_posicao: (ind.ocupacaoPatio.lista || []).map((c) => c.codigo || c.id || null)
+            ocupados: ind.ocupacaoPatio.ocupados, capacidade: ind.ocupacaoPatio.capacidade, taxa_pct: ind.ocupacaoPatio.taxa
           } : null
         }
       };
@@ -88,26 +82,7 @@
       } else if (args.indicador === 'CARGAS_PRONTAS') {
         itens = ind.cargasProntas.lista.map((c) => ({ id: c.id || null, tipo: c.natureza || null, container: c.container_id || null }));
       } else {
-        const patio = ind.ocupacaoPatio;
-        const setores = Object.entries(patio.porSetor || {})
-          .sort((a, b) => b[1] - a[1])
-          .map(([setor, quantidade]) => ({ setor, quantidade }));
-        const noPatio = (patio.lista || []).map((c) => ({
-          id: c.codigo || null,
-          status: c.status || null,
-          setor: c.setor || null
-        }));
-        return {
-          mensagem: `Pátio com ${patio.ocupados} de ${patio.capacidade} posições ocupadas (${patio.taxa}%).`,
-          dados: {
-            ocupados: patio.ocupados,
-            capacidade: patio.capacidade,
-            livres: patio.livres,
-            taxa_pct: patio.taxa,
-            por_setor: setores,
-            cargas: noPatio.slice(0, limite)
-          }
-        };
+        return { mensagem: 'Ocupação do pátio.', dados: { ocupados: ind.ocupacaoPatio.ocupados, capacidade: ind.ocupacaoPatio.capacidade, taxa_pct: ind.ocupacaoPatio.taxa } };
       }
       return { mensagem: `${itens.length} item(ns) em ${args.indicador}.`, dados: { total: itens.length, itens: itens.slice(0, limite) } };
     }

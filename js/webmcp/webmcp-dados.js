@@ -83,11 +83,6 @@
   }
 
   function cargasVisiveis(lista) {
-    // H1: o agente enxerga exatamente o que a tela Cargas exibe para o mesmo operador
-    // (carga em fluxo visível para todos; histórico com Visão Própria, RF 1.3).
-    if (window.NexusVision && typeof window.NexusVision.visibilidadeDeCargas === 'function') {
-      return window.NexusVision.visibilidadeDeCargas(lista, sessao());
-    }
     if (window.NexusVision && typeof window.NexusVision.filterCargasForUser === 'function') {
       return window.NexusVision.filterCargasForUser(lista, sessao());
     }

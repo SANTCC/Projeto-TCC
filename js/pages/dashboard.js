@@ -578,28 +578,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const canc = indic.recusadas.canceladas.map(c => `• [CANCELADA] Carga ${c.id} (${c.tipo}): ${c.motivo}`);
       detalhe = [...rec, ...canc].join('\n') || 'Nenhuma carga recusada ou cancelada no momento.';
     } else if (tipo === 'OCUPACAO_PATIO') {
-      titulo = 'Ocupação do Pátio STS-01';
+      titulo = 'Taxa de Ocupação do Pátio STS-01';
       icone = 'pie_chart';
-      const patio = indic.ocupacaoPatio;
-      // G1: o detalhamento mostra de onde sai o número do card — cada carga que ocupa uma
-      // posição, agrupada pelo setor do pátio (porto_descarga), para o operador conferir.
-      const setores = Object.entries(patio.porSetor || {})
-        .sort((a, b) => b[1] - a[1])
-        .map(([setor, qtd]) => `• ${setor}: ${qtd} carga(s)`);
-      const noPatio = (patio.lista || []).map(c => `• ${c.codigo}: ${c.status} — ${c.setor}`);
-      detalhe = [
-        `Capacidade Máxima Regulamentar: ${patio.capacidade} posições (100 hectares / 1.000.000 m²)`,
-        `Posições ocupadas: ${patio.ocupados} (${patio.taxa}%)`,
-        `Posições livres: ${Number.isFinite(patio.livres) ? patio.livres : '—'}`,
-        '',
-        'Ocupação por setor do pátio:',
-        ...(setores.length ? setores : ['• Nenhum setor ocupado no momento.']),
-        '',
-        'Cargas que ocupam o pátio (recebimento/inspeção e armazenagem):',
-        ...(noPatio.length ? noPatio : ['• Nenhuma carga ocupando o pátio no momento.']),
-        '',
-        'A posição é liberada quando a carga é movimentada para o contêiner vinculado (passa a PRONTA_PARA_ENTREGA) ou quando sai do porto.'
-      ].join('\n');
+      detalhe = `Capacidade Máxima Regulamentar: ${indic.ocupacaoPatio.capacidade} posições (100 Hectares / 1.000.000 m²)\nCargas em Armazenagem Ativa: ${indic.ocupacaoPatio.ocupados}\nTaxa de Ocupação Atual: ${indic.ocupacaoPatio.taxa}%`;
     } else if (tipo === 'PREVENTIVA_SUGERIDA') {
       // Item 1.8: Usa O MESMO RETORNO de buscarEquipamentosPreventivaSugerida()
       titulo = 'Manutenções Preventivas Sugeridas (> 3 Anos de Uso)';
@@ -716,20 +697,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Ordena logs do mais recente para o mais antigo
     logs.sort((a, b) => new Date(b.data_hora || 0) - new Date(a.data_hora || 0));
 
-    // Visão Própria (RF 1.1): cargos operacionais leem apenas os próprios
-    // registros de auditoria no Painel Geral; Inspetor, Supervisor e Direção
-    // seguem lendo a trilha operacional completa (RF 1.2/1.3). Mesma regra dos
-    // gráficos (js/pages/charts.js), agora em fonte única na Vision Layer.
-    const sessaoVisao = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null);
-    const escopoVisaoPropria = Boolean(window.NexusVision
-      && typeof window.NexusVision.filtrarRegistrosDeVisaoPropria === 'function'
-      && Array.isArray(window.NexusVision.CARGOS_OPERACIONAIS)
-      && sessaoVisao
-      && (window.NexusVision.CARGOS_OPERACIONAIS.indexOf(sessaoVisao.cargo) !== -1 || sessaoVisao.cargo === 'TECNICO_PORTOS'));
-    if (escopoVisaoPropria) {
-      logs = window.NexusVision.filtrarRegistrosDeVisaoPropria(logs, sessaoVisao);
-    }
-
     // Backlog 3 (7b): busca local no log de auditoria + contador "X de Y"
     const buscaAuditVal = (document.getElementById('buscarAuditLogInput')?.value || '').trim().toLowerCase();
     const totalAuditRegistros = logs.length;
@@ -741,8 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const auditCounterEl = document.getElementById('auditLogCounter');
     if (auditCounterEl) {
-      auditCounterEl.textContent = `Exibindo ${logsVisiveis.length} de ${totalAuditRegistros} registro(s)`
-        + (escopoVisaoPropria ? ' — Visão Própria (seus registros)' : '');
+      auditCounterEl.textContent = `Exibindo ${logsVisiveis.length} de ${totalAuditRegistros} registro(s)`;
     }
 
     if (logsVisiveis.length === 0) {
@@ -889,22 +855,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Ordenar por data mais recente
     trail.sort((a, b) => new Date(b.data_hora || 0) - new Date(a.data_hora || 0));
-
-    // Visão Própria (RF 1.1): o operacional lê as próprias decisões; a Visão
-    // Operacional (Inspetor/Supervisor) e a Estratégica leem a trilha completa.
-    const sessaoTrail = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null);
-    const escopoTrailVisaoPropria = Boolean(window.NexusVision
-      && typeof window.NexusVision.filtrarRegistrosDeVisaoPropria === 'function'
-      && sessaoTrail
-      && window.NexusVision.CARGOS_OPERACIONAIS
-      && (window.NexusVision.CARGOS_OPERACIONAIS.indexOf(sessaoTrail.cargo) !== -1 || sessaoTrail.cargo === 'TECNICO_PORTOS'));
-    if (escopoTrailVisaoPropria) {
-      trail = window.NexusVision.filtrarRegistrosDeVisaoPropria(trail, sessaoTrail);
-    }
-    const subtituloTrail = document.getElementById('trailDecisoesSubtitulo');
-    if (subtituloTrail && escopoTrailVisaoPropria) {
-      subtituloTrail.textContent = 'Visão Própria: decisões registradas por você (a trilha completa é da Visão Operacional/Estratégica).';
-    }
 
     if (trail.length === 0) {
       trailContainer.innerHTML = `

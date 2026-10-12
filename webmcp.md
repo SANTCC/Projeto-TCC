@@ -149,7 +149,6 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
 | `cargas.html` | `agendar_carga` | ação (confirmação) | Inspetor, Supervisor, Dir.Oper, Dir.Pres, Conselho |
 | `cargas.html` | `receber_carga` | ação (confirmação) | Conferente, Dir.Oper, Dir.Pres, Conselho · REGISTRAR_RECEBIMENTO |
 | `cargas.html` | `movimentar_carga` | ação (confirmação) | Estivador, Inspetor, Dir.Oper, Dir.Pres, Conselho · MOVIMENTAR_CARGA |
-| `cargas.html` | `mover_carga_container` | ação (confirmação) | Estivador, Inspetor, Dir.Oper, Dir.Pres, Conselho · MOVIMENTAR_CARGA |
 | `cargas.html` | `marcar_pronta_entrega` | ação (confirmação) | Arrumador, Inspetor, Dir.Oper, Dir.Pres, Conselho · ALTERAR_PRONTA_ENTREGA |
 | `cargas.html` | `vincular_carga_container` | ação (confirmação) | Supervisor, Dir.Oper, Dir.Pres, Conselho |
 | `cargas.html` | `liberar_carga_saida` | ação (confirmação) | Supervisor, Dir.Oper, Dir.Pres, Conselho · LIBERAR_CARGA |
@@ -270,18 +269,11 @@ Gerado a partir do registro real das páginas (script de inventário, perfil de 
 5. **Confirmação automática em headless** (`js/layout.js`, `nexusConfirm`): confirma após 50 ms quando o
    User-Agent contém `Headless` ou `Playwright`. Não é usado pelo WebMCP, mas é um risco de contorno
    em automações.
-6. **Ações de embarcações e a matriz de cargos** (`js/pages/embarcacoes.js`) — *ajustado na tarefa I*:
-   `excluirNavio`, `excluirContainer` e `excluirGuindaste` agora conferem a matriz de ações
-   (`CADASTRAR_NAVIO`/`CADASTRAR_CONTAINER`/`CADASTRAR_GUINDASTE`/`LIBERAR_NAVIO`) e recusam com
-   "Acesso Restrito"; os botões de exclusão e o cadastro de rota marítima (`CADASTRAR_ROTA`, do
-   Supervisor) deixam de aparecer ao Planejador, que abre a tela para registrar dados operacionais.
-   `vincularNavioABerco` segue sem checagem interna, mas o WebMCP exige
-   `ATUALIZAR_DADOS_NAVIO_CONTAINER` — permissão de todos os cargos com acesso à página, sem divergência prática.
-7. **Agendamento: tela × agente** (`js/pages/cargas.js`) — *mantido por decisão (tarefa I)*: o botão
-   "Agendar Nova Carga" aparece e funciona para todos os cargos que abrem Cargas & Pátio, porque a
-   nota 3.4 do backlog manda o funcionário operacional registrar a carga e ficar como responsável
-   (auto-atribuição, campo travado). O agente é mais restrito — `agendar_carga` só é exposto a
-   Inspetor, Supervisor e Direção.
+6. **Ações sem checagem de cargo dentro da função** (`js/pages/embarcacoes.js`): `excluirNavio`,
+   `excluirContainer`, `excluirGuindaste` e `vincularNavioABerco` não verificam o cargo; a tela mostra
+   o botão a todos os cargos da página. O WebMCP exige o cargo de cadastro.
+7. **Agendamento visível a todos** (`js/pages/cargas.js`): o botão "Agendar Nova Cargas" aparece a todos os
+   cargos da página, mas o envio só é aceito para Supervisor, Inspetor e Direção.
 8. **Exportação sem checagem interna** (`js/vision-layer.js`, `exportDadosHistoricos`): não verifica o
    cargo e não tem botão na interface. O WebMCP só a expõe a `EXPORTAR_HISTORICO`.
 9. **Filtro com texto livre** (`js/pages/scanner.js`): o código lido é interpolado em filtros PostgREST

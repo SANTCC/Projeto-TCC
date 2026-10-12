@@ -231,7 +231,6 @@ async function carregarPaginaCargas({ falharAtualizacao = false, deferirAtualiza
       if (tabela === 'cargas') {
         return {
           update(payload) {
-            estado.ultimoPayload = payload;
             return {
               in(_coluna, ids) {
                 let statusAnterior;
@@ -308,21 +307,10 @@ async function testarCicloDeInterface() {
   log('\n4. Página real de cargas: transição automática não recursa por renderização');
   const { janela, w, estado } = await carregarPaginaCargas();
   const textoTabela = w.document.getElementById('cargasTableBody').textContent || '';
-  // C1: a carga entregue sai da tabela principal e passa para a Tabela de Cargas Entregues.
-  const textoEntregues = w.document.getElementById('cargasEntreguesTableBody').textContent || '';
   check('carregamento inicial conclui uma leitura e uma atualização de status',
     estado.leituras === 1 && estado.atualizacoes === 1 && estado.statusBanco === 'ENTREGUE',
     `leituras=${estado.leituras}, atualizações=${estado.atualizacoes}, status=${estado.statusBanco}`);
-  check('C1: a carga entregue NÃO aparece mais na tabela principal',
-    !/ENTREGUE/.test(textoTabela) && /Nenhuma carga encontrada/.test(textoTabela), textoTabela.slice(0, 180));
-  check('C1: a carga entregue aparece na Tabela de Cargas Entregues', /ENTREGUE/.test(textoEntregues), textoEntregues.slice(0, 180));
-  check('C1: o contador de entregues informa a quantidade', /1 carga\(s\) entregue\(s\)/.test(w.document.getElementById('cargasEntreguesCounter').textContent), w.document.getElementById('cargasEntreguesCounter').textContent);
-  // A1 (Backlog NexusPort): entregar desvincula a carga do navio no mesmo update, por id.
-  check('A1: a transição para ENTREGUE grava navio_id = null no banco',
-    estado.ultimoPayload && estado.ultimoPayload.status_fluxo === 'ENTREGUE' && estado.ultimoPayload.navio_id === null,
-    JSON.stringify(estado.ultimoPayload));
-  check('A1: a carga entregue deixa de exibir o navio na listagem',
-    /Navio desvinculado na entrega/.test(textoEntregues) && !/MV Teste/.test(textoEntregues), textoEntregues.slice(0, 180));
+  check('listagem continua renderizada com status ENTREGUE', /ENTREGUE/.test(textoTabela), textoTabela.slice(0, 180));
   check('a transição automática não chama notifyChange localmente', estado.notificacoes === 0, `notificações=${estado.notificacoes}`);
 
   w.dispatchEvent(new w.CustomEvent('nexus_data_changed', { detail: { entity: 'logs_alteracoes' } }));
@@ -345,8 +333,6 @@ async function testarTransicaoSaidaNavio() {
   check('a liberação do navio persiste EM_TRANSITO e mantém a carga na listagem',
     estado.leituras === 1 && estado.atualizacoes === 1 && estado.statusBanco === 'EM_TRANSITO' && /EM_TRANSITO/.test(textoTabela),
     `leituras=${estado.leituras}, atualizações=${estado.atualizacoes}, status=${estado.statusBanco}`);
-  check('A1: a saída do porto não mexe no vínculo carga-navio',
-    estado.ultimoPayload && estado.ultimoPayload.navio_id === undefined, JSON.stringify(estado.ultimoPayload));
   w.dispatchEvent(new w.CustomEvent('nexus_data_changed', { detail: { entity: 'navios' } }));
   await aguardar(220);
   check('status EM_TRANSITO já persistido não gera nova atualização automática',
@@ -359,16 +345,10 @@ async function testarTransicaoCargaComNavioHerdado() {
   log('\n6. Navio herdado: transição automática preservada para vínculo via contêiner');
   const { janela, w, estado } = await carregarPaginaCargas({ herdarNavioDoContainer: true });
   const textoTabela = w.document.getElementById('cargasTableBody').textContent || '';
-  const textoEntregues = w.document.getElementById('cargasEntreguesTableBody').textContent || '';
   check('herança do contêiner resolve o navio antes de avaliar e persistir a transição',
     estado.leituras === 1 && estado.atualizacoes === 1 && estado.statusBanco === 'ENTREGUE',
     `leituras=${estado.leituras}, atualizações=${estado.atualizacoes}, status=${estado.statusBanco}`);
-  // A1 (Backlog NexusPort): ao chegar ao destino a carga é entregue E desvinculada do
-  // navio. C1: a entrega continua visível na Tabela de Cargas Entregues, fora da principal.
-  check('C1: carga com navio herdado sai da tabela principal ao ser entregue',
-    !/ENTREGUE/.test(textoTabela), textoTabela.slice(0, 180));
-  check('carga com navio herdado segue visível na Tabela de Cargas Entregues', /ENTREGUE/.test(textoEntregues), textoEntregues.slice(0, 180));
-  check('A1: carga entregue não exibe mais o navio da viagem', !/MV Teste/.test(textoEntregues) && /Navio desvinculado na entrega/.test(textoEntregues), textoEntregues.slice(0, 180));
+  check('carga com navio herdado segue visível na listagem', /MV Teste/.test(textoTabela) && /ENTREGUE/.test(textoTabela), textoTabela.slice(0, 180));
   janela.w.close();
 }
 

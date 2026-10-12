@@ -34,6 +34,11 @@
 
     const isDiretor = ['DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     const isOperacionalSupervisor = ['INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES'].includes(session.cargo);
+    const isTecnico = session.cargo === 'TECNICO_PORTOS';
+    const isSupervisor = session.cargo === 'SUPERVISOR_GERENTE_OPERACOES';
+    const isInspetor = session.cargo === 'INSPETOR';
+    const isPlanejador = session.cargo === 'PLANEJADOR_PATIO_NAVIOS';
+    const isOperacionalCarga = ['ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR'].includes(session.cargo);
 
     const visionLayer = session.camada_visao || (isDiretor ? 'Visão Estratégica' : isOperacionalSupervisor ? 'Visão Operacional' : 'Visão Própria');
 
@@ -42,31 +47,17 @@
     // Determina link ativo baseado na URL
     const activePage = currentPath.split('/').pop() || 'dashboard.html';
 
-    /**
-     * A visibilidade de cada item do menu segue a MESMA matriz de páginas do
-     * guard (js/auth-guard.js → PAGE_PERMISSIONS), consultada em canAccessPage.
-     * Era uma lista paralela de booleanos por cargo: qualquer mudança na matriz
-     * deixava o menu oferecendo (ou escondendo) uma tela em desacordo com o
-     * acesso direto pela URL. Fonte única: o menu nunca mostra link morto.
-     */
-    function podeAbrirPagina(pagina) {
-      if (window.NexusAuth && typeof window.NexusAuth.canAccessPage === 'function') {
-        return window.NexusAuth.canAccessPage(pagina);
-      }
-      return true; // sem guard carregado a página não é restringida
-    }
-
     const menuItems = [
-      { id: 'dashboard.html', label: 'Painel Geral', icon: 'dashboard', href: 'dashboard.html', visible: podeAbrirPagina('dashboard.html') },
-      { id: 'cargas.html', label: 'Cargas & Pátio', icon: 'inventory_2', href: 'cargas.html', visible: podeAbrirPagina('cargas.html') },
-      { id: 'inspecao.html', label: 'Inspeção & Checklist', icon: 'fact_check', href: 'inspecao.html', visible: podeAbrirPagina('inspecao.html') },
-      { id: 'scanner.html', label: 'Scanner QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: podeAbrirPagina('scanner.html') },
-      { id: 'embarcacoes.html', label: 'Embarcações & GPS', icon: 'directions_boat', href: 'embarcacoes.html', visible: podeAbrirPagina('embarcacoes.html') },
-      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: podeAbrirPagina('manutencao.html') },
-      { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: podeAbrirPagina('delegacao.html') },
-      { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: podeAbrirPagina('tecnico_portos.html') },
-      { id: 'seguranca.html', label: 'Auditoria de Login', icon: 'shield_lock', href: 'seguranca.html', visible: podeAbrirPagina('seguranca.html') },
-      { id: 'relatorios.html', label: 'Relatórios & PDF', icon: 'assessment', href: 'relatorios.html', visible: podeAbrirPagina('relatorios.html') }
+      { id: 'dashboard.html', label: 'Painel Geral', icon: 'dashboard', href: 'dashboard.html', visible: true },
+      { id: 'cargas.html', label: 'Cargas & Pátio', icon: 'inventory_2', href: 'cargas.html', visible: isDiretor || isSupervisor || isInspetor || isPlanejador || isOperacionalCarga },
+      { id: 'inspecao.html', label: 'Inspeção & Checklist', icon: 'fact_check', href: 'inspecao.html', visible: isDiretor || isSupervisor || isInspetor },
+      { id: 'scanner.html', label: 'Scanner QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: true },
+      { id: 'embarcacoes.html', label: 'Embarcações & GPS', icon: 'directions_boat', href: 'embarcacoes.html', visible: isDiretor || isSupervisor || isInspetor || isPlanejador },
+      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: isDiretor || isSupervisor || isInspetor },
+      { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: isDiretor || isSupervisor },
+      { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: isTecnico || isDiretor },
+      { id: 'seguranca.html', label: 'Auditoria de Login', icon: 'shield_lock', href: 'seguranca.html', visible: isDiretor || isSupervisor },
+      { id: 'relatorios.html', label: 'Relatórios & PDF', icon: 'assessment', href: 'relatorios.html', visible: true }
     ];
 
     // Montagem prévia dos itens de menu (cada interpolação é codificada aqui)

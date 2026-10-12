@@ -52,24 +52,6 @@
     return typeof window.nexusEmbarcacoesRotas === 'function' ? window.nexusEmbarcacoesRotas() : [];
   }
 
-  // A2/A3 — mesmo critério da página: portos iguais, tolerando variações do nome do
-  // Porto de Santos. A próxima viagem é a ESCOLHIDA no botão "Rota" (o sistema não
-  // presume o porto atual como origem).
-  function mesmoPorto(a, b) {
-    const x = String(a || '').trim().toLowerCase();
-    const y = String(b || '').trim().toLowerCase();
-    if (!x || !y) return false;
-    return x === y || (/santos/i.test(x) && /santos/i.test(y));
-  }
-
-  /** Porto onde a embarcação está: o terminal STS-01 fica no Porto de Santos. */
-  function portoAtual(navio) {
-    if (!navio) return 'Porto de Santos';
-    if (navio.localizacao === 'NO_PORTO_DE_DESTINO') return String(navio.destino || '').trim() || 'Porto de destino';
-    if (navio.localizacao === 'DENTRO_DO_PORTO') return /santos/i.test(String(navio.origem || '')) ? String(navio.origem).trim() : 'Porto de Santos';
-    return String(navio.origem || '').trim();
-  }
-
   function falhaNaoConcluida(mensagem) {
     return { ok: false, codigo: 'NAO_CONCLUIDA', mensagem: mensagem || 'A ação não foi concluída. Veja a mensagem exibida ao operador.' };
   }
@@ -493,46 +475,23 @@
       if (navio.localizacao !== 'DENTRO_DO_PORTO') {
         return { codigo: 'ESTADO_INVALIDO', mensagem: `O navio ${navio.nome} não está no porto (situação: ${navio.localizacao}).` };
       }
-      // A2: a rota da próxima viagem é sempre ESCOLHIDA (origem e destino). O agente
-      // não presume que a origem seja o porto onde o navio está.
-      const origem = String(navio.origem || '').trim().toLowerCase();
+      const origem = String(navio.origem || 'Porto de Santos').trim().toLowerCase();
       const destino = String(navio.destino || '').trim().toLowerCase();
-      if (!origem || !destino) {
-        return { codigo: 'ROTA_NAO_DEFINIDA', mensagem: `A próxima viagem do navio ${navio.nome} não tem origem e destino escolhidos. Use o botão "Rota" na página para definir a rota — o sistema não presume o porto atual como origem.` };
-      }
-      const rota = rotasDaPagina().find((r) => {
-        const ro = String(r.origem || '').trim().toLowerCase();
-        const rd = String(r.destino || '').trim().toLowerCase();
-        return (ro === origem && rd === destino) || (ro === destino && rd === origem);
-      });
+      const rota = rotasDaPagina().find((r) => String(r.origem || '').trim().toLowerCase() === origem
+        && String(r.destino || '').trim().toLowerCase() === destino);
       if (!rota) {
-        return { codigo: 'ROTA_NAO_CADASTRADA', mensagem: `Não há rota cadastrada entre ${navio.origem} e ${navio.destino} (RN 9).` };
-      }
-      // A3: a rota cadastrada precisa ser a da PRÓXIMA viagem — origem no porto onde a
-      // embarcação está e destino diferente dele. O trecho já concluído (a viagem que
-      // trouxe o navio ao terminal) não libera nova saída: a página abriria o seletor.
-      const atual = portoAtual(navio);
-      if (!mesmoPorto(origem, atual)) {
-        return { codigo: 'ROTA_NAO_DEFINIDA', mensagem: `A próxima viagem do navio ${navio.nome} parte de ${atual}, onde a embarcação está, e a origem definida é "${navio.origem}". Peça ao operador para escolher a rota no botão "Rota".` };
-      }
-      if (mesmoPorto(destino, atual)) {
-        return { codigo: 'ROTA_NAO_DEFINIDA', mensagem: `O destino da próxima viagem do navio ${navio.nome} precisa ser diferente de ${atual}, onde a embarcação está (destino definido: "${navio.destino}"). Peça ao operador para escolher a rota no botão "Rota".` };
+        return { codigo: 'ROTA_NAO_CADASTRADA', mensagem: `Não há rota cadastrada de ${navio.origem || 'Porto de Santos'} para ${navio.destino} (RN 9).` };
       }
       return null;
     },
     resumo: async (args) => {
       const navio = await navioPorImo(args.imo);
       if (!navio) return [];
-      const origem = String(navio.origem || '').trim().toLowerCase();
-      const destino = String(navio.destino || '').trim().toLowerCase();
-      const rota = rotasDaPagina().find((r) => {
-        const ro = String(r.origem || '').trim().toLowerCase();
-        const rd = String(r.destino || '').trim().toLowerCase();
-        return (ro === origem && rd === destino) || (ro === destino && rd === origem);
-      });
+      const rota = rotasDaPagina().find((r) => String(r.origem || '').toLowerCase() === String(navio.origem || 'Porto de Santos').toLowerCase()
+        && String(r.destino || '').toLowerCase() === String(navio.destino || '').toLowerCase());
       return [
         `Liberar a saída do navio ${navio.nome} (IMO ${navio.imo}).`,
-        `Rota da próxima viagem: ${navio.origem || '—'} → ${navio.destino || '—'} (${rota ? rota.distancia_km : '?'} km).`,
+        `Rota cadastrada: ${navio.origem || 'Porto de Santos'} → ${navio.destino} (${rota ? rota.distancia_km : '?'} km).`,
         'Situação: DENTRO_DO_PORTO → FORA_DO_PORTO. O berço é liberado.'
       ];
     },
@@ -665,16 +624,8 @@
       if (args.identificacao !== undefined && !D.containers().some((c) => c.identificacao === args.identificacao.toUpperCase())) {
         return { codigo: 'CONTAINER_NAO_ENCONTRADO', mensagem: `Contêiner ${args.identificacao.toUpperCase()} não cadastrado.` };
       }
-      if (args.imo !== undefined) {
-        const navio = await navioPorImo(args.imo);
-        if (!navio) {
-          return { codigo: 'NAVIO_NAO_ENCONTRADO', mensagem: `Navio com IMO ${imoNormalizado(args.imo)} não encontrado.` };
-        }
-        // A4: só embarcações atracadas no Porto de Santos recebem contêiner (mesma
-        // regra da página); o agente é recusado antes de pedir confirmação.
-        if (navio.localizacao !== 'DENTRO_DO_PORTO') {
-          return { codigo: 'ESTADO_INVALIDO', mensagem: `O navio ${navio.nome} não está atracado no Porto de Santos (situação: ${navio.localizacao}).` };
-        }
+      if (args.imo !== undefined && !(await navioPorImo(args.imo))) {
+        return { codigo: 'NAVIO_NAO_ENCONTRADO', mensagem: `Navio com IMO ${imoNormalizado(args.imo)} não encontrado.` };
       }
       return null;
     },
