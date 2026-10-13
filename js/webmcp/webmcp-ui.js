@@ -78,7 +78,8 @@
 .nxm-btn-primario{background:#4338ca;border-color:#4338ca;color:#fff}
 .nxm-btn[disabled]{opacity:.45;cursor:not-allowed}
 .nxm-contador{font:600 11px monospace;color:#64748b}
-#nxmBotao{position:fixed;right:1rem;bottom:1rem;z-index:35;display:inline-flex;align-items:center;gap:.4rem;padding:.55rem .8rem;border-radius:999px;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;font:700 12px/1 Inter,system-ui,sans-serif;box-shadow:0 6px 18px rgba(15,23,42,.18);cursor:pointer}
+#nxmBotao{position:fixed;right:1rem;bottom:1rem;z-index:35;display:none;align-items:center;gap:.4rem;padding:.55rem .8rem;border-radius:999px;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;font:700 12px/1 Inter,system-ui,sans-serif;box-shadow:0 6px 18px rgba(15,23,42,.18);cursor:pointer}
+#nxmBotao[hidden]{display:none}
 #nxmBotao:focus-visible{outline:3px solid #6366f1;outline-offset:2px}
 #nxmBotao .nxm-n{background:#4338ca;color:#fff;border-radius:999px;padding:.1rem .4rem;font-size:10px}
 #nxmPainel{position:fixed;right:1rem;bottom:4.25rem;z-index:36;width:min(380px,calc(100vw - 2rem));max-height:70vh;overflow:auto;border-radius:1rem;background:#fff;color:#0f172a;border:1px solid #e2e8f0;box-shadow:0 20px 40px -12px rgba(15,23,42,.35);padding:1rem;font-family:Inter,system-ui,sans-serif}
@@ -298,7 +299,7 @@ html.dark #nxmBotao{background:#1e1b4b;color:#c7d2fe;border-color:#3730a3}
     instalarEstilos();
     const botao = criar('button', {
       type: 'button', id: 'nxmBotao', 'aria-expanded': 'false', 'aria-controls': 'nxmPainel',
-      'aria-label': 'Agentes IA 0 — abrir painel'
+      'aria-label': 'Agentes IA 0 — abrir painel', hidden: 'hidden'
     }, [
       criar('span', { class: 'material-symbols-outlined', 'aria-hidden': 'true', text: 'smart_toy', style: 'font-size:16px' }),
       // O espaço no fim do rótulo é intencional: o texto visível lido pelas ferramentas de auditoria

@@ -523,7 +523,7 @@ async function secaoUI() {
   await prontoDom(w);
   await aguardar(40);
   const botao = w.document.getElementById('nxmBotao');
-  check('painel: botão "Agentes IA" montado com aria-controls', botao && botao.getAttribute('aria-controls') === 'nxmPainel');
+  check('painel: botão "Agentes IA" montado com aria-controls e oculto da UI', botao && botao.getAttribute('aria-controls') === 'nxmPainel' && botao.hidden === true && w.getComputedStyle(botao).display === 'none');
   const painel = w.document.getElementById('nxmPainel');
   check('painel: começa fechado (hidden) e com role dialog', painel && painel.hidden === true && painel.getAttribute('role') === 'dialog');
   botao.click();
