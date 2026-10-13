@@ -23,7 +23,7 @@ console.log('  ✅ [PASS] 10.1: Datas manipuladas em ISO 8601 e renderizadas no 
 
 // 2. Validando Concorrência e Capacidade de Pátio / Berços (10.2)
 console.log('2. Validando Concorrência de Berços e Capacidade de Pátio (10.2)...');
-assert(cargasJs.includes('bercoAlvo') || embarcacoesJs.includes('bercoAlvo'), 'Fase 10: Bloqueio de ocupação concorrente de berços ativo.');
+assert(cargasJs.includes('bercoAlvo.estado === \'OCUPADO\'') && cargasJs.includes('bercoAlvo.carga_id !== idCarga'), 'Fase 10: Bloqueio de ocupação concorrente de berços ativo.');
 assert(cargasJs.includes('cargaVol > dispVol'), 'Fase 10: Bloqueio de capacidade volumétrica de contêineres ativo.');
 console.log('  ✅ [PASS] 10.2: Validação de capacidade de contêiner e concorrência de berços validada.');
 
@@ -39,14 +39,14 @@ console.log('  ✅ [PASS] 10.3: Mecanismo reativo de broadcast nexus_data_change
 // 4. Validando Integridade Referencial e Exclusão Lógica / Soft Delete (10.4 & 10.5)
 console.log('4. Validando Soft Delete e Integridade Referencial (10.4 & 10.5)...');
 const tecnicoJs = fs.readFileSync(path.join(__dirname, 'js/pages/tecnico_portos.js'), 'utf-8');
-assert(tecnicoJs.includes('deleteFuncionario') || delegacaoJs.includes('ativo: false'), 'Fase 10: Exclusão de funcionário implementada como soft-delete seguro no Supabase.');
+assert(tecnicoJs.includes('ativo: false'), 'Fase 10: Exclusão de funcionário implementada como soft-delete seguro no Supabase.');
 assert(tecnicoJs.includes('deleteFuncionario') || tecnicoJs.includes('update({ ativo: false })'), 'Fase 10: Desativação de funcionário persiste status no banco.');
 console.log('  ✅ [PASS] 10.4 & 10.5: Exclusão lógica com preservação de integridade referencial validada.');
 
 // 5. Validando Limites Numéricos e Campos Positivos (10.6)
 console.log('5. Validando Limites Numéricos e Regras Positivas (10.6)...');
 assert(cargasJs.includes('pesoVal <= 0 || volumeVal <= 0 || valorVal <= 0'), 'Fase 10: Bloqueio de peso, volume e valor menores ou iguais a zero.');
-assert(embarcacoesJs.includes('validarCoordenadaGPS') || embarcacoesJs.includes('lat <= 90'), 'Fase 10: Limites geográficos rígidos de latitude e longitude GPS implementados.');
+assert(embarcacoesJs.includes('lat <= 90 && lon <= 180'), 'Fase 10: Limites geográficos rígidos de latitude e longitude GPS implementados.');
 console.log('  ✅ [PASS] 10.6: Validações de limites numéricos estritamente maiores que zero e coordenadas plausíveis.');
 
 // 6. Validando Sanitização Preventiva de Cache (10.7)

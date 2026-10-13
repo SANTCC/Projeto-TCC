@@ -1,1 +1,0 @@
-../../../js/pages/confirm-role.js

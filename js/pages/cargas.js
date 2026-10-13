@@ -946,116 +946,127 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const submitBtn = agendamentoForm.querySelector('button[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
-
-      try {
-        if (!window.nexusSupabase) {
+      // Tarefa 8: Carga vinculada a contêiner ou navio em manutenção fica com a movimentação bloqueada
+      if (carga.container) {
+        const contsList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+        const contObj = contsList.find(c => NexusCodigos.chave(c.identificacao || c.id) === NexusCodigos.chave(carga.container));
+        if (contObj && (contObj.estado === 'EM_REFORMA' || contObj.estado === 'EM_MANUTENCAO')) {
           if (window.mostrarFeedback) {
-            window.mostrarFeedback('erro', 'Sem Conexão', 'O agendamento da carga não pode ser concluído enquanto o banco de dados estiver indisponível.');
+            window.mostrarFeedback('alerta', 'Contêiner em Manutenção', `A carga ${idCarga} está alocada no contêiner ${contObj.identificacao}, que está em manutenção/reforma. A movimentação fica bloqueada.`);
           }
           return;
         }
-
-        const idNum = Math.floor(100 + Math.random() * 900);
-        const newId = `CRG-2026-${idNum}`;
-        const newQrCode = `QR-${newId}`;
-        const nowIso = new Date().toISOString();
-
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        let tipoCargaUuid = (typeof tipoCompartilhado !== 'undefined' && tipoCompartilhado && isUuid.test(tipoCompartilhado.id)) ? tipoCompartilhado.id : null;
-
-        if (!tipoCargaUuid) {
-          const { data: dbTipo } = await window.nexusSupabase.from('tipos_carga').select('id').eq('nome', tipo).maybeSingle();
-          if (dbTipo && dbTipo.id) tipoCargaUuid = dbTipo.id;
-        }
-
-        const insertPayload = {
-          natureza: natureza || 'Carga Geral',
-          peso: pesoVal,
-          volume: volumeVal,
-          valor_declarado: valorVal,
-          porto_descarga: portoDescarga,
-          destino: destino,
-          status_fluxo: 'AGENDAMENTO',
-          qr_code_url: newQrCode
-        };
-        if (tipoCargaUuid) insertPayload.tipo_carga_id = tipoCargaUuid;
-
-        const { data: resCarga, error: cargaErr } = await window.nexusSupabase.from('cargas').insert(insertPayload).select().single();
-
-        if (cargaErr || !resCarga) {
-          const erroMsg = cargaErr ? cargaErr.message : 'O banco de dados não retornou o registro da carga cadastrada.';
-          if (window.mostrarFeedback) {
-            window.mostrarFeedback('erro', 'Carga Não Agendada', `O banco de dados rejeitou o cadastro: ${erroMsg}`);
-          }
-          return;
-        }
-
-        const novaCarga = {
-          id: newId,
-          rawDbId: resCarga.id,
-          tipo,
-          peso: `${pesoVal} t`,
-          volume: `${volumeVal} m³`,
-          valor: `R$ ${valorVal.toLocaleString('pt-BR')}`,
-          natureza,
-          portoDescarga,
-          destino,
-          rotaOrigem,
-          rota_id: rotaDestino.id || null,
-          status: 'AGENDAMENTO',
-          container: '',
-          navio: '',
-          qrCode: newQrCode,
-          data_cadastro: nowIso,
-          created_at: nowIso,
-          estivador_id: estivadorResp ? estivadorResp.id : null,
-          estivadorMatricula: estivadorResp ? estivadorResp.matricula : null,
-          estivador: estivadorResp ? estivadorResp.nome : null
-        };
-
-        cargasFluxoList.push(novaCarga);
-        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
-
-        await window.nexusSupabase.from('agendamentos').insert({
-          carga_id: resCarga.id
-        }).catch(() => {});
-
-        if (estivadorResp && isUuid.test(String(estivadorResp.id)) && isUuid.test(String(resCarga.id))) {
-          try {
-            await window.nexusSupabase.from('estivador_cargas').upsert({
-              estivador_id: estivadorResp.id,
-              carga_id: resCarga.id,
-              data_inicio: nowIso
-            }, { onConflict: 'estivador_id,carga_id' });
-          } catch (attrErr) {
-            console.warn('[NexusPort] Atribuição do responsável salva apenas localmente:', attrErr);
-          }
-        }
-
-        if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('CRIACAO', 'cargas', resCarga.id, { id: newId, responsavel: estivadorResp ? estivadorResp.nome : null });
-        }
-
-        if (window.NexusRepository && window.NexusRepository.notifyChange) {
-          window.NexusRepository.notifyChange('cargas');
-        }
-
-        renderTable();
-        agendamentoForm.reset();
-        agendamentoForm.classList.add('hidden');
-
-        // Exibição automática da confirmação do agendamento com QR Code em tempo real (RF 17.1)
-        window.exibirEtiquetaQr(novaCarga);
-      } catch (err) {
-        console.error('[NexusPort] Falha ao agendar carga:', err);
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Erro ao Agendar', `Não foi possível concluir o agendamento: ${err.message || err}`);
-        }
-      } finally {
-        if (submitBtn) submitBtn.disabled = false;
       }
+
+      if (carga.navio) {
+        const navsList = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+        const navObj = navsList.find(n => (n.nome || '').toLowerCase() === (carga.navio || '').toLowerCase());
+        if (navObj && (navObj.estado_operacional === 'EM_REFORMA' || navObj.estado_operacional === 'EM_MANUTENCAO' || navObj.estado === 'EM_REFORMA' || navObj.estado === 'EM_MANUTENCAO')) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('alerta', 'Navio em Manutenção', `A carga ${idCarga} está vinculada ao navio ${navObj.nome}, que está em manutenção/reforma. A movimentação fica bloqueada.`);
+          }
+          return;
+        }
+      }
+
+      const idNum = Math.floor(100 + Math.random() * 900);
+      const newId = `CRG-2026-${idNum}`;
+      const newQrCode = `QR-${newId}`;
+
+      const nowIso = new Date().toISOString();
+      const novaCarga = {
+        id: newId,
+        tipo,
+        peso: `${pesoVal} t`,
+        volume: `${volumeVal} m³`,
+        valor: `R$ ${valorVal.toLocaleString('pt-BR')}`,
+        natureza,
+        portoDescarga,
+        destino,
+        rotaOrigem,
+        rota_id: rotaDestino.id || null,
+        status: 'AGENDAMENTO',
+        container: '',
+        navio: '',
+        qrCode: newQrCode,
+        data_cadastro: nowIso,
+        created_at: nowIso,
+        // Atribuição do funcionário responsável (Backlog 3 - Anotação 3.4)
+        estivador_id: estivadorResp ? estivadorResp.id : null,
+        estivadorMatricula: estivadorResp ? estivadorResp.matricula : null,
+        estivador: estivadorResp ? estivadorResp.nome : null
+      };
+
+
+      cargasFluxoList.push(novaCarga);
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
+
+      if (window.nexusSupabase) {
+        try {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          let tipoCargaUuid = (typeof tipoCompartilhado !== 'undefined' && tipoCompartilhado && isUuid.test(tipoCompartilhado.id)) ? tipoCompartilhado.id : null;
+
+          if (!tipoCargaUuid) {
+            const { data: dbTipo } = await window.nexusSupabase.from('tipos_carga').select('id').eq('nome', tipo).maybeSingle();
+            if (dbTipo && dbTipo.id) tipoCargaUuid = dbTipo.id;
+          }
+
+          const insertPayload = {
+            natureza: natureza || 'Carga Geral',
+            peso: pesoVal,
+            volume: volumeVal,
+            valor_declarado: valorVal,
+            porto_descarga: portoDescarga,
+            destino: destino,
+            status_fluxo: 'AGENDAMENTO',
+            qr_code_url: newQrCode
+          };
+          if (tipoCargaUuid) insertPayload.tipo_carga_id = tipoCargaUuid;
+
+          const { data: resCarga, error: cargaErr } = await window.nexusSupabase.from('cargas').insert(insertPayload).select().maybeSingle();
+
+          if (!cargaErr && resCarga) {
+            novaCarga.rawDbId = resCarga.id;
+            const lastIdx = cargasFluxoList.findIndex(c => c.id === newId);
+            if (lastIdx !== -1) {
+              cargasFluxoList[lastIdx].rawDbId = resCarga.id;
+              localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
+            }
+            // Sem data prevista manual: a estimativa de chegada é o ETA do navio
+            // vinculado. O agendamento registra apenas o vínculo com a carga.
+            await window.nexusSupabase.from('agendamentos').insert({
+              carga_id: resCarga.id
+            }).catch(() => {});
+
+            // Backlog 3 (Anotação 3.4) — persiste a atribuição do responsável
+            // na tabela mestre estivador_cargas quando há UUIDs disponíveis
+            if (estivadorResp && isUuid.test(String(estivadorResp.id)) && isUuid.test(String(resCarga.id))) {
+              try {
+                await window.nexusSupabase.from('estivador_cargas').upsert({
+                  estivador_id: estivadorResp.id,
+                  carga_id: resCarga.id,
+                  data_inicio: nowIso
+                }, { onConflict: 'estivador_id,carga_id' });
+              } catch (attrErr) {
+                console.warn('[NexusPort] Atribuição do responsável salva apenas localmente:', attrErr);
+              }
+            }
+
+            if (window.registrarLogAlteracao) {
+              window.registrarLogAlteracao('CRIACAO', 'cargas', resCarga.id, { id: newId, responsavel: estivadorResp ? estivadorResp.nome : null });
+            }
+          }
+        } catch (err) {
+          console.warn('[NexusPort] Erro ao sincronizar agendamento com Supabase:', err);
+        }
+      }
+
+      renderTable();
+      agendamentoForm.reset();
+      agendamentoForm.classList.add('hidden');
+
+      // Exibição automática da confirmação do agendamento com QR Code em tempo real (RF 17.1)
+      window.exibirEtiquetaQr(novaCarga);
     });
   }
 
@@ -1244,7 +1255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     naviosAptosModal = naviosModal.filter(n => !motivoNavioInaptoVinculo(n));
     if (vincularNavioSelect) {
       vincularNavioSelect.innerHTML = '<option value="">Herdar o navio do contêiner</option>' +
-        naviosAptosModal.map((nav, idx) => `<option value="${idx}" data-uuid="${nav.id || ''}">${esc(nav.nome || 'Sem nome')} (IMO ${esc(nav.imo || nav.numero_imo || '—')})</option>`).join('');
+        naviosAptosModal.map((n, idx) => `<option value="${idx}">${esc(n.nome || 'Sem nome')} (IMO ${esc(n.imo || n.numero_imo || '—')})</option>`).join('');
     }
     if (vincularNavioAviso) {
       vincularNavioAviso.textContent = 'Nenhum navio atracado no Porto de Santos e operante está disponível. Cargas só podem ser vinculadas a navios nessa condição.';
