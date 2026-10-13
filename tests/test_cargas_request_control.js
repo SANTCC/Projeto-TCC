@@ -310,7 +310,7 @@ async function testarCicloDeInterface() {
   check('carregamento inicial conclui uma leitura e uma atualização de status',
     estado.leituras === 1 && estado.atualizacoes === 1 && estado.statusBanco === 'ENTREGUE',
     `leituras=${estado.leituras}, atualizações=${estado.atualizacoes}, status=${estado.statusBanco}`);
-  check('listagem continua renderizada com status ENTREGUE', /ENTREGUE/.test(textoTabela), textoTabela.slice(0, 180));
+  check('carga ENTREGUE sai da listagem operacional ativa', !/ENTREGUE/.test(textoTabela) && /Nenhuma carga encontrada/.test(textoTabela), textoTabela.slice(0, 180));
   check('a transição automática não chama notifyChange localmente', estado.notificacoes === 0, `notificações=${estado.notificacoes}`);
 
   w.dispatchEvent(new w.CustomEvent('nexus_data_changed', { detail: { entity: 'logs_alteracoes' } }));
@@ -348,7 +348,7 @@ async function testarTransicaoCargaComNavioHerdado() {
   check('herança do contêiner resolve o navio antes de avaliar e persistir a transição',
     estado.leituras === 1 && estado.atualizacoes === 1 && estado.statusBanco === 'ENTREGUE',
     `leituras=${estado.leituras}, atualizações=${estado.atualizacoes}, status=${estado.statusBanco}`);
-  check('carga com navio herdado segue visível na listagem', /MV Teste/.test(textoTabela) && /ENTREGUE/.test(textoTabela), textoTabela.slice(0, 180));
+  check('carga terminal com navio herdado sai da listagem operacional ativa', !/MV Teste/.test(textoTabela) && !/ENTREGUE/.test(textoTabela) && /Nenhuma carga encontrada/.test(textoTabela), textoTabela.slice(0, 180));
   janela.w.close();
 }
 

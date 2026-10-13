@@ -195,7 +195,7 @@
         natureza: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Natureza', description: 'Natureza da mercadoria, por exemplo Agrícola ou Perecível.' },
         porto_descarga: { type: 'string', enum: D.SETORES_PATIO, rotulo: 'Setor do pátio', description: 'Setor do pátio de descarga.' },
         destino: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Destino (rota cadastrada)', description: 'Porto de destino de uma rota marítima JÁ CADASTRADA (ver listar_rotas). Não há destino manual: o valor precisa casar com uma rota registrada.' },
-        data_prevista: { type: 'string', format: 'date', rotulo: 'Data prevista (ignorado)', description: 'Aceito por compatibilidade, mas IGNORADO: a previsão de chegada agora é o ETA do navio vinculado, não há mais data manual no agendamento.' }
+        data_prevista: { type: 'string', format: 'date', rotulo: 'Data prevista', description: 'Data prevista para a carga ser entregue no Porto de Santos. Se omitida, usa a data atual.' }
       },
       required: ['tipo', 'peso', 'volume', 'valor', 'natureza', 'porto_descarga', 'destino'],
       additionalProperties: false
@@ -226,11 +226,12 @@
         D.definirCampo(form, 'agValor', args.valor);
         D.definirCampo(form, 'agNatureza', args.natureza);
         D.definirCampo(form, 'agPortoDescarga', args.porto_descarga);
+        D.definirCampo(form, 'agDataPrevista', args.data_prevista || new Date().toISOString().split('T')[0]);
       } catch (erro) {
         return { ok: false, codigo: 'ARGUMENTOS_INVALIDOS', mensagem: `Um valor não corresponde às opções da tela (${erro.message}).` };
       }
-      // Destino final = rota marítima cadastrada (sem digitação manual, sem
-      // data prevista): o agente casa o destino pedido com o rótulo da rota
+      // Destino final = rota marítima cadastrada (sem digitação manual).
+      // O agente casa o destino pedido com o rótulo da rota
       // ("origem ➔ destino (km)") carregado pela própria página.
       const agDestinoSel = form.querySelector('#agDestino');
       if (!agDestinoSel) {
@@ -269,7 +270,15 @@
         return { ok: false, codigo: 'FORMULARIO_INVALIDO', mensagem: `Campos inválidos: ${invalidos.join(', ') || 'verifique o formulário'}.` };
       }
       form.requestSubmit();
-      const nova = D.lerLista('nexus_cargas_fluxo').find((c) => !antes.has(c.id));
+      let nova = null;
+      if (D.esperar) {
+        await D.esperar(() => {
+          nova = D.lerLista('nexus_cargas_fluxo').find((c) => !antes.has(c.id)) || null;
+          return Boolean(nova);
+        }, 4000);
+      } else {
+        nova = D.lerLista('nexus_cargas_fluxo').find((c) => !antes.has(c.id)) || null;
+      }
       if (!nova) return falhaNaoConcluida('O agendamento não foi registrado. Veja a mensagem exibida ao operador.');
       return { mensagem: `Carga ${nova.id} agendada. A etiqueta QR foi exibida para o operador.`, dados: D.resumirCarga(nova) };
     }

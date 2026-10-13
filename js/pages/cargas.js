@@ -828,9 +828,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Destino final = rota marítima cadastrada (sem digitação manual). A estimativa
-  // de chegada é calculada pelo ETA do navio vinculado — não há mais campo de
-  // data prevista de entrega no agendamento.
+  // A data prevista registra a entrega terrestre da carga ao Porto de Santos
+  // (SPEC 6.1). Ela é diferente do ETA marítimo, calculado depois pelo navio.
+  const agDataPrevistaEl = document.getElementById('agDataPrevista');
+  const hojeAgendamento = new Date().toISOString().split('T')[0];
+  if (agDataPrevistaEl) agDataPrevistaEl.setAttribute('min', hojeAgendamento);
+
+  // O destino final continua restrito às rotas marítimas cadastradas.
   const agDestinoSel = document.getElementById('agDestino');
   let rotasDestinoCache = null;
 
@@ -917,6 +921,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const valorVal = parseFloat(document.getElementById('agValor').value) || 0;
       const natureza = document.getElementById('agNatureza').value.trim();
       const portoDescarga = document.getElementById('agPortoDescarga').value;
+      const dataPrevista = agDataPrevistaEl ? agDataPrevistaEl.value : '';
+      const hoje = new Date().toISOString().split('T')[0];
+      if (!dataPrevista || dataPrevista < hoje) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Data Prevista Inválida', 'Informe uma data prevista de entrega ao porto igual ou posterior à data de hoje.');
+        }
+        return;
+      }
+
       const rotaDestino = rotaDestinoSelecionada();
       if (!rotaDestino) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Destino Obrigatório', 'Selecione o destino final entre as rotas marítimas cadastradas no sistema. Se a rota desejada não existir, solicite ao Supervisor o registro em Embarcações & GPS (Gestão de Rotas Marítimas).');
@@ -946,127 +959,146 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Tarefa 8: Carga vinculada a contêiner ou navio em manutenção fica com a movimentação bloqueada
-      if (carga.container) {
-        const contsList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
-        const contObj = contsList.find(c => NexusCodigos.chave(c.identificacao || c.id) === NexusCodigos.chave(carga.container));
-        if (contObj && (contObj.estado === 'EM_REFORMA' || contObj.estado === 'EM_MANUTENCAO')) {
+      const submitBtn = agendamentoForm.querySelector('button[type="submit"]');
+      if (submitBtn && submitBtn.disabled) return;
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        if (!window.nexusSupabase) {
           if (window.mostrarFeedback) {
-            window.mostrarFeedback('alerta', 'Contêiner em Manutenção', `A carga ${idCarga} está alocada no contêiner ${contObj.identificacao}, que está em manutenção/reforma. A movimentação fica bloqueada.`);
+            window.mostrarFeedback('erro', 'Sem Conexão', 'O agendamento não pode ser concluído enquanto o banco de dados estiver indisponível. Nenhuma carga foi registrada.');
           }
           return;
         }
-      }
 
-      if (carga.navio) {
-        const navsList = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
-        const navObj = navsList.find(n => (n.nome || '').toLowerCase() === (carga.navio || '').toLowerCase());
-        if (navObj && (navObj.estado_operacional === 'EM_REFORMA' || navObj.estado_operacional === 'EM_MANUTENCAO' || navObj.estado === 'EM_REFORMA' || navObj.estado === 'EM_MANUTENCAO')) {
+        const idNum = Math.floor(100 + Math.random() * 900);
+        const newId = `CRG-2026-${idNum}`;
+        const newQrCode = `QR-${newId}`;
+        const nowIso = new Date().toISOString();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        let tipoCargaUuid = (typeof tipoCompartilhado !== 'undefined' && tipoCompartilhado && isUuid.test(tipoCompartilhado.id)) ? tipoCompartilhado.id : null;
+
+        if (!tipoCargaUuid) {
+          const { data: dbTipo, error: tipoErr } = await window.nexusSupabase.from('tipos_carga').select('id').eq('nome', tipo).maybeSingle();
+          // tipo_carga_id é opcional no schema. Se a consulta auxiliar estiver
+          // indisponível, o próprio insert ainda decide se o cadastro é aceito;
+          // nunca criamos sucesso local antes dessa confirmação.
+          if (tipoErr) {
+            console.warn('[NexusPort] Não foi possível resolver o UUID do tipo de carga:', tipoErr);
+          } else if (dbTipo && dbTipo.id) {
+            tipoCargaUuid = dbTipo.id;
+          }
+        }
+
+        const insertPayload = {
+          natureza: natureza || 'Carga Geral',
+          peso: pesoVal,
+          volume: volumeVal,
+          valor_declarado: valorVal,
+          porto_descarga: portoDescarga,
+          destino,
+          status_fluxo: 'AGENDAMENTO',
+          qr_code_url: newQrCode
+        };
+        if (tipoCargaUuid) insertPayload.tipo_carga_id = tipoCargaUuid;
+
+        // O Supabase é a fonte de verdade: nada entra na lista ou no cache antes
+        // de o banco confirmar e devolver o registro persistido.
+        const { data: resCarga, error: cargaErr } = await window.nexusSupabase
+          .from('cargas')
+          .insert(insertPayload)
+          .select()
+          .maybeSingle();
+
+        if (cargaErr || !resCarga || !resCarga.id) {
+          const motivo = cargaErr && cargaErr.message
+            ? cargaErr.message
+            : 'O banco não confirmou o registro da carga.';
           if (window.mostrarFeedback) {
-            window.mostrarFeedback('alerta', 'Navio em Manutenção', `A carga ${idCarga} está vinculada ao navio ${navObj.nome}, que está em manutenção/reforma. A movimentação fica bloqueada.`);
+            window.mostrarFeedback('erro', 'Carga Não Agendada', `${motivo} Nenhuma carga foi registrada neste dispositivo.`);
           }
           return;
         }
-      }
 
-      const idNum = Math.floor(100 + Math.random() * 900);
-      const newId = `CRG-2026-${idNum}`;
-      const newQrCode = `QR-${newId}`;
+        const novaCarga = {
+          id: newId,
+          rawDbId: resCarga.id,
+          tipo,
+          peso: `${pesoVal} t`,
+          volume: `${volumeVal} m³`,
+          valor: `R$ ${valorVal.toLocaleString('pt-BR')}`,
+          natureza,
+          portoDescarga,
+          destino,
+          rotaOrigem,
+          rota_id: rotaDestino.id || null,
+          status: 'AGENDAMENTO',
+          container: '',
+          navio: '',
+          qrCode: newQrCode,
+          data_cadastro: resCarga.created_at || nowIso,
+          created_at: resCarga.created_at || nowIso,
+          dataPrevista,
+          data_prevista_entrega: dataPrevista,
+          estivador_id: estivadorResp ? estivadorResp.id : null,
+          estivadorMatricula: estivadorResp ? estivadorResp.matricula : null,
+          estivador: estivadorResp ? estivadorResp.nome : null
+        };
 
-      const nowIso = new Date().toISOString();
-      const novaCarga = {
-        id: newId,
-        tipo,
-        peso: `${pesoVal} t`,
-        volume: `${volumeVal} m³`,
-        valor: `R$ ${valorVal.toLocaleString('pt-BR')}`,
-        natureza,
-        portoDescarga,
-        destino,
-        rotaOrigem,
-        rota_id: rotaDestino.id || null,
-        status: 'AGENDAMENTO',
-        container: '',
-        navio: '',
-        qrCode: newQrCode,
-        data_cadastro: nowIso,
-        created_at: nowIso,
-        // Atribuição do funcionário responsável (Backlog 3 - Anotação 3.4)
-        estivador_id: estivadorResp ? estivadorResp.id : null,
-        estivadorMatricula: estivadorResp ? estivadorResp.matricula : null,
-        estivador: estivadorResp ? estivadorResp.nome : null
-      };
+        const { error: agendamentoErr } = await window.nexusSupabase.from('agendamentos').insert({
+          carga_id: resCarga.id,
+          data_prevista_entrega: dataPrevista,
+          agendado_por: estivadorResp && isUuid.test(String(estivadorResp.id)) ? estivadorResp.id : null
+        });
 
-
-      cargasFluxoList.push(novaCarga);
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
-
-      if (window.nexusSupabase) {
-        try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          let tipoCargaUuid = (typeof tipoCompartilhado !== 'undefined' && tipoCompartilhado && isUuid.test(tipoCompartilhado.id)) ? tipoCompartilhado.id : null;
-
-          if (!tipoCargaUuid) {
-            const { data: dbTipo } = await window.nexusSupabase.from('tipos_carga').select('id').eq('nome', tipo).maybeSingle();
-            if (dbTipo && dbTipo.id) tipoCargaUuid = dbTipo.id;
-          }
-
-          const insertPayload = {
-            natureza: natureza || 'Carga Geral',
-            peso: pesoVal,
-            volume: volumeVal,
-            valor_declarado: valorVal,
-            porto_descarga: portoDescarga,
-            destino: destino,
-            status_fluxo: 'AGENDAMENTO',
-            qr_code_url: newQrCode
-          };
-          if (tipoCargaUuid) insertPayload.tipo_carga_id = tipoCargaUuid;
-
-          const { data: resCarga, error: cargaErr } = await window.nexusSupabase.from('cargas').insert(insertPayload).select().maybeSingle();
-
-          if (!cargaErr && resCarga) {
-            novaCarga.rawDbId = resCarga.id;
-            const lastIdx = cargasFluxoList.findIndex(c => c.id === newId);
-            if (lastIdx !== -1) {
-              cargasFluxoList[lastIdx].rawDbId = resCarga.id;
-              localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
-            }
-            // Sem data prevista manual: a estimativa de chegada é o ETA do navio
-            // vinculado. O agendamento registra apenas o vínculo com a carga.
-            await window.nexusSupabase.from('agendamentos').insert({
-              carga_id: resCarga.id
-            }).catch(() => {});
-
-            // Backlog 3 (Anotação 3.4) — persiste a atribuição do responsável
-            // na tabela mestre estivador_cargas quando há UUIDs disponíveis
-            if (estivadorResp && isUuid.test(String(estivadorResp.id)) && isUuid.test(String(resCarga.id))) {
-              try {
-                await window.nexusSupabase.from('estivador_cargas').upsert({
-                  estivador_id: estivadorResp.id,
-                  carga_id: resCarga.id,
-                  data_inicio: nowIso
-                }, { onConflict: 'estivador_id,carga_id' });
-              } catch (attrErr) {
-                console.warn('[NexusPort] Atribuição do responsável salva apenas localmente:', attrErr);
-              }
-            }
-
-            if (window.registrarLogAlteracao) {
-              window.registrarLogAlteracao('CRIACAO', 'cargas', resCarga.id, { id: newId, responsavel: estivadorResp ? estivadorResp.nome : null });
-            }
-          }
-        } catch (err) {
-          console.warn('[NexusPort] Erro ao sincronizar agendamento com Supabase:', err);
+        if (agendamentoErr) {
+          // Enquanto não há uma RPC transacional implantada, desfazemos a carga
+          // principal para não confirmar um cadastro sem o agendamento obrigatório.
+          const { error: rollbackErr } = await window.nexusSupabase
+            .from('cargas')
+            .delete()
+            .eq('id', resCarga.id);
+          const detalheRollback = rollbackErr
+            ? ' A carga principal foi criada, mas a reversão automática também falhou; informe o suporte.'
+            : ' A criação da carga foi revertida.';
+          throw new Error(`Não foi possível registrar o agendamento: ${agendamentoErr.message}.${detalheRollback}`);
         }
+
+        if (estivadorResp && isUuid.test(String(estivadorResp.id)) && isUuid.test(String(resCarga.id))) {
+          try {
+            const { error: attrErr } = await window.nexusSupabase.from('estivador_cargas').upsert({
+              estivador_id: estivadorResp.id,
+              carga_id: resCarga.id,
+              data_inicio: nowIso
+            }, { onConflict: 'estivador_id,carga_id' });
+            if (attrErr) console.warn('[NexusPort] Falha ao persistir a atribuição do responsável:', attrErr);
+          } catch (attrErr) {
+            console.warn('[NexusPort] Falha ao persistir a atribuição do responsável:', attrErr);
+          }
+        }
+
+        cargasFluxoList.push(novaCarga);
+        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
+
+        if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('CRIACAO', 'cargas', resCarga.id, { id: newId, responsavel: estivadorResp ? estivadorResp.nome : null });
+        }
+        if (window.NexusRepository && window.NexusRepository.notifyChange) {
+          window.NexusRepository.notifyChange('cargas');
+        }
+
+        renderTable();
+        agendamentoForm.reset();
+        agendamentoForm.classList.add('hidden');
+        window.exibirEtiquetaQr(novaCarga);
+      } catch (err) {
+        console.error('[NexusPort] Falha ao agendar carga:', err);
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Erro ao Agendar', `Não foi possível concluir o agendamento: ${err.message || err}`);
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
       }
-
-      renderTable();
-      agendamentoForm.reset();
-      agendamentoForm.classList.add('hidden');
-
-      // Exibição automática da confirmação do agendamento com QR Code em tempo real (RF 17.1)
-      window.exibirEtiquetaQr(novaCarga);
     });
   }
 
@@ -1904,7 +1936,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ENTIDADES_QUE_AFETAM_CARGAS = new Set([
     'cargas', 'navios', 'containers', 'estivador_cargas', 'funcionarios',
     'nexus_cargas_fluxo', 'nexus_navios_list', 'nexus_containers_list', 'nexus_func_list',
-    'periodic_sync', 'window_focus'
+    'periodic_sync', 'window_focus', 'visibility_sync'
   ]);
   window.addEventListener('nexus_data_changed', (event) => {
     const entity = event && event.detail ? event.detail.entity : null;
