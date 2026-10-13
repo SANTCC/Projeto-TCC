@@ -53,7 +53,7 @@ const FAMILIAS = new Map([
 ]);
 
 /** Fonte local com versão no nome para invalidar caches imutáveis após ampliar o subconjunto. */
-const FONTE_ICONES = 'material-symbols-outlined-v2.woff2';
+const FONTE_ICONES = 'material-symbols-outlined-v3.woff2';
 /** Nome original da fonte completa publicada pelo pacote npm material-symbols. */
 const FONTE_ICONES_COMPLETA = 'material-symbols-outlined.woff2';
 const PACOTE_ICONES = 'material-symbols';
