@@ -1,0 +1,1 @@
+../../js/haptics.js

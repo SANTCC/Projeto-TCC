@@ -95,6 +95,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const UUID_NAVIO_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const imoRegex = /^IMO-\d{7}$/i;
+  function validarCoordenadaGPS(lat, lon) {
+    return typeof lat === 'number' && typeof lon === 'number' && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+  }
   const CAMPOS_BERCO_LIVRE = { estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null };
 
   /** Reflete no cache local (e, depois, no painel) um estado de berço já gravado no banco. */
@@ -966,6 +970,20 @@ document.addEventListener('DOMContentLoaded', () => {
       : true;
 
     if (confirmou) {
+      if (!window.nexusSupabase) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Sem Conexão com o Servidor', 'A saída não pode ser registrada enquanto o banco de dados estiver indisponível.');
+        }
+        return;
+      }
+
+      if (!navio.id) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Navio sem Identificação', 'O navio não possui um identificador (UUID) válido no banco de dados.');
+        }
+        return;
+      }
+
       // Libera os berços do navio NO BANCO antes da saída: se a liberação falhar, a saída não é registrada
       const resLibSaida = await liberarBercosDoNavio(navio);
       if (resLibSaida.falhas.length > 0) {
@@ -976,12 +994,38 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const horaSaida = new Date().toISOString();
-      navio.localizacao = 'FORA_DO_PORTO';
-      navio.dataSaida = horaSaida;
 
+      // Persiste primeiro no Supabase usando UUID
+      const { data: navioAtualizado, error: navioError } = await window.nexusSupabase
+        .from('navios')
+        .update({
+          localizacao: 'FORA_DO_PORTO',
+          data_saida: horaSaida
+        })
+        .eq('id', navio.id)
+        .select('id, localizacao, data_saida')
+        .single();
+
+      if (navioError || !navioAtualizado || navioAtualizado.localizacao !== 'FORA_DO_PORTO') {
+        const erroMsg = navioError ? navioError.message : 'O banco de dados não confirmou a saída do navio.';
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Saída Não Registrada', `O banco de dados rejeitou a operação: ${erroMsg}`);
+        }
+        return;
+      }
+
+      // Atualiza cargas elegíveis no Supabase para EM_TRANSITO
+      await window.nexusSupabase
+        .from('cargas')
+        .update({ status_fluxo: 'EM_TRANSITO' })
+        .eq('navio_id', navio.id)
+        .not('status_fluxo', 'in', '("ENTREGUE","CANCELADA","RECUSADA")');
+
+      // Atualiza memória e armazenamento local somente APÓS confirmação remota
+      navio.localizacao = navioAtualizado.localizacao;
+      navio.dataSaida = navioAtualizado.data_saida;
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
-      // Atualiza status das cargas vinculadas para EM_TRANSITO
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       cargasFluxo.forEach(c => {
         if ((c.navio && c.navio.toLowerCase() === navio.nome.toLowerCase()) || (c.navio_id && c.navio_id === navio.id)) {
@@ -991,42 +1035,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
-
-      // Sincroniza Supabase
-      // Tarefa 1: Ao autorizar o retorno, garante que qualquer carga vinculada a esta embarcação seja desvinculada
-      const cargasFluxoRetorno = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-      let cargasDesvinculadasRetorno = false;
-      const idsCargasDesvinc = [];
-      cargasFluxoRetorno.forEach(c => {
-        if (cargaPertenceAoNavio(c, navio)) {
-          c.status = 'ENTREGUE';
-          c.navio = '';
-          c.navioId = null;
-          c.navio_id = null;
-          cargasDesvinculadasRetorno = true;
-          const idBanco = String(c.rawDbId || '');
-          if (UUID_CARGA_RE.test(idBanco)) idsCargasDesvinc.push(idBanco);
-        }
-      });
-
-      if (cargasDesvinculadasRetorno) {
-        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoRetorno));
-      }
-
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('navios')
-            .update({ localizacao: 'FORA_DO_PORTO', data_saida: horaSaida })
-            .eq('numero_imo', imo);
-
-          if (navio.id) {
-            await window.nexusSupabase.from('cargas')
-              .update({ status_fluxo: 'EM_TRANSITO' })
-              .eq('navio_id', navio.id)
-              .not('status_fluxo', 'in', '("ENTREGUE","CANCELADA","RECUSADA")');
-          }
-        } catch (err) { console.warn('Erro ao liberar navio no Supabase:', err); }
-      }
 
       // Registra no Trail de Decisões Críticas
       if (window.registrarTrailDecisao) {
@@ -1082,36 +1090,72 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Autorizar Retorno de Embarcação', `Autorizar o retorno da embarcação ${navio.nome} ao Porto de Origem (${navio.origem})?`) : true;
 
     if (confirmou) {
-      // Inverte Origem e Destino para a viagem de regresso. O caminho de volta
-      // é o mesmo invertido: a distância oficial é reaproveitada para o ETA.
+      if (!window.nexusSupabase) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Sem Conexão com o Servidor', 'O retorno não pode ser autorizado enquanto o banco de dados estiver indisponível.');
+        }
+        return;
+      }
+
+      if (!navio.id) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Navio sem Identificação', 'O navio não possui um identificador (UUID) válido no banco de dados.');
+        }
+        return;
+      }
+
       const antigoDestino = navio.destino;
-      navio.destino = navio.origem;
-      navio.origem = antigoDestino;
-      navio.localizacao = 'FORA_DO_PORTO';
-      navio.dataSaida = new Date().toISOString();
+      const novoDestino = navio.origem;
+      const novaOrigem = antigoDestino;
+      const horaSaida = new Date().toISOString();
+
+      // Persiste primeiro no Supabase usando UUID
+      const { data: navioAtualizado, error: navioError } = await window.nexusSupabase
+        .from('navios')
+        .update({
+          porto_origem: novaOrigem,
+          porto_destino: novoDestino,
+          localizacao: 'FORA_DO_PORTO',
+          data_saida: horaSaida
+        })
+        .eq('id', navio.id)
+        .select('id, localizacao, data_saida, porto_origem, porto_destino')
+        .single();
+
+      if (navioError || !navioAtualizado || navioAtualizado.localizacao !== 'FORA_DO_PORTO') {
+        const erroMsg = navioError ? navioError.message : 'O banco de dados não confirmou o retorno do navio.';
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Retorno Não Registrado', `O banco de dados rejeitou a operação: ${erroMsg}`);
+        }
+        return;
+      }
+
+      // Ao autorizar o retorno, desvincula e marca como entregue cargas vinculadas
+      await window.nexusSupabase
+        .from('cargas')
+        .update({ status_fluxo: 'ENTREGUE', navio_id: null })
+        .eq('navio_id', navio.id);
+
+      // Atualiza estado local somente APÓS confirmação remota
+      navio.destino = novoDestino;
+      navio.origem = novaOrigem;
+      navio.localizacao = navioAtualizado.localizacao;
+      navio.dataSaida = navioAtualizado.data_saida;
       const kmVolta = distanciaDaRota(navio.origem, navio.destino);
       if (kmVolta) navio.distancia = kmVolta;
 
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('navios')
-            .update({
-              porto_origem: navio.origem,
-              porto_destino: navio.destino,
-              localizacao: 'FORA_DO_PORTO',
-              data_saida: navio.dataSaida
-            })
-            .eq('numero_imo', imo);
-
-          if (idsCargasDesvinc.length > 0) {
-            await window.nexusSupabase.from('cargas')
-              .update({ status_fluxo: 'ENTREGUE', navio_id: null })
-              .in('id', idsCargasDesvinc);
-          }
-        } catch (err) { console.warn('Erro ao atualizar retorno do navio no Supabase:', err); }
-      }
+      const cargasFluxoRetorno = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      cargasFluxoRetorno.forEach(c => {
+        if (cargaPertenceAoNavio(c, navio)) {
+          c.status = 'ENTREGUE';
+          c.navio = '';
+          c.navioId = null;
+          c.navio_id = null;
+        }
+      });
+      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoRetorno));
 
       if (window.registrarTrailDecisao) {
         await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id || null, `Retorno autorizado para o porto ${navio.destino} por ${session.nome || session.cargo}`);

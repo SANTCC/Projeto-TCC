@@ -1,0 +1,1 @@
+../../js/supabase-client.js

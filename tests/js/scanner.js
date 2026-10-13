@@ -1,0 +1,1 @@
+/app/js/pages/scanner.js
