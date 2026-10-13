@@ -14,6 +14,9 @@
  */
 const path = require('path');
 const { pathToFileURL } = require('url');
+// Mesma biblioteca que a Edge Function carrega como `npm:ipaddr.js@2.5.0`, para a
+// verificação usar exatamente o parse de IP que vai para produção.
+const ipaddr = require('ipaddr.js');
 
 const BASE_GITHUB_PADRAO = 'https://raw.githubusercontent.com/';
 
@@ -66,6 +69,7 @@ async function main() {
 
   const { criarHandler } = await carregarHandler();
   const handler = criarHandler({
+    ipaddr,
     fetchFn: (url, init) => fetch(base === BASE_GITHUB_PADRAO ? url : url.replace(BASE_GITHUB_PADRAO, base), init),
     getEnv: (nome) => ambiente[nome]
   });

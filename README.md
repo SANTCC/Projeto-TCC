@@ -27,10 +27,11 @@ NexusPort é uma plataforma web para gestão operacional de fluxos de cargas, na
 
 - **Frontend:** HTML5, Tailwind CSS, JavaScript (ES6 Modules)
 - **Supabase Backend:** PostgreSQL com Row Level Security (RLS) e Auth Client (`@supabase/supabase-js`)
-- **Supabase Edge Functions (Deno):** `panic-alert` (botão de pânico), `vpn-gate` (verificação de IP antes de revelar a interface)
+- **Supabase Edge Functions (Deno):** `panic-alert` (botão de pânico), `vpn-gate` (verificação de IP antes de revelar a interface), `log-acesso`, `kpis-calculo`, `despacho-embarcacao`, `scanner-qr`, `relatorio-pdf`
 - **Supabase Realtime (WebSocket):** Broadcast do alarme de emergência para todos os clientes conectados
-- **Bibliotecas:** `Chart.js`, `qrcode.js`, `html5-qrcode`, `jsPDF`
-- **Automação & Testes:** Node.js, `jsdom`, `Playwright`
+- **Bibliotecas de runtime (vendorizadas em `vendor/`):** `Chart.js`, `qrcode.js`, `html5-qrcode`, `jsPDF`
+- **Bibliotecas de servidor (Edge Functions, via `npm:`):** `pdf-lib`, `ipaddr.js`
+- **Automação & Testes:** Node.js, `jsdom`, `Playwright`, `terser`, `clean-css`, `postcss`, `tailwindcss`, `acorn`
 
 ---
 
@@ -94,6 +95,8 @@ Os gráficos são montados em tempo de execução recortados pela **camada de vi
 1. **Autenticação e Sessão Client-Side:** Validação por código individual vinculada ao perfil/cargo do funcionário (`nexus_session`).
 2. **Proteção Anti-XSS (DOM-based):** Módulo `js/security.js` expõe sanitização contextual obrigatoriamente aplicada antes da renderização HTML (`nexusEsc`, `nexusJsArg`, `nexusSafeUrl`).
 3. **Row Level Security (RLS) no Supabase:** Políticas *Append-Only* para tabelas de auditoria (`logs_alteracoes`, `trail_decisoes`) e restrição de comandos destrutivos (`DELETE`) nas tabelas operacionais.
+4. **Scanner estático de XSS (`npm run scan:xss`):** `tools/xss-scan.js` varre `js/**` e reprova qualquer interpolação `${...}` dentro de template HTML que não esteja envolvida por um codificador seguro. A análise usa o AST do **`acorn`** (o mesmo parser do webpack/rollup), e não um lexer próprio: comentários, expressões regulares e strings com crase não desalinham mais a leitura, então interpolações que passavam despercebidas agora são reportadas.
+5. **Codificação de saída CSV (`nexusCsvCell` / `nexusCsvTexto`):** as exportações em CSV (planilha de desempenho e histórico de operações) usam um único codificador de `js/security.js`, em RFC 4180, que também neutraliza **injeção de fórmula** (`=`, `+`, `-`, `@`, TAB, CR no início da célula) — sem isso, um valor vindo do banco é executado pela planilha de quem abre o arquivo.
 
 ---
 
@@ -114,6 +117,7 @@ Os gráficos são montados em tempo de execução recortados pela **camada de vi
 
 ## 🚫 Bloqueio de IPs de VPN e geográfico (`vpn-gate`)
 
+- **Parse de IP e CIDR:** as funções `vpn-gate` e `log-acesso` compartilham `supabase/functions/_shared/ip.js`, que usa **`ipaddr.js`** (biblioteca madura e sem dependências) para interpretar e normalizar IPv4/IPv6. A biblioteca é injetada pelo `index.ts` de cada função (`npm:ipaddr.js@2.5.0`); nos testes e no `npm run check:ip` ela vem do `node_modules`. Antes havia dois parsers caseiros divergentes — o do `log-acesso` aceitava `::::` como IPv6 e gravava esse valor no log.
 - **Função:** `supabase/functions/vpn-gate` recebe uma chamada `GET`, obtém o IP dos cabeçalhos de proxy do Supabase e compara IPv4/IPv6 com listas CIDR públicas. Não aceita um IP enviado no corpo/query e não usa `service_role`. A resposta traz o cabeçalho de diagnóstico `X-Vpn-Gate-Motivo` (`geo-eua`, `proton`, `vpn`, `*-indisponivel`), útil para conferir qual camada decidiu.
 - **Camada Proton (ASN + blocos BGP anunciados):** além das listas genéricas, a função bloqueia o espaço da Proton VPN de forma direcionada, porque a API da Proton publica apenas o IP de **entrada** de cada servidor: o endereço que o site vê é uma **saída NAT** diferente, que nunca aparece nas listas.
   - **ASNs próprias da Proton AG** ([ipverse/as-ip-blocks](https://github.com/ipverse/as-ip-blocks), CC0): `AS209103` (PROTONVPN) e `AS208172` (PV-HOSTED), IPv4 e IPv6. Todo o espaço anunciado por elas é da Proton, então é bloqueado por inteiro.

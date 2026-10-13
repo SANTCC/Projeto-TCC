@@ -5,6 +5,9 @@
  * Gera `dist/` a partir da raiz do projeto:
  *   - JS (js/**\/*.js e <script> inline das páginas): Terser, sem alterar nomes globais.
  *   - CSS (*.css e <style> inline das páginas): clean-css, nível 1 (sem reescrever regras).
+ *   - Os blocos inline e os pontos de injeção (</head>, </body>, class de <html>) são localizados com
+ *     o parse5, o parser do WHATWG — regex confunde "<script>" de comentário ou de atributo com tag
+ *     real. Só os deslocamentos são usados: o HTML nunca é re-serializado (ver analisarHtml).
  *   - HTML, imagens e demais estáticos: copiados. Os caminhos não mudam (js/xxx.js continua válido).
  *   - Fora da saída: testes, ferramentas, SPECs, supabase, THEME (protótipos), documentação e manifestos.
  *
@@ -17,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const { minify: minificarJs } = require('terser');
 const CleanCSS = require('clean-css');
+const parse5 = require('parse5');
 
 const RAIZ = path.join(__dirname, '..');
 const SAIDA_PADRAO = path.join(RAIZ, 'dist');
@@ -66,38 +70,110 @@ function listarArquivos(dir = RAIZ, base = '') {
 
 const bytes = (texto) => Buffer.byteLength(texto, 'utf-8');
 
+
+/** Tipos de <script> inline que são JavaScript e podem passar pelo compressor. */
+const TIPOS_JS = new Set([
+  'text/javascript', 'text/ecmascript', 'application/javascript',
+  'application/ecmascript', 'application/x-javascript', 'module'
+]);
+
+/**
+ * Localiza no HTML os pontos que o build altera — o conteúdo dos blocos
+ * <script>/<style> inline, o atributo `class` de <html> e as tags </head> e
+ * </body> — usando o parse5, o parser do WHATWG que o jsdom e o Angular usam.
+ *
+ * Expressão regular não entende HTML: confunde um "<script>" escrito dentro de
+ * comentário ou dentro do valor de um atributo com uma tag real, e corta o
+ * bloco no primeiro "</script>" que aparecer numa string. O parse5 segue a
+ * especificação em vez de adivinhar, e por isso enxerga o documento do mesmo
+ * jeito que o navegador vai enxergar.
+ *
+ * Só os deslocamentos (offsets) calculados pelo parser são usados: o arquivo
+ * continua sendo reescrito por recorte, sem re-serializar o HTML, então nada
+ * além do trecho alterado muda um byte.
+ */
+function analisarHtml(html) {
+  const documento = parse5.parse(html, { sourceCodeLocationInfo: true });
+  const raiz = documento.childNodes.find((no) => no.tagName === 'html');
+  if (!raiz || !raiz.sourceCodeLocation || !raiz.sourceCodeLocation.startTag) return null;
+
+  const cabeca = raiz.childNodes.find((no) => no.tagName === 'head');
+  const corpo = raiz.childNodes.find((no) => no.tagName === 'body');
+  const fimDe = (no) => no && no.sourceCodeLocation && no.sourceCodeLocation.endTag;
+  if (!fimDe(cabeca) || !fimDe(corpo)) return null;
+
+  const blocos = [];
+  const percorrer = (no) => {
+    if (no.tagName === 'script' || no.tagName === 'style') {
+      const texto = (no.childNodes || []).find((filho) => filho.nodeName === '#text');
+      if (texto && texto.sourceCodeLocation && /\S/.test(texto.value)) {
+        blocos.push({
+          tag: no.tagName,
+          atributos: no.attrs || [],
+          conteudo: texto.value,
+          inicio: texto.sourceCodeLocation.startOffset,
+          fim: texto.sourceCodeLocation.endOffset
+        });
+      }
+    }
+    (no.childNodes || []).forEach(percorrer);
+  };
+  percorrer(documento);
+
+  const local = raiz.sourceCodeLocation;
+  return {
+    blocos,
+    classe: (local.attrs && local.attrs.class) || null,
+    valorClasse: (raiz.attrs.find((atributo) => atributo.name === 'class') || {}).value || '',
+    fimTagHtml: local.startTag.endOffset,
+    fimCabeca: cabeca.sourceCodeLocation.endTag.startOffset,
+    fimCorpo: corpo.sourceCodeLocation.endTag.startOffset
+  };
+}
+
+/** Aplica recortes ao HTML do fim para o começo, para os offsets continuarem válidos. */
+function aplicarTrechos(html, trechos) {
+  let saida = html;
+  trechos.slice().sort((a, b) => b.inicio - a.inicio).forEach(({ inicio, fim, texto }) => {
+    saida = saida.slice(0, inicio) + texto + saida.slice(fim);
+  });
+  return saida;
+}
+
 /** Minifica o conteúdo de cada <script> inline (sem src e de tipo JavaScript). */
 async function minificarScriptsInline(html, registro, nome) {
-  const padrao = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi;
-  let saida = '';
-  let ultimo = 0;
-  let m;
-  while ((m = padrao.exec(html)) !== null) {
-    const atributos = m[1] || '';
-    const tipo = (atributos.match(/\btype\s*=\s*["']?([^"'\s>]+)/i) || [])[1];
-    const ehJs = !tipo || tipo === 'text/javascript' || tipo === 'module';
-    if (/\bsrc\s*=/i.test(atributos) || !ehJs || m[2].trim() === '') continue;
+  const analise = analisarHtml(html);
+  if (!analise) return html;
+  const trechos = [];
+  for (const bloco of analise.blocos.filter((b) => b.tag === 'script')) {
+    const atributo = (chave) => (bloco.atributos.find((a) => a.name === chave) || {}).value;
+    if (atributo('src')) continue;
+    const tipo = String(atributo('type') || 'text/javascript').trim().toLowerCase();
+    if (!TIPOS_JS.has(tipo)) continue;
     let codigo;
     try {
-      codigo = (await minificarJs(m[2], OPCOES_TERSER)).code;
+      codigo = (await minificarJs(bloco.conteudo, OPCOES_TERSER)).code;
     } catch (erro) {
       throw new Error(`${nome}: erro de sintaxe em <script> inline — ${erro.message}`);
     }
-    registro.js.push({ arquivo: `${nome} (inline)`, antes: bytes(m[2]), depois: bytes(codigo) });
-    saida += html.slice(ultimo, m.index) + `<script${atributos}>${codigo}</script>`;
-    ultimo = m.index + m[0].length;
+    registro.js.push({ arquivo: `${nome} (inline)`, antes: bytes(bloco.conteudo), depois: bytes(codigo) });
+    trechos.push({ inicio: bloco.inicio, fim: bloco.fim, texto: codigo });
   }
-  return saida + html.slice(ultimo);
+  return aplicarTrechos(html, trechos);
 }
 
 /** Minifica o conteúdo de cada <style> inline. */
 function minificarEstilosInline(html, registro, nome) {
-  return html.replace(/<style(\s[^>]*)?>([\s\S]*?)<\/style>/gi, (todo, atributos = '', css) => {
-    const r = new CleanCSS({ level: 1 }).minify(css);
+  const analise = analisarHtml(html);
+  if (!analise) return html;
+  const trechos = [];
+  for (const bloco of analise.blocos.filter((b) => b.tag === 'style')) {
+    const r = new CleanCSS({ level: 1 }).minify(bloco.conteudo);
     if (r.errors.length) throw new Error(`${nome}: erro de CSS inline — ${r.errors.join('; ')}`);
-    registro.css.push({ arquivo: `${nome} (inline)`, antes: bytes(css), depois: bytes(r.styles) });
-    return `<style${atributos}>${r.styles}</style>`;
-  });
+    registro.css.push({ arquivo: `${nome} (inline)`, antes: bytes(bloco.conteudo), depois: bytes(r.styles) });
+    trechos.push({ inicio: bloco.inicio, fim: bloco.fim, texto: r.styles });
+  }
+  return aplicarTrechos(html, trechos);
 }
 
 async function minificarJsArquivo(origem, destino, registro, rel) {
@@ -184,40 +260,49 @@ function escreverHeaders(saida) {
  * continua entregando os arquivos ao navegador (não é um firewall HTTP).
  */
 function aplicarVpnGate(html, nome) {
-  let encontrouHtml = false;
-  let saida = html.replace(/<html\b[^>]*>/i, (abertura) => {
-    encontrouHtml = true;
-    const classe = abertura.match(/\sclass\s*=\s*(["'])([\s\S]*?)\1/i);
-    if (!classe) return abertura.slice(0, -1) + ' class="nexus-vpn-gate-checking">';
-    const partesClasse = classe[0].match(/^(\s*class\s*=\s*)(["'])([\s\S]*?)\2$/i);
-    if (!partesClasse) return abertura;
-    const nomes = partesClasse[3].trim().split(/\s+/).filter(Boolean);
-    if (nomes.includes('nexus-vpn-gate-checking')) return abertura;
-    const novoAtributo = `${partesClasse[1]}${partesClasse[2]}${[...nomes, 'nexus-vpn-gate-checking'].join(' ')}${partesClasse[2]}`;
-    return abertura.replace(classe[0], novoAtributo);
-  });
-  if (!encontrouHtml) throw new Error(`${nome}: tag <html> não encontrada para instalar o gate VPN.`);
-
-  const recursos = [
-    '  <link rel="stylesheet" href="css/vpn-gate.css?v=20261011" />',
-    '  <script defer src="js/vpn-gate.js?v=20261011"></script>'
-  ].join('\n');
-  if (!saida.includes('js/vpn-gate.js')) {
-    if (!/<\/head>/i.test(saida)) throw new Error(`${nome}: tag </head> não encontrada para instalar o gate VPN.`);
-    saida = saida.replace(/<\/head>/i, `${recursos}\n</head>`);
-  }
+  const analise = analisarHtml(html);
+  if (!analise) throw new Error(`${nome}: tag <html> não encontrada para instalar o gate VPN.`);
+  const { classe, valorClasse, fimTagHtml, fimCabeca, fimCorpo } = analise;
+  const trechos = [];
 
   // about.html e a página pública de diagnóstico não usam o cliente Supabase,
   // mas precisam da configuração no build para consultar esta mesma função.
-  if (!/<script\b[^>]*\bsrc=["']js\/config\.example\.js["']/i.test(saida)) {
+  if (!/<script\b[^>]*\bsrc=["']js\/config\.example\.js["']/i.test(html)) {
     const configuracaoPublica = [
       '  <script src="js/config.example.js"></script>',
-      '  <script src="js/config.js" onerror="this.remove()"></script>'
+      '  <script src="js/config.js" onerror="this.remove()"></script>',
+      ''
     ].join('\n');
-    if (!/<\/body>/i.test(saida)) throw new Error(`${nome}: tag </body> não encontrada para configurar o gate VPN.`);
-    saida = saida.replace(/<\/body>/i, `${configuracaoPublica}\n</body>`);
+    trechos.push({ inicio: fimCorpo, fim: fimCorpo, texto: configuracaoPublica });
   }
-  return saida;
+
+  if (!html.includes('js/vpn-gate.js')) {
+    const recursos = [
+      '  <link rel="stylesheet" href="css/vpn-gate.css?v=20261011" />',
+      '  <script defer src="js/vpn-gate.js?v=20261011"></script>',
+      ''
+    ].join('\n');
+    trechos.push({ inicio: fimCabeca, fim: fimCabeca, texto: recursos });
+  }
+
+  if (classe) {
+    const nomes = valorClasse.trim().split(/\s+/).filter(Boolean);
+    if (!nomes.includes('nexus-vpn-gate-checking')) {
+      // Insere antes da aspa de fechamento, preservando a formatação original do atributo.
+      const fim = classe.endOffset;
+      const ponto = /["']/.test(html[fim - 1]) ? fim - 1 : fim;
+      trechos.push({
+        inicio: ponto,
+        fim: ponto,
+        texto: `${nomes.length ? ' ' : ''}nexus-vpn-gate-checking`
+      });
+    }
+  } else {
+    const ponto = fimTagHtml - 1;
+    trechos.push({ inicio: ponto, fim: ponto, texto: ' class="nexus-vpn-gate-checking"' });
+  }
+
+  return aplicarTrechos(html, trechos);
 }
 
 /**
@@ -302,7 +387,11 @@ function resumo(registro) {
   return linhas.join('\n');
 }
 
-module.exports = { build, listarArquivos, linhasDeHeaders, SAIDA_PADRAO, RAIZ };
+// `internos` existe para os testes: o build é determinístico e roda em cima de
+// arquivos reais, então os ajustes de HTML são verificados isoladamente.
+const internos = { analisarHtml, aplicarTrechos, minificarScriptsInline, minificarEstilosInline, aplicarVpnGate };
+
+module.exports = { build, listarArquivos, linhasDeHeaders, SAIDA_PADRAO, RAIZ, internos };
 
 if (require.main === module) {
   build()

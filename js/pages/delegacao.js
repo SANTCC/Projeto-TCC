@@ -12,16 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // antes de qualquer inserção em HTML.
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
 
-  // Validador de estrutura de CPF (permite CPFs fictícios de 11 dígitos - Tarefa 5)
+  // Validador de estrutura de CPF: aceita CPF fictício, como os cadastros de
+  // funcionário e de visitante. Os dígitos verificadores (módulo 11) NÃO são
+  // conferidos de propósito; exige-se apenas os 11 dígitos. A unicidade é
+  // garantida à parte, na gravação da delegação.
   function validarCPF(cpfStr) {
     if (!cpfStr) return false;
     const clean = String(cpfStr).replace(/\D/g, '');
-    if (clean.length !== 11) return false;
-
-    let soma = 0;
-    for (let i = 0; i < 9; i++) soma += parseInt(clean.charAt(i)) * (10 - i);
-    let resto = 11 - (soma % 11);
-    return true;
+    return clean.length === 11;
   }
 
   function aplicarMascaraCPF(value) {

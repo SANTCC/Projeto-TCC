@@ -159,7 +159,7 @@ npm run audit:xss          # Análise estática + testes de regressão Anti-XSS
 
 ## 8. Diretrizes de Codificação para Agentes
 
-1. **Vanilla JavaScript:** Não adicione dependências de build (Babel, Webpack, SASS, TypeScript).
+1. **Vanilla JavaScript:** Não adicione dependências de build (Babel, Webpack, SASS, TypeScript) nem bibliotecas de runtime no navegador — as telas carregam apenas o que está em `js/` e `vendor/`. Ferramentas de desenvolvimento (`terser`, `clean-css`, `postcss`, `jsdom`, `acorn`) e código de servidor (Edge Functions Deno, que importam com o prefixo `npm:`) podem usar pacotes npm maduros; nesse caso declare a dependência em `package.json` e mantenha a biblioteca injetável, para os testes Node rodarem sem o runtime Deno.
 2. **Modularidade:** Mantenha a lógica de UI separada dos clientes de dados. Use ES Modules (`import`/`export`) onde apropriado.
 3. **Confirmação de Ações Críticas:** Operações como cancelamento, liberação de navios/cargas e aprovações devem solicitar confirmação do usuário com modal explicativo.
 4. **Mensagens de Feedback:** Utilize banners inline para notificações ao operador. Evite o uso de `alert()` ou `toast` desalinhados da identidade visual.

@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const vm = require('vm');
+// Mesma biblioteca que a Edge Function carrega como `npm:ipaddr.js@2.5.0`.
+const ipaddr = require('ipaddr.js');
 
 const ROOT = path.resolve(__dirname, '..');
 let ok = 0;
@@ -30,18 +32,14 @@ async function main() {
     ASNS_HOSPEDAGEM_PROTON,
     PREFIXO_MINIMO_BLOCO_PROTON,
     urlBlocosAsn,
-    parseIPAddress,
-    parseCIDR,
-    parseListaCIDR,
-    ipPertenceALista,
-    menorBlocoContido,
-    normalizarIp,
-    extrairIp,
+    criarUtilitariosIp,
     criarHandler
   } = vpn;
+  // Os utilitários de IP/CIDR recebem a biblioteca por injeção (Deno: npm:ipaddr.js).
+  const ip = criarUtilitariosIp(ipaddr);
 
   console.log('\n[1] Parsing e correspondência CIDR IPv4/IPv6');
-  const redes = parseListaCIDR([
+  const redes = ip.parseListaCIDR([
     '# comentário',
     '198.51.100.0/24',
     '198.51.100.0/24 # repetida',
@@ -50,16 +48,30 @@ async function main() {
     'linha inválida'
   ].join('\n'));
   check('CIDR válidos são carregados e duplicatas removidas', redes.length === 3);
-  check('IPv4 no /24 é bloqueável', ipPertenceALista('198.51.100.42', redes));
-  check('IPv4 fora do /24 não é bloqueado', !ipPertenceALista('198.51.101.42', redes));
-  check('IP exato sem máscara vira /32', ipPertenceALista('203.0.113.7', redes));
-  check('IPv6 comprimido corresponde a /48', ipPertenceALista('2001:db8:abcd:1234::42', redes));
-  check('IPv6 fora do /48 não corresponde', !ipPertenceALista('2001:db8:abce::42', redes));
-  check('IPv4-mapped IPv6 usa a lista IPv4', ipPertenceALista('::ffff:198.51.100.8', redes));
-  check('prefixos inválidos são rejeitados', parseCIDR('198.51.100.0/33') === null && parseCIDR('2001:db8::/129') === null);
-  check('IPv6 baixo válido não é confundido com IPv4', parseIPAddress('::1')?.familia === 6);
-  check('IP malformado é rejeitado', parseIPAddress('999.1.2.3') === null && parseIPAddress('2001:::1') === null);
-  check('normalizarIp remove colchetes/porta IPv6', normalizarIp('[2001:db8::1]:443') === '2001:db8::1');
+  check('IPv4 no /24 é bloqueável', ip.ipPertenceALista('198.51.100.42', redes));
+  check('IPv4 fora do /24 não é bloqueado', !ip.ipPertenceALista('198.51.101.42', redes));
+  check('IP exato sem máscara vira /32', ip.ipPertenceALista('203.0.113.7', redes));
+  check('IPv6 comprimido corresponde a /48', ip.ipPertenceALista('2001:db8:abcd:1234::42', redes));
+  check('IPv6 fora do /48 não corresponde', !ip.ipPertenceALista('2001:db8:abce::42', redes));
+  check('IPv4-mapped IPv6 usa a lista IPv4', ip.ipPertenceALista('::ffff:198.51.100.8', redes));
+  check('prefixos inválidos são rejeitados', ip.parseCIDR('198.51.100.0/33') === null && ip.parseCIDR('2001:db8::/129') === null);
+  check('IPv6 baixo válido não é confundido com IPv4', ip.parseIPAddress('::1')?.familia === 6);
+  check('IP malformado é rejeitado', ip.parseIPAddress('999.1.2.3') === null && ip.parseIPAddress('2001:::1') === null);
+  check('normalizarIp remove colchetes/porta IPv6', ip.normalizarIp('[2001:db8::1]:443') === '2001:db8::1');
+
+  // Regressões do parser caseiro anterior, substituído por ipaddr.js
+  // (supabase/functions/_shared/ip.js, compartilhado com log-acesso).
+  check('IPv6 malformado é rejeitado (o parser antigo do log-acesso aceitava)',
+    ['::::', ':::', '1:2:3:4:5:6:7:8:9', '0:0:0:0:0:0:0:0:0', 'a:b', '2001:db8::1::2', 'fe80::1%eth0']
+      .every((v) => ip.normalizarIp(v) === null));
+  check('IPv6 com zeros à esquerda é válido e normalizado', ip.normalizarIp('2001:0db8:0000:0000:0000:0000:0000:0001') === '2001:db8::1');
+  check('IPv6 terminado em "::" é válido', ip.parseIPAddress('1:2:3:4:5:6:7::') !== null);
+  check('IPv6 com zone-id é recusado (não é endereço público canônico)', ip.parseIPAddress('fe80::1%eth0') === null);
+  check('rede IPv4 em notação mapeada é comparada na família 4', (() => {
+    const mapeada = ip.parseCIDR('::ffff:198.51.100.0/120');
+    return !!mapeada && mapeada.familia === 4 && mapeada.prefixo === 24 && mapeada.valor === ip.parseCIDR('198.51.100.0/24').valor;
+  })());
+  check('prefixo com zero à esquerda é recusado', ip.parseCIDR('198.51.100.0/033') === null);
 
   console.log('\n[2] Descoberta do IP no gateway');
   const cabeçalhosProxy = new Headers({
@@ -67,10 +79,10 @@ async function main() {
     'x-real-ip': '203.0.113.4',
     'x-forwarded-for': '192.0.2.9, 10.0.0.1'
   });
-  check('prioriza cf-connecting-ip', extrairIp(cabeçalhosProxy) === '198.51.100.10');
-  check('usa x-real-ip se cf-connecting-ip não existir', extrairIp(new Headers({ 'x-real-ip': '203.0.113.4' })) === '203.0.113.4');
-  check('usa o primeiro IP válido de x-forwarded-for', extrairIp(new Headers({ 'x-forwarded-for': '192.0.2.9, 10.0.0.1' })) === '192.0.2.9');
-  check('retorna null quando não há IP confiável', extrairIp(new Headers()) === null);
+  check('prioriza cf-connecting-ip', ip.extrairIp(cabeçalhosProxy) === '198.51.100.10');
+  check('usa x-real-ip se cf-connecting-ip não existir', ip.extrairIp(new Headers({ 'x-real-ip': '203.0.113.4' })) === '203.0.113.4');
+  check('usa o primeiro IP válido de x-forwarded-for', ip.extrairIp(new Headers({ 'x-forwarded-for': '192.0.2.9, 10.0.0.1' })) === '192.0.2.9');
+  check('retorna null quando não há IP confiável', ip.extrairIp(new Headers()) === null);
 
   console.log('\n[3] Endpoint Edge Function, texto simples e cache');
   check('mensagem exata solicitada', MENSAGEM_BLOQUEIO === 'AQUI NÃO!! TICO-TICO!!!!!!!!');
@@ -97,7 +109,7 @@ async function main() {
     chamadasFonte++;
     return new Response(conteudos.get(url), { status: 200 });
   };
-  const handler = criarHandler({ fetchFn: fetchFonte, fontes: feedsTeste, getEnv: () => 'false', now: () => 1_000_000 });
+  const handler = criarHandler({ ipaddr, fetchFn: fetchFonte, fontes: feedsTeste, getEnv: () => 'false', now: () => 1_000_000 });
 
   const criarReq = (ip) => new Request('https://nexus.test/functions/v1/vpn-gate', {
     method: 'GET',
@@ -127,6 +139,7 @@ async function main() {
   let instante = 1_000_000;
   let fonteIndisponivel = false;
   const handlerComCache = criarHandler({
+    ipaddr,
     fetchFn: async (url) => {
       if (fonteIndisponivel) throw new Error('GitHub fora do ar');
       return new Response(conteudos.get(url), { status: 200 });
@@ -145,6 +158,7 @@ async function main() {
 
   console.log('\n[5] Indisponibilidade de feed sem snapshot');
   const handlerIndisponivel = criarHandler({
+    ipaddr,
     fetchFn: async () => { throw new Error('GitHub fora do ar'); },
     fontes: [feedsTeste[0]],
     getEnv: () => 'false'
@@ -176,6 +190,7 @@ async function main() {
     throw new Error('URL de teste desconhecida');
   };
   const handlerGeoPadrao = criarHandler({
+    ipaddr,
     fetchFn: fetchGeo,
     fontes: feedsTeste,
     fontesGeoEua: fontesGeoTeste,
@@ -193,6 +208,7 @@ async function main() {
 
   let chamadasGeoDesligado = 0;
   const handlerGeoDesligado = criarHandler({
+    ipaddr,
     fetchFn: async (url) => {
       if (conteudosGeo.has(url)) {
         chamadasGeoDesligado++;
@@ -210,6 +226,7 @@ async function main() {
     && chamadasGeoDesligado === 0);
 
   const handlerGeoIndisponivel = criarHandler({
+    ipaddr,
     fetchFn: async () => { throw new Error('GitHub fora do ar'); },
     fontes: feedsTeste,
     fontesGeoEua: fontesGeoTeste,
@@ -290,22 +307,22 @@ async function main() {
     /tn3w\/ProtonVPN-IPs/.test(FONTE_IPS_PROTON.url) && FONTE_IPS_PROTON.minimo >= 50);
   check('expansão nunca herda blocos maiores que /20 (evita backbone inteiro)',
     PREFIXO_MINIMO_BLOCO_PROTON === 20);
-  const redesProtonIpv6Observadas = parseListaCIDR(BLOCOS_PROTON_IPV6_OBSERVADOS.join('\n'));
+  const redesProtonIpv6Observadas = ip.parseListaCIDR(BLOCOS_PROTON_IPV6_OBSERVADOS.join('\n'));
   check('os dois IPv6 relatados estão protegidos por prefixos /64 específicos',
     BLOCOS_PROTON_IPV6_OBSERVADOS.length === 2
     && BLOCOS_PROTON_IPV6_OBSERVADOS.every((cidr) => cidr.endsWith('/64'))
-    && ipPertenceALista('2a02:6ea0:510c:3882::13', redesProtonIpv6Observadas)
-    && ipPertenceALista('2a02:6ea0:ce14:3032::12', redesProtonIpv6Observadas));
+    && ip.ipPertenceALista('2a02:6ea0:510c:3882::13', redesProtonIpv6Observadas)
+    && ip.ipPertenceALista('2a02:6ea0:ce14:3032::12', redesProtonIpv6Observadas));
   check('a regra IPv6 evita herdar a rota compartilhada inteira da CDN77',
-    !ipPertenceALista('2a02:6ea0:ce14:3033::12', redesProtonIpv6Observadas)
-    && !ipPertenceALista('2a02:6ea0:ce15::12', redesProtonIpv6Observadas));
+    !ip.ipPertenceALista('2a02:6ea0:ce14:3033::12', redesProtonIpv6Observadas)
+    && !ip.ipPertenceALista('2a02:6ea0:ce15::12', redesProtonIpv6Observadas));
 
-  const redesAnunciadas = parseListaCIDR(['192.0.2.0/22', '10.20.0.0/16', '172.16.40.0/21'].join('\n'));
-  const blocoEspecifico = menorBlocoContido('192.0.2.40', redesAnunciadas, 20);
+  const redesAnunciadas = ip.parseListaCIDR(['192.0.2.0/22', '10.20.0.0/16', '172.16.40.0/21'].join('\n'));
+  const blocoEspecifico = ip.menorBlocoContido('192.0.2.40', redesAnunciadas, 20);
   check('menorBlocoContido escolhe o prefixo mais específico que contém o IP',
-    !!blocoEspecifico && blocoEspecifico.prefixo === 22 && blocoEspecifico.valor === parseCIDR('192.0.2.0/22').valor);
-  check('menorBlocoContido respeita o piso /20', menorBlocoContido('10.20.30.40', redesAnunciadas, 20) === null);
-  check('menorBlocoContido devolve null para IP fora das redes', menorBlocoContido('203.0.113.9', redesAnunciadas, 20) === null);
+    !!blocoEspecifico && blocoEspecifico.prefixo === 22 && blocoEspecifico.valor === ip.parseCIDR('192.0.2.0/22').valor);
+  check('menorBlocoContido respeita o piso /20', ip.menorBlocoContido('10.20.30.40', redesAnunciadas, 20) === null);
+  check('menorBlocoContido devolve null para IP fora das redes', ip.menorBlocoContido('203.0.113.9', redesAnunciadas, 20) === null);
 
   const ASNS_PROPIAS_TESTE = ['64500'];
   const ASNS_HOSPEDAGEM_TESTE = ['64510', '64511'];
@@ -336,6 +353,7 @@ async function main() {
     headers: { 'cf-connecting-ip': ip }
   });
   const handlerProton = criarHandler({
+    ipaddr,
     fetchFn: fetchProton,
     fontes: [fonteVpnProton],
     asnsProprias: ASNS_PROPIAS_TESTE,
@@ -363,6 +381,7 @@ async function main() {
   check('outro /64 do prefixo compartilhado não é bloqueado por engano', outro64Cdn77.status === 204);
   let chamadasParaBloqueioEstatico = 0;
   const handlerIpv6ObservadoSemRede = criarHandler({
+    ipaddr,
     fetchFn: async () => {
       chamadasParaBloqueioEstatico++;
       throw new Error('GitHub indisponível');
@@ -390,6 +409,7 @@ async function main() {
     chamadasProton === conteudosProton.size);
 
   const handlerAgressivo = criarHandler({
+    ipaddr,
     fetchFn: fetchProton,
     fontes: [fonteVpnProton],
     asnsProprias: ASNS_PROPIAS_TESTE,
@@ -406,6 +426,7 @@ async function main() {
   check('modo agressivo continua liberando IP fora de todas as fontes', ipNeutroAgressivo.status === 204);
 
   const handlerSemCamadaProton = criarHandler({
+    ipaddr,
     fetchFn: async (url) => {
       if (url === fonteVpnProton.url) return new Response(conteudoVpnProton, { status: 200 });
       throw new Error('GitHub fora do ar');
@@ -423,6 +444,7 @@ async function main() {
     vpnSemReforco.status === 403 && vpnSemReforco.headers.get('x-vpn-gate-motivo') === 'vpn');
   const urlsSolicitadas = [];
   const handlerFontesReais = criarHandler({
+    ipaddr,
     fetchFn: async (url) => {
       urlsSolicitadas.push(url);
       if (url === FONTE_IPS_PROTON.url) {

@@ -248,28 +248,23 @@
 
       const headers = ['ID', 'Natureza/Tipo', 'Peso (t)', 'Volume (m3)', 'Valor Declarado (R$)', 'Status Fluxo', 'Container ID', 'Porto Descarga', 'Data Registro'];
 
-      // Codificação segura de célula CSV: neutraliza injeção de fórmula
-      // (=, +, -, @, TAB, CR) e aspas/quebras de linha vindas dos dados.
-      const csvCell = (value) => {
-        let text = (value === null || value === undefined) ? '' : String(value);
-        text = text.replace(/[\r\n]+/g, ' ').trim();
-        if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
-        return '"' + text.replace(/"/g, '""') + '"';
-      };
+      // Codificação de saída do CSV (RFC 4180 + anti injeção de fórmula) é a mesma
+      // de todo o projeto: js/security.js, carregado antes dos módulos de página.
+      const csvTexto = window.nexusCsvTexto || (window.NexusSecurity && window.NexusSecurity.csvTexto);
 
       const rows = cargasData.map(c => [
-        csvCell(c.id),
-        csvCell(c.natureza),
-        csvCell(c.peso),
-        csvCell(c.volume),
-        csvCell(c.valor),
-        csvCell(c.status),
-        csvCell(c.container_id),
-        csvCell(c.porto_descarga),
-        csvCell(c.data)
+        c.id,
+        c.natureza,
+        c.peso,
+        c.volume,
+        c.valor,
+        c.status,
+        c.container_id,
+        c.porto_descarga,
+        c.data
       ]);
 
-      const csvContent = '\uFEFF' + [headers.map(csvCell).join(','), ...rows.map(r => r.join(','))].join('\r\n');
+      const csvContent = csvTexto([headers, ...rows], ',');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const encodedUri = URL.createObjectURL(blob);
       const link = document.createElement('a');

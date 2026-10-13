@@ -16,6 +16,8 @@
  */
 const fs = require('fs');
 const path = require('path');
+// Mesma biblioteca que a Edge Function carrega como `npm:ipaddr.js@2.5.0`.
+const ipaddr = require('ipaddr.js');
 
 const ROOT = path.resolve(__dirname, '..');
 let total = 0;
@@ -82,12 +84,14 @@ async function main() {
   console.log('\n=== TESTE: EDGE FUNCTION log-acesso ===\n');
 
   const mod = await import(path.join(ROOT, 'supabase/functions/log-acesso/handler.js'));
-  const { criarHandler, normalizarIp, extrairIp, extrairUserAgent } = mod;
+  const { criarHandler, criarUtilitariosIp, extrairUserAgent } = mod;
+  // Utilitários de IP montados com a biblioteca injetada (Deno: npm:ipaddr.js).
+  const ip = criarUtilitariosIp(ipaddr);
 
   console.log('1. Autenticação obrigatória');
   {
     const f = criarClienteFalso({ funcionarios: FUNCIONARIOS });
-    const handler = criarHandler({ criarCliente: f.criarCliente, env });
+    const handler = criarHandler({ ipaddr, criarCliente: f.criarCliente, env });
     const r = await handler(req('POST', { pagina: 'dashboard' }, { 'user-agent': 'UA' }));
     check('Sem codigo_individual → 401', r.status === 401, `status=${r.status}`);
     check('Sem codigo_individual → nada gravado', f.inserts.length === 0);
@@ -107,7 +111,7 @@ async function main() {
   console.log('\n2. Registro de usuário autenticado');
   {
     const f = criarClienteFalso({ funcionarios: FUNCIONARIOS });
-    const handler = criarHandler({ criarCliente: f.criarCliente, env });
+    const handler = criarHandler({ ipaddr, criarCliente: f.criarCliente, env });
     const r = await handler(req('POST', { codigo_individual: 'EST-8001', pagina: 'cargas' }, {
       'cf-connecting-ip': '189.10.20.30',
       'x-real-ip': '10.0.0.1',
@@ -127,15 +131,20 @@ async function main() {
   }
 
   console.log('\n3. Prioridade e validação de IP');
-  check('x-real-ip usado sem cf-connecting-ip', extrairIp(headers({ 'x-real-ip': '10.1.2.3' })) === '10.1.2.3');
-  check('x-forwarded-for usa o primeiro item', extrairIp(headers({ 'x-forwarded-for': '8.8.8.8, 10.0.0.1' })) === '8.8.8.8');
-  check('IP inválido vira null', extrairIp(headers({ 'cf-connecting-ip': 'lixo<script>' })) === null);
-  check('Octeto > 255 é rejeitado', normalizarIp('999.1.1.1') === null);
-  check('IPv6 válido é aceito', normalizarIp('2001:db8::1') === '2001:db8::1');
-  check('Sem cabeçalhos → null', extrairIp(headers({})) === null);
+  check('x-real-ip usado sem cf-connecting-ip', ip.extrairIp(headers({ 'x-real-ip': '10.1.2.3' })) === '10.1.2.3');
+  check('x-forwarded-for usa o primeiro item', ip.extrairIp(headers({ 'x-forwarded-for': '8.8.8.8, 10.0.0.1' })) === '8.8.8.8');
+  check('IP inválido vira null', ip.extrairIp(headers({ 'cf-connecting-ip': 'lixo<script>' })) === null);
+  check('Octeto > 255 é rejeitado', ip.normalizarIp('999.1.1.1') === null);
+  check('IPv6 válido é aceito', ip.normalizarIp('2001:db8::1') === '2001:db8::1');
+  // Regressão: a validação anterior (expressão regular própria) aceitava "::::" e
+  // gravava esse valor na coluna ip. O parse agora é compartilhado com o vpn-gate
+  // (supabase/functions/_shared/ip.js, sobre ipaddr.js).
+  check('IPv6 malformado é rejeitado e não chega ao log',
+    ['::::', ':::', '1:2:3:4:5:6:7:8:9', 'a:b'].every((v) => ip.normalizarIp(v) === null));
+  check('Sem cabeçalhos → null', ip.extrairIp(headers({})) === null);
   check('IP enviado no corpo é ignorado', (() => {
     const f = criarClienteFalso({ funcionarios: FUNCIONARIOS });
-    const handler = criarHandler({ criarCliente: f.criarCliente, env });
+    const handler = criarHandler({ ipaddr, criarCliente: f.criarCliente, env });
     return handler(req('POST', { codigo_individual: 'EST-8001', ip: '6.6.6.6' }, {})).then(() =>
       f.inserts[0].linha.ip === null);
   })());
@@ -146,7 +155,7 @@ async function main() {
 
   console.log('\n5. Método e CORS');
   {
-    const handler = criarHandler({ criarCliente: criarClienteFalso().criarCliente, env });
+    const handler = criarHandler({ ipaddr, criarCliente: criarClienteFalso().criarCliente, env });
     check('GET → 405', (await handler(req('GET'))).status === 405);
     const opt = await handler(req('OPTIONS'));
     check('OPTIONS → 204 com CORS', opt.status === 204 && opt.headers.get('Access-Control-Allow-Origin') === '*');
@@ -154,11 +163,11 @@ async function main() {
 
   console.log('\n6. Falhas de banco');
   {
-    const h1 = criarHandler({ criarCliente: criarClienteFalso({ erroBusca: { message: 'x' } }).criarCliente, env });
+    const h1 = criarHandler({ ipaddr, criarCliente: criarClienteFalso({ erroBusca: { message: 'x' } }).criarCliente, env });
     check('Erro na busca do funcionário → 500', (await h1(req('POST', { codigo_individual: 'EST-8001' }))).status === 500);
-    const h2 = criarHandler({ criarCliente: criarClienteFalso({ funcionarios: FUNCIONARIOS, erroInsert: { message: 'x' } }).criarCliente, env });
+    const h2 = criarHandler({ ipaddr, criarCliente: criarClienteFalso({ funcionarios: FUNCIONARIOS, erroInsert: { message: 'x' } }).criarCliente, env });
     check('Erro no insert → 500', (await h2(req('POST', { codigo_individual: 'EST-8001' }))).status === 500);
-    const h3 = criarHandler({ criarCliente: criarClienteFalso().criarCliente, env: () => '' });
+    const h3 = criarHandler({ ipaddr, criarCliente: criarClienteFalso().criarCliente, env: () => '' });
     check('Sem variáveis de ambiente → 500', (await h3(req('POST', { codigo_individual: 'EST-8001' }))).status === 500);
   }
 

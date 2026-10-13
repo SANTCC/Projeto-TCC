@@ -5,103 +5,72 @@
  * Percorre template literals que contenham marcação HTML e reporta toda
  * interpolação `${...}` que não esteja envolvida por um codificador seguro
  * (nexusEsc / esc / nexusJsArg / jsArg / nexusSafeUrl / toLocaleString / etc.).
+ *
+ * As expressões são analisadas com o AST do `acorn` (o mesmo parser usado por
+ * webpack/rollup/acorn-jsx). Antes deste módulo fazia lexing próprio por
+ * índices e expressões regulares: um lexer caseiro não reconhece literais de
+ * expressão regular, comentários, aspas dentro de strings nem operadores como
+ * `??` e `?.`, e portanto tanto deixava escapar interpolações como acusava
+ * falsos positivos. O parser real elimina essa classe inteira de erros.
  */
 const fs = require('fs');
 const path = require('path');
+const acorn = require('acorn');
 
-/* ------------------------------------------------------------------ *
- * Parsing mínimo de expressões JavaScript
- * (necessário para só aceitar uma expressão como "segura" quando a
- *  forma COMPLETA corresponde ao permitido, e não apenas um prefixo)
- * ------------------------------------------------------------------ */
+/** Opções do parser: sintaxe moderna, scripts clássicos (os módulos são IIFEs). */
+const OPCOES_PARSER = {
+  ecmaVersion: 'latest',
+  sourceType: 'script',
+  allowReturnOutsideFunction: true,
+  allowAwaitOutsideFunction: true,
+  allowHashBang: true,
+  locations: true
+};
 
-/** `i` aponta para ' ou " ou `; retorna o índice após o fechamento (-1 se inválido). */
-function skipQuoted(src, i) {
-  const quote = src[i];
-  let j = i + 1;
-  while (j < src.length) {
-    const ch = src[j];
-    if (ch === '\\') { j += 2; continue; }
-    if (quote === '`' && ch === '$' && src[j + 1] === '{') {
-      const end = skipBalanced(src, j + 1, '{', '}');
-      if (end === -1) return -1;
-      j = end + 1;
-      continue;
-    }
-    if (ch === quote) return j + 1;
-    j++;
-  }
-  return -1;
-}
-
-/** `i` aponta para `open`; retorna o índice de `close` correspondente (-1 se inválido). */
-function skipBalanced(src, i, open, close) {
-  let depth = 0;
-  for (let j = i; j < src.length; j++) {
-    const ch = src[j];
-    if (ch === '"' || ch === "'" || ch === '`') {
-      const end = skipQuoted(src, j);
-      if (end === -1) return -1;
-      j = end - 1;
-      continue;
-    }
-    if (ch === open) depth++;
-    else if (ch === close) {
-      depth--;
-      if (depth === 0) return j;
+/**
+ * Analisa o arquivo inteiro. Devolve o AST ou null se o arquivo não for
+ * JavaScript válido (o build falharia antes disso, então só é avisado).
+ */
+function parseProgram(src) {
+  try {
+    return acorn.parse(src, OPCOES_PARSER);
+  } catch (_erro) {
+    try {
+      return acorn.parse(src, { ...OPCOES_PARSER, sourceType: 'module' });
+    } catch (_erro2) {
+      return null;
     }
   }
-  return -1;
 }
 
 /**
- * Separa o primeiro ternário de nível zero da expressão.
- * Retorna { cond, then, elseB } ou null. Ignora `??`, `?.` e ternários aninhados.
+ * Analisa um trecho como UMA expressão completa. `parseExpressionAt` aceita
+ * sobra de texto, por isso exigimos que o nó consuma a expressão inteira.
  */
-function splitTernary(expr) {
-  let depth = 0;
-  let q = -1;
-  for (let i = 0; i < expr.length; i++) {
-    const ch = expr[i];
-    if (ch === '"' || ch === "'" || ch === '`') {
-      const end = skipQuoted(expr, i);
-      if (end === -1) return null;
-      i = end - 1;
-      continue;
-    }
-    if (ch === '(' || ch === '[' || ch === '{') { depth++; continue; }
-    if (ch === ')' || ch === ']' || ch === '}') { depth--; continue; }
-    if (depth !== 0 || ch !== '?') continue;
-    if (expr[i + 1] === '?' || expr[i + 1] === '.') { i++; continue; } // ?? / ?.
-    q = i;
-    break;
+function parseExpression(expr) {
+  try {
+    const node = acorn.parseExpressionAt(expr, 0, OPCOES_PARSER);
+    return node.end === expr.length ? node : null;
+  } catch (_erro) {
+    return null;
   }
-  if (q === -1) return null;
+}
 
-  let nest = 0;
-  for (let i = q + 1; i < expr.length; i++) {
-    const ch = expr[i];
-    if (ch === '"' || ch === "'" || ch === '`') {
-      const end = skipQuoted(expr, i);
-      if (end === -1) return null;
-      i = end - 1;
-      continue;
+/** Percorre o AST em profundidade, chamando `visitar` para cada nó. */
+function percorrer(no, visitar) {
+  if (!no || typeof no.type !== 'string') return;
+  visitar(no);
+  for (const chave of Object.keys(no)) {
+    if (chave === 'type' || chave === 'start' || chave === 'end' || chave === 'loc') continue;
+    const valor = no[chave];
+    if (Array.isArray(valor)) {
+      valor.forEach((item) => {
+        if (item && typeof item.type === 'string') percorrer(item, visitar);
+      });
+    } else if (valor && typeof valor.type === 'string') {
+      percorrer(valor, visitar);
     }
-    if (ch === '(' || ch === '[' || ch === '{') { nest++; continue; }
-    if (ch === ')' || ch === ']' || ch === '}') { nest--; continue; }
-    if (nest !== 0) continue;
-    if (ch === '?') {
-      if (expr[i + 1] === '?' || expr[i + 1] === '.') { i++; continue; }
-      // ternário aninhado: pula até o seu `:` correspondente
-      const inner = splitTernary(expr.slice(i));
-      if (!inner) return null;
-      i += inner.end;
-      continue;
-    }
-    // `end` = índice do ':' correspondente (usado para pular ternários aninhados)
-    if (ch === ':') return { cond: expr.slice(0, q), then: expr.slice(q + 1, i), elseB: expr.slice(i + 1), end: i };
   }
-  return null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -114,91 +83,82 @@ const SAFE_FUNCTIONS = new Set([
   'esc', 'nexusEsc', 'escapeHtml', 'escAttr', 'nexusEscAttr',
   'jsArg', 'nexusJsArg', 'jsString', 'nexusJsString',
   'safeUrl', 'nexusSafeUrl', 'safeId', 'setText', 'sanitizeText',
-  'NexusSecurity.escapeHtml', 'NexusSecurity.escapeAttr',
-  'NexusSecurity.jsString', 'NexusSecurity.jsArg',
-  'NexusSecurity.safeUrl', 'NexusSecurity.safeId', 'NexusSecurity.setText',
   'Number', 'parseInt', 'parseFloat', 'String'
 ]);
 
-// Cadeia permitida apenas para datas: new Date(x).toLocaleString('pt-BR')
+// Métodos de formatação aceitos APENAS sobre `new Date(...)`
+// (um `x.toLocaleString()` genérico não é considerado seguro).
 const DATE_METHODS = new Set([
   'toLocaleString', 'toLocaleDateString', 'toLocaleTimeString', 'toISOString'
 ]);
 
-// Exceções numéricas/contadores, sempre na forma completa.
+// Exceções: identificadores numéricos/contadores usados nus na interpolação.
 const BARE_SAFE_IDENTIFIERS = new Set(['key', 'idx']);
-const MEMBER_LENGTH_RE = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.length$/;
-const PLUS_ONE_RE = /^[A-Za-z_$][\w$]*\s*\+\s*1$/;
-const HTML_VAR_RE = /^[A-Za-z_$][\w$]*Html$/;
+const HTML_VAR_RE = /Html$/;
 
-/** Literal de string estático: 'a', "b" ou template sem interpolação dinâmica. */
-function isStaticStringLiteral(expr) {
-  if (typeof expr !== 'string' || expr.length < 2) return false;
-  const quote = expr[0];
-  if (quote === "'" || quote === '"') return skipQuoted(expr, 0) === expr.length;
-  if (quote !== '`') return false;
-
-  let i = 1;
-  while (i < expr.length) {
-    const ch = expr[i];
-    if (ch === '\\') { i += 2; continue; }
-    if (ch === '$' && expr[i + 1] === '{') {
-      const end = skipBalanced(expr, i + 1, '{', '}');
-      if (end === -1) return false;
-      // Uma interpolação dentro do template é aceita apenas se também for segura.
-      if (!isSafeExpression(expr.slice(i + 2, end))) return false;
-      i = end + 1;
-      continue;
-    }
-    if (ch === '`') return i === expr.length - 1;
-    i++;
+/** Nome completo de uma chamada: `esc` ou `NexusSecurity.escapeHtml`. */
+function nomeDoCallee(callee) {
+  if (callee.type === 'Identifier') return callee.name;
+  if (callee.type === 'MemberExpression' && !callee.computed && callee.object.type === 'Identifier') {
+    return `${callee.object.name}.${callee.property.name}`;
   }
-  return false;
+  return null;
 }
 
-/** Chamada completa: `fn(...)`, `new Date(...)` ou `new Date(...).toLocaleString(...)`. */
-function isSafeCallChain(expr) {
-  let i = 0;
-  let isDate = false;
+/** `new Date(...)`, com ou sem argumentos. */
+function ehNewDate(no) {
+  return no.type === 'NewExpression' && no.callee.type === 'Identifier' && no.callee.name === 'Date';
+}
 
-  if (expr.startsWith('new ')) {
-    if (!expr.startsWith('new Date')) return false;
-    i = 'new Date'.length;
-    isDate = true;
-  } else {
-    const m = /^(?:NexusSecurity\.)?[A-Za-z_$][\w$]*/.exec(expr);
-    if (!m || !SAFE_FUNCTIONS.has(m[0])) return false;
-    i = m[0].length;
+/**
+ * Chamada completa e isolada de uma função codificadora, ou
+ * `new Date(x).toLocaleString(...)` / `new Date(x)`.
+ */
+function isSafeCallChain(node) {
+  if (node.type !== 'CallExpression' && node.type !== 'NewExpression') return false;
+
+  if (node.type === 'NewExpression') {
+    // `new Date(...)` sozinho é seguro; qualquer outro construtor, não.
+    return ehNewDate(node);
   }
 
-  if (expr[i] !== '(') return false;
-  const close = skipBalanced(expr, i, '(', ')');
-  if (close === -1) return false;
-  i = close + 1;
+  // new Date(x).toLocaleString('pt-BR')
+  if (node.callee.type === 'MemberExpression' && !node.callee.computed && ehNewDate(node.callee.object)) {
+    return DATE_METHODS.has(node.callee.property.name);
+  }
 
-  if (i === expr.length) return true;          // nada sobrando após a chamada
-  if (!isDate || expr[i] !== '.') return false; // cadeias de método só para datas
+  return SAFE_FUNCTIONS.has(nomeDoCallee(node.callee) || '');
+}
 
-  const m = /^\.([A-Za-z_$][\w$]*)/.exec(expr.slice(i));
-  if (!m || !DATE_METHODS.has(m[1])) return false;
-  i += m[0].length;
-  if (expr[i] !== '(') return false;
-  const close2 = skipBalanced(expr, i, '(', ')');
-  return close2 === expr.length - 1;           // consome a expressão inteira
+/** `x + 1` / `1 + x`: soma com o literal 1 (índices e paginação). */
+function ehSomaDeIndice(node) {
+  if (node.type !== 'BinaryExpression' || node.operator !== '+') return false;
+  const { left, right } = node;
+  const literalUm = (no) => no.type === 'Literal' && no.value === 1;
+  return (literalUm(left) && right.type === 'Identifier') || (literalUm(right) && left.type === 'Identifier');
+}
+
+/** Literal de string estático: 'a', "b" ou template sem interpolação dinâmica. */
+function isStaticStringLiteral(node) {
+  if (!node) return false;
+  if (node.type === 'Literal') return typeof node.value === 'string' || typeof node.value === 'number';
+  if (node.type === 'TemplateLiteral') {
+    return node.expressions.every(isSafeExpressionNode);
+  }
+  return false;
 }
 
 /**
  * Ternário só é aceito quando CADA ramo completo é um literal de string
  * estático ou uma expressão integralmente segura (verificação recursiva).
  */
-function isStaticTernary(expr) {
-  const parts = splitTernary(expr);
-  if (!parts) return false;
-  return isSafeExpression(parts.then) && isSafeExpression(parts.elseB);
+function isStaticTernary(node) {
+  if (node.type !== 'ConditionalExpression') return false;
+  return isSafeExpressionNode(node.consequent) && isSafeExpressionNode(node.alternate);
 }
 
 /**
- * Heurística de segurança de uma expressão interpolada:
+ * Heurística de segurança de um nó de expressão:
  *  - literal de string estático (ou template cujas interpolações são seguras);
  *  - chamada completa de uma função codificadora (esc/jsArg/...);
  *  - variável "…Html" construída e codificada previamente (verificada no
@@ -208,49 +168,79 @@ function isStaticTernary(expr) {
  * Casos como `esc(a) + raw`, `raw + esc(a)` ou `cond ? raw : 'x'` são
  * deliberadamente REPROVADOS.
  */
+function isSafeExpressionNode(node) {
+  if (!node) return false;
+
+  switch (node.type) {
+    case 'Literal':
+    case 'TemplateLiteral':
+      return isStaticStringLiteral(node);
+    case 'CallExpression':
+    case 'NewExpression':
+      return isSafeCallChain(node);
+    case 'MemberExpression':
+      return !node.computed && node.property.type === 'Identifier' && node.property.name === 'length';
+    case 'Identifier':
+      return BARE_SAFE_IDENTIFIERS.has(node.name) || HTML_VAR_RE.test(node.name);
+    case 'BinaryExpression':
+      return ehSomaDeIndice(node);
+    case 'ConditionalExpression':
+      return isStaticTernary(node);
+    case 'ChainExpression':
+      return isSafeExpressionNode(node.expression);
+    case 'ParenthesizedExpression':
+      return isSafeExpressionNode(node.expression);
+    case 'SequenceExpression':
+      return node.expressions.every(isSafeExpressionNode);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Heurística de segurança de uma expressão interpolada (em texto).
+ * Expressões que não são JavaScript válido nunca são consideradas seguras.
+ */
 function isSafeExpression(expr) {
   if (typeof expr !== 'string') return false;
   const e = expr.trim();
   if (!e) return false;
-  if (isStaticStringLiteral(e)) return true;
-  if (isSafeCallChain(e)) return true;
-  if (HTML_VAR_RE.test(e)) return true;
-  if (MEMBER_LENGTH_RE.test(e)) return true;
-  if (PLUS_ONE_RE.test(e)) return true;
-  if (BARE_SAFE_IDENTIFIERS.has(e)) return true;
-  if (isStaticTernary(e)) return true;
-  return false;
+  const node = parseExpression(e);
+  return node ? isSafeExpressionNode(node) : false;
 }
 
+/**
+ * Todos os template literals do arquivo, na ordem em que aparecem.
+ * Cada item traz o texto cru (com as crases) e as expressões interpoladas.
+ */
 function findTemplateLiterals(src) {
+  const ast = parseProgram(src);
+  if (!ast) return [];
   const out = [];
-  for (let i = 0; i < src.length; i++) {
-    if (src[i] !== '`') continue;
-    let j = i + 1, depth = 0, exprStart = -1;
-    const exprs = [];
-    while (j < src.length) {
-      const ch = src[j];
-      if (ch === '\\') { j += 2; continue; }
-      if (depth === 0 && ch === '`') break;
-      if (ch === '$' && src[j + 1] === '{') { depth === 0 && (exprStart = j + 2); depth++; j += 2; continue; }
-      if (ch === '{' && depth > 0) { depth++; j++; continue; }
-      if (ch === '}' && depth > 0) {
-        depth--;
-        if (depth === 0) exprs.push({ start: exprStart, end: j, text: src.slice(exprStart, j) });
-        j++; continue;
-      }
-      j++;
-    }
-    out.push({ start: i, end: j, raw: src.slice(i, j + 1), exprs });
-    i = j;
-  }
+  percorrer(ast, (no) => {
+    if (no.type !== 'TemplateLiteral') return;
+    out.push({
+      start: no.start,
+      end: no.end,
+      raw: src.slice(no.start, no.end),
+      exprs: no.expressions.map((e) => ({ start: e.start, end: e.end, text: src.slice(e.start, e.end) }))
+    });
+  });
   return out;
 }
 
 const looksLikeHtml = (raw) => /<[a-zA-Z/!]/.test(raw);
 
+/**
+ * Varre um arquivo e devolve as interpolações não codificadas.
+ * Um arquivo que não parseia entra como achado: sem AST não há como garantir
+ * que as interpolações estão codificadas.
+ */
 function scan(file) {
   const src = fs.readFileSync(file, 'utf8');
+  if (parseProgram(src) === null) {
+    return [{ line: 1, expr: `arquivo não parseável pelo acorn (${path.basename(file)})` }];
+  }
   const findings = [];
   for (const tpl of findTemplateLiterals(src)) {
     if (!looksLikeHtml(tpl.raw)) continue;
@@ -307,9 +297,18 @@ function run(argv) {
 module.exports = {
   listarArquivosJs,
   isSafeExpression,
-  isStaticTernary,
-  isStaticStringLiteral,
-  isSafeCallChain,
+  isStaticTernary: (expr) => {
+    const node = typeof expr === 'string' ? parseExpression(expr.trim()) : expr;
+    return node ? isStaticTernary(node) : false;
+  },
+  isStaticStringLiteral: (expr) => {
+    const node = typeof expr === 'string' ? parseExpression(expr.trim()) : expr;
+    return node ? isStaticStringLiteral(node) : false;
+  },
+  isSafeCallChain: (expr) => {
+    const node = typeof expr === 'string' ? parseExpression(expr.trim()) : expr;
+    return node ? isSafeCallChain(node) : false;
+  },
   findTemplateLiterals,
   scan
 };
