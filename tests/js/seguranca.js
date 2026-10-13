@@ -1,0 +1,1 @@
+/app/js/pages/seguranca.js

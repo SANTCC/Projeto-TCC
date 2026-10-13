@@ -1,0 +1,1 @@
+../../../js/pages/scanner.js

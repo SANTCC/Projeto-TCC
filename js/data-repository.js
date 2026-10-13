@@ -264,7 +264,7 @@
               status: c.status_fluxo || 'AGENDAMENTO',
               container: c.container_id || '',
               navio: isEntregue ? '' : ((c.navios && c.navios.nome) ? c.navios.nome : ''),
-              navioId: isEntregue ? null : (c.navio_id || null),
+              navioId: c.navio_id || null,
               qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
               motivoCancelamento: c.motivo_recusa || null,
               rawDbId: c.id,
