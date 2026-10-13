@@ -1,1 +1,0 @@
-../../js/panic-realtime.js

@@ -740,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return {
               data_hora: l.data_hora,
-              nome_funcionario: nomeFunc || 'Operador do Sistema',
+              nome_funcionario: nomeFunc || null,
               cargo: cargoFunc || 'OPERACIONAL',
               codigo_usuario: l.codigo_individual || '--',
               entidade: `${l.entidade_tipo || ''} ${l.entidade_id || ''}`.trim(),

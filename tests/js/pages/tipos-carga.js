@@ -1,1 +1,0 @@
-../../../js/pages/tipos-carga.js

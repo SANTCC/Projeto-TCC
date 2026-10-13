@@ -1,1 +1,0 @@
-../../js/config.example.js

@@ -1,15 +1,7 @@
 /**
  * Lógica do Módulo Relatórios & PDF (relatorios.html) - NexusPort
- * Gera relatórios PDF A4 em 4 seções sequenciais (RF 11 & 16):
- * 1. DADOS DA CARGA
- * 2. DADOS DO NAVIO
- * 3. DADOS DO CONTÊINER
- * 4. RESUMO DO FLUXO OPERACIONAL
- * Arquivo exportado: Relatorio_A4_
- * Joins relacionais Supabase:
- * navios:navio_id(id, nome, numero_imo, porto_origem, porto_destino)
- * containers:container_id(id, numero_identificacao, material_carregado, estado)
- * Auditoria: window.registrarLogAlteracao('EXPORTACAO', 'cargas', idCarga)
+ * Gera relatórios PDF A4 em 4 seções sequenciais (RF 11 & 16) e exibe
+ * a tabela de produtividade operacional por cargo e funcionário (T6.9, T6.10).
  */
 
 document.addEventListener('DOMContentLoaded', () => {
