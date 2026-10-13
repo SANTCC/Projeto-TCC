@@ -50,6 +50,27 @@ function supabaseRotasFalso(rotas, opcoes) {
     if (tabela === 'containers') {
       return Promise.resolve({ data: [], error: null });
     }
+    if (tabela === 'tipos_carga') {
+      return Promise.resolve({ data: null, error: null });
+    }
+    if (tabela === 'cargas' && estado.insert) {
+      return Promise.resolve({
+        data: Object.assign({ id: '44444444-4444-4444-8444-444444444444', created_at: new Date().toISOString() }, estado.insert),
+        error: null
+      });
+    }
+    if (tabela === 'cargas' && estado.update) {
+      return Promise.resolve({ data: [], error: null });
+    }
+    if (tabela === 'agendamentos' || tabela === 'estivador_cargas' || tabela === 'logs_alteracoes') {
+      return Promise.resolve({ data: estado.insert || null, error: null });
+    }
+    if (tabela === 'navios' && estado.update) {
+      return Promise.resolve({
+        data: Object.assign({ id: estado.filtros.id || '11111111-1111-4111-8111-111111111111' }, estado.update),
+        error: null
+      });
+    }
     if (tabela !== 'rotas_maritimas') {
       return Promise.resolve({ data: null, error: { message: 'tabela indisponível no teste' } });
     }
@@ -61,14 +82,16 @@ function supabaseRotasFalso(rotas, opcoes) {
     return Promise.resolve({ data: rotas.map((x) => Object.assign({}, x)), error: null });
   }
   function construir(tabela) {
-    const estado = { insert: null };
+    const estado = { insert: null, update: null, filtros: {} };
     const proxy = new Proxy({}, {
       get(_, prop) {
         if (prop === 'then') return (res, rej) => resolver(tabela, estado).then(res, rej);
         if (prop === 'catch') return (rej) => resolver(tabela, estado).catch(rej);
         if (typeof prop !== 'string') return undefined;
         return (...args) => {
-          if (prop === 'insert') estado.insert = args[0];
+          if (prop === 'insert' || prop === 'upsert') estado.insert = args[0];
+          if (prop === 'update') estado.update = args[0];
+          if (prop === 'eq') estado.filtros[args[0]] = args[1];
           return proxy;
         };
       }
@@ -251,15 +274,15 @@ async function testesVinculacaoNavioNoPorto() {
   log('\n[1b] Vinculação de carga a navio (somente atracado no porto e operante)');
   const ontem = new Date(Date.now() - 86400000).toISOString();
   const navios = () => [
-    { id: 'nA', nome: 'MV Apto', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9608, -46.3022', dataSaida: null },
+    { id: '11111111-1111-4111-8111-111111111111', nome: 'MV Apto', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9608, -46.3022', dataSaida: null },
     { id: 'nD', nome: 'MV Outro', imo: 'JKL1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9700, -46.3100', dataSaida: null },
-    { id: 'nB', nome: 'MV Fora', imo: 'DEF7654321', localizacao: 'FORA_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.5000, -46.3000', dataSaida: ontem },
-    { id: 'nC', nome: 'MV Reforma', imo: 'GHI1234567', localizacao: 'DENTRO_DO_PORTO', estado_operacional: 'AGENDADO_PARA_REFORMA', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9800, -46.3200', dataSaida: null }
+    { id: '22222222-2222-4222-8222-222222222222', nome: 'MV Fora', imo: 'DEF7654321', localizacao: 'FORA_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.5000, -46.3000', dataSaida: ontem },
+    { id: '33333333-3333-4333-8333-333333333333', nome: 'MV Reforma', imo: 'GHI1234567', localizacao: 'DENTRO_DO_PORTO', estado_operacional: 'AGENDADO_PARA_REFORMA', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9800, -46.3200', dataSaida: null }
   ];
   const containers = () => [
-    { identificacao: 'MSCU1000001', tipo: 'Eletrônicos', estado: 'OPERANTE', navio: 'MV Apto', navio_id: 'nA' },
-    { identificacao: 'MSCU1000002', tipo: 'Têxteis', estado: 'OPERANTE', navio: 'MV Fora', navio_id: 'nB' },
-    { identificacao: 'MSCU1000003', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Reforma', navio_id: 'nC' },
+    { identificacao: 'MSCU1000001', tipo: 'Eletrônicos', estado: 'OPERANTE', navio: 'MV Apto', navio_id: '11111111-1111-4111-8111-111111111111' },
+    { identificacao: 'MSCU1000002', tipo: 'Têxteis', estado: 'OPERANTE', navio: 'MV Fora', navio_id: '22222222-2222-4222-8222-222222222222' },
+    { identificacao: 'MSCU1000003', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Reforma', navio_id: '33333333-3333-4333-8333-333333333333' },
     { identificacao: 'MSCU1000004', tipo: 'Carga Geral', estado: 'OPERANTE', navio: '', navio_id: null },
     { identificacao: 'MSCU1000005', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Outro', navio_id: 'nD' }
   ];
@@ -320,7 +343,7 @@ async function testesVinculacaoNavioNoPorto() {
   await aguardar(30);
   sel(w).value = '0';
   sel(w).dispatchEvent(new w.Event('change', { bubbles: true }));
-  w.localStorage.setItem('nexus_navios_list', JSON.stringify(navios().map((n) => (n.id === 'nA' ? Object.assign({}, n, { localizacao: 'FORA_DO_PORTO', dataSaida: ontem }) : n))));
+  w.localStorage.setItem('nexus_navios_list', JSON.stringify(navios().map((n) => (n.id === '11111111-1111-4111-8111-111111111111' ? Object.assign({}, n, { localizacao: 'FORA_DO_PORTO', dataSaida: ontem }) : n))));
   cont(w).value = 'MSCU1000004';
   await confirmar(w);
   c = cargaSalva(w, 'CRG-D');
@@ -405,8 +428,8 @@ async function testesEmbarcacoes() {
   const rotasSupabase = [{ origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }];
   const supaRotas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasSupabase); };
   const navios = [
-    { id: 'n1', nome: 'MV Santos Star', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia: 10200, gps: '-23.9608, -46.3022', dataSaida: null },
-    { id: 'n2', nome: 'MV Sem Rota', imo: 'DEF7654321', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Tóquio', distancia: 20000, gps: '-23.9700, -46.3100', dataSaida: null }
+    { id: '11111111-1111-4111-8111-111111111111', nome: 'MV Santos Star', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia: 10200, gps: '-23.9608, -46.3022', dataSaida: null },
+    { id: '22222222-2222-4222-8222-222222222222', nome: 'MV Sem Rota', imo: 'DEF7654321', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Tóquio', distancia: 20000, gps: '-23.9700, -46.3100', dataSaida: null }
   ];
   const storage = {
     nexus_navios_list: navios,

@@ -947,6 +947,11 @@
   window.addEventListener('focus', () => {
     NexusRepository.notifyChange('window_focus');
   });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      NexusRepository.notifyChange('visibility_sync');
+    }
+  });
 
   // Polling de segurança: sem o Realtime (ou entre eventos perdidos), as telas são
   // reconsultadas a cada POLLING_SEGURANCA_MS (60 s por padrão).

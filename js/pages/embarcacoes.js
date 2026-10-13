@@ -439,6 +439,42 @@ document.addEventListener('DOMContentLoaded', () => {
     return distanciaDaRota(navio && navio.origem, navio && navio.destino);
   }
 
+  const chegadasEmConfirmacao = new Set();
+
+  // Confirma a chegada no banco antes de alterar memória/cache. O render pode
+  // rodar a cada segundo, por isso a Set impede requisições duplicadas.
+  async function confirmarChegadaNavio(navio, novaLocalizacao) {
+    const chave = String(navio && (navio.id || navio.imo) || '');
+    if (!chave || chegadasEmConfirmacao.has(chave)) return;
+    if (!window.nexusSupabase || !UUID_NAVIO_RE.test(String(navio.id || ''))) return;
+    chegadasEmConfirmacao.add(chave);
+    try {
+      const { data, error } = await window.nexusSupabase
+        .from('navios')
+        .update({ localizacao: novaLocalizacao })
+        .eq('id', navio.id)
+        .eq('localizacao', 'FORA_DO_PORTO')
+        .select('id, localizacao, data_saida')
+        .maybeSingle();
+      if (error) throw error;
+      // Alguns dublês/versões legadas retornam uma lista mesmo com maybeSingle;
+      // o Supabase atual retorna o objeto diretamente.
+      const registro = Array.isArray(data) ? data[0] : data;
+      if (!registro || registro.localizacao !== novaLocalizacao) return;
+      navio.localizacao = registro.localizacao;
+      navio.dataSaida = registro.data_saida || navio.dataSaida;
+      localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('navios');
+      }
+      renderGpsTable();
+    } catch (error) {
+      console.warn('[NexusPort] Não foi possível confirmar a chegada do navio no Supabase:', error);
+    } finally {
+      chegadasEmConfirmacao.delete(chave);
+    }
+  }
+
   // Carrega navios mantendo persistência rigorosa do Supabase / Local
   async function carregarNaviosSupabase() {
     if (window.nexusSupabase) {
@@ -457,7 +493,8 @@ document.addEventListener('DOMContentLoaded', () => {
             destino: n.porto_destino || '',
             // A distância não é gravada no navio: vem da rota marítima cadastrada (distanciaDoNavio)
             distancia: null,
-            dataSaida: n.data_saida || (n.localizacao === 'FORA_DO_PORTO' ? new Date(Date.now() - 86400000 * 2).toISOString() : null)
+            // Nunca inventa horário de saída: sem data persistida, o ETA fica indisponível.
+            dataSaida: n.data_saida || null
           }));
           localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
           renderGpsTable();
@@ -596,48 +633,36 @@ document.addEventListener('DOMContentLoaded', () => {
         etaText = 'Atracado no Destino (Concluído)';
         tempoForaText = '0d 0h 0s (Atracado no Destino)';
       } else {
-        // C6 & A4: Cálculo de ETA e tempo decorrido dinâmico baseado em tempo real com parsing seguro
-        let horaSaidaTime = Date.now();
-        if (n.dataSaida) {
-          const parsed = new Date(n.dataSaida).getTime();
-          if (!isNaN(parsed)) horaSaidaTime = parsed;
+        // C6 & A4: o ETA só existe com um horário de saída persistido e válido.
+        const horaSaidaTime = n.dataSaida ? new Date(n.dataSaida).getTime() : NaN;
+        const horarioSaidaValido = Number.isFinite(horaSaidaTime);
+        const diffMs = horarioSaidaValido ? Math.max(0, Date.now() - horaSaidaTime) : 0;
+
+        if (horarioSaidaValido) {
+          const diasDecorridos = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          const horasDecorridas = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const minutosDecorridos = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+          const segundosDecorridos = Math.floor((diffMs % (1000 * 60)) / 1000);
+          tempoForaText = `${diasDecorridos}d ${horasDecorridas}h ${minutosDecorridos}m ${segundosDecorridos}s fora`;
+        } else {
+          tempoForaText = 'Tempo indisponível: saída não registrada';
         }
-        const diffMs = Math.max(0, Date.now() - horaSaidaTime);
-
-        const diasDecorridos = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const horasDecorridas = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutosDecorridos = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-        const segundosDecorridos = Math.floor((diffMs % (1000 * 60)) / 1000);
-
-        tempoForaText = `${diasDecorridos}d ${horasDecorridas}h ${minutosDecorridos}m ${segundosDecorridos}s fora`;
 
         // Distância oficial = rota marítima cadastrada (sem valor padrão)
         const distanciaKm = distanciaDoNavio(n);
-        if (!distanciaKm) {
+        if (!horarioSaidaValido) {
+          etaText = 'ETA indisponível: horário de saída não registrado';
+        } else if (!distanciaKm) {
           etaText = 'ETA indisponível: rota sem distância cadastrada';
         } else {
-          // Cálculo dinâmico do tempo total previsto
-          const horasTotaisPrevistas = distanciaKm / 33; // 33 km/h
+          const horasTotaisPrevistas = distanciaKm / 33; // 33 km/h (RN 9)
           const msTotaisPrevistos = horasTotaisPrevistas * 3600 * 1000;
           const msRestantes = Math.max(0, msTotaisPrevistos - diffMs);
 
-          // Transição automática para NO_PORTO_DE_DESTINO se o ETA zerou
+          // Ao zerar, a chegada só aparece depois de confirmada no Supabase.
           if (msRestantes <= 0 && n.localizacao === 'FORA_DO_PORTO') {
-            // Chegada ao Porto de Santos (ex.: retorno de Paranaguá) = "No porto", apto a receber cargas.
-            // Demais destinos = "Chegou ao destino" (cargas são entregues).
             const novaLocalizacao = ehPortoSantos(n.destino) ? 'DENTRO_DO_PORTO' : 'NO_PORTO_DE_DESTINO';
-            n.localizacao = novaLocalizacao;
-            localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
-            if (window.nexusSupabase) {
-              window.nexusSupabase.from('navios')
-                .update({ localizacao: novaLocalizacao })
-                .eq('numero_imo', n.imo)
-                .then(() => {})
-                .catch(err => console.warn('Erro ao atualizar chegada ao destino no Supabase:', err));
-            }
-            if (window.NexusRepository && window.NexusRepository.notifyChange) {
-              window.NexusRepository.notifyChange('navios');
-            }
+            confirmarChegadaNavio(n, novaLocalizacao);
           }
 
           const diasRestantes = Math.floor(msRestantes / (1000 * 60 * 60 * 24));
@@ -966,78 +991,97 @@ document.addEventListener('DOMContentLoaded', () => {
       : true;
 
     if (confirmou) {
-      // Libera os berços do navio NO BANCO antes da saída: se a liberação falhar, a saída não é registrada
-      const resLibSaida = await liberarBercosDoNavio(navio);
-      if (resLibSaida.falhas.length > 0) {
+      if (!window.nexusSupabase) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Saída Não Registrada', `Não foi possível liberar o(s) berço(s) ${resLibSaida.falhas.map(f => f.berco).join(', ')} no banco de dados (${resLibSaida.falhas[0].motivo}). A saída não foi registrada; tente novamente.`);
+          window.mostrarFeedback('erro', 'Sem Conexão com o Servidor', 'A saída não pode ser registrada enquanto o banco de dados estiver indisponível.');
+        }
+        return;
+      }
+
+      if (!navio.id || !UUID_NAVIO_RE.test(String(navio.id))) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Navio sem Identificação', 'O navio não possui um UUID válido no banco de dados. Recarregue os dados antes de tentar novamente.');
         }
         return;
       }
 
       const horaSaida = new Date().toISOString();
-      navio.localizacao = 'FORA_DO_PORTO';
-      navio.dataSaida = horaSaida;
+      let navioAtualizado;
+      try {
+        // Compare-and-set: outro dispositivo só pode vencer esta liberação uma vez.
+        const { data, error } = await window.nexusSupabase
+          .from('navios')
+          .update({ localizacao: 'FORA_DO_PORTO', data_saida: horaSaida })
+          .eq('id', navio.id)
+          .eq('localizacao', 'DENTRO_DO_PORTO')
+          .select('id, localizacao, data_saida')
+          .maybeSingle();
 
+        if (error) throw error;
+        if (!data || data.localizacao !== 'FORA_DO_PORTO' || !data.data_saida) {
+          throw new Error('Nenhuma embarcação em estado DENTRO_DO_PORTO foi atualizada. Ela pode ter sido alterada em outro dispositivo.');
+        }
+        navioAtualizado = data;
+      } catch (err) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Saída Não Registrada', `O banco de dados não confirmou a saída: ${err.message || err}`);
+        }
+        return;
+      }
+
+      // O navio já está confirmado fora do porto. Agora libera o berço. Se essa
+      // etapa falhar, tenta restaurar o navio para não deixar estados divergentes.
+      const resLibSaida = await liberarBercosDoNavio(navio);
+      if (resLibSaida.falhas.length > 0) {
+        const { error: rollbackError } = await window.nexusSupabase
+          .from('navios')
+          .update({ localizacao: 'DENTRO_DO_PORTO', data_saida: null })
+          .eq('id', navio.id)
+          .eq('localizacao', 'FORA_DO_PORTO');
+        const detalhe = rollbackError
+          ? ' A reversão automática também falhou; informe o suporte imediatamente.'
+          : ' A saída do navio foi revertida.';
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Saída Não Registrada', `Não foi possível liberar o(s) berço(s) ${resLibSaida.falhas.map(f => f.berco).join(', ')} (${resLibSaida.falhas[0].motivo}).${detalhe}`);
+        }
+        return;
+      }
+
+      // Atualiza somente as cargas elegíveis e verifica a resposta. O trigger do
+      // banco também pode aplicar esta transição; a operação é idempotente.
+      const { error: cargasError } = await window.nexusSupabase
+        .from('cargas')
+        .update({ status_fluxo: 'EM_TRANSITO' })
+        .eq('navio_id', navio.id)
+        .not('status_fluxo', 'in', '("ENTREGUE","CANCELADA","RECUSADA")');
+
+      if (cargasError) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Saída Parcialmente Registrada', `O navio saiu do porto, mas não foi possível sincronizar todas as cargas vinculadas: ${cargasError.message}. Recarregue a página e informe o suporte.`);
+        }
+        await carregarNaviosSupabase();
+        return;
+      }
+
+      // Só agora o estado confirmado é refletido em memória e no cache.
+      navio.localizacao = navioAtualizado.localizacao;
+      navio.dataSaida = navioAtualizado.data_saida;
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
-      // Atualiza status das cargas vinculadas para EM_TRANSITO
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       cargasFluxo.forEach(c => {
-        if ((c.navio && c.navio.toLowerCase() === navio.nome.toLowerCase()) || (c.navio_id && c.navio_id === navio.id)) {
-          if (c.status !== 'ENTREGUE' && c.status !== 'CANCELADA' && c.status !== 'RECUSADA') {
-            c.status = 'EM_TRANSITO';
-          }
+        if (cargaPertenceAoNavio(c, navio) && !['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)) {
+          c.status = 'EM_TRANSITO';
         }
       });
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
 
-      // Sincroniza Supabase
-      // Tarefa 1: Ao autorizar o retorno, garante que qualquer carga vinculada a esta embarcação seja desvinculada
-      const cargasFluxoRetorno = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-      let cargasDesvinculadasRetorno = false;
-      const idsCargasDesvinc = [];
-      cargasFluxoRetorno.forEach(c => {
-        if (cargaPertenceAoNavio(c, navio)) {
-          c.status = 'ENTREGUE';
-          c.navio = '';
-          c.navioId = null;
-          c.navio_id = null;
-          cargasDesvinculadasRetorno = true;
-          const idBanco = String(c.rawDbId || '');
-          if (UUID_CARGA_RE.test(idBanco)) idsCargasDesvinc.push(idBanco);
-        }
-      });
-
-      if (cargasDesvinculadasRetorno) {
-        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoRetorno));
-      }
-
-      if (window.nexusSupabase) {
-        try {
-          await window.nexusSupabase.from('navios')
-            .update({ localizacao: 'FORA_DO_PORTO', data_saida: horaSaida })
-            .eq('numero_imo', imo);
-
-          if (navio.id) {
-            await window.nexusSupabase.from('cargas')
-              .update({ status_fluxo: 'EM_TRANSITO' })
-              .eq('navio_id', navio.id)
-              .not('status_fluxo', 'in', '("ENTREGUE","CANCELADA","RECUSADA")');
-          }
-        } catch (err) { console.warn('Erro ao liberar navio no Supabase:', err); }
-      }
-
-      // Registra no Trail de Decisões Críticas
       if (window.registrarTrailDecisao) {
-        await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id || null, `Navio ${navio.nome} (${navio.imo}) liberado para saída com destino a ${navio.destino} por ${session.nome || session.cargo}. Horário: ${new Date(horaSaida).toLocaleString('pt-BR')}`);
+        await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id, `Navio ${navio.nome} (${navio.imo}) liberado para saída com destino a ${navio.destino} por ${session.nome || session.cargo}. Horário: ${new Date(navio.dataSaida).toLocaleString('pt-BR')}`);
       }
-
-      // Registra auditoria
       if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { localizacao: 'FORA_DO_PORTO', data_saida: horaSaida });
+        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id, { localizacao: 'FORA_DO_PORTO', data_saida: navio.dataSaida });
       }
-
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('navios');
         window.NexusRepository.notifyChange('cargas');
@@ -1045,7 +1089,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       renderGpsTable();
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Navio Liberado', `Navio ${navio.nome} liberado com sucesso pela Rota ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km). Horário de saída: ${new Date(horaSaida).toLocaleString('pt-BR')}.`);
+        window.mostrarFeedback('sucesso', 'Navio Liberado', `Navio ${navio.nome} liberado com sucesso pela Rota ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km). Horário de saída: ${new Date(navio.dataSaida).toLocaleString('pt-BR')}.`);
       }
     }
   };
@@ -1105,11 +1149,6 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .eq('numero_imo', imo);
 
-          if (idsCargasDesvinc.length > 0) {
-            await window.nexusSupabase.from('cargas')
-              .update({ status_fluxo: 'ENTREGUE', navio_id: null })
-              .in('id', idsCargasDesvinc);
-          }
         } catch (err) { console.warn('Erro ao atualizar retorno do navio no Supabase:', err); }
       }
 
@@ -2639,12 +2678,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Sincronização viva em tempo real (Item 2)
-  window.addEventListener('nexus_data_changed', () => {
+  // Sincronização viva: ignora auditoria e outras entidades que não afetam esta
+  // página, evitando leituras em cascata após cada operação local.
+  const ENTIDADES_QUE_AFETAM_EMBARCACOES = new Set([
+    'navios', 'bercos', 'containers', 'guindastes', 'rotas_maritimas', 'cargas',
+    'nexus_navios_list', 'nexus_bercos_list', 'nexus_containers_list',
+    'nexus_guindastes_list', 'nexus_cargas_fluxo',
+    'periodic_sync', 'window_focus', 'visibility_sync'
+  ]);
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    if (entity && !ENTIDADES_QUE_AFETAM_EMBARCACOES.has(entity)) return;
     carregarBercosSupabase();
     carregarNaviosSupabase();
     carregarContainersSupabase();
     carregarGuindastesSupabase();
-    carregarRotasMaritimas();   // Backlog 3 (tempo real): rotas cadastradas em outra tela/usuário
+    carregarRotasMaritimas();
   });
 });

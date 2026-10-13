@@ -336,8 +336,15 @@ function testarConfiguracao() {
   check('OS de navio grava navio_id (UUID validado)', /navio_id:\s*navioUuid/.test(manut) && /navioUuid\s*=.*test\(/.test(manut));
   check('listener nexus_data_changed de manutenção recarrega do Supabase (carregarOsSupabase)',
     /addEventListener\('nexus_data_changed'[\s\S]*?carregarOsSupabase\(\)/.test(manut));
+  const embarcacoes = read('js/pages/embarcacoes.js');
   check('listener nexus_data_changed de embarcações recarrega as rotas (carregarRotasMaritimas)',
-    /addEventListener\('nexus_data_changed'[\s\S]*?carregarRotasMaritimas\(\)/.test(read('js/pages/embarcacoes.js')));
+    /addEventListener\('nexus_data_changed'[\s\S]*?carregarRotasMaritimas\(\)/.test(embarcacoes));
+  check('visibilidade recuperada dispara sincronização de segurança',
+    /visibilitychange/.test(dataRepo) && /visibility_sync/.test(dataRepo));
+  check('cargas e embarcações aceitam o evento visibility_sync',
+    /visibility_sync/.test(read('js/pages/cargas.js')) && /visibility_sync/.test(embarcacoes));
+  check('embarcações filtra entidades irrelevantes antes de reler o Supabase',
+    /ENTIDADES_QUE_AFETAM_EMBARCACOES/.test(embarcacoes) && /!ENTIDADES_QUE_AFETAM_EMBARCACOES\.has\(entity\)/.test(embarcacoes));
 
   const relatorios = read('js/pages/relatorios.js');
   check('Relatórios não tem intervalo de 5 s para produtividade (setInterval removido)',
