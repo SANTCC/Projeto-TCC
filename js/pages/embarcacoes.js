@@ -8,6 +8,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  const isEstivadorOnly = session.cargo === 'ESTIVADOR';
+
+  // Se o usuário for Estivador, a página Embarcações & GPS é restrita a guindastes apenas
+  if (isEstivadorOnly) {
+    ['indicadoresMaritimos', 'secaoBercos', 'secaoNavios', 'secaoContainers', 'secaoRotas'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
+  }
+
   // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
   // antes de qualquer inserção em HTML ou em manipuladores inline.
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);

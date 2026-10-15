@@ -22,6 +22,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const isInspetor = ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
   const isSupervisor = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
+  const isEstivadorOnly = session.cargo === 'ESTIVADOR';
+
+  // Se for Estivador, esconde atalhos/seções de manutenção de navio e abertura geral de OS
+  if (isEstivadorOnly) {
+    ['secaoNavioManut', 'secaoGestaoOs'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
+  }
 
   let guindastesList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
 
@@ -235,8 +244,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // opcoes (uso do agente WebMCP): { descricao? } evita o diálogo de justificativa.
   window.solicitarManutencaoGuindaste = async function(identificacao, opcoes) {
-    if (!isSupervisor) {
-      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor pode solicitar manutenção de guindastes!');
+    const podeSolicitar = isSupervisor || isEstivadorOnly || isInspetor;
+    if (!podeSolicitar) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Você não tem permissão para solicitar manutenção de guindastes!');
       return;
     }
 
