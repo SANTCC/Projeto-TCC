@@ -89,7 +89,7 @@
       { id: 'inspecao.html', label: 'Inspeção & Checklist', icon: 'fact_check', href: 'inspecao.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente },
       { id: 'scanner.html', label: 'Scanner QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente || isArrumador },
       { id: 'embarcacoes.html', label: 'Embarcações & GPS', icon: 'directions_boat', href: 'embarcacoes.html', visible: () => isDiretor || isSupervisor || isInspetor || isPlanejador || isEstivador },
-      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador || isEstivador },
+      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador || isEstivador || isPlanejador },
       { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: () => isDiretor || isSupervisor },
       { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: () => isTecnico || isDiretor },
       // Item oculto por padrão: só aparece depois dos 5 cliques no nome do

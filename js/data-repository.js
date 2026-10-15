@@ -441,7 +441,10 @@
               origem: n.porto_origem || n.origem || 'Porto de Santos',
               destino: n.porto_destino || n.destino || 'Destino',
               operacoes: n.quantidade_cargas_realizadas || n.operacoes || 0,
-              data_saida: n.data_saida || null
+              dataSaida: n.data_saida || n.dataSaida || null,
+              data_saida: n.data_saida || n.dataSaida || null,
+              tempo_fora_do_porto: n.tempo_fora_do_porto || null,
+              data_chegada: n.data_chegada || null
             }));
             localStorage.setItem('nexus_navios_list', JSON.stringify(mapped));
             return mapped;
