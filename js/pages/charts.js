@@ -367,7 +367,7 @@
         {
           id: 'valor_declarado_mes',
           titulo: 'Valor declarado movimentado (6 meses)',
-          descricao: 'Indicador financeiro estratégico restrito à Direção e ao Conselho.',
+          descricao: 'Não inclui cargas canceladas. Indicador financeiro estratégico restrito à Direção e ao Conselho.',
           icone: 'payments',
           badge: 'ESTRATÉGICO'
         }
@@ -1480,7 +1480,8 @@
       if (!dados.cargas.length) return null;
       const meses = ultimosMeses(6);
       const porMes = somarPor(
-        dados.cargas.filter(c => c.valor > 0),
+        // Excluir apenas do agregado: o valor original continua no histórico da carga.
+        dados.cargas.filter(c => c.status !== 'CANCELADA' && c.valor > 0),
         c => chaveMes(c.dataEntrada),
         c => c.valor
       );
@@ -1501,7 +1502,7 @@
           pointBackgroundColor: CORES.escura
         }],
         formatoMoeda: true,
-        resumo: `${formatarMoedaCompacta(total)} em valor declarado movimentado nos últimos 6 meses`
+        resumo: `${formatarMoedaCompacta(total)} em valor declarado movimentado nos últimos 6 meses (excluindo cargas canceladas)`
       };
     }
   };

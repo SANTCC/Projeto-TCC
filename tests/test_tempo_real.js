@@ -240,7 +240,7 @@ async function testarPainelAuditoria() {
       'js/security.js', 'js/session-cookies.js', 'js/auth-guard.js', 'js/pages/tipos-carga.js',
       'js/vision-layer.js', 'js/layout.js', 'js/supabase-client.js',
       (win) => { win.nexusSupabase = cli; },
-      'js/data-repository.js', 'js/pages/dashboard.js'
+      'js/data-repository.js', 'js/auditoria.js', 'js/pages/dashboard.js'
     ]
   });
   janelasAbertas.push(dom.window);
@@ -259,8 +259,8 @@ async function testarPainelAuditoria() {
   check('Ana (cadastro pelo funcionario_id) aparece em 1050 linhas', contar('Ana Estivadora') === 1050, contar('Ana Estivadora'));
   check('Bruno (só codigo_individual gravado no log) é resolvido: 60 linhas', contar('Bruno Conferente') === 60, contar('Bruno Conferente'));
   check('Carla (só funcionario_id gravado no log) é resolvida: 40 linhas', contar('Carla Inspetora') === 40, contar('Carla Inspetora'));
-  check('código sem cadastro aparece como "Sem cadastro (código)"', contar('Sem cadastro (NX-XYZ-9)') === 5, contar('Sem cadastro (NX-XYZ-9)'));
-  check('log sem identificação aparece como "Não identificado"', contar('Não identificado') === 3, contar('Não identificado'));
+  check('código sem cadastro não é exposto: responsável não identificado', contar('Não identificado') === 8, contar('Não identificado'));
+  check('logs sem identificação/cadastro aparecem como "Não identificado", sem credencial', contar('Não identificado') === 8, contar('Não identificado'));
   check('nome da sessão ("Diretora Sessão") NÃO aparece como responsável de outros logs',
     !nomes.some((x) => x.includes('Diretora Sessão')));
 }

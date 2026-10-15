@@ -5,283 +5,7 @@
  * e o Painel Estratégico com Gráficos para Diretores (RF 1).
  */
 
-// Funções utilitárias globais exigidas para integração (T7.1, T7.3, T8.3 - T8.6, T6.8)
-window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes = '') {
-  // Ações feitas por agente de IA (WebMCP) ficam marcadas na auditoria. Sem agente, nada muda.
-  const marcaAgente = (window.NexusWebMCP && typeof window.NexusWebMCP.marcaAuditoria === 'function') ? window.NexusWebMCP.marcaAuditoria() : '';
-  if (marcaAgente) {
-    detalhes = typeof detalhes === 'string' ? marcaAgente + detalhes : Object.assign({}, detalhes, { origem_agente: window.NexusWebMCP.origemAtual() });
-  }
-  const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null) || {};
-  const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-
-  let funcId = isUUID(session.id) ? session.id : null;
-  if (!funcId) {
-    const list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
-    const match = list.find(f => f.codigo_individual === session.codigo_individual || f.matricula === session.matricula);
-    if (match && isUUID(match.id)) funcId = match.id;
-  }
-
-  const validTipos = ['CRIACAO', 'EDICAO', 'EXCLUSAO', 'REIMPRESSAO_ETIQUETA', 'EXPORTACAO'];
-  let tipoEnum = 'EDICAO';
-  const tipoUpper = String(tipoAlteracao || '').toUpperCase();
-  if (validTipos.includes(tipoUpper)) {
-    tipoEnum = tipoUpper;
-  } else if (tipoUpper.includes('CRI')) tipoEnum = 'CRIACAO';
-  else if (tipoUpper.includes('EXCLU') || tipoUpper.includes('DELET')) tipoEnum = 'EXCLUSAO';
-  else if (tipoUpper.includes('ETIQUETA')) tipoEnum = 'REIMPRESSAO_ETIQUETA';
-
-  let entidadeTipo = 'CARGA';
-  let entidadeId = String(entidade || '').trim();
-  const entUpper = entidadeId.toUpperCase();
-  if (entUpper.startsWith('NAVIO') || entUpper.includes('NAVIO')) entidadeTipo = 'NAVIO';
-  else if (entUpper.startsWith('CONT') || entUpper.includes('CONTAINER')) entidadeTipo = 'CONTAINER';
-  else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
-  else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
-  else if (entUpper.startsWith('VIS') || entUpper.includes('VISITANTE')) entidadeTipo = 'VISITANTE';
-  // Auditoria das emergências (botão de pânico). O valor EMERGENCIA vive no
-  // tipo tipo_entidade_enum; se o banco ainda não o tiver, o insert é recusado
-  // com 22P02 — por isso o erro é tratado logo abaixo.
-  else if (entUpper.includes('EMERGENCIA')) entidadeTipo = 'EMERGENCIA';
-
-  const validCargos = [
-    'ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 
-    'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS', 'SUPERVISOR_GERENTE_OPERACOES', 
-    'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 
-    'CONSELHO_ADMINISTRACAO'
-  ];
-  let cargoEnum = 'ESTIVADOR';
-  if (validCargos.includes(session.cargo)) cargoEnum = session.cargo;
-
-  const nowIso = new Date().toISOString();
-
-  if (window.nexusSupabase) {
-    try {
-      const payload = {
-        data_hora: nowIso,
-        cargo: cargoEnum,
-        codigo_individual: session.codigo_individual || session.codigo || '--',
-        entidade_tipo: entidadeTipo,
-        entidade_id: entidadeId || 'N/A',
-        tipo_alteracao: tipoEnum,
-        detalhes: typeof detalhes === 'object' ? detalhes : { descricao: detalhes }
-      };
-      if (funcId) payload.funcionario_id = funcId;
-
-      let { error } = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
-      if (error && payload.funcionario_id) {
-        // funcionario_id pode não existir em public.funcionarios (sessão
-        // antiga): repete sem a FK, mantendo o restante da linha.
-        delete payload.funcionario_id;
-        const retentativa = await window.nexusSupabase.from('logs_alteracoes').insert(payload);
-        error = retentativa && retentativa.error;
-      }
-      if (error) {
-        // Recusa do banco (ex.: 22P02 — valor 'EMERGENCIA' ausente no enum
-        // tipo_entidade_enum): o insert devolvia erro e ninguém o lia, então
-        // a auditoria se perdia em silêncio. Agora fica no console uma única
-        // vez, apontando o arquivo .sql que cria o valor.
-        const utils = window.NexusSupabaseUtils;
-        if (utils && typeof utils.registrarEnumDesconhecido === 'function') {
-          utils.registrarEnumDesconhecido(error);
-        } else {
-          console.warn('[NexusPort] Auditoria não gravada em logs_alteracoes:', error.message || error);
-        }
-      }
-    } catch (err) {
-      console.warn('[NexusPort] Erro ao invocar log Supabase:', err);
-    }
-  }
-
-  const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
-  const newLog = {
-    data_hora: nowIso,
-    nome_funcionario: session.nome || 'Operador Porto',
-    cargo: session.cargo_nome || session.cargo || 'Operador',
-    codigo_usuario: session.codigo_individual || session.codigo || '--',
-    entidade: `${entidadeTipo} ${entidadeId}`,
-    tipo_alteracao: tipoEnum,
-    detalhes: detalhes
-  };
-  logs.unshift(newLog);
-  localStorage.setItem('nexus_audit_logs', JSON.stringify(logs));
-
-  if (window.NexusRepository && window.NexusRepository.notifyChange) {
-    window.NexusRepository.notifyChange('logs_alteracoes');
-  } else {
-    window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'logs_alteracoes' } }));
-  }
-};
-
-// Tabelas usadas por chamadas antigas (decisao, tabela, id, motivo) de outros módulos.
-const TRAIL_TABELAS_LEGADAS = {
-  navios: 'NAVIO',
-  guindastes: 'GUINDASTE',
-  containers: 'CONTAINER',
-  manutencoes: 'MANUTENCAO',
-  cargas: 'CARGA',
-  delegacoes_supervisor: 'FUNCIONARIO'
-};
-
-// Tipos de entidade aceitos para cada decisão (sem combinações sem sentido).
-const TRAIL_TIPOS_COMPATIVEIS = {
-  APROVOU_CARGA: ['CARGA'],
-  RECUSOU_CARGA: ['CARGA'],
-  CANCELOU_ENTREGA: ['CARGA'],
-  LIBEROU_NAVIO: ['NAVIO'],
-  SOLICITOU_MANUTENCAO_NAVIO: ['NAVIO'],
-  SOLICITOU_MANUTENCAO_CONTAINER: ['CONTAINER', 'GUINDASTE'],
-  APROVOU_MANUTENCAO: ['MANUTENCAO', 'GUINDASTE'],
-  RECUSOU_MANUTENCAO: ['MANUTENCAO', 'GUINDASTE'],
-  DESIGNOU_SUBSTITUTO: ['FUNCIONARIO']
-};
-window.TRAIL_TIPOS_COMPATIVEIS = TRAIL_TIPOS_COMPATIVEIS;
-
-// registrarTrailDecisao(decisao, entidade, motivo, referencia)
-//   referencia = { tipo, id, codigo, rotulo } vindo de um registro real do Supabase (formulário do painel).
-//   Sem referencia, mantém o comportamento anterior (texto livre), usado por chamadas legadas.
-window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', referencia = null) {
-  // Chamadas antigas com 4 argumentos: (decisao, tabela, id, motivo). O id não pode virar motivo.
-  if (arguments.length >= 4 && TRAIL_TABELAS_LEGADAS[entidade] && !(referencia && typeof referencia === 'object')) {
-    const idLegado = motivo;
-    motivo = referencia;
-    referencia = {
-      tipo: TRAIL_TABELAS_LEGADAS[entidade],
-      id: idLegado || null,
-      codigo: idLegado ? String(idLegado) : String(entidade),
-      rotulo: entidade,
-      legado: true
-    };
-  }
-
-  // Decisões tomadas via agente de IA (WebMCP) ficam marcadas na trilha imutável.
-  const marcaAgente = (window.NexusWebMCP && typeof window.NexusWebMCP.marcaAuditoria === 'function') ? window.NexusWebMCP.marcaAuditoria() : '';
-  if (marcaAgente) motivo = marcaAgente + (motivo || 'Decisão registrada pelo agente');
-  const session = window.currentUserSession || (window.NexusAuth ? NexusAuth.getSession() : null) || {};
-  const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-
-  let funcId = isUUID(session.id) ? session.id : null;
-  if (!funcId) {
-    const list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
-    const match = list.find(f => f.codigo_individual === session.codigo_individual || f.matricula === session.matricula);
-    if (match && isUUID(match.id)) funcId = match.id;
-  }
-
-  const validDecisoes = [
-    'APROVOU_CARGA', 'RECUSOU_CARGA', 'SOLICITOU_MANUTENCAO_NAVIO', 
-    'SOLICITOU_MANUTENCAO_CONTAINER', 'LIBEROU_NAVIO', 'CANCELOU_ENTREGA', 
-    'APROVOU_MANUTENCAO', 'RECUSOU_MANUTENCAO', 'DESIGNOU_SUBSTITUTO'
-  ];
-  let decisaoEnum = 'APROVOU_CARGA';
-  const decUpper = String(decisao || '').toUpperCase();
-  if (validDecisoes.includes(decUpper)) {
-    decisaoEnum = decUpper;
-  } else if (decUpper.includes('RECUS') && decUpper.includes('CARGA')) {
-    decisaoEnum = 'RECUSOU_CARGA';
-  } else if (decUpper.includes('CANCEL')) {
-    decisaoEnum = 'CANCELOU_ENTREGA';
-  } else if (decUpper.includes('NAVIO') && decUpper.includes('LIBER')) {
-    decisaoEnum = 'LIBEROU_NAVIO';
-  } else if (decUpper.includes('MANUT') && decUpper.includes('APROV')) {
-    decisaoEnum = 'APROVOU_MANUTENCAO';
-  } else if (decUpper.includes('MANUT') && decUpper.includes('RECUS')) {
-    decisaoEnum = 'RECUSOU_MANUTENCAO';
-  } else if (decUpper.includes('SUBSTITUT')) {
-    decisaoEnum = 'DESIGNOU_SUBSTITUTO';
-  }
-
-  let entidadeTipo = 'CARGA';
-  let entidadeId = String(entidade || '').trim();
-  let detalhes = null;
-  if (referencia) {
-    const permitidos = TRAIL_TIPOS_COMPATIVEIS[decisaoEnum] || [];
-    if (!referencia.legado && !permitidos.includes(referencia.tipo)) {
-      return { ok: false, mensagem: `A decisão "${decisaoEnum}" não pode ser registrada para ${referencia.tipo}.` };
-    }
-    entidadeTipo = referencia.tipo;
-    entidadeId = String(referencia.codigo || '').trim();
-    if (!referencia.legado && !entidadeId) {
-      return { ok: false, mensagem: 'Selecione um registro válido antes de registrar a decisão.' };
-    }
-    detalhes = { referencia_id: referencia.id || null, rotulo: referencia.rotulo || null };
-  } else {
-    const entUpper = entidadeId.toUpperCase();
-    if (entUpper.startsWith('NAVIO') || entUpper.includes('NAVIO')) entidadeTipo = 'NAVIO';
-    else if (entUpper.startsWith('CONT') || entUpper.includes('CONTAINER')) entidadeTipo = 'CONTAINER';
-    else if (entUpper.startsWith('GND') || entUpper.includes('GUINDASTE')) entidadeTipo = 'GUINDASTE';
-    else if (entUpper.startsWith('MANUT') || entUpper.includes('OS-')) entidadeTipo = 'MANUTENCAO';
-  }
-
-  const validCargos = [
-    'ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 
-    'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS', 'SUPERVISOR_GERENTE_OPERACOES', 
-    'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 
-    'CONSELHO_ADMINISTRACAO'
-  ];
-  let cargoEnum = 'SUPERVISOR_GERENTE_OPERACOES';
-  if (validCargos.includes(session.cargo)) cargoEnum = session.cargo;
-
-  const nowIso = new Date().toISOString();
-  const estruturado = !!(referencia && !referencia.legado);
-  const msgFalhaBanco = 'Não foi possível gravar a decisão no banco de dados. Nada foi registrado; tente novamente.';
-  if (estruturado && !window.nexusSupabase) {
-    return { ok: false, mensagem: 'Sem conexão com o banco de dados. A decisão não foi registrada.' };
-  }
-  let insertedDbId = null;
-
-  if (window.nexusSupabase) {
-    try {
-      const payload = {
-        data_hora: nowIso,
-        cargo: cargoEnum,
-        codigo_individual: session.codigo_individual || session.codigo || 'SUP-2001',
-        tipo_decisao: decisaoEnum,
-        entidade_tipo: entidadeTipo,
-        entidade_id: entidadeId,
-        motivo: motivo || 'Decisão homologada conforme fluxo operacional'
-      };
-      if (detalhes) payload.detalhes = detalhes;
-      if (funcId) payload.funcionario_id = funcId;
-
-      let resposta = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
-      if (resposta.error && payload.funcionario_id) {
-        delete payload.funcionario_id;
-        resposta = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
-      }
-      if (!resposta.error && resposta.data) {
-        insertedDbId = resposta.data.id;
-      } else if (estruturado) {
-        console.warn('[NexusPort] Trail não gravado no Supabase:', resposta.error);
-        return { ok: false, mensagem: msgFalhaBanco };
-      }
-    } catch (err) {
-      console.warn('[NexusPort] Erro ao invocar trail Supabase:', err);
-      if (estruturado) return { ok: false, mensagem: msgFalhaBanco };
-    }
-  }
-
-  const trail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
-  const idReg = insertedDbId ? `TRL-${insertedDbId.substring(0, 8)}` : `TRL-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-  const newEntry = {
-    id: idReg,
-    dbId: insertedDbId,
-    data_hora: nowIso,
-    responsavel: `${session.nome || 'Operador'} (${session.cargo_nome || session.cargo || 'Supervisor'}) - ${session.codigo_individual || session.codigo || '--'}`,
-    decisao: decisaoEnum,
-    entidade: `${entidadeTipo} ${entidadeId}`,
-    motivo: motivo || 'Decisão homologada conforme fluxo operacional',
-    retificacao: null
-  };
-  trail.unshift(newEntry);
-  localStorage.setItem('nexus_trail_decisoes', JSON.stringify(trail));
-
-  if (window.registrarLogAlteracao) {
-    await window.registrarLogAlteracao(entidadeId, `Decisão Crítica: ${decisaoEnum}`, motivo);
-  }
-
-  window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'trail_decisoes' } }));
-  return { ok: true, id: idReg, dbId: insertedDbId };
-};
+// Gravadores e tipos de entidade compartilhados: js/auditoria.js.
 
 window.calcularEstimativaChegada = function(distanciaKm) {
   if (!distanciaKm || distanciaKm <= 0) return 'Atracado / Viagem Concluída';
@@ -391,6 +115,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (welcomeContext) welcomeContext.textContent = `Matrícula ${session.matricula} • Terminal STS-01 Santos`;
   if (welcomeCode) welcomeCode.textContent = session.codigo_individual || session.codigo || '--';
 
+  let indicadoresLeituraRevision = 0;
+  let cardsLeituraRevision = 0;
+  let auditoriaLeituraRevision = 0;
+
   const isDiretor = ['DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
   const isOperacionalSupervisor = ['INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES'].includes(session.cargo);
 
@@ -419,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Renderiza Planilha Consolidada de Desempenho Operacional por Categoria (A3 / Item 1.5)
   async function renderIndicadoresExecutivosTable() {
+    const revisao = ++indicadoresLeituraRevision;
     const execTableBody = document.getElementById('indicadoresExecutivosTableBody');
     if (!execTableBody) return;
 
@@ -447,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
       manutencoes = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
     }
 
+    if (revisao !== indicadoresLeituraRevision) return;
     const totalCargas = cargas.length;
     const totalConts = containers.length;
     const naviosNoPorto = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
@@ -510,11 +240,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function renderCardsOperacionais() {
+    const revisao = ++cardsLeituraRevision;
     let indic = null;
     if (window.NexusRepository && window.NexusRepository.buscarIndicadoresOperacionais) {
       indic = await window.NexusRepository.buscarIndicadoresOperacionais();
     }
 
+    if (revisao !== cardsLeituraRevision) return;
     registrarUltimaAtualizacao();
 
     if (!indic) return;
@@ -690,7 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!error && Array.isArray(data)) {
             data.forEach(f => {
               const chave = f[coluna];
-              if (chave && !mapa[chave]) mapa[chave] = { nome: f.nome, cargo: f.cargo };
+              if (chave && !mapa[chave]) mapa[chave] = { nome: f.nome, cargo: f.cargo, matricula: f.matricula, codigo_individual: f.codigo_individual };
             });
           }
         } catch (err) {
@@ -702,9 +434,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 2. Renderiza Log Geral de Alterações com Nome do Funcionário Real
   async function renderAuditLogTable() {
+    const revisao = ++auditoriaLeituraRevision;
     if (!auditTableBody) return;
     let logs = [];
     const localLogs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+    const contextoPrivacidade = [session, ...JSON.parse(localStorage.getItem('nexus_func_list') || '[]')];
 
     if (window.nexusSupabase) {
       try {
@@ -725,6 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
             buscarFuncionariosPorChaves('id', idsFunc),
             buscarFuncionariosPorChaves('codigo_individual', codigosFunc)
           ]);
+          contextoPrivacidade.push(...Object.values(mapaPorId), ...Object.values(mapaPorCodigo));
           const mappedDbLogs = dbLogs.map(l => {
             const cadastro = (l.funcionario_id && mapaPorId[l.funcionario_id])
               || (l.codigo_individual && mapaPorCodigo[l.codigo_individual])
@@ -765,15 +500,26 @@ document.addEventListener('DOMContentLoaded', () => {
       logs = localLogs;
     }
 
+    if (revisao !== auditoriaLeituraRevision) return;
     // Ordena logs do mais recente para o mais antigo
     logs.sort((a, b) => new Date(b.data_hora || 0) - new Date(a.data_hora || 0));
+
+    // Projeção privada ANTES da busca: identificadores ocultos também não são pesquisáveis.
+    const privacidade = window.NexusSecurity.privacidadeAuditoria(contextoPrivacidade);
+    logs = logs.map(l => ({
+      data_hora: l.data_hora,
+      nome_funcionario: privacidade.texto(l.nome_funcionario || l.nome || 'Não identificado'),
+      cargo: privacidade.texto(l.cargo || 'OPERACIONAL'),
+      entidade: privacidade.entidade(l.entidade || 'Sistema', l.entidade_tipo),
+      tipo_alteracao: privacidade.texto(l.tipo_alteracao || 'EDICAO')
+    }));
 
     // Backlog 3 (7b): busca local no log de auditoria + contador "X de Y"
     const buscaAuditVal = (document.getElementById('buscarAuditLogInput')?.value || '').trim().toLowerCase();
     const totalAuditRegistros = logs.length;
     const logsVisiveis = logs.filter(l => {
       if (!buscaAuditVal) return true;
-      const haystack = `${l.nome_funcionario || l.nome || ''} ${l.cargo || ''} ${l.codigo_usuario || l.codigo_individual || ''} ${l.entidade || ''} ${l.tipo_alteracao || ''}`.toLowerCase();
+      const haystack = `${l.nome_funcionario || l.nome || ''} ${l.cargo || ''} ${l.entidade || ''} ${l.tipo_alteracao || ''}`.toLowerCase();
       return haystack.includes(buscaAuditVal);
     });
 
@@ -785,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logsVisiveis.length === 0) {
       auditTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="p-4 text-center text-slate-600 italic">${totalAuditRegistros === 0 ? 'Nenhum log de alteração registrado no momento.' : 'Nenhum log corresponde à busca aplicada. Ajuste o termo para listar novamente.'}</td>
+          <td colspan="5" class="p-4 text-center text-slate-600 italic">${totalAuditRegistros === 0 ? 'Nenhum log de alteração registrado no momento.' : 'Nenhum log corresponde à busca aplicada. Ajuste o termo para listar novamente.'}</td>
         </tr>
       `;
       return;
@@ -794,9 +540,8 @@ document.addEventListener('DOMContentLoaded', () => {
     auditTableBody.innerHTML = logsVisiveis.map(l => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <td class="p-2.5 text-slate-600 whitespace-nowrap">${l.data_hora ? esc(new Date(l.data_hora).toLocaleString('pt-BR')) : 'N/A'}</td>
-        <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${esc(l.nome_funcionario || l.nome || (l.codigo_usuario && l.codigo_usuario !== '--' ? `Sem cadastro (${l.codigo_usuario})` : 'Não identificado'))}</td>
+        <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${esc(l.nome_funcionario)}</td>
         <td class="p-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">${esc(l.cargo || 'OPERACIONAL')}</td>
-        <td class="p-2.5 text-nexus-500 font-bold whitespace-nowrap">${esc(l.codigo_usuario || l.codigo_individual || '--')}</td>
         <td class="p-2.5 font-bold whitespace-nowrap">${esc(l.entidade || 'Sistema')}</td>
         <td class="p-2.5">
           <span class="px-2 py-0.5 rounded text-xs font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 whitespace-nowrap">${esc(l.tipo_alteracao || 'EDICAO')}</span>
@@ -846,13 +591,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Paginação de exibição: dois registros por vez, sem modificar o histórico/cache.
+  const TRAIL_TAMANHO_PAGINA = 2;
+  let trailLimiteVisivel = TRAIL_TAMANHO_PAGINA;
+  let trailDadosExibicao = [];
+  let trailLeituraRevision = 0;
+  const mostrarMaisTrailBtn = document.getElementById('mostrarMaisTrailBtn');
+  if (mostrarMaisTrailBtn) {
+    mostrarMaisTrailBtn.addEventListener('click', () => {
+      if (trailLimiteVisivel >= trailDadosExibicao.length) return;
+      trailLimiteVisivel += TRAIL_TAMANHO_PAGINA;
+      renderizarTrailVisivel();
+    });
+  }
+
   // 3. Renderiza Trail de Decisões Críticas Imutável Organizado a partir do Supabase (Item 1.4)
   async function renderTrailDecisoesTable() {
     const trailContainer = document.getElementById('trailDecisoesContainer');
     if (!trailContainer) return;
 
+    const revisao = ++trailLeituraRevision;
     let trail = [];
     const localTrail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
+    const contextoPrivacidade = [session, ...JSON.parse(localStorage.getItem('nexus_func_list') || '[]')];
 
     if (window.nexusSupabase) {
       try {
@@ -863,6 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!error && Array.isArray(dbTrail)) {
           const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+          contextoPrivacidade.push(...dbTrail.map(t => ({ codigo_individual: t.codigo_individual })));
           const mappedDbTrail = dbTrail.map(t => {
             let respNome = t.funcionarios ? t.funcionarios.nome : null;
             let respCargo = t.funcionarios && t.funcionarios.cargo ? t.funcionarios.cargo : t.cargo;
@@ -895,6 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const codigosPendentes = [...new Set(mappedDbTrail.filter(x => x._codigoPendente).map(x => x._codigoPendente))];
           if (codigosPendentes.length > 0) {
             const mapaDb = await buscarFuncionariosPorChaves('codigo_individual', codigosPendentes);
+            contextoPrivacidade.push(...Object.values(mapaDb));
             mappedDbTrail.forEach(x => {
               const info = mapaDb[x._codigoPendente];
               if (info) {
@@ -924,8 +687,29 @@ document.addEventListener('DOMContentLoaded', () => {
       trail = localTrail;
     }
 
-    // Ordenar por data mais recente
-    trail.sort((a, b) => new Date(b.data_hora || 0) - new Date(a.data_hora || 0));
+    if (revisao !== trailLeituraRevision) return;
+    // Ordenar por data mais recente, sem recortar os dados usados por outras telas/WebMCP.
+    const privacidade = window.NexusSecurity.privacidadeAuditoria(contextoPrivacidade);
+    trailDadosExibicao = trail.map(t => Object.assign({}, t, {
+      responsavel: privacidade.responsavel(t.responsavel),
+      entidade: privacidade.entidade(t.entidade, t.entidade_tipo),
+      motivo: privacidade.texto(t.motivo),
+      retificacao: privacidade.texto(t.retificacao)
+    })).sort((a, b) => new Date(b.data_hora || 0) - new Date(a.data_hora || 0));
+    renderizarTrailVisivel();
+  }
+
+  function renderizarTrailVisivel() {
+    const trailContainer = document.getElementById('trailDecisoesContainer');
+    if (!trailContainer) return;
+    const trail = trailDadosExibicao.slice(0, trailLimiteVisivel);
+    const contador = document.getElementById('trailDecisoesContador');
+    if (contador) contador.textContent = `Exibindo ${trail.length} de ${trailDadosExibicao.length} registros`;
+    if (mostrarMaisTrailBtn) {
+      const temMais = trail.length < trailDadosExibicao.length;
+      mostrarMaisTrailBtn.classList.toggle('hidden', !temMais);
+      mostrarMaisTrailBtn.disabled = !temMais;
+    }
 
     if (trail.length === 0) {
       trailContainer.innerHTML = `
@@ -987,7 +771,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const nowIso = new Date().toISOString();
-    const retificacaoFormatada = `[Retificação em ${new Date().toLocaleString('pt-BR')} por ${session.codigo_individual || 'Operador'}]: ${textoRetificacao}`;
+    const retificacaoFormatada = `[Retificação em ${new Date().toLocaleString('pt-BR')} por ${session.nome || 'Operador'} (${session.cargo_nome || session.cargo || 'Operacional'})]: ${textoRetificacao}`;
 
     if (window.nexusSupabase && dbId && isUUID(dbId)) {
       try {
@@ -1026,6 +810,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const closeRegistrarTrailModalBtn = document.getElementById('closeRegistrarTrailModalBtn');
   const cancelRegistrarTrailModalBtn = document.getElementById('cancelRegistrarTrailModalBtn');
   const registrarTrailForm = document.getElementById('registrarTrailForm');
+  const podeRegistrarTrailManual = !['ESTIVADOR', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS'].includes(NexusAuth.getSession()?.cargo);
+  if (!podeRegistrarTrailManual && toggleRegistrarTrailBtn) toggleRegistrarTrailBtn.classList.add('hidden');
 
   // Entidade da decisão: tipo e registro vêm de listas (cadastros do Supabase), sem digitação livre.
   const trailDecisaoSel = document.getElementById('trailTipoDecisao');
@@ -1037,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
     MANUTENCAO: 'Ordem de manutenção', FUNCIONARIO: 'Funcionário'
   };
   let trailRegistrosAtuais = [];
+  let trailConsultaRevision = 0;
 
   function preencherOpcoesTrail(select, opcoes, placeholder) {
     select.textContent = '';
@@ -1088,7 +875,7 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     FUNCIONARIO: {
       tabela: 'funcionarios', colunas: 'id, nome, matricula', filtro: (q) => q.eq('ativo', true),
-      mapear: (f) => ({ id: f.id, codigo: f.matricula, rotulo: `${f.nome} · ${f.matricula}` })
+      mapear: (f) => ({ id: f.id, codigo: f.matricula, rotulo: `${window.NexusSecurity.privacidadeAuditoria([f]).texto(f.nome)} · Funcionário #${f.id}` })
     }
   };
 
@@ -1106,6 +893,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function carregarRegistrosTrail() {
+    const revisao = ++trailConsultaRevision;
     trailRegistrosAtuais = [];
     const tipo = trailTipoSel ? trailTipoSel.value : '';
     mostrarAvisoTrail('');
@@ -1123,8 +911,11 @@ document.addEventListener('DOMContentLoaded', () => {
     preencherOpcoesTrail(trailRegistroSel, [], 'Carregando registros...');
     trailRegistroSel.disabled = true;
     try {
-      trailRegistrosAtuais = await buscarRegistrosTrail(tipo);
+      const registros = await buscarRegistrosTrail(tipo);
+      if (revisao !== trailConsultaRevision || trailTipoSel.value !== tipo) return;
+      trailRegistrosAtuais = registros;
     } catch (err) {
+      if (revisao !== trailConsultaRevision) return;
       console.warn('[NexusPort] Falha ao carregar registros para a trilha:', err);
       preencherOpcoesTrail(trailRegistroSel, [], 'Erro ao carregar');
       mostrarAvisoTrail('Não foi possível carregar os registros do banco. Tente novamente.');
@@ -1154,6 +945,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (toggleRegistrarTrailBtn && registrarTrailModal) {
     toggleRegistrarTrailBtn.addEventListener('click', () => {
+      if (!podeRegistrarTrailManual) return;
       registrarTrailModal.classList.remove('hidden');
       atualizarTiposTrail();
     });
@@ -1167,6 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (registrarTrailForm) {
     registrarTrailForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!podeRegistrarTrailManual) return;
       const tipoDecisao = trailDecisaoSel.value;
       const tipoEntidade = trailTipoSel.value;
       const registroId = trailRegistroSel.value;

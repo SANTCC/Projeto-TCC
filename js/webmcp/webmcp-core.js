@@ -478,7 +478,8 @@
     const propriedades = esquema.properties || {};
     return Object.keys(args).map((chave) => ({
       rotulo: texto((propriedades[chave] && propriedades[chave].rotulo) || chave, 60),
-      valor: ocultar(texto(formatarValor(args[chave]), 200))
+      valor: propriedades[chave] && propriedades[chave].writeOnly === true
+        ? '[protegido]' : ocultar(texto(formatarValor(args[chave]), 200))
     }));
   }
 

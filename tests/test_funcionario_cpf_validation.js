@@ -208,7 +208,7 @@ const titulos = (estado, titulo) => estado.feedbacks.filter((f) => f.titulo === 
       titulos(paginaB.estado, 'Funcionário Cadastrado').length === 1 &&
       titulos(paginaB.estado, 'CPF Inválido').length === 0 &&
       payload.cpf === CPF_VALIDO_DIGITOS &&
-      tabela.includes(CPF_VALIDO) && tabela.includes(MATRICULA),
+      tabela.includes(CPF_VALIDO) && !tabela.includes(MATRICULA),
       `sucessos=${titulos(paginaB.estado, 'Funcionário Cadastrado').length}, cpf="${payload.cpf}", tabela="${tabela.slice(0, 120)}"`);
 
     // ------------------------------------------------------------------

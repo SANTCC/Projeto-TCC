@@ -82,7 +82,7 @@ const PAGINAS = [
       'Vínculo com contêiner, navio e estivador responsável; QR Code gerado em canvas e etiqueta 10×10 cm para impressão.',
       'Busca com filtros combinados e contadores por status.'
     ],
-    cargos: TODOS_OPERACIONAIS.filter((c) => c !== 'TECNICO_PORTOS')
+    cargos: TODOS_OPERACIONAIS.filter((c) => !['TECNICO_PORTOS', 'PLANEJADOR_PATIO_NAVIOS'].includes(c))
   },
   {
     chave: 'inspecao',
@@ -110,7 +110,7 @@ const PAGINAS = [
       'Fallback de digitação manual para ambientes sem câmera.',
       'Cada leitura é registrada em leituras_qr_code para rastreabilidade.'
     ],
-    cargos: TODOS_OPERACIONAIS
+    cargos: TODOS_OPERACIONAIS.filter(c => !['ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS'].includes(c))
   },
   {
     chave: 'embarcacoes',
@@ -124,7 +124,7 @@ const PAGINAS = [
       'Localização (dentro do porto, fora do porto, no porto de destino) atualiza o status das cargas vinculadas por gatilho no banco.',
       'Distância da rota e tempo de trânsito alimentam o cálculo de ETA.'
     ],
-    cargos: ['PLANEJADOR_PATIO_NAVIOS', 'INSPETOR', ...GESTAO]
+    cargos: ['ESTIVADOR', 'PLANEJADOR_PATIO_NAVIOS', 'INSPETOR', ...GESTAO]
   },
   {
     chave: 'manutencao',
@@ -138,7 +138,7 @@ const PAGINAS = [
       'Conclusão de OS devolve o equipamento ao estado OPERANTE e grava o histórico.',
       '🚨 Botão de pânico global disponível em todas as telas autenticadas.'
     ],
-    cargos: ['INSPETOR', ...GESTAO]
+    cargos: ['ESTIVADOR', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'INSPETOR', ...GESTAO]
   },
   {
     chave: 'delegacao',
@@ -180,7 +180,7 @@ const PAGINAS = [
       'Relatório PDF A4 gerado no servidor (Edge Function relatorio-pdf) com cache por hash do conteúdo.',
       'Exportação de histórico com registro de auditoria da operação.'
     ],
-    cargos: TODOS_OPERACIONAIS
+    cargos: TODOS_OPERACIONAIS.filter(c => !['ESTIVADOR', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS'].includes(c))
   },
   {
     chave: 'teste-vibracao',

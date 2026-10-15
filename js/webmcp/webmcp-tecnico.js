@@ -5,7 +5,7 @@
  * NUNCA saem para o agente:
  *   - a reemissão de código (RN 15) acontece na tela; o novo código só aparece para o operador;
  *   - cadastros com documento são apenas PREENCHIDOS (sem documento) e enviados pelo operador;
- *   - leituras mostram nome, cargo, matrícula, status e motivo, sem documentos.
+ *   - leituras mostram nome, cargo, status e motivo, sem matrícula, sem documentos.
  *
  * Carregamento: depois de webmcp-core, webmcp-ui, webmcp-dados e webmcp-global.
  */
@@ -21,7 +21,7 @@
   const CARGOS_PAGINA = ['TECNICO_PORTOS'].concat(G.direcao);
   const STATUS_VISITA = ['AGUARDANDO_AUTORIZACAO', 'EM_VISITA', 'CONCLUIDO'];
   const ESQUEMA_MATRICULA = {
-    type: 'string', minLength: 2, maxLength: 20, pattern: '^(MAT-)?[A-Za-z0-9]{2,20}$',
+    type: 'string', minLength: 2, maxLength: 20, writeOnly: true, pattern: '^(MAT-)?[A-Za-z0-9]{2,20}$',
     rotulo: 'Matrícula', description: 'Matrícula do funcionário, por exemplo MAT-2001 ou 2001.'
   };
 
@@ -49,13 +49,13 @@
   const pesquisar = {
     nome: 'pesquisar_funcionario',
     titulo: 'Pesquisar funcionário',
-    descricao: 'Mostra nome, cargo, matrícula e situação de um funcionário. Não mostra código de acesso nem documentos.',
+    descricao: 'Mostra nome, cargo e situação de um funcionário. Não mostra código de acesso nem documentos.',
     anotacoes: { readOnlyHint: true, untrustedContentHint: true },
     cargos: CARGOS_PAGINA,
     esquema: { type: 'object', properties: { matricula: ESQUEMA_MATRICULA }, required: ['matricula'], additionalProperties: false },
     executar: (args) => {
       const f = funcionarioPorMatricula(args.matricula);
-      if (!f) return { ok: false, codigo: 'NAO_ENCONTRADO', mensagem: `Funcionário ${normalizarMat(args.matricula)} não localizado.` };
+      if (!f) return { ok: false, codigo: 'NAO_ENCONTRADO', mensagem: 'Funcionário não localizado.' };
       return { mensagem: `Funcionário ${f.nome}.`, dados: D.resumirFuncionario(f) };
     }
   };
@@ -99,13 +99,13 @@
     precondicao: (args) => {
       if (args.matricula === undefined) return null;
       const f = funcionarioPorMatricula(args.matricula);
-      if (!f || f.ativo === false) return { codigo: 'FUNCIONARIO_NAO_ENCONTRADO', mensagem: `Funcionário ${normalizarMat(args.matricula)} não localizado ou inativo.` };
+      if (!f || f.ativo === false) return { codigo: 'FUNCIONARIO_NAO_ENCONTRADO', mensagem: 'Funcionário não localizado ou inativo.' };
       return null;
     },
     resumo: (args) => {
       const f = funcionarioPorMatricula(args.matricula);
       return [
-        `Invalidar o código de acesso atual de ${f ? f.nome : normalizarMat(args.matricula)} e gerar um novo.`,
+        `Invalidar o código de acesso atual de ${f ? f.nome : 'selecionado'} e gerar um novo.`,
         'O novo código aparece somente na tela do Técnico em Portos; o agente não o recebe.',
         'O código antigo deixa de funcionar imediatamente.'
       ];
@@ -120,7 +120,7 @@
       if (depois[f.matricula] && depois[f.matricula].data_geracao !== marcaAntes) {
         return {
           mensagem: `Código de ${f.nome} reemitido. O novo código foi exibido na tela do Técnico em Portos e não é informado ao agente.`,
-          dados: { matricula: f.matricula, nome: f.nome }
+          dados: { nome: f.nome }
         };
       }
       return { ok: false, codigo: 'NAO_CONCLUIDA', mensagem: 'O código não foi reemitido. Veja a mensagem exibida ao operador.' };
@@ -136,18 +136,18 @@
     esquema: { type: 'object', properties: { matricula: ESQUEMA_MATRICULA }, required: ['matricula'], additionalProperties: false },
     precondicao: (args) => {
       if (args.matricula === undefined) return null;
-      return funcionarioPorMatricula(args.matricula) ? null : { codigo: 'FUNCIONARIO_NAO_ENCONTRADO', mensagem: `Funcionário ${normalizarMat(args.matricula)} não localizado.` };
+      return funcionarioPorMatricula(args.matricula) ? null : { codigo: 'FUNCIONARIO_NAO_ENCONTRADO', mensagem: 'Funcionário não localizado.' };
     },
     resumo: (args) => {
       const f = funcionarioPorMatricula(args.matricula);
-      return [`DESATIVAR o funcionário ${f ? f.nome : ''} (${f ? f.matricula : normalizarMat(args.matricula)}).`, 'O acesso dele ao sistema é removido.'];
+      return [`DESATIVAR o funcionário ${f ? f.nome : 'selecionado'}.`, 'O acesso dele ao sistema é removido.'];
     },
     executar: async (args) => {
       const f = funcionarioPorMatricula(args.matricula);
       if (!f) return { ok: false, codigo: 'FUNCIONARIO_NAO_ENCONTRADO', mensagem: 'Funcionário não localizado.' };
       await window.excluirFuncionarioReal(f.matricula, { confirmado: true });
       const ainda = D.funcionarios().some((x) => x.matricula === f.matricula);
-      if (!ainda) return { mensagem: `Funcionário ${f.matricula} desativado.`, dados: { matricula: f.matricula } };
+      if (!ainda) return { mensagem: `Funcionário ${f.nome} desativado.`, dados: { nome: f.nome } };
       return { ok: false, codigo: 'NAO_CONCLUIDA', mensagem: 'O funcionário não foi desativado. Veja a mensagem exibida ao operador.' };
     }
   };

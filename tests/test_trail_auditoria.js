@@ -68,7 +68,7 @@ async function abrirPainel(tabelas, opcoes) {
     storage,
     scripts: BASE.concat([
       (w) => { if (o.semSupabase !== true) w.nexusSupabase = bancoFalso(tabelas, o); },
-      'js/pages/dashboard.js'
+      'js/auditoria.js', 'js/pages/dashboard.js'
     ])
   });
   await prontoDom(janela.w);
@@ -111,8 +111,8 @@ async function main() {
     dec.dispatchEvent(new w.Event('change'));
     await aguardar(60);
     const opsSub = opcoesDoSelect(reg).filter((o) => o.value);
-    check('DESIGNOU_SUBSTITUTO lista funcionários ativos (matrícula)',
-      tipo.value === 'FUNCIONARIO' && opsSub.length === 1 && /MAT-2001/.test(opsSub[0].label), JSON.stringify(opsSub));
+    check('DESIGNOU_SUBSTITUTO lista funcionários ativos por nome e referência, sem matrícula',
+      tipo.value === 'FUNCIONARIO' && opsSub.length === 1 && opsSub[0].value === 'f-1' && /Ana Titular/.test(opsSub[0].label) && !/MAT-2001/.test(opsSub[0].label), JSON.stringify(opsSub));
 
     log('\n[3] Sem cadastros ou sem conexão: aviso e nada a registrar');
     tabelas.funcionarios.length = 0;

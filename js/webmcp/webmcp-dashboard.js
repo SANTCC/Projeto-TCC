@@ -98,13 +98,14 @@
       type: 'object',
       properties: {
         decisao: { type: 'string', maxLength: 60, rotulo: 'Decisão', description: 'Trecho do tipo de decisão, por exemplo LIBEROU ou CANCELOU.' },
-        entidade: { type: 'string', maxLength: 80, rotulo: 'Entidade', description: 'Trecho da entidade, por exemplo CARGA ou NAVIO.' },
+        entidade: { type: 'string', maxLength: 80, rotulo: 'Entidade', description: 'Trecho do tipo ou código da entidade: CARGA, FUNCIONARIO, NAVIO, CONTAINER ou GUINDASTE.' },
         limite: { type: 'integer', minimum: 1, maximum: 20, rotulo: 'Limite', description: 'Quantidade máxima de itens (padrão 10).' }
       },
       additionalProperties: false
     },
     executar: (args) => {
-      let lista = D.trilha().map((t) => D.resumirTrilha(t));
+      const privacidade = D.privacidadeAuditoria();
+      let lista = D.trilha().map((t) => D.resumirTrilha(t, privacidade));
       if (args.decisao) lista = lista.filter((t) => D.contem(t.decisao, args.decisao));
       if (args.entidade) lista = lista.filter((t) => D.contem(t.entidade, args.entidade));
       return { mensagem: `${lista.length} registro(s) na trilha.`, dados: { total: lista.length, itens: lista.slice(0, args.limite || 10) } };
@@ -120,17 +121,18 @@
     esquema: {
       type: 'object',
       properties: {
-        entidade: { type: 'string', maxLength: 80, rotulo: 'Entidade', description: 'Trecho da entidade alterada.' },
+        entidade: { type: 'string', maxLength: 80, rotulo: 'Entidade', description: 'Trecho do tipo ou código da entidade alterada: CARGA, FUNCIONARIO, NAVIO, CONTAINER ou GUINDASTE.' },
         limite: { type: 'integer', minimum: 1, maximum: 20, rotulo: 'Limite', description: 'Quantidade máxima de itens (padrão 10).' }
       },
       additionalProperties: false
     },
     executar: (args) => {
+      const privacidade = D.privacidadeAuditoria();
       let lista = D.lerLista('nexus_audit_logs').map((l) => ({
         data_hora: D.dataHora(l.data_hora) || null,
-        cargo: l.cargo || null,
-        entidade: l.entidade || null,
-        tipo: l.tipo_alteracao || null
+        cargo: privacidade.texto(l.cargo) || null,
+        entidade: privacidade.entidade(l.entidade, l.entidade_tipo) || null,
+        tipo: privacidade.texto(l.tipo_alteracao) || null
       }));
       if (args.entidade) lista = lista.filter((l) => D.contem(l.entidade, args.entidade));
       return { mensagem: `${lista.length} registro(s) de auditoria.`, dados: { total: lista.length, itens: lista.slice(0, args.limite || 10) } };

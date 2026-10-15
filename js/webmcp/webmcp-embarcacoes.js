@@ -167,7 +167,7 @@
     titulo: 'Listar guindastes',
     descricao: 'Lista os guindastes e o estado de cada um (OPERANTE ou EM_MANUTENÇÃO).',
     anotacoes: { readOnlyHint: true },
-    cargos: CARGOS_PAGINA,
+    cargos: CARGOS_PAGINA.filter(c => c !== 'PLANEJADOR_PATIO_NAVIOS'),
     esquema: { type: 'object', properties: {}, additionalProperties: false },
     executar: () => {
       const itens = D.guindastesEfetivos().map((g) => D.resumirGuindaste(g));
@@ -180,7 +180,7 @@
     titulo: 'Tarefas dos guindastes',
     descricao: 'Lista as tarefas de movimentação criadas para os guindastes (uma por carga movimentada).',
     anotacoes: { readOnlyHint: true, untrustedContentHint: true },
-    cargos: CARGOS_PAGINA,
+    cargos: CARGOS_PAGINA.filter(c => c !== 'PLANEJADOR_PATIO_NAVIOS'),
     esquema: {
       type: 'object',
       properties: {
@@ -341,7 +341,7 @@
       type: 'object',
       properties: {
         identificacao: ESQUEMA_CONTAINER,
-        tipo: { type: 'string', minLength: 2, maxLength: 80, rotulo: 'Tipo de carga', description: 'Material ou tipo de carga do contêiner.' },
+        tipo: { type: 'string', minLength: 2, maxLength: 80, rotulo: 'Tipo de carga', description: 'Nome exato de um tipo cadastrado, igual à lista de agendamento de cargas.' },
         data_fabricacao: { type: 'string', format: 'date', rotulo: 'Fabricação', description: 'Data de fabricação (AAAA-MM-DD).' },
         data_ultima_manutencao: { type: 'string', format: 'date', rotulo: 'Última manutenção', description: 'Data da última manutenção (AAAA-MM-DD), se houver.' },
         referencia_tempo: { type: 'string', enum: ['DATA_FABRICACAO', 'DATA_ULTIMA_MANUTENCAO'], rotulo: 'Referência', description: 'Data usada para calcular a manutenção preventiva.' }
@@ -351,6 +351,7 @@
     },
     precondicao: (args) => {
       if (args.identificacao !== undefined) { const v = NexusCodigos.validarConteiner(args.identificacao); if (!v.ok) return { codigo: 'FORMATO_INVALIDO', mensagem: v.erro }; }
+      if (args.tipo !== undefined && window.getNexusTipoCarga?.(args.tipo)?.nome !== args.tipo) return { codigo: 'TIPO_INVALIDO', mensagem: 'Selecione um tipo de carga cadastrado, como no agendamento de cargas.' };
       if (args.identificacao !== undefined && D.containers().some((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(NexusCodigos.formatarConteiner(args.identificacao)))) {
         return { codigo: 'CONTAINER_DUPLICADO', mensagem: `O contêiner ${NexusCodigos.formatarConteiner(args.identificacao)} já está cadastrado.` };
       }
@@ -538,7 +539,7 @@
   const vincularBerco = {
     nome: 'vincular_navio_berco',
     titulo: 'Vincular navio a berço',
-    descricao: 'Vincula um navio a um berço LIVRE. Se o navio já estava em outro berço, ele é liberado. Exige confirmação.',
+    descricao: 'Vincula um navio já no Porto de Santos a um berço LIVRE, sem alterar sua localização. Se o navio já estava em outro berço, ele é liberado. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: CARGOS_PAGINA,
     permissao: 'ATUALIZAR_DADOS_NAVIO_CONTAINER',
@@ -553,7 +554,9 @@
     },
     precondicao: async (args) => {
       if (args.imo !== undefined) {
-        if (!(await navioPorImo(args.imo))) return { codigo: 'NAVIO_NAO_ENCONTRADO', mensagem: `Navio com IMO ${imoNormalizado(args.imo)} não encontrado.` };
+        const navio = await navioPorImo(args.imo);
+        if (!navio) return { codigo: 'NAVIO_NAO_ENCONTRADO', mensagem: `Navio com IMO ${imoNormalizado(args.imo)} não encontrado.` };
+        if (navio.localizacao !== 'DENTRO_DO_PORTO') return { codigo: 'ESTADO_INVALIDO', mensagem: 'O navio precisa estar no Porto de Santos antes de ser vinculado a um berço.' };
       }
       if (args.berco !== undefined) {
         const berco = D.bercos().find((b) => b.nome === args.berco);

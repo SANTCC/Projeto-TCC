@@ -108,7 +108,7 @@ function testarFrontEndEstatico() {
   console.log('\n2. Validando a resiliência do front-end...');
   const cliente = read('js/supabase-client.js');
   const panic = read('js/panic-realtime.js');
-  const dashboard = read('js/pages/dashboard.js');
+  const dashboard = read('js/auditoria.js');
   const manutencao = read('js/pages/manutencao.js');
 
   check('supabase-client.js sabe classificar o erro de enum (isEnumDesconhecidoError)',
@@ -133,10 +133,10 @@ function testarFrontEndEstatico() {
   check('panic-realtime.js verifica o valor do enum no diagnóstico (verificarTabelas/diagnose)',
     panic.includes('verificarEnumAuditoria') && panic.includes('auditoria_enum'));
 
-  check('dashboard.js registra auditoria de emergência com entidade_tipo EMERGENCIA',
-    /entUpper\.includes\('EMERGENCIA'\)\)\s*entidadeTipo = 'EMERGENCIA'/i.test(dashboard));
+  check('auditoria.js registra auditoria de emergência com entidade_tipo EMERGENCIA',
+    /entUpper\.includes\('EMERGENCIA'\)\)\s*tipo = 'EMERGENCIA'/i.test(dashboard));
 
-  check('dashboard.js trata o erro de insert (antes era descartado)',
+  check('auditoria.js trata o erro de insert (antes era descartado)',
     dashboard.includes('registrarEnumDesconhecido(error)'));
 
   check('manutencao.js chama registrarLogAlteracao na ordem correta (entidade, tipo)',

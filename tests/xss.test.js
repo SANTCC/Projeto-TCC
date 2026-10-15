@@ -230,7 +230,8 @@ async function scenarioModalVinculacao(collected) {
   const label = 'cargas.html (modal de vinculação)';
   const carga = {
     id: 'CRG-2026-500',
-    tipo: 'Carga Geral',
+    // Tipos iguais para alcançar a renderização do modal após o filtro de compatibilidade.
+    tipo: PAYLOADS.svgEvent,
     natureza: 'Geral',
     peso: '10 t',
     volume: '20 m³',
@@ -357,7 +358,7 @@ async function scenarioDashboard(collected) {
     retificacao: PAYLOADS.tagBreak
   };
   const dom = await loadApp('dashboard.html', {
-    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/pages/dashboard.js'],
+    scripts: ['js/vision-layer.js', 'js/layout.js', 'js/auditoria.js', 'js/pages/dashboard.js'],
     seed: {
       nexus_audit_logs: [log],
       nexus_trail_decisoes: [trail],

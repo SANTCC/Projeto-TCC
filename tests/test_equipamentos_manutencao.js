@@ -55,7 +55,8 @@ function cargaPagina() {
   return {
     id: CARGA_ID, tipo: 'Carga Geral', natureza: 'Carga Geral', peso: '10 t', volume: '20 m³',
     valor: 'R$ 100,00', portoDescarga: 'Pátio STS-01 (Setor B)', destino: 'Porto de Santos',
-    status: 'AGENDAMENTO', container: '', navio: '', navioId: null, qrCode: 'QR-CRG-TESTE-1',
+    // A movimentação exige carga recebida (backlog, tarefa 7).
+    status: 'RECEBIMENTO_INSPECAO', container: '', navio: '', navioId: null, qrCode: 'QR-CRG-TESTE-1',
     rawDbId: '11111111-1111-4111-8111-111111111111'
   };
 }

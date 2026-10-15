@@ -18,8 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const prodTableBody = document.getElementById('produtividadeTableBody');
 
   let cargas = [];
-  let funcionariosList = [];
-  let logsList = [];
+  let produtividadeLeituraRevision = 0;
+  let cargasRelatorioRevision = 0;
 
   // Backlog 3 (7g): período de referência selecionado — os atalhos do topo
   // (Hoje / 7 dias / 30 dias / Este mês) e o select compartilham este estado e
@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function popularCargas() {
+    const revisao = ++cargasRelatorioRevision;
     if (!selectCarga) return;
     let cargasRaw = [];
     if (window.nexusSupabase) {
@@ -62,6 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
       try { cargasRaw = await window.NexusRepository.getCargas(); } catch (e) {}
     }
 
+    if (revisao !== cargasRelatorioRevision) return;
+    const selecaoAnterior = selectCarga.value;
     cargas = cargasRaw.map(c => ({
       id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : (c.codigo || `CRG-${c.id}`),
       tipo: c.natureza || c.tipo || 'Não informado',
@@ -90,6 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cargasFiltradas.forEach(c => {
       selectCarga.innerHTML += `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.tipo)} (${esc(c.status)})</option>`;
     });
+    if (cargasFiltradas.some(c => c.id === selecaoAnterior)) selectCarga.value = selecaoAnterior;
   }
 
   popularCargas();
@@ -272,6 +276,9 @@ document.addEventListener('DOMContentLoaded', () => {
   window.nexusRelatorioGerarPdf = gerarRelatorioPdfA4;
 
   async function renderProdutividadeTable() {
+    const revisao = ++produtividadeLeituraRevision;
+    let funcionariosList = [];
+    let logsList = [];
     if (!prodTableBody) return;
 
     // Backlog 3 (tempo real): leitura COMPLETA e paginada. O PostgREST corta cada resposta em
@@ -302,6 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
       funcionariosList = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
     }
 
+    if (revisao !== produtividadeLeituraRevision) return;
     const isDiretor = ['DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     const isInspetor = session.cargo === 'INSPETOR';
 

@@ -228,7 +228,6 @@
 
   function resumirFuncionario(f) {
     return {
-      matricula: f.matricula || null,
       nome: f.nome || null,
       cargo: f.cargo || null,
       ativo: f.ativo !== false
@@ -262,16 +261,21 @@
   }
 
   /** O campo "responsavel" grava "Nome (Cargo) - CÓDIGO": só nome e cargo saem para o agente. */
-  function resumirTrilha(t) {
-    const responsavel = String(t.responsavel || '').split(' - ')[0];
+  function privacidadeAuditoria() {
+    return window.NexusSecurity.privacidadeAuditoria([sessao() || {}, ...funcionarios()]);
+  }
+
+  function resumirTrilha(t, privacidade) {
+    const p = privacidade || privacidadeAuditoria();
+    const responsavel = p.responsavel(t.responsavel);
     return {
       id: t.id || null,
       decisao: t.decisao || null,
-      entidade: t.entidade || null,
+      entidade: p.entidade(t.entidade, t.entidade_tipo) || null,
       data_hora: dataHora(t.data_hora) || null,
       responsavel: responsavel || null,
-      motivo: t.motivo || null,
-      retificacao: t.retificacao ? String(t.retificacao).slice(0, 200) : null
+      motivo: p.texto(t.motivo) || null,
+      retificacao: t.retificacao ? p.texto(t.retificacao).slice(0, 200) : null
     };
   }
 
@@ -448,6 +452,7 @@
     resumirVisitante,
     trilha,
     resumirTrilha,
+    privacidadeAuditoria,
     indicadores,
     tiposCarga,
     tipoCarga

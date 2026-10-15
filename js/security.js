@@ -168,6 +168,33 @@
     return str.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
   }
 
+  /** Projeção de saída do Log/Trail. Não modifica registros nem substitui escapeHtml. */
+  function privacidadeAuditoria(funcionarios) {
+    const valores = [...new Set((funcionarios || []).flatMap(f =>
+      [f && f.matricula, f && f.codigo_individual, f && f.codigo]
+    ).filter(v => v !== null && v !== undefined && String(v).trim() && v !== '--')
+      .map(v => String(v).trim()))].sort((a, b) => b.length - a.length);
+    const escaparRegex = v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const conhecidos = valores.length ? new RegExp(
+      '(^|[^\\p{L}\\p{N}_-])(' + valores.map(escaparRegex).join('|') + ')(?=$|[^\\p{L}\\p{N}_-])', 'giu'
+    ) : null;
+    function texto(valor) {
+      let saida = valor === null || valor === undefined ? '' : String(valor);
+      if (conhecidos) saida = saida.replace(conhecidos, '$1[identificação protegida]');
+      return saida
+        .replace(/\bMAT\s*[-:]?\s*\d+\b/gi, '[matrícula protegida]')
+        .replace(/\bmatr[ií]cula\s*[:#=-]?\s*\d+\b/gi, '[matrícula protegida]')
+        .replace(/\b(?:NX|SUP|INS|EST|TEC|CONF|ARR|PLAN|FUNC|FUN)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b/gi, '[identificação protegida]');
+    }
+    return {
+      texto,
+      // Referências antigas usam a matrícula como entidade. O vínculo original fica no histórico.
+      entidade: (valor, tipo) => tipo === 'FUNCIONARIO' || /^FUNCION[AÁ]RIO(?:\s|$)/i.test(String(valor || ''))
+        ? 'FUNCIONARIO (identificação protegida)' : texto(valor),
+      responsavel: valor => texto(String(valor || '').replace(/(\))\s*-\s*.*$/, '$1'))
+    };
+  }
+
   const NexusSecurity = {
     escapeHtml: escapeHtml,
     escapeAttr: escapeHtml,
@@ -176,6 +203,7 @@
     safeUrl: safeUrl,
     safeId: safeId,
     setText: setText,
+    privacidadeAuditoria: privacidadeAuditoria,
     sanitizeText: sanitizeText
   };
 
