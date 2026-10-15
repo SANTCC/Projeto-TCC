@@ -85,7 +85,7 @@ class InspecoesAPI:
         if resultado == "RECUSADA":
             carga_update["motivo_recusa"] = observacoes or "Recusada no checklist de inspeção"
 
-        self.client.request("PATCH", f"cargas?id=eq.{db_carga_id}", body=carga_update, headers={"Prefer": "return=representation"})
+        self.client.request("PATCH", f"cargas?id=eq.{db_carga_id}", body=carga_update)
 
         # 5. Trail
         if funcionario_info:

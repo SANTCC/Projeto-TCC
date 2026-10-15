@@ -119,9 +119,9 @@ class TestNexusPortPythonSuite(unittest.TestCase):
         self.assertEqual(navio["nome"], "MV Python Express")
 
         # Vincular ao berço
-        self.app.embarcacoes.vincular_navio_berco("BERCO-15", {"nome": "MV Python Express", "imo": "IMO-9998887"})
+        self.app.embarcacoes.vincular_navio_berco("BERCO-99", {"nome": "MV Python Express", "imo": "IMO-9998887"})
         bercos = self.app.embarcacoes.get_bercos()
-        b_list = [b for b in bercos if b["nome"] == "BERCO-15" or b["id"] == "BERCO-15"]
+        b_list = [b for b in bercos if b["nome"] == "BERCO-99" or b["id"] == "BERCO-99"]
         self.assertTrue(len(b_list) > 0)
         b1 = b_list[0]
         self.assertEqual(b1["estado"], "OCUPADO")
@@ -132,7 +132,7 @@ class TestNexusPortPythonSuite(unittest.TestCase):
         navio_lib = self.app.embarcacoes.get_navio("IMO-9998887")
         self.assertEqual(navio_lib["localizacao"], "FORA_DO_PORTO")
 
-        b1_after = [b for b in self.app.embarcacoes.get_bercos() if b["nome"] == "BERCO-15" or b["id"] == "BERCO-15"][0]
+        b1_after = [b for b in self.app.embarcacoes.get_bercos() if b["nome"] == "BERCO-99" or b["id"] == "BERCO-99"][0]
         self.assertEqual(b1_after["estado"], "LIVRE")
 
     # 5. INSPEÇÕES & HISTÓRICO
