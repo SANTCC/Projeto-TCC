@@ -18,7 +18,7 @@
 (function (window, document) {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const PREFS_KEY = 'nexus_haptics_prefs';
   const MAX_PATTERN_LENGTH = 10;
   const MAX_DURATION_MS = 10000;
@@ -26,8 +26,8 @@
   const PATTERNS = {
     tap: [30],
     double: [60, 80, 60],
-    alert: [300, 120, 300, 120, 300],
-    sos: [300, 120, 300, 120, 300, 350, 700, 350, 700]
+    alert: [600, 120, 600, 120, 600],
+    sos: [600, 120, 600, 120, 600, 350, 900, 350, 900]
   };
 
   let prefs = loadPrefs();
@@ -35,19 +35,21 @@
   let armed = false;
   let lastReason = null;
   let audioCtx = null;
+  let lastSoundReason = null;
+  const activeAudioNodes = new Set();
 
   // ------------------------------------------------------------------
   // Preferências do usuário (persistidas por aparelho/navegador)
   // ------------------------------------------------------------------
   function loadPrefs() {
-    const base = { enabled: true, sound: null }; // som null = automático
+    const base = { enabled: true, sound: true }; // Emergência: som obrigatório, inclusive para preferências antigas.
     try {
       const raw = window.localStorage.getItem(PREFS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') {
           if (typeof parsed.enabled === 'boolean') base.enabled = parsed.enabled;
-          if (typeof parsed.sound === 'boolean') base.sound = parsed.sound;
+          // A preferência antiga sound:false não silencia emergências.
         }
       }
     } catch (e) { /* localStorage indisponível (modo privado/iframe) */ }
@@ -139,6 +141,9 @@
       visible: visible,
       userActivated: activated,
       soundEnabled: isSoundEnabled(),
+      soundRequired: true,
+      soundReady: Boolean(visible && activated && audioCtx && audioCtx.state === 'running'),
+      soundReason: soundReason(),
       canHaptic: enabled && secureContext && visible && activated && vibrationApi,
       reasons: reasons,
       lastReason: lastReason
@@ -171,8 +176,8 @@
         return 'Vibração desativada neste aparelho — reative no painel "Alerta no Aparelho".';
       case 'unsupported':
         return isIOS()
-          ? 'Este navegador no iPhone/iPad não expõe a Vibration API. A página não consegue acionar a vibração; ative o alerta sonoro.'
-          : 'Este navegador não expõe a Vibration API (por exemplo, Firefox 129+). Ative o alerta sonoro.';
+          ? 'Este navegador no iPhone/iPad não expõe a Vibration API. A página não consegue acionar a vibração; o alerta sonoro obrigatório será tentado quando liberado pelo navegador.'
+          : 'Este navegador não expõe a Vibration API (por exemplo, Firefox 129+). O alerta sonoro obrigatório será tentado quando liberado pelo navegador.';
       case 'insecure_context':
         return 'A Vibration API exige https:// ou localhost. Abra o sistema por uma conexão segura.';
       case 'no_activation':
@@ -209,13 +214,14 @@
     if (st.backend !== 'none') parts.push(`interação do usuário: ${st.userActivated ? 'sim' : 'não'}`);
     parts.push(`página visível: ${st.visible ? 'sim' : 'não'}`);
     parts.push(`vibração ${st.enabled ? 'ativada' : 'desativada'}`);
-    parts.push(`som ${st.soundEnabled ? 'ativado' : 'desativado'}`);
+    parts.push('som obrigatório');
+    parts.push(soundHint(st.soundReason));
 
     return `${parts.join(' · ')}\n→ ${hint(st.reasons[0] || st.lastReason)}`;
   }
 
   // ------------------------------------------------------------------
-  // Backend sonoro (WebAudio) — alternativa quando não há vibração
+  // Backend sonoro (WebAudio) — obrigatório, junto da vibração quando suportada
   // ------------------------------------------------------------------
   function ensureAudio() {
     if (audioCtx) return audioCtx;
@@ -229,34 +235,66 @@
     return audioCtx;
   }
 
-  function isSoundEnabled() {
-    if (typeof prefs.sound === 'boolean') return prefs.sound;
-    // Automático: desligado em celulares que expõem a Vibration API;
-    // ligado onde ela não existe e em desktop, como alternativa perceptível.
-    return !(hasVibrationApi() && isMobile());
+  // Mantém a API pública por compatibilidade, mas o som de emergência não é opcional.
+  function isSoundEnabled() { return true; }
+
+  function soundReason() {
+    if (document.hidden) return 'hidden';
+    if (!hasUserActivation()) return 'no_activation';
+    if (!(window.AudioContext || window.webkitAudioContext)) return 'unsupported';
+    if (lastSoundReason === 'error') return 'error';
+    if (audioCtx && audioCtx.state === 'running') return null;
+    return lastSoundReason || 'suspended';
+  }
+
+  function soundHint(reason) {
+    const mensagens = {
+      hidden: 'Áudio pausado: mantenha a página visível.',
+      no_activation: 'Toque na página para liberar o áudio.',
+      unsupported: 'WebAudio indisponível neste navegador.',
+      suspended: 'Áudio ainda não liberado pelo navegador; toque e teste novamente.',
+      blocked: 'O navegador bloqueou o áudio; toque e teste novamente.',
+      error: 'Falha ao preparar o áudio neste navegador.'
+    };
+    return mensagens[reason] || 'Áudio liberado no navegador; volume, modo silencioso e saída física dependem do aparelho.';
   }
 
   function resumeAudioFromUserGesture() {
-    if (!isSoundEnabled()) return;
+    if (document.hidden || !hasUserActivation()) return;
     const ctx = ensureAudio();
-    if (!ctx) return;
+    if (!ctx) { lastSoundReason = 'unsupported'; return; }
     try {
       if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
-        const resumePromise = ctx.resume();
-        if (resumePromise && typeof resumePromise.catch === 'function') resumePromise.catch(function () {});
+        const promise = ctx.resume();
+        if (promise && typeof promise.then === 'function') {
+          promise.then(function () {
+            lastSoundReason = ctx.state === 'running' ? null : 'suspended';
+          }, function () { lastSoundReason = 'blocked'; });
+        }
       }
-    } catch (e) { /* o navegador pode bloquear até uma interação real */ }
+    } catch (e) { lastSoundReason = 'blocked'; }
+  }
+
+  function playableAudio() {
+    if (document.hidden || !hasUserActivation()) return null;
+    resumeAudioFromUserGesture();
+    if (!audioCtx || audioCtx.state !== 'running') return null;
+    lastSoundReason = null;
+    return audioCtx;
+  }
+
+  function trackAudio(osc, gain) {
+    activeAudioNodes.add(osc);
+    osc.onended = function () {
+      activeAudioNodes.delete(osc);
+      try { osc.disconnect(); gain.disconnect(); } catch (e) { /* nó já desconectado */ }
+    };
   }
 
   function beep(count) {
-    if (!isSoundEnabled()) return false;
-    const ctx = ensureAudio();
+    const ctx = playableAudio();
     if (!ctx) return false;
     try {
-      if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
-        const resumePromise = ctx.resume();
-        if (resumePromise && typeof resumePromise.catch === 'function') resumePromise.catch(function () {});
-      }
       const total = Math.max(1, Math.min(3, Math.floor(count || 1)));
       const start = ctx.currentTime + 0.01;
       for (let i = 0; i < total; i++) {
@@ -270,11 +308,13 @@
         gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
         osc.connect(gain);
         gain.connect(ctx.destination);
+        trackAudio(osc, gain);
         osc.start(at);
         osc.stop(at + 0.2);
       }
       return true;
     } catch (e) {
+      lastSoundReason = 'error';
       return false;
     }
   }
@@ -344,12 +384,20 @@
   }
 
   /** Cancela uma vibração já iniciada, sem produzir chamadas antes da ativação. */
-  function stop() {
+  function stopVibration() {
     try {
       if (hasVibrationApi() && isSecureContext() && !document.hidden && hasUserActivation()) {
         window.navigator.vibrate(0);
       }
     } catch (e) { /* vibração indisponível neste navegador */ }
+  }
+
+  function stop() {
+    activeAudioNodes.forEach(function (osc) {
+      try { osc.stop(); } catch (e) { /* oscilador já encerrado */ }
+    });
+    activeAudioNodes.clear();
+    stopVibration();
   }
 
   /**
@@ -359,14 +407,9 @@
    * `ciclos`: quantas idas-e-voltas da sirene (alert=2, acionamento=4).
    */
   function siren(ciclos) {
-    if (!isSoundEnabled()) return false;
-    const ctx = ensureAudio();
+    const ctx = playableAudio();
     if (!ctx) return false;
     try {
-      if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
-        const resumePromise = ctx.resume();
-        if (resumePromise && typeof resumePromise.catch === 'function') resumePromise.catch(function () {});
-      }
       const total = Math.max(1, Math.min(6, Math.floor(ciclos || 2)));
       const TOM_GRAVE = 620;
       const TOM_AGUDO = 1240;
@@ -388,16 +431,18 @@
         gain.gain.exponentialRampToValueAtTime(0.0001, at + DURACAO_TOM);
         osc.connect(gain);
         gain.connect(ctx.destination);
+        trackAudio(osc, gain);
         osc.start(at);
         osc.stop(at + DURACAO_TOM + 0.02);
       }
       return true;
     } catch (e) {
+      lastSoundReason = 'error';
       return false;
     }
   }
 
-  /** Um ciclo de alerta do aparelho = vibração + sirene quando habilitada. */
+  /** Um ciclo de emergência tenta vibração e sirene obrigatória, respeitando o navegador. */
   function alert() {
     const fired = vibrate('alert');
     const sounded = siren(2);
@@ -453,15 +498,15 @@
   function setEnabled(value) {
     prefs.enabled = Boolean(value);
     savePrefs();
-    if (!prefs.enabled) stop();
+    if (!prefs.enabled) stopVibration();
     return prefs.enabled;
   }
 
-  function setSoundEnabled(value) {
-    prefs.sound = Boolean(value);
+  function setSoundEnabled() {
+    prefs.sound = true;
     savePrefs();
-    if (prefs.sound) unlock();
-    return prefs.sound;
+    unlock();
+    return true;
   }
 
   // ------------------------------------------------------------------
@@ -479,7 +524,7 @@
 
     function refresh(message) {
       if (toggle) toggle.checked = isEnabled();
-      if (soundToggle) soundToggle.checked = isSoundEnabled();
+      if (soundToggle) { soundToggle.checked = true; soundToggle.disabled = true; }
       if (statusEl) statusEl.textContent = describe();
       if (feedbackEl && message) feedbackEl.textContent = message;
     }
@@ -493,16 +538,14 @@
     if (soundToggle) {
       soundToggle.addEventListener('change', function () {
         const on = setSoundEnabled(soundToggle.checked);
-        refresh(on ? 'Alerta sonoro ativado neste aparelho.' : 'Alerta sonoro desativado neste aparelho.');
+        refresh('O som de emergência é obrigatório na aplicação.');
         if (on) beep(1);
       });
     }
     if (testBtn) {
       testBtn.addEventListener('click', function () {
         const result = test();
-        refresh(result.fired
-          ? 'Teste enviado: você deve ter sentido a vibração (e o som, se ativado).'
-          : `Teste concluído sem vibração — ${hint(result.reason)}`);
+        refresh(`${result.fired ? 'Vibração solicitada à API.' : hint(result.reason)} ${result.sounded ? 'Sinal sonoro programado; confirme se foi ouvido no aparelho.' : soundHint(result.status.soundReason)}`);
       });
     }
     if (refreshBtn) {
@@ -547,6 +590,7 @@
     isEnabled: isEnabled,
     setEnabled: setEnabled,
     isSoundEnabled: isSoundEnabled,
+    soundHint: soundHint,
     setSoundEnabled: setSoundEnabled,
     bindUI: bindUI,
     isIOS: isIOS,

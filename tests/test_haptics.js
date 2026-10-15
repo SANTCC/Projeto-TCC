@@ -380,8 +380,8 @@ async function testHaptics() {
     JSON.stringify(primeiroPadrao) === JSON.stringify(w13.NexusHaptics.PATTERNS.sos), JSON.stringify(vibracoes));
   check('Vibração disparada já na confirmação do operador (antes da rede)',
     PANIC_SRC.includes('primeActivationAlert') && /primeActivationAlert\(\);\s*\n\s*const motivo/.test(PANIC_SRC));
-  check('Pulsos com duração perceptível no Android (>= 300ms)',
-    /alert: \[300,/.test(HAPTICS_SRC) && /sos: \[300,/.test(HAPTICS_SRC));
+  check('Pulsos mais longos no Android (600ms)',
+    /alert: \[600,/.test(HAPTICS_SRC) && /sos: \[600,/.test(HAPTICS_SRC));
   check('Estado global ativo após o acionamento', w13.NexusPanic.isActive() === true);
   const rodape = w13.document.getElementById('nexusPanicFooter');
   check('Rodapé de emergência exibido em todas as páginas',

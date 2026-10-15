@@ -78,9 +78,10 @@
     'LIBERAR_NAVIO': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'LIBERAR_CARGA': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'CANCELAR_ENTREGA': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
-    'SOLICITAR_MANUTENCAO': ['SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
-    'APROVAR_MANUTENCAO': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    'SOLICITAR_MANUTENCAO': ['PLANEJADOR_PATIO_NAVIOS', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    'APROVAR_MANUTENCAO': ['ARRUMADOR_CONSERTADOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'DESIGNAR_SUBSTITUTO': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    'REVOGAR_DELEGACAO': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'CADASTRAR_ROTA': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'CADASTRAR_TIPO_CARGA': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
 
@@ -94,14 +95,44 @@
     'dashboard.html': ['ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'cargas.html': ['ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'inspecao.html': ['CONFERENTE_CARGA', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
-    'scanner.html': ['ESTIVADOR', 'CONFERENTE_CARGA', 'ARRUMADOR_CONSERTADOR', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
-    'embarcacoes.html': ['PLANEJADOR_PATIO_NAVIOS', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
-    'manutencao.html': ['ARRUMADOR_CONSERTADOR', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    'scanner.html': ['ESTIVADOR', 'CONFERENTE_CARGA', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    'embarcacoes.html': ['ESTIVADOR', 'PLANEJADOR_PATIO_NAVIOS', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
+    'manutencao.html': ['ESTIVADOR', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'delegacao.html': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'tecnico_portos.html': ['TECNICO_PORTOS', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'seguranca.html': ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     'relatorios.html': ['CONFERENTE_CARGA', 'SUPERVISOR_GERENTE_OPERACOES', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO']
   };
+
+  // A elevação operacional não deve apagar a condição de substituto.
+  function delegacaoDoSubstituto(session) {
+    if (!session) return null;
+    try {
+      const d = JSON.parse(localStorage.getItem('nexus_active_delegation') || 'null');
+      if (!d || d.ativo === false || d.data_revogacao) return null;
+      const agora = Date.now();
+      const inicio = d.inicio || d.data_inicio;
+      const fim = d.fim || d.data_fim_previsto || d.data_fim;
+      if ((inicio && !(agora >= Date.parse(inicio))) || (fim && !(agora <= Date.parse(fim)))) return null;
+      const subId = d.substitutoId || d.substituto_id;
+      const titularId = d.substituidoId || d.supervisor_titular_id || d.referenciaFuncionario?.id;
+      if (subId && session.id) return subId !== titularId && subId === session.id ? d : null;
+      const matricula = v => String(v || '').trim().toUpperCase().replace(/^MAT-/, '');
+      const subMat = matricula(d.substitutoMatricula);
+      const titularMat = matricula(d.substituidoMatricula);
+      // Registros antigos copiavam a matrícula do titular para o substituto.
+      // Essa cópia nunca pode transformar o próprio titular em substituto.
+      if (!subMat || subMat === titularMat) return null;
+      return subMat === matricula(session.matricula) ? d : null;
+    } catch (e) { return null; }
+  }
+
+  function perfilSubstituto(session) {
+    return !!session && (session.cargo === 'SUPERVISOR_SUBSTITUTO'
+      || session.supervisor_substituto === true || session.delegacao_ativa === true
+      || /\bsupervisor\s+substitut[oa]\b/i.test(String(session.cargo_nome || ''))
+      || !!delegacaoDoSubstituto(session));
+  }
 
   const NexusAuth = {
     /**
@@ -115,20 +146,11 @@
         const session = JSON.parse(raw);
         if (!session || !session.codigo_individual) return null;
 
-        // A8 & SPEC 14: Elevação temporária do cargo para Supervisor em caso de delegação ativa
-        const activeDelegRaw = localStorage.getItem('nexus_active_delegation');
-        if (activeDelegRaw) {
-          try {
-            const activeDeleg = JSON.parse(activeDelegRaw);
-            if (activeDeleg && activeDeleg.substitutoMatricula) {
-              const subMat = String(activeDeleg.substitutoMatricula).toUpperCase();
-              const userMat = String(session.matricula || '').toUpperCase();
-              if (subMat === userMat || subMat === `MAT-${userMat}`) {
-                session.cargo = 'SUPERVISOR_GERENTE_OPERACOES';
-                session.cargo_nome = 'Supervisor Substituto (Delegação Ativa)';
-              }
-            }
-          } catch (e) {}
+        // Preserva o perfil derivado, sem alterar o cookie/cargo original.
+        if (delegacaoDoSubstituto(session)) {
+          session.cargo = 'SUPERVISOR_GERENTE_OPERACOES';
+          session.cargo_nome = 'Supervisor Substituto (Delegação Ativa)';
+          session.supervisor_substituto = true;
         }
 
         return session;
@@ -160,6 +182,14 @@
       }
 
       const pageName = window.location.pathname.split('/').pop() || 'dashboard.html';
+      if (pageName === 'delegacao.html' && perfilSubstituto(session)) {
+        window.location.href = 'dashboard.html';
+        return null;
+      }
+      if (['ESTIVADOR', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS'].includes(session.cargo) && !this.canAccessPage(pageName)) {
+        window.location.href = 'dashboard.html';
+        return null;
+      }
       const effectiveAllowed = allowedRoles || PAGE_PERMISSIONS[pageName];
 
       // Se cargos específicos foram informados ou mapeados para a rota, valida se o cargo do usuário possui permissão
@@ -186,20 +216,32 @@
     canAccessPage: function (pageName) {
       const session = this.getSession();
       if (!session || !session.cargo) return false;
+      if (pageName === 'delegacao.html' && perfilSubstituto(session)) return false;
+      if (session.cargo === 'ESTIVADOR') {
+        return ['dashboard.html', 'embarcacoes.html', 'manutencao.html', 'cargas.html', 'scanner.html'].includes(pageName);
+      }
+      if (session.cargo === 'ARRUMADOR_CONSERTADOR') {
+        return ['dashboard.html', 'cargas.html', 'manutencao.html'].includes(pageName);
+      }
+      if (session.cargo === 'PLANEJADOR_PATIO_NAVIOS') {
+        return ['dashboard.html', 'embarcacoes.html', 'manutencao.html'].includes(pageName);
+      }
       const allowed = PAGE_PERMISSIONS[pageName];
       if (!allowed || !Array.isArray(allowed) || allowed.length === 0) return true;
       return allowed.includes(session.cargo);
     },
 
-    /**
-     * Verifica se o usuário autenticado possui permissão para executar determinada ação (RBAC T1.7)
-     * @param {string} actionKey - Identificador da ação (ex: 'LIBERAR_NAVIO')
-     * @returns {boolean}
-     */
+    /** Identifica o perfil explícito ou derivado, mesmo com cargo operacional elevado. */
+    isSupervisorSubstituto: function (session) {
+      return perfilSubstituto(session || this.getSession());
+    },
+
+    /** Verifica a ação RBAC, incluindo a negativa de administrar delegações. */
     hasPermission: function (actionKey) {
       const session = this.getSession();
       if (!session || !session.cargo) return false;
 
+      if (['DESIGNAR_SUBSTITUTO', 'REVOGAR_DELEGACAO'].includes(actionKey) && perfilSubstituto(session)) return false;
       const allowedRoles = ACTION_PERMISSIONS[actionKey];
       if (!allowedRoles) {
         console.warn(`[NexusAuth] Ação não mapeada na matriz RBAC: ${actionKey}`);
@@ -209,26 +251,7 @@
       // Validação direta do cargo
       if (allowedRoles.includes(session.cargo)) return true;
 
-      // Suporte a SUPERVISOR_SUBSTITUTO ou delegação ativa dentro da vigência
-      const activeDelegRaw = localStorage.getItem('nexus_active_delegation');
-      let temDelegacaoAtiva = false;
-      if (activeDelegRaw) {
-        try {
-          const activeDeleg = JSON.parse(activeDelegRaw);
-          if (activeDeleg) {
-            const now = new Date();
-            const dentroVigencia = (!activeDeleg.fim || now <= new Date(activeDeleg.fim)) &&
-                                  (!activeDeleg.inicio || now >= new Date(activeDeleg.inicio));
-            if (dentroVigencia) {
-              const subMat = String(activeDeleg.substitutoMatricula || '').toUpperCase();
-              const userMat = String(session.matricula || '').toUpperCase();
-              if (subMat === userMat || subMat === `MAT-${userMat}` || session.cargo === 'SUPERVISOR_SUBSTITUTO' || session.delegacao_ativa === true) {
-                temDelegacaoAtiva = true;
-              }
-            }
-          }
-        } catch (e) {}
-      }
+      const temDelegacaoAtiva = !!delegacaoDoSubstituto(session);
 
       if (temDelegacaoAtiva) {
         if (allowedRoles.includes('SUPERVISOR_SUBSTITUTO') || allowedRoles.includes('SUPERVISOR_GERENTE_OPERACOES')) {
@@ -251,6 +274,7 @@
      * Encerra a sessão ativa do usuário e redireciona para o login
      */
     logout: function () {
+      if (window.NexusOnlinePresence) window.NexusOnlinePresence.parar();
       sessionCookies().limparSessao();
       window.location.href = 'index.html';
     }

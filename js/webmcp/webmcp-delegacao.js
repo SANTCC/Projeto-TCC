@@ -3,7 +3,7 @@
  *
  * A designação de um substituto exige CPF e data de nascimento do substituto. Por
  * privacidade, o agente NÃO recebe nem preenche esses dados: a ferramenta declarativa
- * preenche apenas nome, matrícula e vigência, e o operador completa CPF e data de
+ * preenche apenas nomes e vigência, e o operador completa CPF e data de
  * nascimento e envia o formulário. A revogação exige confirmação.
  *
  * Carregamento: depois de webmcp-core, webmcp-ui, webmcp-dados e webmcp-global.
@@ -41,8 +41,8 @@
         mensagem: 'Delegação ativa.',
         dados: {
           ativa: true,
-          substituido: { nome: d.substituidoNome || d.supervisor || null, matricula: d.substituidoMatricula || null },
-          substituto: { nome: d.substitutoNome || null, matricula: d.substitutoMatricula || null },
+          substituido: { nome: d.substituidoNome || d.supervisor || null },
+          substituto: { nome: d.substitutoNome || null },
           inicio: D.dataHora(d.inicio),
           fim: D.dataHora(d.fim)
         }
@@ -56,7 +56,7 @@
     descricao: 'Encerra imediatamente os poderes do substituto temporário do Supervisor. Exige confirmação do operador.',
     anotacoes: { consequentialHint: true },
     cargos: CARGOS_PAGINA,
-    permissao: 'DESIGNAR_SUBSTITUTO',
+    permissao: 'REVOGAR_DELEGACAO',
     esquema: { type: 'object', properties: {}, additionalProperties: false },
     precondicao: () => (delegacaoAtiva() ? null : { codigo: 'SEM_DELEGACAO', mensagem: 'Não há substituto ativo para revogar.' }),
     resumo: () => {
@@ -77,20 +77,23 @@
   function criarDesignacao() {
     const form = document.getElementById('delegacaoForm');
     if (!form || typeof W.formularioComoFerramenta !== 'function') return null;
-    return W.formularioComoFerramenta({
+    const ferramenta = W.formularioComoFerramenta({
       nome: 'preparar_designacao_substituto',
       titulo: 'Preparar designação de substituto',
-      descricao: 'Preenche matrícula do Supervisor substituído, nome do substituto e vigência. CPF e data de nascimento são do operador. Não envia o formulário.',
+      descricao: 'Seleciona o nome do funcionário substituído, nome do substituto e vigência. CPF e data de nascimento são do operador. Não envia o formulário.',
       cargos: CARGOS_PAGINA,
       permissao: 'DESIGNAR_SUBSTITUTO',
       elemento: form,
       campos: {
-        delegSubstituidoMatricula: { descricao: 'Matrícula do Supervisor que será substituído, por exemplo MAT-2001.', rotulo: 'Matrícula substituída' },
+        delegSubstituidoNome: { descricao: 'Selecione pelo nome do funcionário; informe o valor da opção do cadastro (ID), não a matrícula.', rotulo: 'Nome do funcionário substituído' },
         delegSubstitutoNome: { descricao: 'Nome completo do substituto.', rotulo: 'Nome do substituto' },
         delegDataInicio: { descricao: 'Início da vigência (AAAA-MM-DDTHH:MM).', rotulo: 'Início' },
         delegDataFim: { descricao: 'Fim da vigência (AAAA-MM-DDTHH:MM).', rotulo: 'Fim' }
       }
     });
+    delete ferramenta.esquema.properties.delegSubstituidoNome.enum;
+    ferramenta.esquema.properties.delegSubstituidoNome.maxLength = 120;
+    return ferramenta;
   }
 
   const ferramentas = [obterDelegacao, revogar];

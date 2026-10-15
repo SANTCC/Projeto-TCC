@@ -6,6 +6,19 @@
 document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
+  const isEstivador = session.cargo === 'ESTIVADOR';
+  const isPlanejador = session.cargo === 'PLANEJADOR_PATIO_NAVIOS';
+  const containersSolicitaveis = new Set();
+  const isArrumador = session.cargo === 'ARRUMADOR_CONSERTADOR';
+  if (isArrumador) {
+    document.getElementById('navioManutForm')?.parentElement?.remove();
+    document.getElementById('toggleOsFormBtn')?.classList.add('hidden');
+    document.getElementById('osForm')?.remove();
+  }
+  if (isEstivador) {
+    document.getElementById('navioManutForm')?.parentElement?.remove();
+    document.getElementById('alertaPreventivaList')?.parentElement?.classList.add('hidden');
+  }
 
   // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
   // antes de qualquer inserção em HTML ou em manipuladores inline.
@@ -87,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (navioManutForm) {
     navioManutForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isArrumador) return;
       const navioNome = navioManutSelect.value;
       const tipoManut = document.getElementById('navioTipoManutSelect').value;
       const descricao = document.getElementById('navioDescManut').value.trim();
@@ -97,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const navio = naviosListLocal.find(n => n.nome === navioNome);
+      if (isPlanejador && !navio) return;
 
       // Regra de negócio: manutenção bloqueada para navio fora do Porto de Santos
       if (navio && navio.localizacao && navio.localizacao !== 'DENTRO_DO_PORTO') {
@@ -185,6 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (guindasteForm) {
     guindasteForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isArrumador) return;
       if (!isInspetor) {
         if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Cadastro de guindastes é de responsabilidade exclusiva do Inspetor!');
         return;
@@ -235,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // opcoes (uso do agente WebMCP): { descricao? } evita o diálogo de justificativa.
   window.solicitarManutencaoGuindaste = async function(identificacao, opcoes) {
-    if (!isSupervisor) {
+    if (isPlanejador || isArrumador || (!isSupervisor && !isEstivador)) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor pode solicitar manutenção de guindastes!');
       return;
     }
@@ -244,6 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!descricao) return;
 
     const gnd = guindastesList.find(x => x.identificacao === identificacao);
+    if (isEstivador && !gnd) return;
 
     // Tarefa 9.3: Não permite pedir mais de uma manutenção para o mesmo guindaste
     if (gnd && gnd.estado === 'EM_MANUTENCAO') {
@@ -472,6 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const buscaOsVal = (document.getElementById('buscarOsInput')?.value || '').trim().toLowerCase();
     const osVisiveis = osList.filter(os => {
+      if (isEstivador && !String(os.equipamento).startsWith('Guindaste ')) return false;
       if (filtroStatusOsAtual && os.status !== filtroStatusOsAtual) return false;
       if (buscaOsVal) {
         const haystack = `${os.id || ''} ${os.equipamento || ''} ${os.descricao || ''}`.toLowerCase();
@@ -513,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 text-xs">${statusHtml}</td>
         <td class="p-3 text-right text-[11px]">
           <div class="flex items-center justify-end gap-1.5 flex-wrap min-w-[150px]">
-          ${os.status === 'PENDENTE_APROVACAO' ? `
+          ${(isEstivador || isPlanejador) ? '<span>Somente solicitação</span>' : os.status === 'PENDENTE_APROVACAO' ? `
             <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'APROVAR')" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Aprovar</button>
             <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'REPROVAR')" class="px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold">Reprovar</button>
           ` : os.status === 'EM_MANUTENCAO' ? `
@@ -582,6 +600,9 @@ document.addEventListener('DOMContentLoaded', () => {
       conts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]').map(c => ({ identificacao: c.identificacao || c.id, dataManut: c.data_ultima_manutencao || '' }));
     }
 
+    containersSolicitaveis.clear();
+    conts.forEach(c => containersSolicitaveis.add(`Contêiner ${c.identificacao}`));
+
     if (osSelect) {
       // Item 8.6: cada <optgroup> é montado de uma só vez. O padrão antigo
       // (innerHTML += '<optgroup>' ... += '</optgroup>') fazia o navegador
@@ -596,11 +617,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       osSelect.innerHTML =
         '<option value="">Selecione o Equipamento / Ativo...</option>' +
-        optGroup('Guindastes & Pórticos', gnds.map(g => {
+        optGroup('Guindastes & Pórticos', (isPlanejador ? [] : gnds).map(g => {
           const identificacao = g.identificacao || g.id;
           return { valor: `Guindaste ${identificacao}`, rotulo: `Guindaste ${identificacao}` };
         })) +
-        optGroup('Contêineres', conts.map(c => ({
+        optGroup('Contêineres', (isEstivador ? [] : conts).map(c => ({
           valor: `Contêiner ${c.identificacao}`,
           rotulo: `Contêiner ${c.identificacao}`
         })));
@@ -642,7 +663,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (osForm) {
     osForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (isArrumador) return;
       const equipamento = document.getElementById('osEquipamento').value;
+      if (isPlanejador && !containersSolicitaveis.has(equipamento)) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'O Planejador pode solicitar manutenção apenas de navios e contêineres cadastrados.');
+        return;
+      }
+      if (isEstivador && !Array.from(document.querySelectorAll('#osEquipamento optgroup[label="Guindastes & Pórticos"] option')).some(o => o.value === equipamento)) return;
       const prioridade = document.getElementById('osPrioridade').value;
       const descricao = document.getElementById('osDescricao').value.trim();
 
@@ -702,13 +729,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.executarAcaoOS = async function(idOS, acao) {
     const isSupervisor = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
-    if (!isSupervisor) {
-      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor de Operações ou Diretor pode aprovar/reprovar Ordens de Serviço!');
+    if (!isSupervisor && !isArrumador) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Seu cargo não pode aprovar, recusar ou concluir Ordens de Serviço.');
       return;
     }
 
     const os = osList.find(o => o.id === idOS);
     if (!os) return;
+    if (isArrumador) {
+      const permitido = (['APROVAR', 'REPROVAR'].includes(acao) && os.status === 'PENDENTE_APROVACAO') ||
+        (acao === 'CONCLUIR' && os.status === 'EM_MANUTENCAO');
+      if (!permitido) return;
+      if (!window.nexusConfirm || !await window.nexusConfirm('Confirmar ação de manutenção', `Confirma ${acao === 'APROVAR' ? 'aprovar' : acao === 'REPROVAR' ? 'recusar' : 'concluir'} a ordem ${idOS}?`)) return;
+      // O estado pode ter mudado enquanto o operador confirmava.
+      if ((acao === 'CONCLUIR' && os.status !== 'EM_MANUTENCAO') || (acao !== 'CONCLUIR' && os.status !== 'PENDENTE_APROVACAO')) return;
+    }
+
 
     let supabaseStatus = 'SOLICITADA';
     let feedbackTitulo = '';

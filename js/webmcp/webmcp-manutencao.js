@@ -16,7 +16,7 @@
 
   const G = D.GRUPOS;
   // Mesmos cargos que PAGE_PERMISSIONS['manutencao.html'] e isSupervisor da página.
-  const CARGOS_PAGINA = G.gestaoOperacional;
+  const CARGOS_PAGINA = [...G.gestaoOperacional, 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS'];
   const CARGOS_SUPERVISAO = G.supervisao;
   const ESQUEMA_OS = { type: 'string', minLength: 5, maxLength: 40, pattern: '^[A-Za-z0-9._-]{5,40}$', rotulo: 'Ordem de serviço', description: 'Número da OS, por exemplo OS-2026-123.' };
   const ESQUEMA_GUINDASTE = { type: 'string', minLength: 9, maxLength: 11, pattern: '^[A-Za-z]{3}-?\\d{3}-?[A-Za-z]{3}$', rotulo: 'Guindaste', description: 'Identificação do guindaste no padrão ABC-123-DEF (o hífen é aceito também sem separação).' };
@@ -110,9 +110,9 @@
   const executarAcao = {
     nome: 'executar_acao_os',
     titulo: 'Aprovar, reprovar ou concluir OS',
-    descricao: 'Aprova ou reprova uma OS solicitada, ou conclui uma OS em manutenção. Só Supervisor ou Direção. Exige confirmação.',
+    descricao: 'Aprova ou reprova uma OS solicitada, ou conclui uma OS em manutenção. Arrumador/Consertador, Supervisor ou Direção. Exige confirmação.',
     anotacoes: { consequentialHint: true },
-    cargos: CARGOS_SUPERVISAO,
+    cargos: [...CARGOS_SUPERVISAO, 'ARRUMADOR_CONSERTADOR'],
     permissao: 'APROVAR_MANUTENCAO',
     esquema: {
       type: 'object',

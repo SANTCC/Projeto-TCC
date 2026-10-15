@@ -26,6 +26,7 @@
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
   <script src="js/vision-layer.js"></script>
+  <script src="js/auditoria.js"></script>
   <script src="js/layout.js"></script>
 </head>
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
@@ -212,7 +213,9 @@
             </div>
             <div>
               <label class="block font-bold text-slate-600 mb-1">Tipo de Carga</label>
-              <input type="text" id="contTipo" required placeholder="Ex: Eletrônicos" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
+              <select id="contTipo" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900">
+                <option value="">Selecione o Tipo de Carga...</option>
+              </select>
             </div>
             <div>
               <label class="block font-bold text-slate-600 mb-1">Data Fabricação</label>
@@ -508,6 +511,7 @@
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
   <script src="js/padronizacao-codigos.js"></script>
+  <script src="js/pages/tipos-carga.js"></script>
   <script src="js/pages/embarcacoes.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
   <script src="js/webmcp/webmcp-core.js"></script>

@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // antes de qualquer inserção em HTML ou em manipuladores inline.
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
   const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
+  const safeUrl = window.nexusSafeUrl || (window.NexusSecurity && window.NexusSecurity.safeUrl);
 
   const userCargo = session.cargo;
 
@@ -39,6 +40,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const isEstivadorRole = ['ESTIVADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
 
   const isGestorRole = isSupervisorRole || isInspetorRole;
+  const exigeEtapasPronta = ['ARRUMADOR_CONSERTADOR', 'INSPETOR'].includes(userCargo);
+
+  // ARMAZENAGEM comprova a passagem pelo recebimento/inspeção no fluxo.
+  // A vinculação não é um status separado: precisa ser conferida explicitamente.
+  function requisitosProntaConcluidos(carga) {
+    return carga.status === 'ARMAZENAGEM' &&
+      Boolean(carga.container || carga.container_id) &&
+      Boolean(carga.navio || carga.navio_id || carga.navioId) &&
+      !carga.movimentacaoPendente &&
+      !JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]').some(t => t.cargaId === carga.id) &&
+      !['RECUSADA', 'PENDENTE'].includes(carga.resultadoInspecao || carga.resultado_inspecao);
+  }
+
+  // Compartilhada com a pré-condição WebMCP; não altera o estado da carga.
+  window.nexusEtapasProntaConcluidas = requisitosProntaConcluidos;
+
 
   // ======================================================================
   // Backlog 3 (Anotação 3.4) — Funcionário responsável pela carga
@@ -151,12 +168,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Preenche o select de tipos de carga usando a lista compartilhada NEXUS_TIPOS_CARGA
   const selectTipoCarga = document.getElementById('agTipoCarga');
-  if (selectTipoCarga && window.NEXUS_TIPOS_CARGA) {
-    selectTipoCarga.innerHTML = '<option value="">Selecione o Tipo de Carga...</option>';
-    window.NEXUS_TIPOS_CARGA.forEach(t => {
-      selectTipoCarga.innerHTML += `<option value="${esc(t.nome)}">${esc(t.nome)}</option>`;
-    });
-  }
+  const preencherTiposAgendamento = () => window.preencherNexusTiposCargaSelect?.(selectTipoCarga);
+  preencherTiposAgendamento();
+  window.addEventListener('nexus_tipos_carga_changed', preencherTiposAgendamento);
 
   function renderBercosPanel() {}
 
@@ -435,12 +449,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!cargasRecusadas || cargasRecusadas.length === 0) {
       recusadasTableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhuma carga recusada no sistema.</td>
+          <td colspan="6" class="p-4 text-center text-slate-600 italic">Nenhuma carga recusada no sistema.</td>
         </tr>
       `;
       return;
     }
 
+    const podeAbrirChecklist = window.NexusAuth?.canAccessPage('inspecao.html') === true;
     recusadasTableBody.innerHTML = cargasRecusadas.map(c => `
       <tr class="hover:bg-red-100/60 dark:hover:bg-red-950/40 transition-colors">
         <td class="p-3 font-mono font-bold text-red-700 dark:text-red-300">${esc(c.id)}</td>
@@ -449,6 +464,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 text-slate-700 dark:text-slate-300">${esc(c.motivoRecusa || c.motivo_recusa || c.motivo || 'Recusada na inspeção formal')}</td>
         <td class="p-3">
           <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-red-600 text-white dark:bg-red-800 dark:text-red-100">RECUSADA</span>
+        </td>
+        <td class="p-3">
+          ${podeAbrirChecklist && c.id ? `<a href="${safeUrl('inspecao.html?carga=' + encodeURIComponent(c.id))}" aria-label="Abrir checklist da carga ${esc(c.id)}" title="Revisar checklist para nova tentativa de aceite" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[40px] rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nexus-500"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">fact_check</span><span>Checklist</span></a>` : '<span class="text-slate-500">—</span>'}
         </td>
       </tr>
     `).join('');
@@ -659,7 +677,9 @@ document.addEventListener('DOMContentLoaded', () => {
       let actionButtonsHtml = '';
 
       if (isEstivador) {
-        if (cargaEmTransito) {
+        if (c.status === 'AGENDAMENTO') {
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Aguardando recebimento físico no Porto de Santos: a carga ainda não pode ser movimentada" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+        } else if (cargaEmTransito) {
           // Carga em trânsito não pode ser movimentada pelo sistema
           actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else if (emergenciaAtiva) {
@@ -678,7 +698,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (c.status === 'ARMAZENAGEM') {
-        if (isArrumador) {
+        if (isArrumador && (!exigeEtapasPronta || requisitosProntaConcluidos(c))) {
           actionButtonsHtml += `<button type="button" title="Marcar carga como pronta para entrega" aria-label="Marcar como pronta" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'PRONTA')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">verified</span><span class="hidden sm:inline">Pronta</span></button>`;
         }
         if (isSupervisor) {
@@ -916,6 +936,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const tipo = document.getElementById('agTipoCarga').value;
+      const tipoCompartilhado = window.getNexusTipoCarga?.(tipo);
       const pesoVal = parseFloat(document.getElementById('agPeso').value) || 0;
       const volumeVal = parseFloat(document.getElementById('agVolume').value) || 0;
       const valorVal = parseFloat(document.getElementById('agValor').value) || 0;
@@ -1024,6 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
           id: newId,
           rawDbId: resCarga.id,
           tipo,
+          tipo_carga_id: tipoCargaUuid,
           peso: `${pesoVal} t`,
           volume: `${volumeVal} m³`,
           valor: `R$ ${valorVal.toLocaleString('pt-BR')}`,
@@ -1170,6 +1192,20 @@ document.addEventListener('DOMContentLoaded', () => {
    * Apto = DENTRO_DO_PORTO e estado operacional OPERANTE (sem reforma agendada ou em curso).
    * Navio sem estado conhecido no cache é tratado como OPERANTE (default do banco).
    */
+  function motivoDestinoIncompativel(carga, navio) {
+    if (!navio) return null; // Contêiner ainda sem navio: não há vínculo marítimo a validar.
+    const normalizar = valor => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const destinoCarga = String(carga.destino || '').trim();
+    const destinoNavio = String(navio.destino || navio.porto_destino || '').trim();
+    const a = normalizar(destinoCarga);
+    const b = normalizar(destinoNavio);
+    if (!a || !b || ['destino', 'destino geral'].includes(a) || ['destino', 'destino geral'].includes(b)) {
+      return 'Não foi possível confirmar os destinos da carga e do navio. Complete os cadastros antes de vincular.';
+    }
+    return a === b ? null : `O destino da carga (${destinoCarga}) diverge do destino do navio ${navio.nome || ''} (${destinoNavio}). Selecione um navio com o mesmo destino.`;
+  }
+  window.nexusMotivoDestinoIncompativel = motivoDestinoIncompativel;
+
   function motivoNavioInaptoVinculo(navio) {
     if (!navio || navio._naoEncontrado) return 'não foi encontrado no cadastro de navios';
     const loc = navio.localizacao || 'DENTRO_DO_PORTO';
@@ -1220,7 +1256,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const linha = data.find(c => String(c.numero_identificacao || '').toUpperCase() === idLocal);
       if (!linha) return { ok: true, estado: cont && cont.estado ? cont.estado : null };
-      return { ok: true, estado: linha.estado || 'OPERANTE' };
+      return { ok: true, estado: linha.estado || 'OPERANTE', registro: linha };
     } catch (e) {
       return { ok: false, erro: e && e.message ? e.message : String(e) };
     }
@@ -1240,6 +1276,7 @@ document.addEventListener('DOMContentLoaded', () => {
     containersModal.forEach(cont => {
       // Contêiner em manutenção/reforma (estado persistido diferente de OPERANTE) não é opção.
       if (cont.estado && cont.estado !== 'OPERANTE') return;
+      if (!window.nexusTiposCargaCompativeis?.(targetCargaParaVinculacao, cont)) return;
       // Tarefa 5: volume já ocupado em cada contêiner, com limite de 75 m³
       const volCargasNoCont = cargasFluxoList
         .filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA' && (
@@ -1276,6 +1313,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.abrirModalVinculacao = async function(idCarga) {
+    if (userCargo === 'ESTIVADOR') return;
     targetCargaParaVinculacao = cargasFluxoList.find(c => c.id === idCarga);
     if (!targetCargaParaVinculacao || !vincularModal) return;
 
@@ -1303,7 +1341,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const mapConts = data.map(c => ({
             id: c.id || `CONT-${c.numero_identificacao}`,
             identificacao: c.numero_identificacao,
-            tipo: c.material_carregado || 'Carga Geral',
+            tipo: c.material_carregado || '',
+            tipo_carga_id: c.tipo_carga_id || null,
             estado: c.estado || 'OPERANTE',
             navio_id: c.navio_id || null
           }));
@@ -1392,7 +1431,16 @@ document.addEventListener('DOMContentLoaded', () => {
         ? (naviosAtuais.find(n => mesmoNavioVinculo(n, navioEscolhido)) || { nome: navioEscolhido.nome, _naoEncontrado: true })
         : null;
       const contModal = containersModal.find(c => uuidContainerVinculo(c) === contUuid) || null;
-      const navioDoContAtual = contModal ? navioDoContainerVinculo(contModal, naviosAtuais) : null;
+      const contAtual = estadoLido.registro
+        ? Object.assign({}, contModal, { navio_id: estadoLido.registro.navio_id || null, navio_nome: null })
+        : contModal;
+      const navioDoContAtual = contAtual ? navioDoContainerVinculo(contAtual, naviosAtuais) : null;
+      const contTipoAtual = estadoLido.registro || contModal;
+      const cargaAtual = cargasFluxoList.find(c => c.id === targetCargaParaVinculacao.id);
+      if (!window.nexusTiposCargaCompativeis?.(cargaAtual, contTipoAtual)) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Tipos de Carga Incompatíveis', 'A carga só pode ser vinculada a um contêiner do mesmo tipo. Atualize ou corrija os cadastros antes de vincular.');
+        return;
+      }
 
       if (navioEscolhidoAtual && navioDoContAtual && !mesmoNavioVinculo(navioEscolhidoAtual, navioDoContAtual)) {
         if (window.mostrarFeedback) {
@@ -1410,6 +1458,15 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           return;
         }
+      }
+      // A carga pode ter sido atualizada enquanto o modal estava aberto.
+      targetCargaParaVinculacao = cargasFluxoList.find(c => c.id === targetCargaParaVinculacao.id);
+      if (!targetCargaParaVinculacao) return;
+      if (!window.nexusTiposCargaCompativeis?.(targetCargaParaVinculacao, contTipoAtual)) return;
+      const divergenciaDestino = motivoDestinoIncompativel(targetCargaParaVinculacao, navioFinal);
+      if (divergenciaDestino) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Destinos Incompatíveis', divergenciaDestino);
+        return;
       }
       const navVal = navioFinal ? (navioFinal.nome || '') : '';
       const navUuid = navioFinal && !navioFinal._naoEncontrado ? (navioFinal.id || null) : null;
@@ -1588,7 +1645,16 @@ document.addEventListener('DOMContentLoaded', () => {
       `Após posicionar a carga no setor de destino, marcar esta tarefa como concluída para atualizar o Setor do Pátio da carga.`;
   }
 
+  function validarRecebimentoParaMovimentacao(carga) {
+    if (!carga) return false;
+    if (carga.status !== 'AGENDAMENTO') return true;
+    if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Aguardando Recebimento', 'A carga ainda está em agendamento. Registre o recebimento físico no Porto de Santos antes de movimentá-la.');
+    return false;
+  }
+
   async function criarTarefaMovimentacao(carga, setorDestino, guindasteIdent) {
+    carga = cargasFluxoList.find(c => c.id === carga.id);
+    if (!validarRecebimentoParaMovimentacao(carga)) return false;
     // Validação no momento da confirmação, com o estado persistido (não o cache da tela).
     const atual = await obterGuindastesAtuais();
     if (!atual.ok) {
@@ -1613,6 +1679,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Mesmo Setor', `A carga ${carga.id} já está no setor "${setorDestino}". Escolha um setor de destino diferente.`);
       return false;
     }
+
+    // A leitura assíncrona do guindaste pode coincidir com atualização das cargas.
+    carga = cargasFluxoList.find(c => c.id === carga.id);
+    if (!validarRecebimentoParaMovimentacao(carga)) return false;
 
     const instrucoes = montarInstrucaoMovimentacao(carga, setorDestino, gnd.identificacao);
     const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
@@ -1683,6 +1753,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.abrirModalMovimentacao = function(idCarga) {
     targetCargaMovimentacao = cargasFluxoList.find(c => c.id === idCarga);
     if (!targetCargaMovimentacao || !movimentarModal) return;
+    if (!validarRecebimentoParaMovimentacao(targetCargaMovimentacao)) {
+      targetCargaMovimentacao = null;
+      return;
+    }
     if (movimentarCargaIdLabel) movimentarCargaIdLabel.textContent = targetCargaMovimentacao.id;
     if (movimentarSetorAtualLabel) movimentarSetorAtualLabel.textContent = targetCargaMovimentacao.portoDescarga || '—';
 
@@ -1761,6 +1835,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Executa Ações Operacionais
   // opcoes (uso do agente WebMCP; a interface não envia): { guindasteIdentificacao?, setorDestino?, motivo? } evitam os diálogos.
   window.executarAcaoCarga = async function(idCarga, acao, opcoes) {
+    if (userCargo === 'ESTIVADOR' && acao !== 'MOVIMENTAR') return;
     const op = opcoes || {};
     const carga = cargasFluxoList.find(c => c.id === idCarga);
     if (!carga) return;
@@ -1770,6 +1845,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Estivadores podem registrar movimentação de cargas!');
         return;
       }
+
+      if (!validarRecebimentoParaMovimentacao(carga)) return;
 
       // Regra de negócio: carga em trânsito não pode ser movimentada pelo sistema
       if (carga.status === 'EM_TRANSITO') {
@@ -1793,7 +1870,8 @@ document.addEventListener('DOMContentLoaded', () => {
           if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Dados Incompletos', 'Informe o setor de destino e o guindaste para criar a tarefa de movimentação.');
           return;
         }
-        await criarTarefaMovimentacao(carga, op.setorDestino, op.guindasteIdentificacao);
+        const criada = await criarTarefaMovimentacao(carga, op.setorDestino, op.guindasteIdentificacao);
+        if (!criada) return;
         localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
         renderTable();
         return;
@@ -1823,6 +1901,11 @@ document.addEventListener('DOMContentLoaded', () => {
         window.mostrarFeedback('sucesso', 'Recebimento Registrado', `Recebimento físico da carga ${idCarga} registrado pelo Conferente em ${carga.dataChegada}.`);
       }
     } else if (acao === 'PRONTA') {
+      if (exigeEtapasPronta && !requisitosProntaConcluidos(carga)) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Etapas Pendentes', 'Conclua o recebimento, a inspeção, a vinculação ao contêiner e navio e as movimentações pendentes antes de marcar a carga como pronta.');
+        return;
+      }
+
       if (!isArrumadorRole) {
         if (window.mostrarFeedback) {
           window.mostrarFeedback('erro', 'Acesso Restrito', 'Acesso Restrito (RF 1.8): Apenas Arrumadores e Consertadores (ou Supervisão/Direção) podem alterar o status da carga para Pronta para Entrega!');

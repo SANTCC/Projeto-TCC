@@ -65,6 +65,15 @@ function supabaseRotasFalso(rotas, opcoes) {
     if (tabela === 'agendamentos' || tabela === 'estivador_cargas' || tabela === 'logs_alteracoes') {
       return Promise.resolve({ data: estado.insert || null, error: null });
     }
+    // Consultas de localização usadas na vinculação precisam de navios persistidos.
+    if (tabela === 'navios' && o.navios && !estado.insert) {
+      const linhas = o.navios.filter(n => Object.entries(estado.filtros).every(([campo, valor]) => String(n[campo]) === String(valor)));
+      if (estado.update) {
+        linhas.forEach(n => Object.assign(n, estado.update));
+        return Promise.resolve({ data: linhas[0] ? Object.assign({}, linhas[0]) : null, error: null });
+      }
+      return Promise.resolve({ data: estado.single ? (linhas[0] ? Object.assign({}, linhas[0]) : null) : linhas.map(n => Object.assign({}, n)), error: null });
+    }
     if (tabela === 'navios' && estado.update) {
       return Promise.resolve({
         data: Object.assign({ id: estado.filtros.id || '11111111-1111-4111-8111-111111111111' }, estado.update),
@@ -91,6 +100,7 @@ function supabaseRotasFalso(rotas, opcoes) {
         return (...args) => {
           if (prop === 'insert' || prop === 'upsert') estado.insert = args[0];
           if (prop === 'update') estado.update = args[0];
+          if (prop === 'maybeSingle' || prop === 'single') estado.single = true;
           if (prop === 'eq') estado.filtros[args[0]] = args[1];
           return proxy;
         };
@@ -141,7 +151,7 @@ async function testesCargas() {
   log('\n[1] Cargas & Pátio (cargas.html — código real da página)');
   const storage = {
     nexus_cargas_fluxo: cargasBase(),
-    nexus_containers_list: [{ identificacao: 'MSCU1234567', tipo: 'Eletrônicos', estado: 'OPERANTE', navio: '' }, { identificacao: 'MSCU7654321', tipo: 'Têxteis', estado: 'OPERANTE', navio: '' }],
+    nexus_containers_list: [{ identificacao: 'MSCU1234567', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: '' }, { identificacao: 'MSCU7654321', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: '' }],
     nexus_guindastes_list: [{ identificacao: 'GND-01-STS', estado: 'OPERANTE' }, { identificacao: 'GND-02-STS', estado: 'EM_MANUTENCAO' }],
     nexus_guindaste_tarefas: []
   };
@@ -280,14 +290,14 @@ async function testesVinculacaoNavioNoPorto() {
     { id: '33333333-3333-4333-8333-333333333333', nome: 'MV Reforma', imo: 'GHI1234567', localizacao: 'DENTRO_DO_PORTO', estado_operacional: 'AGENDADO_PARA_REFORMA', origem: 'Porto de Santos', destino: 'Porto de Hamburgo', gps: '-23.9800, -46.3200', dataSaida: null }
   ];
   const containers = () => [
-    { identificacao: 'MSCU1000001', tipo: 'Eletrônicos', estado: 'OPERANTE', navio: 'MV Apto', navio_id: '11111111-1111-4111-8111-111111111111' },
-    { identificacao: 'MSCU1000002', tipo: 'Têxteis', estado: 'OPERANTE', navio: 'MV Fora', navio_id: '22222222-2222-4222-8222-222222222222' },
-    { identificacao: 'MSCU1000003', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Reforma', navio_id: '33333333-3333-4333-8333-333333333333' },
-    { identificacao: 'MSCU1000004', tipo: 'Carga Geral', estado: 'OPERANTE', navio: '', navio_id: null },
-    { identificacao: 'MSCU1000005', tipo: 'Carga Geral', estado: 'OPERANTE', navio: 'MV Outro', navio_id: 'nD' }
+    { identificacao: 'MSCU1000001', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: 'MV Apto', navio_id: '11111111-1111-4111-8111-111111111111' },
+    { identificacao: 'MSCU1000002', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: 'MV Fora', navio_id: '22222222-2222-4222-8222-222222222222' },
+    { identificacao: 'MSCU1000003', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: 'MV Reforma', navio_id: '33333333-3333-4333-8333-333333333333' },
+    { identificacao: 'MSCU1000004', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: '', navio_id: null },
+    { identificacao: 'MSCU1000005', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: 'MV Outro', navio_id: 'nD' }
   ];
   const abrir = async (listaNavios) => {
-    const storage = { nexus_cargas_fluxo: cargasBase(), nexus_containers_list: containers(), nexus_navios_list: listaNavios || navios(), nexus_guindastes_list: [], nexus_guindaste_tarefas: [] };
+    const storage = { nexus_cargas_fluxo: cargasBase().map(c => Object.assign({}, c, { destino: 'Porto de Hamburgo' })), nexus_containers_list: containers(), nexus_navios_list: listaNavios || navios(), nexus_guindastes_list: [], nexus_guindaste_tarefas: [] };
     const w = await pronta(pagina('cargas.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, adaptadores: PAGINA_CARGAS }));
     w.mostrarFeedback = (tipo, titulo, texto) => { w.__avisos.push({ tipo, titulo, texto }); };
     w.__avisos = [];
@@ -426,7 +436,14 @@ async function testesInspecao() {
 async function testesEmbarcacoes() {
   log('\n[3] Embarcações & GPS (embarcacoes.html)');
   const rotasSupabase = [{ origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }];
-  const supaRotas = (w) => { w.nexusSupabase = supabaseRotasFalso(rotasSupabase); };
+  const supaRotas = (w) => {
+    const persistidos = JSON.parse(w.localStorage.getItem('nexus_navios_list') || '[]').map(n => Object.assign({}, n, {
+      numero_imo: n.imo, porto_origem: n.origem, porto_destino: n.destino
+    }));
+    w.nexusSupabase = supabaseRotasFalso(rotasSupabase, {
+      navios: w.NexusAuth.getSession().cargo === 'SUPERVISOR_GERENTE_OPERACOES' ? persistidos : undefined
+    });
+  };
   const navios = [
     { id: '11111111-1111-4111-8111-111111111111', nome: 'MV Santos Star', imo: 'ABC1234567', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia: 10200, gps: '-23.9608, -46.3022', dataSaida: null },
     { id: '22222222-2222-4222-8222-222222222222', nome: 'MV Sem Rota', imo: 'DEF7654321', localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Tóquio', distancia: 20000, gps: '-23.9700, -46.3100', dataSaida: null }
@@ -434,7 +451,7 @@ async function testesEmbarcacoes() {
   const storage = {
     nexus_navios_list: navios,
     nexus_bercos_list: [{ id: 'B1', nome: 'Berço 01', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null }],
-    nexus_containers_list: [{ identificacao: 'MSCU1234567', tipo: 'Eletrônicos', estado: 'OPERANTE', navio: '' }],
+    nexus_containers_list: [{ identificacao: 'MSCU1234567', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: '' }],
     nexus_guindastes_list: [{ identificacao: 'ABC123DEF', estado: 'OPERANTE', dataManut: '2026-01-01' }],
     nexus_cargas_fluxo: []
   };
@@ -478,7 +495,7 @@ async function testesEmbarcacoes() {
   check('cadastrar navio: DENTRO_DO_PORTO ocupa o berço imediatamente (primeiro livre)', bercosAposCadastro.some((b) => b.nome === 'Berço 01' && b.estado === 'OCUPADO' && b.navio_imo === 'IMO-7654321'), JSON.stringify(bercosAposCadastro).slice(0, 200));
   r = await w.NexusWebMCP.executar('excluir_navio', { imo: 'IMO-7654321' });
   check('excluir navio: sem confirmação do banco, não remove e informa erro (exclusão só após o banco)', r.ok === false && JSON.parse(w.localStorage.getItem('nexus_navios_list')).some((n) => n.imo === 'IMO-7654321'), JSON.stringify(r));
-  r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU-7654321', tipo: 'Têxteis', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
+  r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU-7654321', tipo: "Contêiner 20' Dry", data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
   check('cadastrar contêiner: identificação ISO e formulário da página', r.ok === true && JSON.parse(w.localStorage.getItem('nexus_containers_list')).some((c) => c.identificacao === 'MSCU-7654321'), JSON.stringify(r).slice(0, 200));
   r = await w.NexusWebMCP.executar('cadastrar_container', { identificacao: 'MSCU1-234-567', tipo: 'X', data_fabricacao: '2020-01-10', referencia_tempo: 'DATA_FABRICACAO' });
   check('cadastrar contêiner: identificação fora do padrão é recusada pelo esquema', r.codigo === 'ARGUMENTOS_INVALIDOS', JSON.stringify(r));
@@ -607,6 +624,7 @@ async function testesManutencao() {
 async function testesDelegacaoETecnico() {
   log('\n[5] Delegação de Supervisor (delegacao.html) — dados pessoais fora do agente');
   const storage = {
+    nexus_func_list: [{id:'titular-2',nome:'Ana Titular',matricula:'MAT-1002',cargo:'SUPERVISOR_GERENTE_OPERACOES',ativo:true}],
     nexus_active_delegation: { substitutoMatricula: 'MAT-7001', substitutoNome: 'Carlos Substituto', substituidoNome: 'Ana Titular', substituidoMatricula: 'MAT-1001', inicio: '2026-10-01T08:00', fim: '2099-01-01T00:00' }
   };
   let w = await pronta(pagina('delegacao.html', { session: sessao('SUPERVISOR_GERENTE_OPERACOES'), storage, scriptsPagina: ['js/padronizacao-codigos.js', 'js/pages/delegacao.js'], adaptadores: ['js/webmcp/webmcp-delegacao.js'] }));
@@ -616,9 +634,9 @@ async function testesDelegacaoETecnico() {
   let envios = 0;
   form.addEventListener('submit', (e) => { e.preventDefault(); envios += 1; });
   r = await w.NexusWebMCP.executar('preparar_designacao_substituto', {
-    delegSubstituidoMatricula: 'MAT-1002', delegSubstitutoNome: 'Marta Substituta', delegDataInicio: '2026-11-01T08:00', delegDataFim: '2026-11-15T18:00'
+    delegSubstituidoNome: 'titular-2', delegSubstitutoNome: 'Marta Substituta', delegDataInicio: '2026-11-01T08:00', delegDataFim: '2026-11-15T18:00'
   });
-  check('preparar designação: preenche nome, matrícula e vigência', r.ok === true && w.document.getElementById('delegSubstitutoNome').value === 'Marta Substituta', JSON.stringify(r).slice(0, 200));
+  check('preparar designação: seleciona titular pelo nome e preenche substituto e vigência', r.ok === true && w.document.getElementById('delegSubstitutoNome').value === 'Marta Substituta', JSON.stringify(r).slice(0, 200));
   check('preparar designação: CPF e data de nascimento permanecem com o operador', w.document.getElementById('delegSubstitutoCpf').value === ''
     && r.dados.preencher_pelo_operador.includes('delegSubstitutoCpf') && r.dados.preencher_pelo_operador.includes('delegSubstitutoDataNasc'));
   check('preparar designação: não envia o formulário', envios === 0);
@@ -696,7 +714,7 @@ async function testesRelatoriosScannerPainel() {
       nexus_trail_decisoes: [{ id: 'TRL-1', decisao: 'LIBEROU_NAVIO', entidade: 'NAVIO MV Santos Star', responsavel: 'Ana Titular (Supervisor de Operações) - SUP-0001', data_hora: new Date().toISOString(), motivo: 'Saída autorizada', retificacao: null }],
       nexus_audit_logs: [{ data_hora: new Date().toISOString(), cargo: 'INSPETOR', codigo_usuario: 'INS-6090', entidade: 'CRG-A', tipo_alteracao: 'EDICAO' }]
     },
-    scriptsPagina: ['js/data-repository.js', 'js/pages/dashboard.js'],
+    scriptsPagina: ['js/data-repository.js', 'js/auditoria.js', 'js/pages/dashboard.js'],
     adaptadores: ['js/webmcp/webmcp-dashboard.js']
   }));
   r = await w.NexusWebMCP.executar('listar_trilha_decisoes', {});
@@ -726,7 +744,7 @@ async function testesRelatoriosScannerPainel() {
 async function testesGlobaisEAcesso() {
   log('\n[8] Ferramentas globais, emergência e telas de acesso');
   const storage = {};
-  let w = await pronta(pagina('dashboard.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/pages/dashboard.js'], adaptadores: ['js/webmcp/webmcp-dashboard.js'] }));
+  let w = await pronta(pagina('dashboard.html', { session: sessao('INSPETOR'), storage, scriptsPagina: ['js/auditoria.js', 'js/pages/dashboard.js'], adaptadores: ['js/webmcp/webmcp-dashboard.js'] }));
   let r = await w.NexusWebMCP.executar('obter_sessao', {});
   check('sessão: nome e cargo, sem código individual nem matrícula', r.ok && r.dados.cargo === 'INSPETOR' && !/NX-9001|MAT-9001|codigo|matricula/i.test(JSON.stringify(r.dados)), JSON.stringify(r).slice(0, 200));
   check('sessão: lista as ações permitidas ao cargo', Array.isArray(r.dados.acoes_permitidas) && r.dados.acoes_permitidas.includes('INSPECIONAR_CARGA'));

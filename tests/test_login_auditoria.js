@@ -162,6 +162,7 @@ function abrirPainel({ cargo = 'SUPERVISOR_GERENTE_OPERACOES', gestoLiberado = f
   w.eval(read('js/session-cookies.js'));
   w.eval(read('js/auth-guard.js'));
   w.eval(read('js/layout.js'));
+  w.eval(read('js/auditoria.js'));
   w.eval(read('js/pages/dashboard.js'));
 
   // o DOMContentLoaded da página já passou no parse: dispara de novo para os

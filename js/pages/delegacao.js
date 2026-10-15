@@ -5,8 +5,28 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  const session = window.currentUserSession || NexusAuth.getSession();
-  if (!session) return;
+  const session = window.NexusAuth?.getSession();
+  let acessoBloqueado = false;
+  function autorizado(acao = 'DESIGNAR_SUBSTITUTO') {
+    const atual = window.NexusAuth?.getSession();
+    return !!session && !!atual && atual.codigo_individual === session.codigo_individual
+      && NexusAuth.canAccessPage('delegacao.html') && NexusAuth.hasPermission(acao);
+  }
+  function verificarAcesso(acao) {
+    if (autorizado(acao)) return true;
+    if (!acessoBloqueado) {
+      acessoBloqueado = true;
+      window.dispatchEvent(new Event('nexus_permissions_changed'));
+    }
+    const main = document.querySelector('main');
+    if (main) main.innerHTML = '<p role="alert" class="p-6 text-slate-600">Acesso restrito: esta sessão não pode criar ou revogar delegações. Retorne ao Painel Geral.</p>';
+    return false;
+  }
+  if (!verificarAcesso()) return;
+  window.addEventListener('focus', () => verificarAcesso());
+  window.addEventListener('storage', event => {
+    if (event.key === 'nexus_active_delegation' || event.key === null) verificarAcesso();
+  });
 
   // Utilitário Anti-XSS (js/security.js) — codifica dados não confiáveis
   // antes de qualquer inserção em HTML.
@@ -62,11 +82,68 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const delegCpfInput = document.getElementById('delegSubstitutoCpf');
-  if (window.NexusCodigos) NexusCodigos.vincularFormatacao(document.getElementById('delegSubstituidoMatricula'), NexusCodigos.formatarMatricula);
   if (delegCpfInput) {
     delegCpfInput.addEventListener('input', (e) => {
       aplicarMascaraCPFPreservandoCursor(e.target);
     });
+  }
+
+  const titularSelect = document.getElementById('delegSubstituidoNome');
+  const titularAviso = document.getElementById('delegSubstituidoAviso');
+  let titulares = [];
+  let titularesRevisao = 0;
+  const chavesTitularesLocais = new Map();
+
+  async function carregarTitulares() {
+    if (!verificarAcesso()) return;
+    if (!titularSelect) return;
+    const revisao = ++titularesRevisao;
+    const selecionado = titularSelect.value;
+    titularSelect.disabled = true;
+    let lista = null;
+    let local = true;
+    if (window.nexusSupabase) {
+      try {
+        const consulta = () => window.nexusSupabase.from('funcionarios')
+          .select('id, nome, cargo, matricula, ativo').eq('ativo', true)
+          .order('nome', { ascending: true }).order('id');
+        if (window.NexusRepository?.lerTodasAsLinhas) {
+          lista = await window.NexusRepository.lerTodasAsLinhas(consulta);
+        } else {
+          const resultado = await consulta();
+          if (!resultado.error && Array.isArray(resultado.data)) lista = resultado.data;
+        }
+        if (Array.isArray(lista)) local = false;
+      } catch (e) { /* Sem banco: os nomes do cache ainda podem ser consultados. */ }
+    }
+    if (revisao !== titularesRevisao || !verificarAcesso()) return;
+    if (!Array.isArray(lista)) {
+      try { lista = JSON.parse(localStorage.getItem('nexus_func_list') || '[]'); } catch (e) { lista = []; }
+    }
+    titulares = (Array.isArray(lista) ? lista : []).filter(f => f.ativo !== false && f.nome && (f.id || f.matricula))
+      .map(f => {
+        if (!f.id && !chavesTitularesLocais.has(f.matricula)) chavesTitularesLocais.set(f.matricula, `local-${chavesTitularesLocais.size}`);
+        return Object.assign({}, f, { chave: String(f.id || chavesTitularesLocais.get(f.matricula)) });
+      })
+      .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR') || a.chave.localeCompare(b.chave));
+    const contagem = new Map();
+    titulares.forEach(f => { const nome = normalizarNomeBusca(f.nome); contagem.set(nome, (contagem.get(nome) || 0) + 1); });
+    titularSelect.replaceChildren();
+    const vazio = document.createElement('option');
+    vazio.value = ''; vazio.textContent = titulares.length ? 'Selecione o nome do funcionário' : 'Nenhum funcionário disponível';
+    titularSelect.appendChild(vazio);
+    titulares.forEach(f => {
+      const opcao = document.createElement('option');
+      opcao.value = f.chave;
+      const homonimo = contagem.get(normalizarNomeBusca(f.nome)) > 1;
+      opcao.textContent = `${f.nome} · ${f.cargo || 'Funcionário'}${homonimo ? ` · Referência ${f.chave}` : ''}`;
+      titularSelect.appendChild(opcao);
+    });
+    if (titulares.some(f => f.chave === selecionado)) titularSelect.value = selecionado;
+    titularSelect.disabled = titulares.length === 0;
+    if (titularAviso) titularAviso.textContent = local
+      ? 'Nomes do cache local. A gravação on-line confirmará o cadastro no servidor.'
+      : 'Selecione o nome no cadastro. Nomes iguais têm referências distintas.';
   }
 
   // Autopreenchimento do substituto pelo NOME COMPLETO: ao digitar o nome, o
@@ -149,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .slice(0, 8);
       if (matches.length === 0) { esconder(); return; }
       sugBox.innerHTML = matches.map(({ f }, idx) => {
-        const detalhe = [f.matricula, f.cargo].filter(Boolean).join(' • ') || 'Funcionário cadastrado';
+        const detalhe = [f.cargo].filter(Boolean).join(' • ') || 'Funcionário cadastrado';
         return `<button type="button" data-idx="${idx}" class="w-full text-left px-3 py-2 hover:bg-nexus-bg dark:hover:bg-slate-800 flex flex-col gap-0.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
           <span class="font-bold text-nexus-900 dark:text-white">${esc(f.nome)}</span>
           <span class="font-mono text-slate-600 dark:text-slate-400">${esc(detalhe)}</span>
@@ -187,6 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const delegForm = document.getElementById('delegacaoForm');
 
   async function carregarDelegacaoAtiva() {
+    if (!verificarAcesso()) return;
     let activeDeleg = null;
 
     if (window.nexusSupabase) {
@@ -199,6 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
           .limit(1)
           .maybeSingle();
 
+        if (!verificarAcesso()) return;
         if (error) {
           console.warn('[NexusPort] Erro ao buscar delegação ativa no Supabase:', error);
           if (window.mostrarFeedback) {
@@ -208,12 +287,23 @@ document.addEventListener('DOMContentLoaded', () => {
           const now = new Date();
           const fimDate = new Date(data.data_fim_previsto || data.data_fim);
           if (now <= fimDate) {
+            const salvo = JSON.parse(localStorage.getItem('nexus_active_delegation') || 'null');
+            const cadastros = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+            const funcionario = cadastros.find(f => f.id === data.supervisor_titular_id);
+            const cadastroSubstituto = cadastros.find(f => f.id && f.id === data.substituto_id);
+            const mesmoTitular = salvo?.referenciaFuncionario?.id === data.supervisor_titular_id;
+            const nomeTitular = data.supervisor?.nome || (mesmoTitular && salvo.substituidoNome) || funcionario?.nome || 'Funcionário Substituído';
+            const matriculaTitular = data.supervisor?.matricula || funcionario?.matricula || (mesmoTitular && salvo.substituidoMatricula) || '';
             activeDeleg = {
               id: data.id,
-              supervisor: data.supervisor?.nome || session.nome,
-              substituidoNome: data.supervisor?.nome || session.nome,
-              substituidoMatricula: data.supervisor?.matricula || session.matricula,
-              substitutoMatricula: data.substituto?.matricula || 'MAT-SUB',
+              supervisor: nomeTitular,
+              substituidoNome: nomeTitular,
+              substituidoMatricula: matriculaTitular,
+              referenciaFuncionario: {tipo:'FUNCIONARIO', id:data.supervisor_titular_id || null, codigo:matriculaTitular || data.supervisor_titular_id, rotulo:nomeTitular, legado:true},
+              substituidoId: data.supervisor_titular_id || null,
+              substitutoId: data.substituto_id || null,
+              substitutoMatricula: data.substituto?.matricula || cadastroSubstituto?.matricula
+                || (salvo?.substitutoId && salvo.substitutoId === data.substituto_id ? salvo.substitutoMatricula : null),
               substitutoNome: data.substituto_nome || data.substituto?.nome || 'Substituto',
               substitutoCpf: data.substituto_cpf || '',
               substitutoDataNasc: data.substituto_data_nascimento || '',
@@ -247,20 +337,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    if (!verificarAcesso()) return;
     updateDelegacaoUI(activeDeleg);
   }
 
   function updateDelegacaoUI(activeDeleg) {
     if (activeDeleg) {
-      const substituidoTxt = activeDeleg.substituidoNome || activeDeleg.supervisor || activeDeleg.substituidoMatricula || 'Funcionário Substituído';
-      const substitutoTxt = activeDeleg.substitutoNome || activeDeleg.substitutoMatricula || 'Funcionário Substituto';
+      const substituidoTxt = activeDeleg.substituidoNome || activeDeleg.supervisor || 'Funcionário Substituído';
+      const substitutoTxt = activeDeleg.substitutoNome || 'Funcionário Substituto';
       const cpfTxt = activeDeleg.substitutoCpf ? ` | CPF: ${activeDeleg.substitutoCpf}` : '';
 
       if (substitutoNome) {
         substitutoNome.textContent = `Substituído: ${substituidoTxt} ➔ Substituto: ${substitutoTxt}${cpfTxt}`;
       }
       if (substitutoVigencia) {
-        substitutoVigencia.textContent = `Vigência: de ${new Date(activeDeleg.inicio).toLocaleString('pt-BR')} até ${new Date(activeDeleg.fim).toLocaleString('pt-BR')} (Matrícula do Substituído: ${activeDeleg.substituidoMatricula || activeDeleg.substitutoMatricula || '--'})`;
+        substitutoVigencia.textContent = `Vigência: de ${new Date(activeDeleg.inicio).toLocaleString('pt-BR')} até ${new Date(activeDeleg.fim).toLocaleString('pt-BR')}`;
       }
       if (revogarBtn) revogarBtn.classList.remove('hidden');
     } else {
@@ -271,10 +362,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   carregarDelegacaoAtiva();
+  carregarTitulares();
 
   if (delegForm) {
     delegForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!verificarAcesso()) return;
       const activeDeleg = JSON.parse(localStorage.getItem('nexus_active_delegation') || 'null');
       if (activeDeleg) {
         const msg = 'REGRA DE NEGÓCIO (RF 14): Apenas 1 substituto ativo por Supervisor é permitido! Revogue a delegação atual antes de designar um novo.';
@@ -282,21 +375,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const matValidacao = NexusCodigos.validarMatricula(document.getElementById('delegSubstituidoMatricula').value);
-      const substituidoMatricula = matValidacao.valor;
+      const titular = titulares.find(f => f.chave === titularSelect?.value);
+      let substituidoMatricula = titular?.matricula || '';
       const substitutoNomeInput = document.getElementById('delegSubstitutoNome').value.trim();
       const substitutoCpf = document.getElementById('delegSubstitutoCpf').value.trim();
       const substitutoDataNasc = document.getElementById('delegSubstitutoDataNasc').value;
       const inicio = document.getElementById('delegDataInicio').value;
       const fim = document.getElementById('delegDataFim').value;
 
-      if (substituidoMatricula && !matValidacao.ok) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Matrícula Inválida', matValidacao.erro);
-        return;
-      }
-
-      if (!substituidoMatricula || !substitutoNomeInput || !substitutoCpf || !inicio || !fim) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Preencha a matrícula do funcionário substituído, os dados do substituto e a vigência.');
+      if (!titular || titularSelect.disabled || !substitutoNomeInput || !substitutoCpf || !inicio || !fim) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campos Obrigatórios', 'Selecione o nome do funcionário substituído, os dados do substituto e a vigência.');
         return;
       }
 
@@ -309,40 +397,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-      let supervisorId = isUUID(session.id) ? session.id : null;
-      let substitutoId = null;
-      let substituidoNomeStr = session.nome || 'Supervisor Original';
-
-      const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
-      const matchSup = localFuncs.find(f => f.matricula === substituidoMatricula || f.codigo_individual === substituidoMatricula);
-      if (matchSup && isUUID(matchSup.id)) supervisorId = matchSup.id;
+      let supervisorId = isUUID(titular.id) ? titular.id : null;
+      const cpfSubstituto = substitutoCpf.replace(/\D/g, '');
+      const substitutoLocal = JSON.parse(localStorage.getItem('nexus_func_list') || '[]')
+        .find(f => f.ativo !== false && String(f.cpf || f.documento || '').replace(/\D/g, '') === cpfSubstituto);
+      let substitutoId = isUUID(substitutoLocal?.id) ? substitutoLocal.id : null;
+      let substitutoMatricula = substitutoLocal?.matricula || null;
+      let substituidoNomeStr = titular.nome;
 
       if (window.nexusSupabase) {
+        // Nunca usar o ID da sessão como fallback para o funcionário escolhido.
         try {
-          const formattedMat = substituidoMatricula.startsWith('MAT-') ? substituidoMatricula : `MAT-${substituidoMatricula}`;
-          const { data: supData } = await window.nexusSupabase.from('funcionarios').select('id, nome').or(`matricula.eq.${substituidoMatricula},matricula.eq.${formattedMat}`).maybeSingle();
-          if (supData && supData.id) {
-            supervisorId = supData.id;
-            substituidoNomeStr = supData.nome;
+          if (!supervisorId) throw new Error('Cadastro selecionado sem referência válida no servidor.');
+          const { data: supData, error: supErro } = await window.nexusSupabase.from('funcionarios')
+            .select('id, nome, matricula, ativo').eq('id', supervisorId).maybeSingle();
+          if (!verificarAcesso()) return;
+          if (supErro || !supData || supData.id !== supervisorId || supData.ativo === false || !supData.nome) {
+            throw new Error('O funcionário selecionado não está disponível. Atualize a seleção.');
           }
-
-          // Resolver ID de substituto na tabela de funcionarios caso cadastrado por nome ou CPF
-          const { data: subData } = await window.nexusSupabase.from('funcionarios').select('id').or(`nome.ilike.%${substitutoNomeInput}%,telefone.eq.${substitutoCpf}`).maybeSingle();
+          substituidoNomeStr = supData.nome;
+          substituidoMatricula = supData.matricula || substituidoMatricula;
+        } catch (erro) {
+          if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Funcionário Não Confirmado', 'Não foi possível confirmar o funcionário selecionado no servidor. Atualize a seleção e tente novamente.');
+          carregarTitulares();
+          return;
+        }
+        try {
+          substitutoId = null;
+          substitutoMatricula = null;
+          // CPF cadastrado identifica o substituto; nomes parciais/homônimos não são identidade.
+          const { data: subData } = await window.nexusSupabase.from('funcionarios')
+            .select('id, matricula').eq('cpf', cpfSubstituto).eq('ativo', true).maybeSingle();
           if (subData && subData.id) {
             substitutoId = subData.id;
+            substitutoMatricula = subData.matricula || null;
           }
         } catch (e) {
           console.warn('Erro ao resolver IDs de funcionários para delegação:', e);
         }
       }
 
+      if (!verificarAcesso()) return;
       const newDeleg = {
         substituidoMatricula,
+        referenciaFuncionario: {tipo:'FUNCIONARIO', id:supervisorId, codigo:substituidoMatricula || supervisorId, rotulo:substituidoNomeStr, legado:true},
         substituidoNome: substituidoNomeStr,
         substitutoNome: substitutoNomeInput,
         substitutoCpf,
         substitutoDataNasc,
-        substitutoMatricula: substituidoMatricula,
+        substituidoId: supervisorId,
+        substitutoId,
+        substitutoMatricula,
         supervisor: substituidoNomeStr,
         inicio, fim, dataDesignacao: new Date().toISOString()
       };
@@ -377,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           if (window.registrarLogAlteracao) {
-            await window.registrarLogAlteracao('CRIACAO', 'delegacoes_supervisor', insertedDelegId, { substituto: substitutoNomeInput, cpf: substitutoCpf, inicio, fim });
+            await window.registrarLogAlteracao(substituidoMatricula, 'CRIACAO', { substituto: substitutoNomeInput, delegacao_id: insertedDelegId, inicio, fim }, newDeleg.referenciaFuncionario);
           }
         } catch (err) {
           console.error('[NexusPort] Exceção ao sincronizar delegação com Supabase:', err);
@@ -392,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateDelegacaoUI(newDeleg);
 
       if (window.registrarTrailDecisao) {
-        await window.registrarTrailDecisao('DESIGNOU_SUBSTITUTO', 'delegacoes_supervisor', insertedDelegId, `Designou Substituto ${substitutoNomeStr} (${substitutoMatricula}) para o período de ${inicio} até ${fim}`);
+        await window.registrarTrailDecisao('DESIGNOU_SUBSTITUTO', substituidoMatricula, `Designou ${substitutoNomeInput} como substituto de ${substituidoNomeStr} para o período de ${inicio} até ${fim}`, newDeleg.referenciaFuncionario);
       }
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
@@ -401,17 +506,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
       delegForm.reset();
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Substituto Designado', `Funcionário ${substitutoNomeStr} (${substitutoMatricula}) designado temporariamente como substituto do Supervisor com poderes operacionais.`);
+        window.mostrarFeedback('sucesso', 'Substituto Designado', `Funcionário ${substitutoNomeInput} designado temporariamente como substituto de ${substituidoNomeStr} com poderes operacionais.`);
       }
     });
   }
 
   // opcoes (uso do agente WebMCP): { confirmado? } — a interface chama sem opções.
   async function revogarDelegacaoAtiva(opcoes) {
+      if (!verificarAcesso('REVOGAR_DELEGACAO')) return false;
       const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Revogar Delegação', 'ATENÇÃO: Deseja REVOGAR IMEDIATAMENTE os poderes do substituto temporário?') : true;
       if (confirmou) {
+        if (!verificarAcesso('REVOGAR_DELEGACAO')) return false;
         const activeDeleg = JSON.parse(localStorage.getItem('nexus_active_delegation') || '{}');
-        localStorage.removeItem('nexus_active_delegation');
 
         if (window.nexusSupabase) {
           try {
@@ -428,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (window.registrarLogAlteracao) {
-              await window.registrarLogAlteracao('EDICAO', 'delegacoes_supervisor', activeDeleg.rawDbId || null, { ativo: false, data_revogacao: new Date().toISOString() });
+              await window.registrarLogAlteracao(activeDeleg.substituidoMatricula, 'EDICAO', { ativo: false, delegacao_id: activeDeleg.rawDbId || null, data_revogacao: new Date().toISOString() }, activeDeleg.referenciaFuncionario || {tipo:'FUNCIONARIO',codigo:activeDeleg.substituidoMatricula,legado:true});
             }
           } catch (err) {
             console.warn('[NexusPort] Exceção ao revogar delegação no Supabase:', err);
@@ -439,10 +545,11 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
+        localStorage.removeItem('nexus_active_delegation');
         updateDelegacaoUI(null);
 
         if (window.registrarTrailDecisao) {
-          await window.registrarTrailDecisao('DESIGNOU_SUBSTITUTO', 'delegacoes_supervisor', activeDeleg.rawDbId || null, `Revogou antecipadamente a delegação de ${activeDeleg.substitutoNome || activeDeleg.substitutoMatricula || ''}`);
+          await window.registrarTrailDecisao('DESIGNOU_SUBSTITUTO', activeDeleg.substituidoMatricula, `Revogou antecipadamente a delegação de ${activeDeleg.substitutoNome || activeDeleg.substitutoMatricula || ''}`, activeDeleg.referenciaFuncionario || {tipo:'FUNCIONARIO',codigo:activeDeleg.substituidoMatricula,legado:true});
         }
 
         if (window.NexusRepository && window.NexusRepository.notifyChange) {
@@ -463,5 +570,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sincronização viva em tempo real (Item 2)
   window.addEventListener('nexus_data_changed', () => {
     carregarDelegacaoAtiva();
+    carregarTitulares();
   });
 });

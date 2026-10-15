@@ -124,7 +124,7 @@ function testPanicGlobal() {
     }));
   check('Teste dedicado do alerta no aparelho (tests/test_haptics.js)', read('tests/test_haptics.js').includes('NexusHaptics'));
   check('Página pública de teste de vibração (teste-vibracao.html)', read('teste-vibracao.html').includes('js/haptics.js'));
-  check('Pulsos do alerta com duração perceptível (>= 300ms)', pr.includes('HAPTIC_PULSE_MS = 300'));
+  check('Pulsos do alerta com duração reforçada (600ms)', pr.includes('HAPTIC_PULSE_MS = 600'));
   check('Vibração é repetida na primeira interação durante a emergência',
     pr.includes('onUserInteraction') && /pointerdown.*touchstart.*keydown.*click/.test(pr));
 

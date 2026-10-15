@@ -90,7 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const formattedMatricula = q.startsWith('MAT-') ? q : `MAT-${q}`;
-      const storedOverrides = JSON.parse(localStorage.getItem('nexus_code_overrides') || '{}');
       let found = null;
 
       // 1. Busca assíncrona na tabela 'funcionarios' do Supabase
@@ -165,16 +164,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (selectedEmp) {
         if (resultBox) resultBox.classList.remove('hidden');
         if (resNome) resNome.textContent = selectedEmp.nome;
-        if (resCargo) resCargo.textContent = `${selectedEmp.cargo_nome || selectedEmp.cargo} (${selectedEmp.matricula})`;
+        if (resCargo) resCargo.textContent = selectedEmp.cargo_nome || selectedEmp.cargo;
 
-        const currentCode = storedOverrides[selectedEmp.matricula]?.codigo || selectedEmp.codigo;
-        if (resCodigo) resCodigo.textContent = currentCode;
+        if (resCodigo) resCodigo.textContent = 'Protegido';
 
         if (regenBtn) regenBtn.disabled = false;
         if (regenNotice) regenNotice.classList.add('hidden');
       } else {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('atencao', 'Não Encontrado', `Funcionário com matrícula "${q}" não localizado no banco de dados.`);
+          window.mostrarFeedback('atencao', 'Não Encontrado', 'Funcionário não localizado no banco de dados.');
         }
         if (resultBox) resultBox.classList.add('hidden');
         if (regenBtn) regenBtn.disabled = true;
@@ -192,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // sugere os funcionários mais prováveis sem exigir a grafia exata.
     const suggestBox = document.getElementById('empSearchSuggest');
     let suggestTimer = null;
+    let sugestoesFuncionarios = [];
     const esconderSugestoes = () => { if (suggestBox) suggestBox.classList.add('hidden'); };
     function montarSugestoes(termo) {
       if (!suggestBox) return;
@@ -218,13 +217,13 @@ document.addEventListener('DOMContentLoaded', () => {
         esconderSugestoes();
         return;
       }
-      suggestBox.innerHTML = top.map(({ f }) => {
-        const mat = String(f.matricula || '');
+      sugestoesFuncionarios = top.map(({ f }) => f);
+      suggestBox.innerHTML = top.map(({ f }, indice) => {
         const nome = String(f.nome || 'Sem nome');
         const cargo = String(f.cargo_nome || f.cargo || '');
-        return `<button type="button" data-matricula="${esc(mat)}" class="w-full text-left px-3 py-2 hover:bg-nexus-bg dark:hover:bg-slate-800 flex flex-col gap-0.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+        return `<button type="button" data-func-indice="${esc(indice)}" class="w-full text-left px-3 py-2 hover:bg-nexus-bg dark:hover:bg-slate-800 flex flex-col gap-0.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
           <span class="font-mono font-bold text-nexus-900 dark:text-white">${esc(nome)}</span>
-          <span class="font-mono text-slate-600 dark:text-slate-400">${esc(mat)} • ${esc(cargo)}</span>
+          <span class="font-mono text-slate-600 dark:text-slate-400">${esc(cargo)}</span>
         </button>`;
       }).join('');
       suggestBox.classList.remove('hidden');
@@ -236,11 +235,13 @@ document.addEventListener('DOMContentLoaded', () => {
     searchInput.addEventListener('blur', () => setTimeout(esconderSugestoes, 150));
     if (suggestBox) {
       suggestBox.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-matricula]');
+        const btn = e.target.closest('[data-func-indice]');
         if (!btn) return;
-        searchInput.value = btn.getAttribute('data-matricula');
+        const funcionario = sugestoesFuncionarios[Number(btn.getAttribute('data-func-indice'))];
+        if (!funcionario) return;
+        searchInput.value = funcionario.nome || '';
         esconderSugestoes();
-        buscarFuncionarioPorMatricula(searchInput.value.trim().toUpperCase());
+        buscarFuncionarioPorMatricula(String(funcionario.matricula || '').trim().toUpperCase());
       });
     }
   }
@@ -249,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function reemitirCodigoSelecionado(opcoes) {
       if (!selectedEmp) return false;
 
-      const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Invalidar Código', `Confirma a INVALIDAÇÃO do código atual (${resCodigo.textContent}) para ${selectedEmp.nome}?`) : true;
+      const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Invalidar Código', `Confirma a INVALIDAÇÃO do código atual para ${selectedEmp.nome}?`) : true;
 
       if (confirmou) {
         const suffix = Math.floor(1000 + Math.random() * 9000);
@@ -257,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const storedOverrides = JSON.parse(localStorage.getItem('nexus_code_overrides') || '{}');
         storedOverrides[selectedEmp.matricula] = {
-          old_codigo: resCodigo.textContent,
+          old_codigo: storedOverrides[selectedEmp.matricula]?.codigo || selectedEmp.codigo,
           codigo: newCode,
           gerado_por: session.matricula,
           data_geracao: new Date().toISOString()
@@ -312,6 +313,8 @@ document.addEventListener('DOMContentLoaded', () => {
     regenBtn.addEventListener('click', () => reemitirCodigoSelecionado({}));
   }
 
+  // T21 (escopo autorizado): ocultação de saída; banco/cache continuam contendo os campos.
+  // A exclusividade do titular exige autenticação/políticas no servidor e permanece pendente.
   // CRUD Funcionários (T2.1 & Conexão Supabase)
   const toggleFuncBtn = document.getElementById('toggleFuncFormBtn');
   const funcForm = document.getElementById('funcCrudForm');
@@ -354,40 +357,54 @@ document.addEventListener('DOMContentLoaded', () => {
     renderFuncTable();
   }
 
+  function nomeResponsavelRegistro(valor) {
+    if (valor === session.matricula) return session.nome || 'Titular da sessão';
+    const funcionario = mergedFuncList.find(f => f.matricula === valor || f.codigo === valor);
+    if (funcionario) return funcionario.nome || 'Funcionário';
+    return 'Funcionário não identificado';
+  }
+
   function renderFuncTable() {
     if (!funcTableBody) return;
-    funcTableBody.innerHTML = mergedFuncList.map(f => `
+    funcTableBody.innerHTML = mergedFuncList.map((f, indice) => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-        <td class="p-3 font-mono font-bold text-nexus-500">${esc(f.matricula)}</td>
         <td class="p-3 font-bold">${esc(f.nome)}</td>
         <td class="p-3 text-slate-600 font-semibold">${esc(f.cargo)}</td>
-        <td class="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">${esc(f.codigo)}</td>
         <td class="p-3 font-mono text-slate-600 dark:text-slate-300">${esc(formatarCpfExibicao(f.cpf))}</td>
         <td class="p-3 font-mono text-slate-600">${esc(formatarDataNascExibicao(f.data_nascimento))}</td>
         <td class="p-3 text-slate-600 font-mono text-xs flex items-center justify-between">
           <span class="${f.ativo ? 'text-emerald-700 font-bold' : 'text-slate-600'}">${esc(f.doc || 'Cadastrado')}</span>
-          <button type="button" onclick="window.excluirFuncionarioReal(${jsArg(f.matricula)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
+          <button type="button" onclick="window.excluirFuncionarioPorIndice(${jsArg(indice)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
         </td>
       </tr>
     `).join('');
   }
 
+  // O DOM recebe só um índice de apresentação, nunca matrícula em onclick/data-*.
+  window.excluirFuncionarioPorIndice = function(indice) {
+    const funcionario = mergedFuncList[Number(indice)];
+    if (funcionario) return window.excluirFuncionarioReal(funcionario.matricula);
+  };
+
   window.excluirFuncionarioReal = async function(matricula, opcoes) {
-    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Excluir Funcionário', `Tem certeza que deseja desativar/excluir o funcionário de matrícula ${matricula}?`) : true;
+    const funcionario = mergedFuncList.find(f => f.matricula === matricula);
+    const nome = funcionario?.nome || 'selecionado';
+    const privacidade = window.NexusSecurity.privacidadeAuditoria([session, ...mergedFuncList]);
+    const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm ? await window.nexusConfirm('Excluir Funcionário', `Tem certeza que deseja desativar/excluir o funcionário ${nome}?`) : true;
     if (!confirmou) return;
 
     const aviso = (tipo, titulo, msg) => { if (window.mostrarFeedback) window.mostrarFeedback(tipo, titulo, msg); };
     if (!window.NexusRepository || typeof window.NexusRepository.deleteFuncionario !== 'function') {
-      aviso('erro', 'Exclusão Não Realizada', `Não foi possível excluir o funcionário ${matricula}: serviço de dados indisponível.`);
+      aviso('erro', 'Exclusão Não Realizada', `Não foi possível excluir o funcionário ${nome}: serviço de dados indisponível.`);
       return;
     }
 
     // A exclusão só é considerada feita quando o banco confirma.
     const resultado = await window.NexusRepository.deleteFuncionario(matricula);
     if (!resultado || !resultado.ok) {
-      const motivo = (resultado && resultado.erro) || 'falha desconhecida';
+      const motivo = privacidade.texto((resultado && resultado.erro) || 'falha desconhecida');
       aviso(resultado && resultado.bloqueio ? 'alerta' : 'erro', 'Exclusão Não Realizada',
-        `Funcionário ${matricula} não foi excluído: ${motivo} Nada foi alterado.`);
+        `Funcionário ${nome} não foi excluído: ${motivo} Nada foi alterado.`);
       return;
     }
 
@@ -402,8 +419,8 @@ document.addEventListener('DOMContentLoaded', () => {
     mergedFuncList = (mergedFuncList || []).filter(f => f.matricula !== matricula);
     renderFuncTable();
     aviso('sucesso', 'Funcionário Excluído', resultado.removido
-      ? `Funcionário de matrícula ${matricula} excluído do banco de dados.`
-      : `Funcionário de matrícula ${matricula} removido da lista; ele não existia no banco de dados.`);
+      ? `Funcionário ${nome} excluído do banco de dados.`
+      : `Funcionário ${nome} removido da lista; ele não existia no banco de dados.`);
   };
 
   carregarFuncionariosCompleto();
@@ -518,7 +535,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Bloqueio de CPF duplicado no cache local
       const cpfDuplicadoLocal = mergedFuncList.find(f => fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === cpfDigits);
       if (cpfDuplicadoLocal) {
-        const msg = `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para "${cpfDuplicadoLocal.nome}" (${cpfDuplicadoLocal.matricula}). Cada pessoa pode ter apenas um cadastro no sistema!`;
+        const msg = `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para "${cpfDuplicadoLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', msg);
         return;
       }
@@ -549,7 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .eq('cpf', cpfDigits)
             .maybeSingle();
           if (!dupCpfErr && dupCpf) {
-            const msg = `BLOQUEIO DE DUPLICIDADE (Supabase): o CPF ${formatarCpfExibicao(cpfDigits)} já pertence ao funcionário "${dupCpf.nome}" (${dupCpf.matricula}). Não é permitido cadastrar duplicidades!`;
+            const msg = `BLOQUEIO DE DUPLICIDADE (Supabase): o CPF ${formatarCpfExibicao(cpfDigits)} já pertence ao funcionário "${dupCpf.nome}". Não é permitido cadastrar duplicidades!`;
             if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', msg);
             return;
           }
@@ -702,7 +719,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </span>
               </td>
               <td class="p-3 font-mono text-xs text-slate-600">${esc(v.data)}</td>
-              <td class="p-3 font-mono text-xs font-bold text-nexus-500">${esc(v.por || session.matricula)}</td>
+              <td class="p-3 font-mono text-xs font-bold text-nexus-500">${esc(nomeResponsavelRegistro(v.por || session.matricula))}</td>
               <td class="p-3 text-right whitespace-nowrap">
                 <div class="flex items-center justify-end gap-2">
                   ${isAguardando ? `
@@ -744,7 +761,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${esc(v.vistoria || 'Vistoria em Ordem - Sem Anormalidades')}
               </span>
             </td>
-            <td class="p-3 font-mono text-xs text-slate-600">${esc(v.por || session.matricula)}</td>
+            <td class="p-3 font-mono text-xs text-slate-600">${esc(nomeResponsavelRegistro(v.por || session.matricula))}</td>
           </tr>
         `).join('');
       }

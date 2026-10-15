@@ -165,7 +165,7 @@
         }
         const habilitado = simNao(st.enabled, 'ativada', 'desativada');
         lista.appendChild(linha('Preferência de vibração', habilitado.valor, habilitado.classe));
-        const som = simNao(st.soundEnabled, 'ativado', 'desativado');
+        const som = simNao(st.soundEnabled, 'obrigatório na aplicação', 'indisponível');
         lista.appendChild(linha('Alerta sonoro', som.valor, som.classe));
 
         diag.textContent = NexusHaptics.describe();

@@ -19,7 +19,10 @@
     'nexus_containers_list',
     'nexus_func_list',
     'periodic_sync',
-    'window_focus'
+    'window_focus',
+    'visibility_sync',
+    'online_sync',
+    'realtime_sync'
   ]);
 
   function ehErroDaRelacaoEstivador(error) {
@@ -254,7 +257,8 @@
             const isEntregue = (c.status_fluxo === 'ENTREGUE' || c.status_fluxo === 'CANCELADA' || c.status_fluxo === 'RECUSADA');
             return {
               id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
-              tipo: c.natureza || 'Carga Geral',
+              tipo: window.getNexusTipoCarga?.(c.tipo_carga_id)?.nome || c.natureza || '',
+              tipo_carga_id: c.tipo_carga_id || null,
               peso: `${c.peso || 0} t`,
               volume: `${c.volume || 0} m³`,
               valor: `R$ ${(c.valor_declarado || 0).toLocaleString('pt-BR')}`,
@@ -850,6 +854,7 @@
 
     _realtimeChannel: null,
     _realtimeDebounce: null,
+    _realtimePendentes: new Set(),
 
     iniciarSincronizacaoRealtime: function () {
       const client = this.getSupabase();
@@ -863,15 +868,21 @@
             'postgres_changes',
             { event: '*', schema: 'public', table: tabela },
             () => {
-              // Debounce: rajadas de mudanças viram uma única notificação,
-              // e NÃO retransmitimos via BroadcastChannel — cada aba possui
-              // sua própria assinatura Realtime, o que evita loops/duplas
-              // notificações entre abas do mesmo dispositivo.
-              if (this._realtimeDebounce) clearTimeout(this._realtimeDebounce);
+              // Agrupa sem perder tabelas: carga + auditoria na mesma rajada
+              // precisam invalidar as cargas, não apenas o último log recebido.
+              // Janela fixa de 400 ms evita adiar indefinidamente sob fluxo contínuo.
+              this._realtimePendentes.add(tabela);
+              if (this._realtimeDebounce !== null) return;
               this._realtimeDebounce = setTimeout(() => {
+                this._realtimeDebounce = null;
+                const entities = Array.from(this._realtimePendentes);
+                this._realtimePendentes.clear();
+                // null mantém compatibilidade com ouvintes antigos: lote misto
+                // significa atualização geral, nunca uma tabela arbitrária.
                 window.dispatchEvent(new CustomEvent('nexus_data_changed', {
-                  detail: { entity: tabela, origem: 'realtime' }
+                  detail: { entity: entities.length === 1 ? entities[0] : null, entities, origem: 'realtime' }
                 }));
+                // Não retransmitir Realtime via BroadcastChannel: evita ecos.
               }, 400);
             }
           );
@@ -879,6 +890,7 @@
         channel.subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             console.log('[NexusRepository] Sincronização Realtime ativa.');
+            this.notifyChange('realtime_sync');
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             console.warn('[NexusRepository] Realtime indisponível (' + status + '); o polling de segurança (' + (this.POLLING_SEGURANCA_MS / 1000) + ' s) mantém os dados atualizados.');
           }
@@ -900,6 +912,9 @@
         try { client.removeChannel(this._realtimeChannel); } catch (e) {}
       }
       this._realtimeChannel = null;
+      if (this._realtimeDebounce !== null) clearTimeout(this._realtimeDebounce);
+      this._realtimeDebounce = null;
+      this._realtimePendentes.clear();
     },
 
     /**
@@ -932,7 +947,8 @@
   // que os módulos de página iniciem uma nova leitura no mesmo evento.
   window.addEventListener('nexus_data_changed', (event) => {
     const entity = event && event.detail ? event.detail.entity : null;
-    if (!entity || EVENTOS_QUE_INVALIDAM_CARGAS.has(entity)) {
+    const entities = event && event.detail && Array.isArray(event.detail.entities) ? event.detail.entities : [];
+    if (!entity || EVENTOS_QUE_INVALIDAM_CARGAS.has(entity) || entities.some(e => EVENTOS_QUE_INVALIDAM_CARGAS.has(e))) {
       NexusRepository.invalidarLeiturasCargas();
     }
   }, true);
@@ -945,12 +961,19 @@
 
   // Sincronização periódica e em foco da janela para atualização entre dispositivos/abas (Item 2)
   window.addEventListener('focus', () => {
+    NexusRepository.iniciarSincronizacaoRealtime();
     NexusRepository.notifyChange('window_focus');
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
+      NexusRepository.iniciarSincronizacaoRealtime();
       NexusRepository.notifyChange('visibility_sync');
     }
+  });
+
+  window.addEventListener('online', () => {
+    NexusRepository.iniciarSincronizacaoRealtime();
+    NexusRepository.notifyChange('online_sync');
   });
 
   // Polling de segurança: sem o Realtime (ou entre eventos perdidos), as telas são

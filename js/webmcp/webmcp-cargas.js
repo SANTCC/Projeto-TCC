@@ -311,7 +311,7 @@
   const movimentar = {
     nome: 'movimentar_carga',
     titulo: 'Movimentar carga',
-    descricao: 'Move a carga entre setores do pátio: designa um guindaste OPERANTE e cria a tarefa de movimentação (pendente em Embarcações & GPS); o setor só muda quando a tarefa for concluída por lá. Não funciona em trânsito nem durante emergência. Exige confirmação.',
+    descricao: 'Move a carga entre setores do pátio: designa um guindaste OPERANTE e cria a tarefa de movimentação (pendente em Embarcações & GPS); o setor só muda quando a tarefa for concluída por lá. Exige recebimento físico; não funciona em agendamento, em trânsito nem durante emergência. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: ['ESTIVADOR', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     permissao: 'MOVIMENTAR_CARGA',
@@ -330,6 +330,9 @@
       if (args.id !== undefined) {
         const carga = await cargaDoOperador(args.id);
         if (!carga) return naoEncontrada(args.id);
+        if (carga.status === 'AGENDAMENTO') {
+          return { codigo: 'RECEBIMENTO_OBRIGATORIO', mensagem: 'Registre o recebimento físico da carga no Porto de Santos antes de movimentá-la.' };
+        }
         if (carga.status === 'EM_TRANSITO') {
           return { codigo: 'ESTADO_INVALIDO', mensagem: `A carga ${carga.id} está em trânsito e não pode ser movimentada.` };
         }
@@ -376,7 +379,7 @@
   const prontaEntrega = {
     nome: 'marcar_pronta_entrega',
     titulo: 'Marcar pronta para entrega',
-    descricao: 'Marca a carga como PRONTA_PARA_ENTREGA. Exige que a carga já esteja vinculada a um contêiner. Só Arrumador, Inspetor ou Direção.',
+    descricao: 'Marca a carga como PRONTA_PARA_ENTREGA. Para Arrumador e Inspetor, exige as etapas anteriores concluídas, incluindo contêiner, navio e movimentações. Só Arrumador, Inspetor ou Direção.',
     anotacoes: { consequentialHint: true },
     cargos: ['ARRUMADOR_CONSERTADOR', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     permissao: 'ALTERAR_PRONTA_ENTREGA',
@@ -386,7 +389,12 @@
       if (!carga) return naoEncontrada(args.id);
       const estado = estadoEsperado(carga, ['ARMAZENAGEM']);
       if (estado) return estado;
-      if (!carga.container) return { codigo: 'VINCULO_OBRIGATORIO', mensagem: 'A carga precisa estar vinculada a um contêiner antes de ficar pronta (Item 4).' };
+      if (['ARRUMADOR_CONSERTADOR', 'INSPETOR'].includes(window.NexusAuth?.getSession()?.cargo)) {
+        if (typeof window.nexusEtapasProntaConcluidas !== 'function' || !window.nexusEtapasProntaConcluidas(carga)) {
+          return { codigo: 'ETAPAS_PENDENTES', mensagem: 'Conclua a inspeção, os vínculos de contêiner e navio e as movimentações pendentes antes de marcar a carga como pronta.' };
+        }
+      }
+      if (!carga.container && !carga.container_id) return { codigo: 'VINCULO_OBRIGATORIO', mensagem: 'A carga precisa estar vinculada a um contêiner antes de ficar pronta (Item 4).' };
       return null;
     },
     resumo: (args) => [`Marcar a carga ${args.id} como Pronta para Entrega.`],
@@ -401,7 +409,7 @@
   const vincular = {
     nome: 'vincular_carga_container',
     titulo: 'Vincular carga a contêiner',
-    descricao: 'Vincula uma carga armazenada a um contêiner OPERANTE com capacidade disponível (até 75 m³). Usa o modal de vinculação da tela. Exige confirmação.',
+    descricao: 'Vincula uma carga armazenada a um contêiner OPERANTE com capacidade disponível (até 75 m³). Exige destino compatível com o navio herdado do contêiner. Usa o modal de vinculação da tela. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: G.supervisao,
     esquema: {
@@ -428,6 +436,18 @@
             : { ok: true, estado: cont.estado };
           if (!lido.ok) return { codigo: 'ESTADO_NAO_CONFIRMADO', mensagem: 'Não foi possível confirmar o estado do contêiner no banco de dados. Tente novamente.' };
           if (lido.estado && lido.estado !== 'OPERANTE') return { codigo: 'CONTAINER_INDISPONIVEL', mensagem: `Contêiner ${args.container} está em ${lido.estado}.` };
+          if (!window.nexusTiposCargaCompativeis?.(carga, lido.registro || cont)) {
+            return { codigo: 'TIPOS_INCOMPATIVEIS', mensagem: 'A carga e o contêiner precisam ter o mesmo tipo de carga.' };
+          }
+          // A confirmação da página revalida o navio; aqui evita pedir confirmação
+          // quando a divergência do vínculo herdado já é conhecida.
+          const referencia = lido.registro ? { navio_id: lido.registro.navio_id } : cont;
+          const navios = await D.navios();
+          const navio = navios.find(n => (referencia.navio_id && n.id === referencia.navio_id) ||
+            (!referencia.navio_id && (referencia.navio_nome || referencia.navio) && n.nome === (referencia.navio_nome || referencia.navio)));
+          const divergencia = navio && typeof window.nexusMotivoDestinoIncompativel === 'function'
+            ? window.nexusMotivoDestinoIncompativel(carga, navio) : null;
+          if (divergencia) return { codigo: 'DESTINOS_INCOMPATIVEIS', mensagem: divergencia };
           const disponivel = D.disponibilidadeContainer(args.container, await D.cargas());
           const volume = D.volumeNumero(carga.volume);
           if (volume > disponivel) {

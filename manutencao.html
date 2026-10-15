@@ -26,6 +26,7 @@
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
   <script src="js/vision-layer.js"></script>
+  <script src="js/auditoria.js"></script>
   <script src="js/layout.js"></script>
 </head>
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
@@ -86,13 +87,13 @@
           </div>
         </div>
 
-        <!-- Alerta no Aparelho (vibração / som) — diagnóstico e preferências -->
+        <!-- Alerta de emergência: som obrigatório e diagnóstico de vibração -->
         <div id="hapticsPanel" class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-3">
           <div class="flex items-start gap-3">
             <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">vibration</span>
             <div class="min-w-0">
               <span class="font-bold text-sm text-nexus-900 dark:text-white block">Alerta no Aparelho (vibração / som)</span>
-              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Enquanto a emergência estiver ativa, navegadores compatíveis vibram a cada 3s quando a página está visível e já recebeu uma interação do usuário. O Safari no iPhone/iPad não expõe a Vibration API; nesses aparelhos, em contexto HTTP inseguro ou em navegadores sem suporte, tentamos o alerta sonoro (quando permitido) e mostramos o banner. O painel abaixo mostra o diagnóstico deste aparelho.</p>
+              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Enquanto a emergência estiver ativa, o sistema tenta emitir sirene obrigatória e pulsos de vibração mais longos. Após o SOS inicial, o alerta se repete a cada 3s com a página visível e após interação do usuário. A API não controla a força do motor; Safari no iPhone/iPad não oferece vibração. Toque em Testar vibração e som para verificar o aparelho. O navegador não garante áudio no modo silencioso, com volume zerado, tela bloqueada ou em segundo plano. O banner visual permanece disponível.</p>
             </div>
           </div>
           <div class="grid sm:grid-cols-2 gap-3">
@@ -104,19 +105,19 @@
               <input type="checkbox" id="hapticsEnabledToggle" class="sr-only peer" />
               <div class="relative w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:bg-nexus-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full shrink-0"></div>
             </label>
-            <label class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700 cursor-pointer">
+            <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700">
               <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-[18px]">volume_up</span>
+                <span class="material-symbols-outlined text-[18px]" aria-hidden="true">volume_up</span>
                 <span>Alerta sonoro</span>
               </span>
-              <input type="checkbox" id="hapticsSoundToggle" class="sr-only peer" />
-              <div class="relative w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:bg-nexus-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full shrink-0"></div>
-            </label>
+              <input type="checkbox" id="hapticsSoundToggle" aria-label="Som de emergência obrigatório" class="sr-only" checked disabled />
+              <span class="text-xs font-bold text-nexus-500 dark:text-indigo-400">Obrigatório</span>
+            </div>
           </div>
           <div class="flex flex-wrap gap-2">
             <button id="hapticsTestBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm flex items-center gap-1">
               <span class="material-symbols-outlined text-[16px]">sensors</span>
-              <span>Testar vibração</span>
+              <span>Testar vibração e som</span>
             </button>
             <button id="hapticsRefreshBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors flex items-center gap-1">
               <span class="material-symbols-outlined text-[16px]">refresh</span>

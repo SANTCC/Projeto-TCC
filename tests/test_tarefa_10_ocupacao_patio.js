@@ -36,7 +36,7 @@ async function carregar(banco) {
         win.nexusSupabase = banco;
       },
       'js/data-repository.js',
-      'js/pages/dashboard.js'
+      'js/auditoria.js', 'js/pages/dashboard.js'
     ]
   });
   await prontoDom(janela.w);

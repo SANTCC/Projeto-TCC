@@ -61,12 +61,13 @@
   let lastInteractionHapticAt = -Infinity;
   let lastPulseBlocked = false;
   // Motores de celular (Android) levam ~50–100 ms para girar e o sistema
-  // arredonda pulsos muito curtos: 300 ms é o mínimo que se sente no bolso.
-  const HAPTIC_PULSE_MS = 300;
+  // arredonda pulsos muito curtos: pulsos de 600 ms aumentam o tempo de acionamento, não a força do motor.
+  const HAPTIC_PULSE_MS = 600;
   const HAPTIC_INTERVAL_MS = 3000;
   // Padrão "SOS" reduzido (limitado a 10 posições pela especificação da
   // Vibration API): três toques curtos + dois longos, repetido pelo loop.
-  const HAPTIC_PATTERN_SOS = [300, 120, 300, 120, 300, 350, 700, 350, 700];
+  const HAPTIC_PATTERN_SOS = [600, 120, 600, 120, 600, 350, 900, 350, 900];
+  const HAPTIC_SOS_DURATION_MS = HAPTIC_PATTERN_SOS.reduce((total, ms) => total + ms, 0);
   const HAPTIC_PATTERN_ALERT = [HAPTIC_PULSE_MS, 120, HAPTIC_PULSE_MS, 120, HAPTIC_PULSE_MS];
 
   // ------------------------------------------------------------------
@@ -255,8 +256,9 @@
     }
     const st = window.NexusHaptics.status();
     const motivo = st.reasons[0] || st.lastReason || null;
-    if (!motivo) return null;
-    return window.NexusHaptics.hint(motivo, true);
+    const avisos = motivo ? [window.NexusHaptics.hint(motivo, true)] : [];
+    if (st.soundReason && window.NexusHaptics.soundHint) avisos.push(window.NexusHaptics.soundHint(st.soundReason));
+    return avisos.join(' · ') || null;
   }
 
   function stopDeviceVibration() {
@@ -287,7 +289,7 @@
     }
     if (window.NexusHaptics && typeof window.NexusHaptics.alert === 'function') {
       const resultado = window.NexusHaptics.alert();
-      lastPulseBlocked = Boolean(resultado && resultado.fired === false);
+      lastPulseBlocked = Boolean(resultado && (resultado.fired === false || resultado.sounded === false));
     } else {
       lastPulseBlocked = !vibrateDevice(HAPTIC_PATTERN_ALERT);
     }
@@ -306,7 +308,13 @@
     }
     if (hapticTimer !== null) return;
     if (!deviceHasHapticBackend() && !deviceSoundEnabled()) return;
-    pulseDeviceAlert();
+    // Não truncar o SOS mais longo com o primeiro pulso periódico.
+    const restanteSOS = HAPTIC_SOS_DURATION_MS - (Date.now() - lastActivationAlertAt);
+    if (restanteSOS > 0) {
+      hapticTimer = window.setTimeout(pulseDeviceAlert, restanteSOS);
+    } else {
+      pulseDeviceAlert();
+    }
   }
 
   /** Reinicia o ciclo do alerta disparando um pulso imediatamente. */
@@ -380,7 +388,7 @@
       hapticTimer = null;
     }
     if (deviceHasHapticBackend() || deviceSoundEnabled()) {
-      hapticTimer = window.setTimeout(pulseDeviceAlert, HAPTIC_INTERVAL_MS);
+      hapticTimer = window.setTimeout(pulseDeviceAlert, Math.max(HAPTIC_INTERVAL_MS, HAPTIC_SOS_DURATION_MS));
     }
   }
 

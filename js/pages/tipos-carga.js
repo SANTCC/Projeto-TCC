@@ -275,6 +275,7 @@
 
       if (loadedTipos.length > 0) {
         window.NEXUS_TIPOS_CARGA = loadedTipos;
+        window.dispatchEvent(new CustomEvent('nexus_tipos_carga_changed'));
       }
     } catch (e) {
       console.warn("[NexusPort] Exceção ao carregar tipos de carga do Supabase:", e);
@@ -291,6 +292,46 @@
       (t.id && String(t.id).toLowerCase() === busca) ||
       (t.nome && String(t.nome).toLowerCase() === busca)
     ) || null;
+  };
+
+  // A mesma fonte e os mesmos valores alimentam os dois cadastros.
+  window.preencherNexusTiposCargaSelect = function(select) {
+    if (!select) return;
+    const atual = select.value;
+    select.textContent = '';
+    const vazio = document.createElement('option');
+    vazio.value = '';
+    vazio.textContent = 'Selecione o Tipo de Carga...';
+    select.appendChild(vazio);
+    (window.NEXUS_TIPOS_CARGA || []).forEach(tipo => {
+      const opcao = document.createElement('option');
+      opcao.value = tipo.nome;
+      opcao.textContent = tipo.nome;
+      select.appendChild(opcao);
+    });
+    select.value = atual;
+    if (select.selectedIndex < 0) select.value = '';
+  };
+
+  window.nexusTiposCargaCompativeis = function(carga, container) {
+    if (!carga || !container) return false;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const resolver = registro => {
+      const id = registro.tipo_carga_id || registro.tipoCargaId || '';
+      const nome = registro.tipo || registro.material_carregado || '';
+      const idPersistido = uuid.test(String(id));
+      // UUID desconhecido não pode herdar um nome genérico/antigo como se fosse o tipo real.
+      const cadastrado = window.getNexusTipoCarga(id) || (!idPersistido ? window.getNexusTipoCarga(nome) : null);
+      return {
+        id: uuid.test(String(id)) ? String(id).toLowerCase() : (cadastrado && uuid.test(String(cadastrado.id)) ? String(cadastrado.id).toLowerCase() : ''),
+        nome: String((cadastrado && cadastrado.nome) || (idPersistido ? '' : nome)).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase()
+      };
+    };
+    const a = resolver(carga);
+    const b = resolver(container);
+    if (a.id && b.id) return a.id === b.id;
+    // Cadastro legado: comparar o nome real, sem promover tipo ausente a "Carga Geral".
+    return Boolean(a.nome && b.nome && a.nome === b.nome);
   };
 
   // Dispara carregamento inicial

@@ -28,6 +28,7 @@
     window.currentUserSession = NexusAuth.requireAuth(['TECNICO_PORTOS', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO']);
   </script>
   <script src="js/vision-layer.js"></script>
+  <script src="js/auditoria.js"></script>
   <script src="js/layout.js"></script>
 </head>
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
@@ -168,10 +169,8 @@
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 font-mono uppercase">
                 <tr>
-                  <th class="p-3">Matrícula</th>
                   <th class="p-3">Nome</th>
                   <th class="p-3">Cargo</th>
-                  <th class="p-3">Código Individual</th>
                   <th class="p-3">CPF</th>
                   <th class="p-3">Nascimento</th>
                   <th class="p-3">Doc. Interna</th>

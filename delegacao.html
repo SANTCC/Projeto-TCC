@@ -26,6 +26,7 @@
   <script src="js/auth-guard.js"></script>
   <script>window.currentUserSession = NexusAuth.requireAuth();</script>
   <script src="js/vision-layer.js"></script>
+  <script src="js/auditoria.js"></script>
   <script src="js/layout.js"></script>
 </head>
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col transition-colors duration-200">
@@ -106,8 +107,9 @@
           <!-- Formulário de Designação de Substituto -->
           <form id="delegacaoForm" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs pt-2">
             <div>
-              <label class="block font-bold text-slate-600 mb-1">Matrícula do Funcionário Substituído</label>
-              <input type="text" id="delegSubstituidoMatricula" required placeholder="Ex: MAT-2001 (Supervisor)" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono" />
+              <label for="delegSubstituidoNome" class="block font-bold text-slate-600 mb-1">Nome do Funcionário Substituído</label>
+              <select id="delegSubstituidoNome" required disabled aria-describedby="delegSubstituidoAviso" class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-mono"><option value="">Carregando funcionários...</option></select>
+              <p id="delegSubstituidoAviso" role="status" class="text-[11px] text-slate-600 mt-1">Selecione o nome no cadastro. Nomes iguais têm referências distintas.</p>
             </div>
             <div>
               <label class="block font-bold text-slate-600 mb-1">Nome do Funcionário Substituto <span class="font-normal text-nexus-500">(digite para buscar e autopreencher CPF e nascimento)</span></label>

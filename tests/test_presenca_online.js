@@ -5,7 +5,7 @@
  * Cobre o indicador do cabeçalho em páginas reais (jsdom) e no módulo js/online-presence.js:
  *   1. Sem Supabase, sem código de sessão ou sem canal sincronizado: mostra "—" (nunca um número).
  *   2. Canal `nexus-online` com chave codigo_individual: um código conta uma única vez.
- *   3. Primeira leitura ao sincronizar; depois, atualização só a cada 30 s.
+ *   3. Atualização imediata a cada sync; reconciliação a cada 30 s.
  *   4. Erro de canal volta a "—"; sair da página encerra o canal e o temporizador.
  *   5. Payload da presença só leva o instante de entrada (sem nome nem matrícula).
  *   6. Páginas reais: o indicador #headerOnlineCount aparece no cabeçalho e recebe a contagem.
@@ -119,7 +119,7 @@ function testarModulo() {
     canal && canal.opcoes && canal.opcoes.config.presence.key === 'NX-1');
   check('antes da primeira sincronização: "—"', textoContagem(w) === '—', textoContagem(w));
 
-  log('\n[3] Primeira leitura ao sincronizar; depois só a cada 30 s');
+  log('\n[3] Atualização imediata a cada sync; reconciliação a cada 30 s');
   check('temporizador agendado a cada 30 s', agendados.length === 1 && agendados[0].ms === 30000,
     JSON.stringify(agendados.map((a) => a.ms)));
   canal.subscribeCb('SUBSCRIBED');
@@ -130,8 +130,8 @@ function testarModulo() {
     textoContagem(w) === '2', textoContagem(w));
   canal.estado = { 'NX-1': [{}], 'NX-2': [{}, {}], 'NX-3': [{}], 'NX-4': [{}] };
   canal.handlers['presence:sync']();
-  check('sincronização nova não altera o número antes do intervalo de 30 s',
-    textoContagem(w) === '2', textoContagem(w));
+  check('sincronização nova atualiza imediatamente, sem esperar 30 s',
+    textoContagem(w) === '4', textoContagem(w));
   agendados[0].fn();
   check('no intervalo de 30 s o número é atualizado: 4 usuários', textoContagem(w) === '4', textoContagem(w));
 

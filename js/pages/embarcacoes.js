@@ -8,6 +8,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  const isEstivador = session.cargo === 'ESTIVADOR';
+  const isPlanejador = session.cargo === 'PLANEJADOR_PATIO_NAVIOS';
+  if (isPlanejador) {
+    document.getElementById('guindastesTableBody')?.closest('table')?.parentElement?.parentElement?.remove();
+    document.getElementById('tarefasGuindasteModal')?.remove();
+  }
+  if (isEstivador) {
+    const painel = document.querySelector('main > div');
+    const guindastes = document.getElementById('guindastesTableBody')?.closest('table')?.parentElement?.parentElement;
+    if (painel && guindastes) {
+      Array.from(painel.children).forEach(bloco => { if (bloco !== guindastes) bloco.remove(); });
+    }
+  }
+
   // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
   // antes de qualquer inserção em HTML ou em manipuladores inline.
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
@@ -18,9 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const navioForm = document.getElementById('navioForm');
   const toggleContainerBtn = document.getElementById('toggleContainerFormBtn');
   const containerForm = document.getElementById('containerForm');
+  const preencherTiposContainer = () => window.preencherNexusTiposCargaSelect?.(document.getElementById('contTipo'));
+  preencherTiposContainer();
+  window.addEventListener('nexus_tipos_carga_changed', preencherTiposContainer);
   const containersTableBody = document.getElementById('containersTableBody');
 
   let naviosList = [];
+  const ordemNomeNavio = new Intl.Collator('pt-BR', { sensitivity: 'base' });
   // Backlog 3 (rotas): única fonte de origem/destino/distância = rotas_maritimas do Supabase.
   let rotasMaritimasList = [];
   let rotasCarregamentoFalhou = false;
@@ -600,6 +618,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!buscaNavioVal) return true;
       const haystack = `${n.nome || ''} ${n.imo || ''} ${n.origem || ''} ${n.destino || ''}`.toLowerCase();
       return haystack.includes(buscaNavioVal);
+    }).sort((a, b) => {
+      // Ordenação apenas da cópia exibida: estado, localização e ordem do banco
+      // não podem mover o navio. IMO/ID desempata nomes equivalentes de forma fixa.
+      return ordemNomeNavio.compare(String(a.nome || '').trim(), String(b.nome || '').trim())
+        || ordemNomeNavio.compare(String(a.imo || ''), String(b.imo || ''))
+        || ordemNomeNavio.compare(String(a.id || ''), String(b.id || ''));
     });
 
     const embarcacoesCounterEl = document.getElementById('embarcacoesCounter');
@@ -710,7 +734,11 @@ document.addEventListener('DOMContentLoaded', () => {
       let acoesHtml = '<div class="flex items-center justify-end gap-1.5 text-[11px] flex-wrap">';
 
       // Botão Vincular a Berço (Tarefa 6)
-      acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+      if (n.localizacao === 'DENTRO_DO_PORTO') {
+        acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+      } else {
+        acoesHtml += `<button type="button" disabled aria-disabled="true" title="Vinculação indisponível: o navio precisa estar no Porto de Santos" class="px-2 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 font-bold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+      }
 
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
@@ -829,6 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Função para despachar embarcação via Edge Function "despacho-embarcacao"
   window.nexusDespacharEmbarcacaoEdgeFunction = async function(navioId, motivo) {
+    if (isEstivador) return;
     if (!window.nexusSupabase || !window.nexusSupabase.functions) return null;
     try {
       const codigo = session && session.codigo_individual;
@@ -927,6 +956,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // RN 3: Liberação de Saída de Navios pelo Supervisor de Operações / Diretor
   window.liberarNavioPeloDiretor = async function(imo, opcoes) {
+    if (isEstivador) return;
     const podeLiberar = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     if (!podeLiberar) {
       if (window.mostrarFeedback) {
@@ -1096,6 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Autorização de retorno do navio ao porto de origem
   window.autorizarRetornoNavio = async function(imo, opcoes) {
+    if (isEstivador) return;
     const podeLiberar = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     if (!podeLiberar) {
       if (window.mostrarFeedback) {
@@ -1203,6 +1234,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.selecionarRotaNavio = async function(imo, opcoes) {
+    if (isEstivador) return;
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
 
@@ -1383,10 +1415,40 @@ document.addEventListener('DOMContentLoaded', () => {
     navioPendenteBerco = null;
   }
 
+  // Vincular não registra chegada: a localização precisa estar confirmada antes.
+  // Releitura também protege seleções abertas antes da saída em outra sessão.
+  async function confirmarNavioNoPortoParaBerco(navio) {
+    const avisar = (mensagem) => {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Vinculação Bloqueada', mensagem);
+      return false;
+    };
+    if (navio.localizacao !== 'DENTRO_DO_PORTO') {
+      return avisar('O navio precisa estar no Porto de Santos para ser vinculado a um berço. A vinculação não pode alterar sua localização.');
+    }
+    if (!window.nexusSupabase) return true;
+    try {
+      let consulta = window.nexusSupabase.from('navios').select('localizacao');
+      consulta = UUID_NAVIO_RE.test(String(navio.id || ''))
+        ? consulta.eq('id', navio.id) : consulta.eq('numero_imo', navio.imo);
+      const { data, error } = await consulta;
+      if (error || !Array.isArray(data) || data.length !== 1) {
+        return avisar('Não foi possível confirmar a localização do navio no banco de dados. Vinculação não realizada; tente novamente.');
+      }
+      if (data[0].localizacao !== 'DENTRO_DO_PORTO') {
+        return avisar('A localização atual do navio no banco não é o Porto de Santos. Atualize a página; nenhum berço foi vinculado.');
+      }
+      return true;
+    } catch (erro) {
+      return avisar('Não foi possível consultar a localização do navio. Vinculação não realizada; tente novamente.');
+    }
+  }
+
   // Vincular Navio a um dos 15 Berços: abre a seleção (somente berços livres habilitados)
   window.vincularNavioABerco = async function(imo, opcoes) {
+    if (isEstivador) return;
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
+    if (!await confirmarNavioNoPortoParaBerco(navio)) return;
 
     const atual = await lerBercosAtuais();
     if (!atual.ok) {
@@ -1439,6 +1501,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return false;
     }
 
+    // Confere o navio novamente na confirmação, antes de reservar qualquer berço.
+    if (!await confirmarNavioNoPortoParaBerco(navio)) return false;
+
     // 1) Reserva o novo berço no banco (falha se outro operador o ocupou primeiro)
     const reserva = await reservarBercoNoBanco(bercoAlvo, navio);
     if (!reserva.ok) {
@@ -1466,16 +1531,6 @@ document.addEventListener('DOMContentLoaded', () => {
     refletirBercoLocal(bercoAlvo.nome, reserva.payload);
     renderBercosPanel();
     renderGpsTable();
-
-    if (window.nexusSupabase) {
-      try {
-        let navioQuery = window.nexusSupabase.from('navios').update({ localizacao: 'DENTRO_DO_PORTO' });
-        navioQuery = UUID_NAVIO_RE.test(navio.id) ? navioQuery.eq('id', navio.id) : navioQuery.eq('numero_imo', navio.imo);
-        await navioQuery;
-      } catch (e) {
-        console.warn('[NexusPort] Erro ao salvar vinculação de navio no Supabase:', e);
-      }
-    }
 
     if (window.registrarLogAlteracao) {
       await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Navio ${navio.nome} vinculado ao ${bercoAlvo.nome}`);
@@ -1535,6 +1590,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.excluirNavio = async function(imo, opcoes) {
+    if (isEstivador) return;
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) {
       avisoExclusao('alerta', 'Navio Não Encontrado', `O navio com IMO ${imo} não consta na lista local do sistema. Atualize a página.`);
@@ -1891,7 +1947,8 @@ document.addEventListener('DOMContentLoaded', () => {
             id: c.id || `CONT-${c.numero_identificacao}`,
             rawDbId: c.id,
             identificacao: c.numero_identificacao,
-            tipo: c.material_carregado || 'Carga Geral',
+            tipo: c.material_carregado || '',
+            tipo_carga_id: c.tipo_carga_id || null,
             dataFabr: c.data_fabricacao || '',
             dataManut: c.data_ultima_manutencao || 'Sem Manutenção',
             refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
@@ -2014,6 +2071,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
   window.vincularContainerANavio = async function(contIdentificacao, opcoes) {
+    if (isEstivador) return;
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
     if (!cont) return;
 
@@ -2101,6 +2159,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const contsDoNavio = containersList.filter(c => (c.navio || '').toLowerCase() === navioAlvo.nome.toLowerCase() || c.navio_id === navioAlvo.id);
 
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      // Vincular o contêiner também vincula suas cargas: não contornar a regra de destinos.
+      // Mesma normalização da vinculação em Cargas & Pátio: caixa, acentos e espaços.
+      const normalizarDestino = valor => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+      const destinoNavio = normalizarDestino(navioAlvo.destino || navioAlvo.porto_destino);
+      const referenciasCont = [cont.identificacao, cont.id, cont.rawDbId].filter(Boolean).map(String);
+      const cargaIncompativel = cargasFluxo.find(c => {
+        if (!c || ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)) return false;
+        if (![c.container, c.container_id].filter(Boolean).some(ref => referenciasCont.includes(String(ref)))) return false;
+        const destinoCarga = normalizarDestino(c.destino);
+        return !destinoCarga || !destinoNavio || ['destino', 'destino geral'].includes(destinoCarga) ||
+          ['destino', 'destino geral'].includes(destinoNavio) || destinoCarga !== destinoNavio;
+      });
+      if (cargaIncompativel) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Destinos Incompatíveis', `A carga ${cargaIncompativel.id} do contêiner tem destino ${cargaIncompativel.destino || 'não informado'}, diferente ou não confirmável em relação ao destino do navio (${navioAlvo.destino || navioAlvo.porto_destino || 'não informado'}). Vinculação não realizada.`);
+        return;
+      }
       let pesoTotalNavioTons = 0;
 
       cargasFluxo.filter(crg => crg.navio && crg.navio.toLowerCase() === navioAlvo.nome.toLowerCase()).forEach(crg => {
@@ -2161,6 +2235,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Excluir Contêiner (Tarefa 8)
   window.excluirContainer = async function(contIdentificacao, opcoes) {
+    if (isEstivador) return;
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
     if (!cont) {
       avisoExclusao('alerta', 'Contêiner Não Encontrado', `O contêiner ${contIdentificacao} não consta na lista local do sistema. Atualize a página.`);
@@ -2271,6 +2346,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const contValidacao = NexusCodigos.validarConteiner(document.getElementById('contIdentificacao').value);
       const identificacao = contValidacao.valor;
       const tipo = document.getElementById('contTipo').value.trim();
+      const tipoCadastrado = window.getNexusTipoCarga?.(tipo);
+      if (!tipoCadastrado || tipoCadastrado.nome !== tipo) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Tipo de Carga Inválido', 'Selecione um tipo de carga cadastrado na lista.');
+        return;
+      }
       const dataFabr = document.getElementById('contFabricacao').value;
       let dataManut = document.getElementById('contManutencao').value;
       if (semManutCheckbox && semManutCheckbox.checked) {
@@ -2303,16 +2383,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const newCont = {
         id: `CONT-${Math.floor(100 + Math.random() * 900)}`,
-        identificacao, tipo, dataFabr, dataManut, refTempo, navio: '', estado: 'DISPONIVEL'
+        identificacao, tipo, dataFabr, dataManut, refTempo, navio: '', estado: 'OPERANTE'
       };
 
+      const uuidTipo = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let tipoCargaId = uuidTipo.test(String(tipoCadastrado.id)) ? tipoCadastrado.id : null;
       let insertedContId = null;
       if (window.nexusSupabase) {
         try {
           const dbDataManut = (dataManut && dataManut !== 'Sem Manutenção') ? dataManut : null;
+          if (!tipoCargaId) {
+            const { data: tipoBanco } = await window.nexusSupabase.from('tipos_carga').select('id').eq('nome', tipo).maybeSingle();
+            if (tipoBanco && uuidTipo.test(String(tipoBanco.id))) tipoCargaId = tipoBanco.id;
+          }
           const { data, error } = await window.nexusSupabase.from('containers').insert({
             numero_identificacao: identificacao,
             material_carregado: tipo,
+            ...(tipoCargaId ? { tipo_carga_id: tipoCargaId } : {}),
             data_fabricacao: dataFabr || null,
             data_ultima_manutencao: dbDataManut,
             tempo_uso_referencia: refTempo,
@@ -2337,6 +2424,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
+      newCont.tipo_carga_id = tipoCargaId;
       containersList.push(newCont);
       localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
 
@@ -2357,6 +2445,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let guindastesList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
 
   async function carregarGuindastesSupabase() {
+    if (isPlanejador) return;
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase.from('guindastes').select('*');
@@ -2412,7 +2501,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="material-symbols-outlined text-[13px]">task</span>
                 <span>Tarefas (${tarefasAtivas.length})</span>
               </button>
-              <button type="button" onclick="window.excluirGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+              <button ${isEstivador ? 'hidden disabled' : ''} type="button" onclick="window.excluirGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
             </div>
           </td>
         </tr>
@@ -2422,6 +2511,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Excluir Guindaste (Item 6)
   window.excluirGuindaste = async function(gndIdentificacao, opcoes) {
+    if (isEstivador || isPlanejador) return;
     const guindaste = guindastesList.find(g => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(gndIdentificacao));
     if (!guindaste) {
       avisoExclusao('alerta', 'Guindaste Não Encontrado', `O guindaste ${gndIdentificacao} não consta na lista local do sistema. Atualize a página.`);
@@ -2542,6 +2632,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.exibirTarefasGuindaste = async function(gndIdentificacao) {
+    if (isPlanejador) return;
     tarefasGndAtual = gndIdentificacao;
     if (!tarefasModal) {
       if (window.mostrarFeedback) {
@@ -2556,6 +2647,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Conclui a tarefa: atualiza o Setor do Pátio da carga (Cargas & Pátio) e
   // remove a pendência do guindaste.
   window.concluirTarefaGuindaste = async function(tarefaId, opcoes) {
+    if (isPlanejador) return;
     const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
     const tarefa = tarefasGnd.find(t => String(t.id) === String(tarefaId));
     if (!tarefa) {
