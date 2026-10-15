@@ -85,11 +85,11 @@
     // depende do gesto de desbloqueio (avaliado de novo quando o gesto acontece).
     const menuItems = [
       { id: 'dashboard.html', label: 'Painel Geral', icon: 'dashboard', href: 'dashboard.html', visible: () => true },
-      { id: 'cargas.html', label: 'Cargas & Pátio', icon: 'inventory_2', href: 'cargas.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente || isArrumador },
+      { id: 'cargas.html', label: 'Cargas & Pátio', icon: 'inventory_2', href: 'cargas.html', visible: () => isDiretor || isSupervisor || isInspetor || isEstivador || isConferente || isArrumador },
       { id: 'inspecao.html', label: 'Inspeção & Checklist', icon: 'fact_check', href: 'inspecao.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente },
-      { id: 'scanner.html', label: 'Scanner QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente || isArrumador },
-      { id: 'embarcacoes.html', label: 'Embarcações & GPS', icon: 'directions_boat', href: 'embarcacoes.html', visible: () => isDiretor || isSupervisor || isInspetor || isPlanejador || isEstivador },
-      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador || isEstivador || isPlanejador },
+      { id: 'scanner.html', label: 'Scanner QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: () => isDiretor || isSupervisor || isInspetor || isEstivador || isConferente || isArrumador },
+      { id: 'embarcacoes.html', label: 'Embarcações & GPS', icon: 'directions_boat', href: 'embarcacoes.html', visible: () => isDiretor || isSupervisor || isInspetor || isPlanejador },
+      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador },
       { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: () => isDiretor || isSupervisor },
       { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: () => isTecnico || isDiretor },
       // Item oculto por padrão: só aparece depois dos 5 cliques no nome do
