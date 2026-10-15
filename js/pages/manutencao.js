@@ -22,6 +22,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const isInspetor = ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
   const isSupervisor = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
+  const isEstivadorOnly = session.cargo === 'ESTIVADOR';
+  const isArrumadorOnly = session.cargo === 'ARRUMADOR_CONSERTADOR';
+  const isPlanejadorOnly = session.cargo === 'PLANEJADOR_PATIO_NAVIOS';
+
+  // Se for Estivador, esconde atalhos/seções de manutenção de navio e abertura geral de OS
+  if (isEstivadorOnly) {
+    ['secaoNavioManut', 'secaoGestaoOs'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
+  }
+
+  // Se for Arrumador/Consertador, esconde atalhos de fazer pedidos/criar OS de manutenção (pode apenas aprovar/recusar/concluir)
+  if (isArrumadorOnly) {
+    const toggleNavioBtn = document.getElementById('toggleNavioManutFormBtn');
+    if (toggleNavioBtn) toggleNavioBtn.classList.add('hidden');
+    const toggleOsBtn = document.getElementById('toggleOsFormBtn');
+    if (toggleOsBtn) toggleOsBtn.classList.add('hidden');
+    const panicBox = document.getElementById('panicButton')?.closest('.p-4');
+    if (panicBox) panicBox.classList.add('hidden');
+  }
+
+  // Tarefa 7: Planejador de Pátio e Navios só pode pedir manutenção de navios e contêineres (sem aprovar/recusar e sem pedir guindaste)
+  if (isPlanejadorOnly) {
+    const panicBox = document.getElementById('panicButton')?.closest('.p-4');
+    if (panicBox) panicBox.classList.add('hidden');
+  }
 
   let guindastesList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
 
@@ -235,8 +262,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // opcoes (uso do agente WebMCP): { descricao? } evita o diálogo de justificativa.
   window.solicitarManutencaoGuindaste = async function(identificacao, opcoes) {
-    if (!isSupervisor) {
-      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas o Supervisor pode solicitar manutenção de guindastes!');
+    const podeSolicitar = isSupervisor || isEstivadorOnly || isInspetor;
+    if (!podeSolicitar || isPlanejadorOnly) {
+      if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Acesso Restrito', 'Planejador de Pátio e Navios não tem permissão para solicitar manutenção de guindastes!');
       return;
     }
 
@@ -748,9 +776,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         await qStatus;
 
-        let limpaNome = (os.equipamento || '').replace(/^(Navio|Guindaste|Contêiner|Container)[:\s]*/i, '').replace(/\s*-.*/, '').trim();
+        let limpaNome = (os.equipamento || '').replace(/^(Navio|Guindaste|Contêiner|Container)[:\s]*/i, '').trim();
         if (!limpaNome || limpaNome === 'GND' || limpaNome === 'CRG' || limpaNome.length <= 2) {
-          const matchCode = (os.descricao || '').match(/(?:Navio|Guindaste|Contêiner|Container)[:\s]*([^\s-]+)/i);
+          const matchCode = (os.descricao || '').match(/(?:Navio|Guindaste|Contêiner|Container)[:\s]*([A-Z0-9-]+)/i);
           if (matchCode) {
             limpaNome = matchCode[1].replace(/^(Navio|Guindaste|Contêiner|Container)[:\s]*/i, '').trim();
           }

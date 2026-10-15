@@ -8,6 +8,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
   if (!session) return;
 
+  const isEstivadorOnly = session.cargo === 'ESTIVADOR';
+  const isPlanejadorOnly = session.cargo === 'PLANEJADOR_PATIO_NAVIOS';
+
+  // Se o usuário for Estivador, a página Embarcações & GPS é restrita a guindastes apenas
+  if (isEstivadorOnly) {
+    ['indicadoresMaritimos', 'secaoBercos', 'secaoNavios', 'secaoContainers', 'secaoRotas'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
+  }
+
+  // Tarefa 7: Planejador de Pátio e Navios tem acesso a Embarcações & GPS sem guindastes
+  if (isPlanejadorOnly) {
+    const secaoGnd = document.getElementById('secaoGuindastes');
+    if (secaoGnd) secaoGnd.classList.add('hidden');
+  }
+
   // Utilitários Anti-XSS (js/security.js) — codificam dados não confiáveis
   // antes de qualquer inserção em HTML ou em manipuladores inline.
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
@@ -446,23 +463,34 @@ document.addEventListener('DOMContentLoaded', () => {
   async function confirmarChegadaNavio(navio, novaLocalizacao) {
     const chave = String(navio && (navio.id || navio.imo) || '');
     if (!chave || chegadasEmConfirmacao.has(chave)) return;
-    if (!window.nexusSupabase || !UUID_NAVIO_RE.test(String(navio.id || ''))) return;
+    if (!window.nexusSupabase) return;
+    const horaChegada = new Date().toISOString();
     chegadasEmConfirmacao.add(chave);
     try {
-      const { data, error } = await window.nexusSupabase
+      let q = window.nexusSupabase
         .from('navios')
-        .update({ localizacao: novaLocalizacao })
-        .eq('id', navio.id)
-        .eq('localizacao', 'FORA_DO_PORTO')
-        .select('id, localizacao, data_saida')
-        .maybeSingle();
+        .update({
+          localizacao: novaLocalizacao,
+          data_chegada: horaChegada,
+          tempo_fora_do_porto: '0d 0h 0s (Atracado no Destino)'
+        })
+        .eq('localizacao', 'FORA_DO_PORTO');
+
+      if (UUID_NAVIO_RE.test(String(navio.id))) {
+        q = q.eq('id', navio.id);
+      } else {
+        q = q.eq('numero_imo', navio.imo);
+      }
+
+      const { data, error } = await q.select('id, localizacao, data_saida, data_chegada').maybeSingle();
       if (error) throw error;
-      // Alguns dublês/versões legadas retornam uma lista mesmo com maybeSingle;
-      // o Supabase atual retorna o objeto diretamente.
       const registro = Array.isArray(data) ? data[0] : data;
       if (!registro || registro.localizacao !== novaLocalizacao) return;
       navio.localizacao = registro.localizacao;
       navio.dataSaida = registro.data_saida || navio.dataSaida;
+      navio.data_saida = registro.data_saida || navio.data_saida;
+      navio.data_chegada = registro.data_chegada || horaChegada;
+      navio.tempo_fora_do_porto = '0d 0h 0s (Atracado no Destino)';
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('navios');
@@ -493,8 +521,11 @@ document.addEventListener('DOMContentLoaded', () => {
             destino: n.porto_destino || '',
             // A distância não é gravada no navio: vem da rota marítima cadastrada (distanciaDoNavio)
             distancia: null,
-            // Nunca inventa horário de saída: sem data persistida, o ETA fica indisponível.
-            dataSaida: n.data_saida || null
+            // Preserva tanto dataSaida quanto data_saida para compatibilidade entre módulos
+            dataSaida: n.data_saida || n.dataSaida || null,
+            data_saida: n.data_saida || n.dataSaida || null,
+            tempo_fora_do_porto: n.tempo_fora_do_porto || null,
+            data_chegada: n.data_chegada || null
           }));
           localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
           renderGpsTable();
@@ -998,24 +1029,25 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (!navio.id || !UUID_NAVIO_RE.test(String(navio.id))) {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Navio sem Identificação', 'O navio não possui um UUID válido no banco de dados. Recarregue os dados antes de tentar novamente.');
-        }
-        return;
-      }
-
       const horaSaida = new Date().toISOString();
       let navioAtualizado;
       try {
-        // Compare-and-set: outro dispositivo só pode vencer esta liberação uma vez.
-        const { data, error } = await window.nexusSupabase
+        let query = window.nexusSupabase
           .from('navios')
-          .update({ localizacao: 'FORA_DO_PORTO', data_saida: horaSaida })
-          .eq('id', navio.id)
-          .eq('localizacao', 'DENTRO_DO_PORTO')
-          .select('id, localizacao, data_saida')
-          .maybeSingle();
+          .update({
+            localizacao: 'FORA_DO_PORTO',
+            data_saida: horaSaida,
+            tempo_fora_do_porto: '0d 0h 0m 0s fora'
+          })
+          .eq('localizacao', 'DENTRO_DO_PORTO');
+
+        if (UUID_NAVIO_RE.test(String(navio.id))) {
+          query = query.eq('id', navio.id);
+        } else {
+          query = query.eq('numero_imo', navio.imo);
+        }
+
+        const { data, error } = await query.select('id, localizacao, data_saida').maybeSingle();
 
         if (error) throw error;
         if (!data || data.localizacao !== 'FORA_DO_PORTO' || !data.data_saida) {
@@ -1066,6 +1098,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // Só agora o estado confirmado é refletido em memória e no cache.
       navio.localizacao = navioAtualizado.localizacao;
       navio.dataSaida = navioAtualizado.data_saida;
+      navio.data_saida = navioAtualizado.data_saida;
+      navio.tempo_fora_do_porto = '0d 0h 0m 0s fora';
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
@@ -2504,7 +2538,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderTarefasModal() {
     if (!tarefasModal || !tarefasListEl || !tarefasGndAtual) return;
-    if (tarefasGndLabel) tarefasGndLabel.textContent = tarefasGndAtual;
+
+    // Obter estado atual do guindaste no cadastro
+    const gndAtualObj = guindastesList.find(g => (g.identificacao || g.id) === tarefasGndAtual);
+    const emManut = gndAtualObj && gndAtualObj.estado === 'EM_MANUTENCAO';
+
+    if (tarefasGndLabel) {
+      const statusBadge = emManut
+        ? ' <span class="px-2 py-0.5 rounded text-xs font-mono font-bold uppercase bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">EM MANUTENÇÃO</span>'
+        : ' <span class="px-2 py-0.5 rounded text-xs font-mono font-bold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">OPERANTE</span>';
+      tarefasGndLabel.innerHTML = `${esc(tarefasGndAtual)}${statusBadge}`;
+    }
+
     const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
     const pendentes = tarefasGnd.filter(t => t.guindasteId === tarefasGndAtual && (!t.status || t.status === 'PENDENTE'));
     if (pendentes.length === 0) {
@@ -2532,10 +2577,17 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>${esc(t.dataCriacao || '')}</span>
           </div>
           <div class="flex justify-end pt-1">
-            <button type="button" onclick="window.concluirTarefaGuindaste(${jsArg(t.id)})" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm">
-              <span class="material-symbols-outlined text-[16px]">check_circle</span>
-              <span>Concluída</span>
-            </button>
+            ${emManut ? `
+              <button type="button" disabled aria-disabled="true" title="Guindaste em manutenção: movimentação de carga bloqueada" class="px-4 py-2 rounded-xl bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-bold text-xs flex items-center gap-1.5 cursor-not-allowed opacity-75">
+                <span class="material-symbols-outlined text-[16px]">block</span>
+                <span>Bloqueado (Em Manutenção)</span>
+              </button>
+            ` : `
+              <button type="button" onclick="window.concluirTarefaGuindaste(${jsArg(t.id)})" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                <span>Concluída</span>
+              </button>
+            `}
           </div>
         </div>`;
     }).join('');
