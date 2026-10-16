@@ -71,8 +71,11 @@ document.addEventListener('DOMContentLoaded', () => {
       cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     }
 
-    // Cargas entregues (e canceladas) não são mais inspecionadas: não entram na lista.
-    const cargasAtivas = cargas.filter(c => !['CANCELADA', 'ENTREGUE'].includes(c.status) && Boolean(c.id));
+    // Cargas entregues, canceladas ou em trânsito não são inspecionáveis: não
+    // entram na lista. EM_TRANSITO = a carga já saiu do porto com o navio
+    // liberado; a inspeção formal pertence às etapas anteriores do fluxo
+    // (recebimento/inspeção e armazenagem — SPEC §6).
+    const cargasAtivas = cargas.filter(c => !['CANCELADA', 'ENTREGUE', 'EM_TRANSITO'].includes(c.status) && Boolean(c.id));
 
     selectCarga.innerHTML = '<option value="">Selecione uma Carga para Vistoria...</option>';
     cargasAtivas.forEach(c => {
@@ -210,6 +213,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Carga em trânsito já saiu do porto: o checklist nem chega a ser aberto
+    // (vale para seleção manual, ?carga= na URL e leitura de QR Code). A tela
+    // fica sem nenhuma carga em inspeção (cargaAtual nulo).
+    if (cargaAtual.status === 'EM_TRANSITO') {
+      const idEmTransito = cargaAtual.id;
+      cargaAtual = null;
+      avisoCargaEmTransito(idEmTransito);
+      return;
+    }
+
     if (cargaTag) cargaTag.textContent = `${cargaAtual.id} • ${cargaAtual.tipo} • Porto: ${cargaAtual.portoDescarga}`;
 
     const items = getChecklistTemplate(cargaAtual.tipo);
@@ -290,6 +303,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
+  // Bloqueio de carga EM_TRANSITO (já saiu do porto): mensagem única usada na
+  // abertura do checklist e na recusa da gravação, em qualquer canal.
+  function avisoCargaEmTransito(idCarga) {
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('atencao', 'Carga em Trânsito', `A carga ${idCarga} está EM TRÂNSITO (já saiu do porto) e não pode ser inspecionada. A inspeção formal só é permitida antes da saída, nas etapas de recebimento/inspeção e armazenagem do fluxo.`);
+    }
+  }
+
+  // Conferência no banco no momento da gravação: o navio pode ter sido liberado
+  // (carga → EM_TRANSITO) enquanto o checklist estava aberto nesta tela.
+  // Retorna true somente quando o banco confirma o status EM_TRANSITO; falha de
+  // consulta não bloqueia (o fluxo normal reporta seus próprios erros adiante).
+  async function cargaEmTransitoNoBanco() {
+    if (!window.nexusSupabase || !cargaAtual) return false;
+    try {
+      const targetDbId = cargaAtual.rawDbId || cargaAtual.id;
+      let consulta = window.nexusSupabase.from('cargas').select('id, status_fluxo');
+      consulta = isUUID(targetDbId)
+        ? consulta.eq('id', targetDbId)
+        : consulta.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+      const { data, error } = await consulta.maybeSingle();
+      return !error && Boolean(data) && String(data.status_fluxo || '').toUpperCase() === 'EM_TRANSITO';
+    } catch (e) {
+      return false;
+    }
+  }
+
   // Motivo (em português) da recusa do banco ao gravar a inspeção formal.
   // 23505 = violação do índice uq_inspecoes_carga_ativa (só UMA inspeção ativa por carga).
   // Com o histórico de inspeções, isso só ocorre se outra gravação da mesma carga
@@ -308,6 +348,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
       if (!cargaAtual) return false;
+
+      // Recusa na gravação: carga em trânsito não pode ser inspecionada — nem
+      // pelo estado local, nem pelo status confirmado no banco (corrida com a
+      // liberação do navio enquanto o checklist estava aberto).
+      if (cargaAtual.status === 'EM_TRANSITO' || await cargaEmTransitoNoBanco()) {
+        avisoCargaEmTransito(cargaAtual.id);
+        return false;
+      }
 
       cargaAtual.status = 'ARMAZENAGEM';
       cargaAtual.resultadoInspecao = 'APROVADA';
@@ -449,6 +497,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
       if (!cargaAtual) return false;
+
+      // Recusa na gravação: carga em trânsito já saiu do porto — a inspeção
+      // (aprovação ou recusa) não pode mais ser registrada (estado local e banco).
+      if (cargaAtual.status === 'EM_TRANSITO' || await cargaEmTransitoNoBanco()) {
+        avisoCargaEmTransito(cargaAtual.id);
+        return false;
+      }
 
       if (motivoBox) motivoBox.classList.remove('hidden');
 
