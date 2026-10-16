@@ -650,6 +650,9 @@ video {
 .z-50 {
   z-index: 50;
 }
+.z-\[45\] {
+  z-index: 45;
+}
 .col-span-2 {
   grid-column: span 2 / span 2;
 }
@@ -679,6 +682,9 @@ video {
 .mb-1 {
   margin-bottom: 0.25rem;
 }
+.mb-1\.5 {
+  margin-bottom: 0.375rem;
+}
 .mb-2 {
   margin-bottom: 0.5rem;
 }
@@ -690,6 +696,9 @@ video {
 }
 .mr-1 {
   margin-right: 0.25rem;
+}
+.mr-auto {
+  margin-right: auto;
 }
 .mt-0\.5 {
   margin-top: 0.125rem;
@@ -811,6 +820,9 @@ video {
 .max-h-\[92vh\] {
   max-height: 92vh;
 }
+.min-h-\[18px\] {
+  min-height: 18px;
+}
 .min-h-\[32px\] {
   min-height: 32px;
 }
@@ -918,6 +930,9 @@ video {
 }
 .max-w-\[500px\] {
   max-width: 500px;
+}
+.max-w-full {
+  max-width: 100%;
 }
 .max-w-lg {
   max-width: 32rem;
@@ -1104,6 +1119,9 @@ video {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.whitespace-normal {
+  white-space: normal;
+}
 .whitespace-nowrap {
   white-space: nowrap;
 }
@@ -1112,6 +1130,9 @@ video {
 }
 .whitespace-pre-wrap {
   white-space: pre-wrap;
+}
+.break-words {
+  overflow-wrap: break-word;
 }
 .rounded {
   border-radius: 0.25rem;
@@ -1369,6 +1390,10 @@ video {
 }
 .bg-slate-50\/60 {
   background-color: rgb(248 250 252 / 0.6);
+}
+.bg-slate-600 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(71 85 105 / var(--tw-bg-opacity, 1));
 }
 .bg-slate-700 {
   --tw-bg-opacity: 1;
@@ -2093,6 +2118,34 @@ html.dark :focus-visible {
   #mobileMenuToggle {
     display: none;
   }
+  #appSidebar {
+    position: sticky;
+    top: 4rem;
+    height: calc(100vh - 4rem);
+    max-height: calc(100vh - 4rem);
+    align-self: flex-start;
+    transition: width 0.22s ease, transform 0.3s ease;
+  }
+  #appSidebar.nexus-sidebar-collapsed {
+    width: 4.5rem;
+  }
+  #appSidebar.nexus-sidebar-collapsed #sidebarScrollArea {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  #appSidebar.nexus-sidebar-collapsed .sidebar-nav-label,
+  #appSidebar.nexus-sidebar-collapsed #sidebarEmergencyBtn span:last-child,
+  #appSidebar.nexus-sidebar-collapsed #sidebarFooter > span:first-child,
+  #appSidebar.nexus-sidebar-collapsed #sidebarFooter a span:last-child {
+    display: none;
+  }
+  #appSidebar.nexus-sidebar-collapsed .sidebar-nav-item,
+  #appSidebar.nexus-sidebar-collapsed #sidebarEmergencyBtn,
+  #appSidebar.nexus-sidebar-collapsed #sidebarFooter {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
 }
 .placeholder\:text-slate-400::placeholder {
   --tw-text-opacity: 1;
@@ -2244,6 +2297,10 @@ html.dark :focus-visible {
 .hover\:bg-slate-50:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(248 250 252 / var(--tw-bg-opacity, 1));
+}
+.hover\:bg-slate-700:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(51 65 85 / var(--tw-bg-opacity, 1));
 }
 .hover\:bg-slate-800:hover {
   --tw-bg-opacity: 1;
@@ -2700,6 +2757,10 @@ html.dark :focus-visible {
     grid-column: span 3 / span 3;
   }
 
+  .sm\:mt-0 {
+    margin-top: 0px;
+  }
+
   .sm\:inline {
     display: inline;
   }
@@ -2728,8 +2789,16 @@ html.dark :focus-visible {
     flex-direction: row;
   }
 
+  .sm\:flex-nowrap {
+    flex-wrap: nowrap;
+  }
+
   .sm\:items-center {
     align-items: center;
+  }
+
+  .sm\:gap-3 {
+    gap: 0.75rem;
   }
 
   .sm\:self-auto {
@@ -2738,6 +2807,12 @@ html.dark :focus-visible {
 
   .sm\:self-center {
     align-self: center;
+  }
+
+  .sm\:truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .sm\:p-8 {
@@ -2760,6 +2835,22 @@ html.dark :focus-visible {
     position: static;
   }
 
+  .md\:sticky {
+    position: sticky;
+  }
+
+  .md\:top-16 {
+    top: 4rem;
+  }
+
+  .md\:z-40 {
+    z-index: 40;
+  }
+
+  .md\:z-50 {
+    z-index: 50;
+  }
+
   .md\:col-span-2 {
     grid-column: span 2 / span 2;
   }
@@ -2774,6 +2865,10 @@ html.dark :focus-visible {
 
   .md\:inline {
     display: inline;
+  }
+
+  .md\:inline-flex {
+    display: inline-flex;
   }
 
   .md\:hidden {
@@ -2803,6 +2898,10 @@ html.dark :focus-visible {
 
   .md\:grid-cols-5 {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .md\:self-start {
+    align-self: flex-start;
   }
 
   .md\:overflow-hidden {

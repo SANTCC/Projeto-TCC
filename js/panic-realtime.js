@@ -171,23 +171,23 @@
 
     banner = document.createElement('div');
     banner.id = 'nexusPanicFooter';
-    banner.className = 'hidden fixed bottom-0 left-0 right-0 z-40 bg-red-600 text-white shadow-[0_-4px_20px_rgba(0,0,0,0.35)] border-t-2 border-red-800';
+    banner.className = 'hidden fixed bottom-0 left-0 right-0 z-[45] bg-red-600 text-white shadow-[0_-4px_20px_rgba(0,0,0,0.35)] border-t-2 border-red-800';
     banner.setAttribute('role', 'alert');
     banner.innerHTML = `
-      <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-2.5">
-        <div class="flex items-center gap-3 min-w-0">
-          <span class="relative flex h-3 w-3 shrink-0">
+      <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2.5">
+        <div class="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+          <span class="relative flex h-3 w-3 shrink-0 mt-1 sm:mt-0">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
             <span class="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
           </span>
-          <span class="material-symbols-outlined text-[22px] shrink-0">e911_emergency</span>
-          <div class="min-w-0">
-            <span id="nexusPanicFooterTitle" class="font-display font-bold text-xs sm:text-sm uppercase tracking-wider block truncate">Emergência global ativa — Terminal STS-01</span>
-            <span id="nexusPanicFooterDetail" class="text-[11px] text-red-100 block truncate">Uma emergência crítica está em andamento no terminal.</span>
-            <span id="nexusPanicFooterHaptics" class="hidden text-[10px] text-red-100/90 block truncate"></span>
+          <span class="material-symbols-outlined text-[22px] shrink-0 mt-0.5 sm:mt-0">e911_emergency</span>
+          <div class="min-w-0 flex-1">
+            <span id="nexusPanicFooterTitle" class="font-display font-bold text-xs sm:text-sm uppercase tracking-wider block whitespace-normal sm:truncate break-words">Emergência global ativa — Terminal STS-01</span>
+            <span id="nexusPanicFooterDetail" class="text-[11px] text-red-100 block whitespace-normal sm:truncate break-words">Uma emergência crítica está em andamento no terminal.</span>
+            <span id="nexusPanicFooterHaptics" class="hidden text-[10px] text-red-100/90 block whitespace-normal sm:truncate break-words"></span>
           </div>
         </div>
-        <button id="nexusPanicFooterDeactivate" type="button" class="hidden sm:flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-red-700 hover:bg-red-50 font-bold text-[11px] uppercase tracking-wide transition-colors">
+        <button id="nexusPanicFooterDeactivate" type="button" class="hidden flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-red-700 hover:bg-red-50 font-bold text-[11px] uppercase tracking-wide transition-colors">
           <span class="material-symbols-outlined text-[16px]">notifications_off</span>
           <span>Desativar Alarme</span>
         </button>

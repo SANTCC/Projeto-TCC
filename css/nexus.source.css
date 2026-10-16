@@ -134,4 +134,32 @@ html.dark :focus-visible {
   #mobileMenuToggle {
     display: none;
   }
+  #appSidebar {
+    position: sticky;
+    top: 4rem;
+    height: calc(100vh - 4rem);
+    max-height: calc(100vh - 4rem);
+    align-self: flex-start;
+    transition: width 0.22s ease, transform 0.3s ease;
+  }
+  #appSidebar.nexus-sidebar-collapsed {
+    width: 4.5rem;
+  }
+  #appSidebar.nexus-sidebar-collapsed #sidebarScrollArea {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  #appSidebar.nexus-sidebar-collapsed .sidebar-nav-label,
+  #appSidebar.nexus-sidebar-collapsed #sidebarEmergencyBtn span:last-child,
+  #appSidebar.nexus-sidebar-collapsed #sidebarFooter > span:first-child,
+  #appSidebar.nexus-sidebar-collapsed #sidebarFooter a span:last-child {
+    display: none;
+  }
+  #appSidebar.nexus-sidebar-collapsed .sidebar-nav-item,
+  #appSidebar.nexus-sidebar-collapsed #sidebarEmergencyBtn,
+  #appSidebar.nexus-sidebar-collapsed #sidebarFooter {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
 }
