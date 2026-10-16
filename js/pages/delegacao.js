@@ -567,9 +567,21 @@ document.addEventListener('DOMContentLoaded', () => {
   if (revogarBtn) {
     revogarBtn.addEventListener('click', () => revogarDelegacaoAtiva({}));
   }
-  // Sincronização viva em tempo real (Item 2)
-  window.addEventListener('nexus_data_changed', () => {
+  // Sincronização viva em tempo real (Item 2 / L-06)
+  const ENTIDADES_QUE_AFETAM_DELEGACAO = new Set([
+    'delegacoes_supervisor', 'funcionarios', 'nexus_active_delegation', 'nexus_func_list',
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+  const ENTIDADES_SYNC_GERAL_DELEGACAO = new Set([
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    if (entity && !ENTIDADES_QUE_AFETAM_DELEGACAO.has(entity)) return;
+    const geral = !entity || ENTIDADES_SYNC_GERAL_DELEGACAO.has(entity);
     carregarDelegacaoAtiva();
-    carregarTitulares();
+    if (geral || entity === 'funcionarios' || entity === 'nexus_func_list') {
+      carregarTitulares();
+    }
   });
 });

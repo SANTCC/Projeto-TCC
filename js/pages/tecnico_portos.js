@@ -1182,9 +1182,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   aplicarRestricoesTecnicoPortos();
 
-  // Sincronização viva em tempo real (Item 2)
-  window.addEventListener('nexus_data_changed', () => {
-    carregarFuncionariosCompleto();
-    carregarVisitantesCompleto();
+  // Sincronização viva em tempo real (Item 2 / L-06)
+  const ENTIDADES_FUNC_TECNICO = new Set(['funcionarios', 'nexus_func_list']);
+  const ENTIDADES_VIS_TECNICO = new Set(['visitantes', 'funcionarios', 'nexus_vis_list', 'nexus_func_list']);
+  const ENTIDADES_SYNC_GERAL_TECNICO = new Set([
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    const geral = !entity || ENTIDADES_SYNC_GERAL_TECNICO.has(entity);
+    if (!geral && !ENTIDADES_FUNC_TECNICO.has(entity) && !ENTIDADES_VIS_TECNICO.has(entity)) return;
+    if (geral || ENTIDADES_FUNC_TECNICO.has(entity)) {
+      carregarFuncionariosCompleto();
+    }
+    if (geral || ENTIDADES_VIS_TECNICO.has(entity)) {
+      carregarVisitantesCompleto();
+    }
   });
 });

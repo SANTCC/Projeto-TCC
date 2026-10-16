@@ -996,11 +996,62 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Sincronização viva em tempo real (Item 2)
-  window.addEventListener('nexus_data_changed', () => {
-    renderCardsOperacionais();
-    renderIndicadoresExecutivosTable();
-    renderAuditLogTable();
-    renderTrailDecisoesTable();
+  // Sincronização viva em tempo real (Item 2 / L-05):
+  // filtra por entidade afetada e agrupa rajadas curtas (debounce de 60 ms).
+  const ENTIDADES_CARDS_DASHBOARD = new Set([
+    'cargas', 'navios', 'manutencoes', 'historico_manutencoes', 'containers',
+    'guindastes', 'inspecoes', 'nexus_cargas_fluxo', 'nexus_navios_list', 'nexus_os_list'
+  ]);
+  const ENTIDADES_KPIS_DASHBOARD = new Set([
+    'cargas', 'navios', 'bercos', 'funcionarios', 'logs_alteracoes',
+    'leituras_qr_code', 'inspecoes', 'visitantes', 'trail_decisoes'
+  ]);
+  const ENTIDADES_AUDITORIA_DASHBOARD = new Set([
+    'logs_alteracoes', 'funcionarios', 'cargas', 'nexus_audit_logs'
+  ]);
+  const ENTIDADES_TRAIL_DASHBOARD = new Set([
+    'trail_decisoes', 'retificacoes_trail', 'funcionarios', 'cargas',
+    'navios', 'manutencoes', 'nexus_trail_decisoes'
+  ]);
+  const ENTIDADES_SYNC_GERAL_DASHBOARD = new Set([
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+
+  let dashboardSyncTimer = null;
+  let dashboardSyncGeral = false;
+  const dashboardEntidadesPendentes = new Set();
+
+  window.addEventListener('nexus_data_changed', (event) => {
+    const detalhe = (event && event.detail) || {};
+    const entity = detalhe.entity || null;
+    const entities = Array.isArray(detalhe.entities) ? detalhe.entities : (entity ? [entity] : []);
+
+    if (entities.length === 0 || entities.some((e) => !e || ENTIDADES_SYNC_GERAL_DASHBOARD.has(e))) {
+      dashboardSyncGeral = true;
+    } else {
+      entities.forEach((e) => dashboardEntidadesPendentes.add(e));
+    }
+
+    if (dashboardSyncTimer !== null) return;
+    dashboardSyncTimer = setTimeout(() => {
+      dashboardSyncTimer = null;
+      const geral = dashboardSyncGeral;
+      const lote = Array.from(dashboardEntidadesPendentes);
+      dashboardSyncGeral = false;
+      dashboardEntidadesPendentes.clear();
+
+      if (geral || lote.some((e) => ENTIDADES_CARDS_DASHBOARD.has(e))) {
+        renderCardsOperacionais();
+      }
+      if (geral || lote.some((e) => ENTIDADES_KPIS_DASHBOARD.has(e))) {
+        renderIndicadoresExecutivosTable();
+      }
+      if (geral || lote.some((e) => ENTIDADES_AUDITORIA_DASHBOARD.has(e))) {
+        renderAuditLogTable();
+      }
+      if (geral || lote.some((e) => ENTIDADES_TRAIL_DASHBOARD.has(e))) {
+        renderTrailDecisoesTable();
+      }
+    }, 60);
   });
 });
