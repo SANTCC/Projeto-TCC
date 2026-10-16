@@ -148,8 +148,8 @@ async function main() {
   j = await abrirPagina({ vis: [visitaMaria()] });
   await submeterVisita(j, { nome: 'Maria Santos', documento: CPF_MARIA, motivo: 'Outra pessoa?' });
   vis = j.lerVis();
-  check('S4: recusado com feedback de atenção (C14)',
-    ultimoFeedback(j).tipo === 'atencao' && /C14/.test(ultimoFeedback(j).msg), ultimoFeedback(j).msg);
+  check('S4: recusado com feedback de atenção (bloqueio de segurança)',
+    ultimoFeedback(j).tipo === 'atencao' && /BLOQUEIO DE SEGURANÇA|C14/i.test(ultimoFeedback(j).msg), ultimoFeedback(j).msg);
   check('S4: mensagem explica que o CPF já está cadastrado com OUTRO nome (cita o nome existente)',
     /já está cadastrado/i.test(ultimoFeedback(j).msg) && /outro visitante/i.test(ultimoFeedback(j).msg) &&
     /Maria Silva/.test(ultimoFeedback(j).msg), ultimoFeedback(j).msg);

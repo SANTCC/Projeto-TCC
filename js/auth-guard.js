@@ -33,6 +33,14 @@
       ];
       keysToRemove.forEach(k => localStorage.removeItem(k));
       localStorage.setItem('nexus_ghost_clean_v1', 'true');
+      localStorage.setItem('nexus_audit_clean_v2', 'true');
+    }
+    // Tarefa 1: Higienização dedicada de logs_alteracoes e trail_decisoes no localStorage
+    // para navegadores que já possuíam nexus_ghost_clean_v1 ativo.
+    if (localStorage.getItem('nexus_audit_clean_v2') !== 'true') {
+      localStorage.removeItem('nexus_audit_logs');
+      localStorage.removeItem('nexus_trail_decisoes');
+      localStorage.setItem('nexus_audit_clean_v2', 'true');
     }
   } catch (e) {}
 
@@ -140,6 +148,21 @@
       || !!delegacaoDoSubstituto(session));
   }
 
+  // Tarefa 15: Perfil de Apresentação Somente-Leitura (Espectador / MAT-1111)
+  function ehPerfilEspectador(dados) {
+    if (!dados || typeof dados !== 'object') return false;
+    if (dados.somente_leitura === true || dados.perfil_espectador === true) return true;
+    const cargo = String(dados.cargo || '').trim().toUpperCase();
+    const cargoNome = String(dados.cargo_nome || '').trim().toUpperCase();
+    if (cargo === 'ESPECTADOR' || cargoNome.includes('ESPECTADOR')) return true;
+    const nome = String(dados.nome || '').trim().toUpperCase();
+    const mat = String(dados.matricula || '').trim().toUpperCase();
+    const cod = String(dados.codigo_individual || dados.codigo || '').trim().toUpperCase();
+    if (nome === 'ESPECTADOR') return true;
+    if ((mat === 'MAT-1111' || cod === 'MAT-1111') && (!nome || nome === 'ESPECTADOR')) return true;
+    return false;
+  }
+
   const NexusAuth = {
     /**
      * Obtém a sessão ativa, lida do cookie `nexus_session`. Não há mais leitura de
@@ -150,7 +173,24 @@
         const raw = sessionCookies().lerSessao();
         if (!raw) return null;
         const session = JSON.parse(raw);
-        if (!session || !session.codigo_individual) return null;
+        if (!session || !session.codigo_individual) {
+          sessionCookies().limparSessao();
+          return null;
+        }
+
+        // Perfil de Apresentação Espectador (MAT-1111): enxerga todo o sistema em camada estratégica,
+        // porém com flag estrita somente-leitura para bloquear qualquer mutação.
+        if (ehPerfilEspectador(session)) {
+          session.somente_leitura = true;
+          session.perfil_espectador = true;
+          if (!session.cargo || session.cargo === 'ESPECTADOR') {
+            session.cargo = 'CONSELHO_ADMINISTRACAO';
+          }
+          session.cargo_nome = 'Espectador (Somente Leitura)';
+          session.nivel = session.nivel || 'Nível Estratégico';
+          session.camada_visao = session.camada_visao || 'Visão Estratégica';
+          return session;
+        }
 
         // Preserva o perfil derivado, sem alterar o cookie/cargo original.
         if (delegacaoDoSubstituto(session)) {
@@ -161,7 +201,8 @@
 
         return session;
       } catch (err) {
-        console.error('[NexusAuth] Erro ao ler sessão:', err);
+        try { sessionCookies().limparSessao(); } catch (e) { /* ignora falha de limpeza */ }
+        console.warn('[NexusAuth] Cookie de sessão inválido ou corrompido removido automaticamente:', err);
         return null;
       }
     },
@@ -185,6 +226,10 @@
         console.warn('[NexusAuth] Acesso negado: Sessão não encontrada ou expirada.');
         window.location.href = 'index.html';
         return null;
+      }
+
+      if (ehPerfilEspectador(session)) {
+        return session;
       }
 
       const pageName = window.location.pathname.split('/').pop() || 'dashboard.html';
@@ -222,6 +267,7 @@
     canAccessPage: function (pageName) {
       const session = this.getSession();
       if (!session || !session.cargo) return false;
+      if (ehPerfilEspectador(session)) return true;
       if (pageName === 'delegacao.html' && perfilSubstituto(session)) return false;
       if (session.cargo === 'ESTIVADOR') {
         return ['dashboard.html', 'embarcacoes.html', 'manutencao.html', 'cargas.html', 'scanner.html'].includes(pageName);
@@ -242,10 +288,23 @@
       return perfilSubstituto(session || this.getSession());
     },
 
-    /** Verifica a ação RBAC, incluindo a negativa de administrar delegações. */
+    /** Identifica se a sessão pertence ao perfil somente-leitura de apresentação (Espectador / MAT-1111). */
+    isReadOnly: function (session) {
+      return ehPerfilEspectador(session || this.getSession());
+    },
+
+    isEspectador: function (session) {
+      return ehPerfilEspectador(session || this.getSession());
+    },
+
+    /** Verifica a ação RBAC, incluindo a negativa de administrar delegações e o bloqueio de escrita para Espectador. */
     hasPermission: function (actionKey) {
       const session = this.getSession();
       if (!session || !session.cargo) return false;
+
+      if (ehPerfilEspectador(session)) {
+        return actionKey === 'VER_DASHBOARD_ESTRATEGICO';
+      }
 
       if (['DESIGNAR_SUBSTITUTO', 'REVOGAR_DELEGACAO'].includes(actionKey) && perfilSubstituto(session)) return false;
       const allowedRoles = ACTION_PERMISSIONS[actionKey];

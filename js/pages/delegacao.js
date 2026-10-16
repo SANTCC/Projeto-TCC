@@ -7,13 +7,24 @@
 document.addEventListener('DOMContentLoaded', () => {
   const session = window.NexusAuth?.getSession();
   let acessoBloqueado = false;
-  function autorizado(acao = 'DESIGNAR_SUBSTITUTO') {
+  function autorizado(acao) {
     const atual = window.NexusAuth?.getSession();
-    return !!session && !!atual && atual.codigo_individual === session.codigo_individual
-      && NexusAuth.canAccessPage('delegacao.html') && NexusAuth.hasPermission(acao);
+    if (!session || !atual || atual.codigo_individual !== session.codigo_individual) return false;
+    if (!NexusAuth.canAccessPage('delegacao.html')) return false;
+    if (window.NexusAuth?.isReadOnly?.(atual)) {
+      return !acao;
+    }
+    return NexusAuth.hasPermission(acao || 'DESIGNAR_SUBSTITUTO');
   }
   function verificarAcesso(acao) {
     if (autorizado(acao)) return true;
+    const atual = window.NexusAuth?.getSession();
+    if (acao && window.NexusAuth?.isReadOnly?.(atual)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return false;
+    }
     if (!acessoBloqueado) {
       acessoBloqueado = true;
       window.dispatchEvent(new Event('nexus_permissions_changed'));
@@ -373,7 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (revogarBtn) revogarBtn.classList.remove('hidden');
     } else {
       if (substitutoNome) substitutoNome.textContent = 'Nenhum Substituto Ativo';
-      if (substitutoVigencia) substitutoVigencia.textContent = 'Cada Supervisor Titular pode ter no máximo 1 substituto ativo por vez (RF 14).';
+      if (substitutoVigencia) substitutoVigencia.textContent = 'Cada Supervisor Titular pode ter no máximo 1 substituto ativo por vez.';
       if (revogarBtn) revogarBtn.classList.add('hidden');
     }
   }
@@ -384,10 +395,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (delegForm) {
     delegForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!verificarAcesso()) return;
+      if (!verificarAcesso('DESIGNAR_SUBSTITUTO')) return;
       const activeDeleg = JSON.parse(localStorage.getItem('nexus_active_delegation') || 'null');
       if (activeDeleg) {
-        const msg = 'REGRA DE NEGÓCIO (RF 14): Apenas 1 substituto ativo por Supervisor é permitido! Revogue a delegação atual antes de designar um novo.';
+        const msg = 'REGRA DE NEGÓCIO: Apenas 1 substituto ativo por Supervisor é permitido! Revogue a delegação atual antes de designar um novo.';
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Limite de Substitutos', msg);
         return;
       }

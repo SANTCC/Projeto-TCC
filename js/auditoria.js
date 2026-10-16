@@ -28,7 +28,23 @@ function resolverEntidadeAuditoria(entidade, referencia) {
   // Compatibilidade com a API histórica de códigos de carga sem metadados.
   return {tipo: tipo || 'CARGA', codigo, id:null};
 }
-window.NexusAuditoria = { resolverEntidade: resolverEntidadeAuditoria, descricaoDoLog: descricaoDoLog };
+function limparCacheAuditoriaLocal() {
+  try {
+    localStorage.removeItem('nexus_audit_logs');
+    localStorage.removeItem('nexus_trail_decisoes');
+    localStorage.setItem('nexus_audit_clean_v2', 'true');
+  } catch (e) {}
+  if (typeof window.dispatchEvent === 'function' && typeof window.CustomEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'logs_alteracoes' } }));
+    window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'trail_decisoes' } }));
+  }
+}
+window.limparCacheAuditoriaLocal = limparCacheAuditoriaLocal;
+window.NexusAuditoria = {
+  resolverEntidade: resolverEntidadeAuditoria,
+  descricaoDoLog: descricaoDoLog,
+  limparCacheLocal: limparCacheAuditoriaLocal
+};
 
 // Tarefa 9 (Correções): frase legível e única do que foi feito no sistema —
 // gravada no log local e no banco (detalhes.descricao) e exibida no log geral
@@ -78,6 +94,9 @@ function descricaoDoLog(registro) {
 
 // Funções utilitárias globais exigidas para integração (T7.1, T7.3, T8.3 - T8.6, T6.8)
 window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes = '', referencia = null) {
+  if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+    return { ok: false, mensagem: 'Perfil Espectador (MAT-1111) possui acesso somente leitura.' };
+  }
   // Suporta também (tipoAlteracao, tabela, id, detalhes), usado pelos cadastros.
   if (AUDIT_TABELAS[tipoAlteracao]) {
     const tabela = tipoAlteracao;
@@ -222,6 +241,9 @@ window.TRAIL_TIPOS_COMPATIVEIS = TRAIL_TIPOS_COMPATIVEIS;
 //   referencia = { tipo, id, codigo, rotulo } vindo de um registro real do Supabase (formulário do painel).
 //   Sem referencia, mantém o comportamento anterior (texto livre), usado por chamadas legadas.
 window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', referencia = null) {
+  if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+    return { ok: false, mensagem: 'Perfil Espectador (MAT-1111) possui acesso somente leitura.' };
+  }
   // Chamadas antigas com 4 argumentos: (decisao, tabela, id, motivo). O id não pode virar motivo.
   if (arguments.length >= 4 && TRAIL_TABELAS_LEGADAS[entidade] && !(referencia && typeof referencia === 'object')) {
     const idLegado = motivo;
@@ -326,8 +348,9 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', re
         delete payload.funcionario_id;
         resposta = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
       }
-      if (!resposta.error && resposta.data) {
-        insertedDbId = resposta.data.id;
+      const registroInserido = resposta && Array.isArray(resposta.data) ? resposta.data[0] : (resposta && resposta.data);
+      if (!resposta.error && registroInserido && registroInserido.id) {
+        insertedDbId = registroInserido.id;
       } else if (estruturado) {
         console.warn('[NexusPort] Trail não gravado no Supabase:', resposta.error);
         return { ok: false, mensagem: msgFalhaBanco };

@@ -13,6 +13,7 @@
  *
  * Uso: npm run build            (gera dist/ e mostra o tamanho antes/depois)
  */
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { minify: minificarJs } = require('terser');
@@ -280,6 +281,30 @@ async function build(opcoes) {
   fs.readdirSync(path.join(RAIZ, 'vendor')).forEach((nome) => {
     fs.copyFileSync(path.join(RAIZ, 'vendor', nome), path.join(saida, 'vendor', nome));
     registro.copiados.push(`vendor/${nome}`);
+  });
+
+  // Cache-busting determinístico: adiciona ?v=<sha256-curto> às referências locais de CSS e JS
+  // nos HTMLs de dist/ para invalidar automaticamente o cache imutável do navegador a cada alteração.
+  const hashesCache = new Map();
+  const obterHashArquivo = (relLimpo) => {
+    if (hashesCache.has(relLimpo)) return hashesCache.get(relLimpo);
+    const caminhoAlvo = path.join(saida, relLimpo);
+    if (!fs.existsSync(caminhoAlvo) || !fs.statSync(caminhoAlvo).isFile()) return null;
+    const h = crypto.createHash('sha256').update(fs.readFileSync(caminhoAlvo)).digest('hex').slice(0, 8);
+    hashesCache.set(relLimpo, h);
+    return h;
+  };
+  fs.readdirSync(saida).filter((f) => f.endsWith('.html')).forEach((nomeHtml) => {
+    const caminhoHtml = path.join(saida, nomeHtml);
+    const htmlAtual = fs.readFileSync(caminhoHtml, 'utf-8');
+    const htmlVersionado = htmlAtual.replace(/\b(href|src)=(["'])((?:css|js)\/[^"'?#]+(?:\.(?:css|js)))(?:\?[^"']*)?\2/g, (tudo, attr, aspas, relLimpo) => {
+      if (relLimpo === 'js/config.example.js' || relLimpo === 'js/config.js') return tudo;
+      const hash = obterHashArquivo(relLimpo);
+      return hash ? `${attr}=${aspas}${relLimpo}?v=${hash}${aspas}` : tudo;
+    });
+    if (htmlVersionado !== htmlAtual) {
+      fs.writeFileSync(caminhoHtml, htmlVersionado, 'utf-8');
+    }
   });
 
   escreverHeaders(saida);

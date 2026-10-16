@@ -340,6 +340,43 @@ async function main() {
     w.close();
   }
 
+  // ─── 8. Blindagem contra payload > 4KB, Secure na remoção e JSON corrompido (Tarefa 14) ───
+  console.log('\n8. Blindagem de cookies (payload > 4KB, Secure na remoção e JSON corrompido)');
+  {
+    const jar = new CookieJar();
+    const { w, cookiesGravados } = abrirPagina({
+      arquivo: 'dashboard.html', url: `${HTTPS}/dashboard.html`, jar,
+      scripts: ['js/security.js', 'js/session-cookies.js', 'js/auth-guard.js']
+    });
+    w.NexusSessionCookies.gravarSessao({
+      id: 'u-big',
+      matricula: 'MAT-5000',
+      codigo_individual: 'NX-5000',
+      nome: 'Operador Payload Grande',
+      cargo: 'INSPETOR',
+      login_at: new Date().toISOString(),
+      lixo_gigante: 'X'.repeat(6000)
+    });
+    const cookieCompacto = ultimoCookieDe(cookiesGravados, 'nexus_session');
+    check('payload > 4KB é compactado abaixo do limite seguro de cookie',
+      Boolean(cookieCompacto) && cookieCompacto.length < 3800 && !cookieCompacto.includes('lixo_gigante'),
+      cookieCompacto ? String(cookieCompacto.length) : 'sem cookie');
+    check('sessão compactada permanece íntegra e legível',
+      w.NexusAuth.getSession() && w.NexusAuth.getSession().codigo_individual === 'NX-5000');
+
+    w.NexusSessionCookies.limparSessao();
+    const remocaoHttps = ultimoCookieDe(cookiesGravados, 'nexus_session');
+    check('remoção em HTTPS inclui atributo Secure e max-age=0',
+      Boolean(remocaoHttps) && atributos(remocaoHttps).includes('Secure') && atributos(remocaoHttps).includes('max-age=0'),
+      remocaoHttps);
+
+    w.document.cookie = 'nexus_session=%7Bjson_corrompido; path=/; Secure';
+    check('cookie corrompido retorna null e é limpo automaticamente',
+      w.NexusAuth.getSession() === null && !w.document.cookie.includes('json_corrompido'),
+      w.document.cookie);
+    w.close();
+  }
+
   console.log(`\nResultado: ${passou} aprovado(s), ${falhou} falha(s).`);
   if (falhou > 0) process.exit(1);
 }

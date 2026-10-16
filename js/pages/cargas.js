@@ -33,11 +33,13 @@ document.addEventListener('DOMContentLoaded', () => {
     roleNoticeTag.textContent = `Ações Ativas para: ${session.cargo_nome || session.cargo}`;
   }
 
-  const isSupervisorRole = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
-  const isInspetorRole = ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
-  const isConferenteRole = ['CONFERENTE_CARGA', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
-  const isArrumadorRole = ['ARRUMADOR_CONSERTADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
-  const isEstivadorRole = ['ESTIVADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+  const isSomenteLeitura = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(session));
+
+  const isSupervisorRole = !isSomenteLeitura && ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+  const isInspetorRole = !isSomenteLeitura && ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+  const isConferenteRole = !isSomenteLeitura && ['CONFERENTE_CARGA', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+  const isArrumadorRole = !isSomenteLeitura && ['ARRUMADOR_CONSERTADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+  const isEstivadorRole = !isSomenteLeitura && ['ESTIVADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
 
   const isGestorRole = isSupervisorRole || isInspetorRole;
   const exigeEtapasPronta = ['ARRUMADOR_CONSERTADOR', 'INSPETOR'].includes(userCargo);
@@ -55,6 +57,31 @@ document.addEventListener('DOMContentLoaded', () => {
     return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
   }
 
+  function resolverCodigoContainerLegivel(ref) {
+    const bruto = String(ref || '').trim();
+    if (!bruto) return '';
+    try {
+      const lista = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+      if (Array.isArray(lista)) {
+        const chave = bruto.toLowerCase();
+        const achado = lista.find(ct => ct && [ct.id, ct.rawDbId, ct.identificacao, ct.numero_identificacao]
+          .some(v => v && String(v).trim().toLowerCase() === chave));
+        if (achado && (achado.identificacao || achado.numero_identificacao)) {
+          return String(achado.identificacao || achado.numero_identificacao).trim();
+        }
+      }
+    } catch (e) {}
+    return bruto;
+  }
+
+  function formatarSetorPatioLegivel(setor) {
+    const txt = String(setor || '');
+    return txt.replace(/^(Cont[eê]iner\s+)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, (_, prefixo, uuid) => {
+      const cod = resolverCodigoContainerLegivel(uuid);
+      return cod ? `${prefixo}${cod}` : txt;
+    });
+  }
+
   /**
    * Backlog Parte 2 — Tarefa 9: a carga só está "alocada no contêiner" quando
    * a movimentação física até ele foi CONCLUÍDA. A conclusão (Embarcações &
@@ -67,7 +94,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!destino.startsWith('conteiner ')) return false;
     const alvo = destino.slice('conteiner '.length).trim();
     if (!alvo) return false;
-    return [carga.container, carga.container_id, carga.containerId]
+    const refs = [
+      carga.container,
+      carga.container_id,
+      carga.containerId,
+      resolverCodigoContainerLegivel(carga.container || carga.container_id || carga.containerId)
+    ];
+    return refs
       .map(textoAlocacaoContainer)
       .filter(Boolean)
       .includes(alvo);
@@ -539,6 +572,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (requestRevision !== cargasLoadRevision) return;
       }
     }
+    if (window.NexusRepository && typeof window.NexusRepository.getContainers === 'function') {
+      const containersEmCache = lerListaLocalCargas('nexus_containers_list');
+      const temContainerSemCodigo = cargasFluxoList.some(c =>
+        c && !['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)
+        && (CARGA_UUID_RE.test(String(c.container || '').trim()) || CARGA_UUID_RE.test(String(c.container_id || '').trim()))
+      );
+      if (containersEmCache.length === 0 && temContainerSemCodigo) {
+        try {
+          await window.NexusRepository.getContainers();
+        } catch (err) { /* segue com o cache disponível */ }
+        if (requestRevision !== cargasLoadRevision) return;
+      }
+    }
     // Resolve primeiro os navios herdados do contêiner, para as mesmas transições
     // automáticas continuarem válidas também para cargas vinculadas indiretamente.
     sincronizarNaviosHerdados();
@@ -641,7 +687,7 @@ document.addEventListener('DOMContentLoaded', () => {
       atualizarResumoHistoricoCargas('entregues', 0, 0);
       entreguesTableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhuma carga entregue no sistema.</td>
+          <td colspan="6" class="p-4 text-center text-slate-600 italic">Nenhuma carga entregue no sistema.</td>
         </tr>
       `;
       return;
@@ -658,6 +704,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3">
           <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100">ENTREGUE</span>
         </td>
+        <td class="p-3 text-right">
+          <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[36px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">qr_code</span><span class="hidden sm:inline">QR Code</span></button>
+        </td>
       </tr>
     `).join('');
   }
@@ -673,7 +722,7 @@ document.addEventListener('DOMContentLoaded', () => {
       atualizarResumoHistoricoCargas('canceladas', 0, 0);
       canceladasTableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhuma carga cancelada no sistema.</td>
+          <td colspan="6" class="p-4 text-center text-slate-600 italic">Nenhuma carga cancelada no sistema.</td>
         </tr>
       `;
       return;
@@ -689,6 +738,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 text-slate-700 dark:text-slate-300">${esc(c.motivoCancelamento || c.motivo_recusa || c.motivo || 'Cancelado pelo Supervisor')}</td>
         <td class="p-3">
           <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-200">CANCELADA</span>
+        </td>
+        <td class="p-3 text-right">
+          <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[36px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">qr_code</span><span class="hidden sm:inline">QR Code</span></button>
         </td>
       </tr>
     `).join('');
@@ -724,7 +776,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-red-600 text-white dark:bg-red-800 dark:text-red-100">RECUSADA</span>
         </td>
         <td class="p-3">
-          ${podeAbrirChecklist && c.id ? `<a href="${safeUrl('inspecao.html?carga=' + encodeURIComponent(c.id))}" aria-label="Abrir checklist da carga ${esc(c.id)}" title="Revisar checklist para nova tentativa de aceite" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[40px] rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nexus-500"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">fact_check</span><span>Checklist</span></a>` : '<span class="text-slate-500">—</span>'}
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[40px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">qr_code</span><span class="hidden sm:inline">QR Code</span></button>
+            ${podeAbrirChecklist && c.id ? `<a href="${safeUrl('inspecao.html?carga=' + encodeURIComponent(c.id))}" aria-label="Abrir checklist da carga ${esc(c.id)}" title="Revisar checklist para nova tentativa de aceite" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[40px] rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nexus-500"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">fact_check</span><span>Checklist</span></a>` : ''}
+          </div>
         </td>
       </tr>
     `).join('');
@@ -769,12 +824,28 @@ document.addEventListener('DOMContentLoaded', () => {
       const refsCont = [c.container, c.container_id, c.containerId]
         .filter(v => v !== undefined && v !== null && String(v).trim() !== '');
       if (refsCont.length === 0) return;
+      const cont = refsCont.map(ref => mapaConts.get(String(ref).trim().toLowerCase())).find(Boolean);
+      if (cont) {
+        const codigoLegivel = String(cont.identificacao || cont.numero_identificacao || '').trim();
+        if (codigoLegivel) {
+          if (!c.container || CARGA_UUID_RE.test(String(c.container).trim())) {
+            c.container = codigoLegivel;
+            alterado = true;
+          }
+          if (c.portoDescarga) {
+            const setorFormatado = formatarSetorPatioLegivel(c.portoDescarga);
+            if (setorFormatado !== c.portoDescarga) {
+              c.portoDescarga = setorFormatado;
+              alterado = true;
+            }
+          }
+        }
+      }
       // Herdam: cargas marcadas com a opção de herança OU (legado) cargas com
       // contêiner e sem navio vinculado. Navio escolhido manualmente nunca é
       // sobrescrito pela herança.
       const deveHerdar = c.herdarNavioDoContainer === true || !c.navio;
       if (!deveHerdar) return;
-      const cont = refsCont.map(ref => mapaConts.get(String(ref).trim().toLowerCase())).find(Boolean);
       if (!cont) return;
       const nomeNavioCont = cont.navio && String(cont.navio).trim() !== '' && cont.navio !== 'Não Vinculado' && cont.navio !== 'Vinculado'
         ? cont.navio
@@ -988,7 +1059,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const userItems = cargasAtivas.filter(c => {
       if (filterNavioVal && !(c.navio || '').toLowerCase().includes(filterNavioVal)) return false;
-      if (filterContVal && !(c.container || '').toLowerCase().includes(filterContVal)) return false;
+      if (filterContVal) {
+        const contLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '');
+        const contHay = `${c.container || ''} ${c.container_id || ''} ${contLegivel}`.toLowerCase();
+        if (!contHay.includes(filterContVal)) return false;
+      }
       if (filterTipoVal && !(c.tipo || '').toLowerCase().includes(filterTipoVal) && !(c.natureza || '').toLowerCase().includes(filterTipoVal)) return false;
       // Filtro por código da carga (usado pelo Scanner QR Code): compara id e QR
       if (filterCodigoVal) {
@@ -1001,7 +1076,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Busca rápida livre (Backlog 3 - 7b): código, QR, tipo, natureza, contêiner, navio
       if (filterBuscaVal) {
-        const haystack = `${c.id || ''} ${c.qrCode || ''} ${c.tipo || ''} ${c.natureza || ''} ${c.container || ''} ${c.navio || ''} ${c.estivador || ''}`.toLowerCase();
+        const contLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '');
+        const haystack = `${c.id || ''} ${c.qrCode || ''} ${c.tipo || ''} ${c.natureza || ''} ${c.container || ''} ${contLegivel} ${c.navio || ''} ${c.estivador || ''}`.toLowerCase();
         if (!haystack.includes(filterBuscaVal)) return false;
       }
 
@@ -1041,11 +1117,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cargasTableBody.innerHTML = userItems.map(c => {
       // Determina quais botões de ação são VISÍVEIS para o CARGO LOGADO (RF 1 / Spec.md)
-      const isConferente = ['CONFERENTE_CARGA', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
-      const isInspetor = ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
-      const isArrumador = ['ARRUMADOR_CONSERTADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
-      const isSupervisor = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
-      const isEstivador = ['ESTIVADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+      const isConferente = !isSomenteLeitura && ['CONFERENTE_CARGA', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+      const isInspetor = !isSomenteLeitura && ['INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+      const isArrumador = !isSomenteLeitura && ['ARRUMADOR_CONSERTADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+      const isSupervisor = !isSomenteLeitura && ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
+      const isEstivador = !isSomenteLeitura && ['ESTIVADOR', 'INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(userCargo);
 
       const cargaEmTransito = c.status === 'EM_TRANSITO';
       const emergenciaAtiva = typeof window.nexusEmergenciaAtiva === 'function' && window.nexusEmergenciaAtiva();
@@ -1102,6 +1178,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const etaLinha = etaCargaTexto(c, naviosLocais);
+      const containerLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '');
+      const setorLegivel = formatarSetorPatioLegivel(c.portoDescarga);
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
           <td class="p-3 font-mono font-bold text-nexus-500 whitespace-nowrap">
@@ -1110,9 +1188,9 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td class="p-3 whitespace-nowrap">${esc(c.tipo)} <span class="block text-[10px] text-slate-600">${esc(c.natureza || '')}</span></td>
           <td class="p-3 font-mono whitespace-nowrap">${esc(c.peso)} / ${esc(c.volume)}</td>
-          <td class="p-3 font-bold whitespace-nowrap">${esc(c.portoDescarga)}</td>
+          <td class="p-3 font-bold whitespace-nowrap">${esc(setorLegivel)}</td>
           <td class="p-3 text-xs whitespace-nowrap">
-            <span class="block font-mono ${c.container ? '' : 'text-slate-600 italic'}">${c.container ? esc(c.container) : 'Contêiner: não vinculado'}</span>
+            <span class="block font-mono ${containerLegivel ? '' : 'text-slate-600 italic'}">${containerLegivel ? esc(containerLegivel) : 'Contêiner: não vinculado'}</span>
             <span class="block text-[10px] ${c.navio ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
             ${etaLinha ? `<span class="block text-[10px] font-mono text-indigo-600 dark:text-indigo-400" title="Estimativa calculada pelo navio vinculado (@ 33 km/h)">${esc(etaLinha)}</span>` : ''}
           </td>
@@ -1361,7 +1439,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Item 16: Validação de valores estritamente positivos em peso, volume e valor declarado
       if (pesoVal <= 0 || volumeVal <= 0 || valorVal <= 0) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Valores Inválidos', 'VALORES INVÁLIDOS (Item 16): Os campos de Peso, Volume e Valor Declarado não aceitam valores negativos ou iguais a zero. Informe apenas valores estritamente maiores que zero!');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Valores Inválidos', 'VALORES INVÁLIDOS: Os campos de Peso, Volume e Valor Declarado não aceitam valores negativos ou iguais a zero. Informe apenas valores estritamente maiores que zero!');
         return;
       }
 
@@ -1375,7 +1453,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const cargasAtivasPatio = cargasFluxoList.filter(c => ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'].includes(c.status));
       if (cargasAtivasPatio.length >= CAPACIDADE_MAXIMA_PATIO_HA) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Capacidade Máxima do Pátio Excedida', `BLOQUEIO DE CAPACIDADE REGULAMENTAR (Regra 2.9): O pátio atingiu o limite operacional máximo de 100 hectares (1.000.000 m² / ${CAPACIDADE_MAXIMA_PATIO_HA} cargas em fluxo ativo)! Não é permitido agendar novas cargas até a liberação de espaço.`);
+          window.mostrarFeedback('alerta', 'Capacidade Máxima do Pátio Excedida', `BLOQUEIO DE CAPACIDADE REGULAMENTAR: O pátio atingiu o limite operacional máximo de 100 hectares (1.000.000 m² / ${CAPACIDADE_MAXIMA_PATIO_HA} cargas em fluxo ativo)! Não é permitido agendar novas cargas até a liberação de espaço.`);
         }
         return;
       }
@@ -1883,7 +1961,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const cargaVol = parseFloat(targetCargaParaVinculacao.volume) || 0;
       const dispVol = parseFloat(selectedContOpt.getAttribute('data-disp')) || 0;
       if (cargaVol > dispVol) {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Capacidade Excedida', `A7 REGRA DE CAPACIDADE: Volume da carga (${cargaVol} m³) excede a capacidade disponível do contêiner (${dispVol.toFixed(1)} m³ de no máximo 75 m³)!`);
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Capacidade Excedida', `REGRA DE CAPACIDADE: Volume da carga (${cargaVol} m³) excede a capacidade disponível do contêiner (${dispVol.toFixed(1)} m³ de no máximo 75 m³)!`);
         return;
       }
 
@@ -2167,14 +2245,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (movimentarCargaIdLabel) movimentarCargaIdLabel.textContent = targetCargaMovimentacao.id;
-    if (movimentarSetorAtualLabel) movimentarSetorAtualLabel.textContent = targetCargaMovimentacao.portoDescarga || '—';
+    if (movimentarSetorAtualLabel) movimentarSetorAtualLabel.textContent = formatarSetorPatioLegivel(targetCargaMovimentacao.portoDescarga) || '—';
 
     if (movimentarSetorSelect) {
       let htmlOptions = '<option value="">Selecione o setor de destino...</option>' +
         SETORES_PATIO.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
 
       // Tarefa 11: A opção de movimentar a carga para o contêiner vinculado só aparece se a carga estiver vinculada a um contêiner
-      const contVinculado = targetCargaMovimentacao.container || targetCargaMovimentacao.container_id;
+      const contVinculado = resolverCodigoContainerLegivel(targetCargaMovimentacao.container || targetCargaMovimentacao.container_id);
       if (contVinculado) {
         const destCont = `Contêiner ${contVinculado}`;
         htmlOptions += `<option value="${esc(destCont)}">📦 ${esc(destCont)} (Embarque em Contêiner Vinculado)</option>`;
@@ -2244,6 +2322,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Executa Ações Operacionais
   // opcoes (uso do agente WebMCP; a interface não envia): { guindasteIdentificacao?, setorDestino?, motivo? } evitam os diálogos.
   window.executarAcaoCarga = async function(idCarga, acao, opcoes) {
+    if (isSomenteLeitura) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return { ok: false, motivo: 'SOMENTE_LEITURA' };
+    }
     if (userCargo === 'ESTIVADOR' && acao !== 'MOVIMENTAR') return;
     const op = opcoes || {};
     const carga = cargasFluxoList.find(c => c.id === idCarga);
@@ -2313,7 +2397,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Item 4: A opção "Pronta" só é permitida se a carga já tiver sido vinculada a um contêiner
       if (!carga.container && !carga.container_id) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', `BLOQUEIO DE SEGURANÇA (Item 4): A carga ${idCarga} só pode ser alterada para "Pronta" se já tiver sido vinculada a um contêiner! Use o botão "Vincular" primeiro.`);
+          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', `BLOQUEIO DE SEGURANÇA: A carga ${idCarga} só pode ser alterada para "Pronta" se já tiver sido vinculada a um contêiner! Use o botão "Vincular" primeiro.`);
         }
         return;
       }
@@ -2334,7 +2418,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (!isArrumadorRole) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Acesso Restrito', 'Acesso Restrito (RF 1.8): Apenas Arrumadores e Consertadores (ou Supervisão/Direção) podem alterar o status da carga para Pronta para Entrega!');
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Acesso Restrito: Apenas Arrumadores e Consertadores (ou Supervisão/Direção) podem alterar o status da carga para Pronta para Entrega!');
         }
         return;
       }
@@ -2350,7 +2434,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // C4, A6, A7: Modal centralizado de vinculação com trava de capacidade max 75 m³
       window.abrirModalVinculacao(idCarga);
     } else if (acao === 'LIBERAR') {
-      // Ação descontinuada: não existe mais liberação manual de carga. O status
+      // Ação descontinuada: não existe mais liberação manual de carga (sem destino não informado no cadastro da carga). O status
       // vai para EM_TRANSITO automaticamente quando o navio vinculado for
       // liberado para o porto de destino (Embarcações & GPS → Liberar Saída).
       if (window.mostrarFeedback) {
@@ -2361,7 +2445,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const statusPermitidos = ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'];
       if (!statusPermitidos.includes(carga.status)) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Regra de Negócio', `REGRA DE NEGÓCIO (RN 16): O cancelamento só é permitido para cargas em Agendamento, Armazenagem ou Pronta para Entrega! O status atual "${carga.status}" não permite cancelamento.`);
+          window.mostrarFeedback('alerta', 'Regra de Negócio', `REGRA DE NEGÓCIO: O cancelamento só é permitido para cargas em Agendamento, Armazenagem ou Pronta para Entrega! O status atual "${carga.status}" não permite cancelamento.`);
         }
         return;
       }

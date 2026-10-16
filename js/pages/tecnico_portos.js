@@ -400,10 +400,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const camposIdentidadeFuncionario = () => ['funcMatricula', 'funcNome', 'funcCargo', 'funcDoc']
     .map(id => document.getElementById(id)).filter(Boolean);
 
+  function mascararMatriculaEdicao(matricula) {
+    const val = String(matricula || '').trim();
+    if (!val) return '';
+    return 'MAT-••••';
+  }
+
   function sairModoEdicaoFuncionario(opcoes) {
     const limpar = !opcoes || opcoes.limpar !== false;
     funcionarioEmEdicao = null;
-    camposIdentidadeFuncionario().forEach(campo => { campo.disabled = false; });
+    camposIdentidadeFuncionario().forEach(campo => {
+      campo.disabled = false;
+      campo.readOnly = false;
+      campo.title = '';
+      campo.classList.remove('bg-slate-100', 'dark:bg-slate-800/80', 'cursor-not-allowed', 'opacity-75');
+    });
     const cpfCampo = document.getElementById('funcCpf');
     if (cpfCampo) {
       cpfCampo.readOnly = false;
@@ -449,7 +460,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const campo = document.getElementById(id);
       if (campo) campo.value = valor == null ? '' : String(valor);
     };
-    setValor('funcMatricula', funcionario.matricula || '');
+    setValor('funcMatricula', mascararMatriculaEdicao(funcionario.matricula));
+    const matCampo = document.getElementById('funcMatricula');
+    if (matCampo) {
+      matCampo.readOnly = true;
+      matCampo.title = 'Matrícula protegida e bloqueada para alteração';
+      matCampo.classList.add('bg-slate-100', 'dark:bg-slate-800/80', 'cursor-not-allowed', 'opacity-75');
+    }
     setValor('funcNome', funcionario.nome || '');
     setValor('funcCargo', cargoEnumDoFuncionario(funcionario));
     setValor('funcDoc', '');
@@ -731,7 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Tarefa 4: Padronizar a matrícula de funcionários no padrão MAT-4 números (ex: MAT-1234)
       const matriculaPattern = /^MAT-\d{4}$/;
       if (!matriculaPattern.test(formattedMatricula)) {
-        const msg = 'PADRÃO DE MATRÍCULA INVÁLIDO (Tarefa 4): A matrícula do funcionário deve seguir obrigatoriamente a estrutura MAT-4 números (Exemplo: MAT-1234 ou MAT-5678)!';
+        const msg = 'PADRÃO DE MATRÍCULA INVÁLIDO: A matrícula do funcionário deve seguir obrigatoriamente a estrutura MAT-4 números (Exemplo: MAT-1234 ou MAT-5678)!';
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Matrícula Inválida', msg);
         return;
       }
@@ -1147,7 +1164,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const funcComMesmoCpf = (mergedFuncList || []).find(f => fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === docClean);
       if (funcComMesmoCpf) {
-        const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${funcComMesmoCpf.nome}". Cada pessoa deve possuir CPF único no sistema!`;
+        const msg = `BLOQUEIO DE SEGURANÇA: O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${funcComMesmoCpf.nome}". Cada pessoa deve possuir CPF único no sistema!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
         return;
       }
@@ -1166,7 +1183,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const mesmoCpfLocal = visList.filter(v => somenteDigitosDoc(v.documento) === docClean);
       const conflitoLocal = mesmoCpfLocal.find(v => normalizarNomePessoa(v.nome) !== nomeNormalizado);
       if (conflitoLocal) {
-        const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${documento}" já está cadastrado para outro visitante ("${conflitoLocal.nome}"). O mesmo CPF não pode pertencer a dois nomes diferentes — confira o nome e o CPF informados.`;
+        const msg = `BLOQUEIO DE SEGURANÇA: O CPF "${documento}" já está cadastrado para outro visitante ("${conflitoLocal.nome}"). O mesmo CPF não pode pertencer a dois nomes diferentes — confira o nome e o CPF informados.`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado com Outro Nome', msg);
         return;
       }
@@ -1188,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const conflitoDb = visitasMesmoCpfDb.find(v => normalizarNomePessoa(v.nome) !== nomeNormalizado);
           if (conflitoDb) {
-            const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${documento}" já está registrado no banco de dados para outro visitante ("${conflitoDb.nome}"). O mesmo CPF não pode pertencer a dois nomes diferentes.`;
+            const msg = `BLOQUEIO DE SEGURANÇA: O CPF "${documento}" já está registrado no banco de dados para outro visitante ("${conflitoDb.nome}"). O mesmo CPF não pode pertencer a dois nomes diferentes.`;
             if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado com Outro Nome', msg);
             return;
           }
@@ -1201,7 +1218,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const funcCpfRegistro = Array.isArray(dupFuncCpf) ? dupFuncCpf[0] : dupFuncCpf;
           if (!dupFuncErr && funcCpfRegistro && (funcCpfRegistro.nome || funcCpfRegistro.cpf)) {
-            const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${funcCpfRegistro.nome}" no banco de dados. Duplicação bloqueada.`;
+            const msg = `BLOQUEIO DE SEGURANÇA: O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${funcCpfRegistro.nome}" no banco de dados. Duplicação bloqueada.`;
             if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
             return;
           }

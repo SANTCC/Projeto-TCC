@@ -172,6 +172,9 @@
     executar: async (args) => {
       const carga = await cargaDoOperador(args.id);
       if (!carga) return { ok: false, codigo: 'CARGA_NAO_ENCONTRADA', mensagem: `Carga ${args.id} não encontrada ou fora da sua visão.` };
+      if (carga.status === 'CANCELADA') {
+        return { ok: false, codigo: 'CARGA_CANCELADA', mensagem: `A carga ${carga.id} está CANCELADA e não pode realizar ou refazer o checklist de inspeção, pois não retorna ao fluxo normal.` };
+      }
       // Revalida na execução (a carga pode ter entrado em trânsito entre a
       // pré-condição e o operador confirmar): em trânsito, a inspeção é recusada.
       if (carga.status === 'EM_TRANSITO') {

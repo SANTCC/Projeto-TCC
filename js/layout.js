@@ -86,10 +86,10 @@
     const menuItems = [
       { id: 'dashboard.html', label: 'Painel Geral', icon: 'dashboard', href: 'dashboard.html', visible: () => true },
       { id: 'cargas.html', label: 'Cargas & Pátio', icon: 'inventory_2', href: 'cargas.html', visible: () => isDiretor || isSupervisor || isInspetor || isEstivador || isConferente || isArrumador },
-      { id: 'inspecao.html', label: 'Inspeção & Checklist', icon: 'fact_check', href: 'inspecao.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente },
-      { id: 'scanner.html', label: 'Scanner QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: () => isDiretor || isSupervisor || isInspetor || isEstivador || isConferente },
-      { id: 'embarcacoes.html', label: 'Embarcações & GPS', icon: 'directions_boat', href: 'embarcacoes.html', visible: () => isDiretor || isSupervisor || isInspetor || isPlanejador || isEstivador },
-      { id: 'manutencao.html', label: 'Manutenção & OS', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador || isEstivador || isPlanejador },
+      { id: 'inspecao.html', label: 'Inspeção', icon: 'fact_check', href: 'inspecao.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente },
+      { id: 'scanner.html', label: 'QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: () => isDiretor || isSupervisor || isInspetor || isEstivador || isConferente },
+      { id: 'embarcacoes.html', label: 'Embarcações & Equipamentos', icon: 'directions_boat', href: 'embarcacoes.html', visible: () => isDiretor || isSupervisor || isInspetor || isPlanejador || isEstivador },
+      { id: 'manutencao.html', label: 'Manutenção & Tarefas', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador || isEstivador || isPlanejador },
       { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: () => (isDiretor || isSupervisor) && NexusAuth.canAccessPage('delegacao.html') },
       { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: () => isTecnico || isDiretor },
       // Item oculto por padrão: só aparece depois dos 5 cliques no nome do
@@ -166,30 +166,30 @@
       `;
     }
 
-    // Cria Overlay Escuro para Mobile se não existir
+    // Cria Overlay Escuro para Gaveta (Mobile + Desktop/Notebook) se não existir
     let mobileOverlay = document.getElementById('sidebarMobileOverlay');
     if (!mobileOverlay) {
       mobileOverlay = document.createElement('div');
       mobileOverlay.id = 'sidebarMobileOverlay';
-      mobileOverlay.className = 'fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 hidden md:hidden transition-opacity duration-300';
+      mobileOverlay.className = 'fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-40 hidden transition-opacity duration-300';
       document.body.appendChild(mobileOverlay);
     }
 
-    // Injeta Sidebar se contêiner existir (V-01: sticky no desktop abaixo da topbar)
+    // Injeta Sidebar em modo Gaveta/Drawer unificado (Celular + Notebook)
     const sidebarElem = document.getElementById('appSidebar') || document.querySelector('aside');
     if (sidebarElem) {
-      sidebarElem.className = 'w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:self-start inset-y-0 left-0 z-50 md:z-40 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0';
+      sidebarElem.className = 'w-72 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0 shadow-2xl';
       sidebarElem.innerHTML = `
         <div id="sidebarScrollArea" class="p-4 flex flex-col gap-6 overflow-y-auto h-full justify-between">
           <div class="flex flex-col gap-6">
 
-            <!-- Cabeçalho Mobile com Fechamento -->
-            <div class="flex md:hidden items-center justify-between pb-3 border-b border-slate-800">
+            <!-- Cabeçalho da Gaveta com Fechamento (Mobile e Notebook) -->
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
               <div class="flex items-center gap-2">
                 <picture class="w-7 h-7 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img src="design/logo_porto.png" alt="Logo" width="28" height="28" class="w-7 h-7 object-contain rounded" /></picture>
                 <span class="font-display font-bold text-sm text-white">NexusPort</span>
               </div>
-              <button id="closeMobileSidebarBtn" type="button" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+              <button id="closeMobileSidebarBtn" type="button" aria-label="Fechar menu de navegação" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
                 <span class="material-symbols-outlined text-[22px]">close</span>
               </button>
             </div>
@@ -225,15 +225,21 @@
             <!-- Botão de Emergência GLOBAL: visível para TODOS os cargos em
                  todas as telas. Qualquer funcionário pode acionar, pois uma
                  situação grave não pode esperar por permissão de página. -->
-            <button id="sidebarEmergencyBtn" type="button" aria-label="Acionar botão de emergência"
-              class="w-full px-3 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-display font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/40 transition-all flex items-center justify-center gap-2 border border-red-400/60">
-              <span class="relative flex h-2.5 w-2.5">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-              </span>
-              <span class="material-symbols-outlined text-[20px]">e911_emergency</span>
-              <span>Emergência</span>
-            </button>
+            <div class="flex items-center gap-2">
+              <button id="sidebarEmergencyBtn" type="button" aria-label="Acionar botão de emergência"
+                class="flex-1 px-3 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-display font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/40 transition-all flex items-center justify-center gap-2 border border-red-400/60">
+                <span class="relative flex h-2.5 w-2.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                </span>
+                <span class="material-symbols-outlined text-[20px]">e911_emergency</span>
+                <span>Emergência</span>
+              </button>
+              <button id="sidebarEmergencySettingsBtn" type="button" aria-label="Configurações de alerta de emergência (vibração e som)" title="Configurações de vibração e som do alerta"
+                class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-all flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-[20px]">settings</span>
+              </button>
+            </div>
 
           </div>
 
@@ -247,40 +253,42 @@
         </div>
       `;
 
-      // Handlers de Abertura/Fechamento Mobile
+      // Handlers de Abertura/Fechamento da Gaveta (Unificado para Celular e Notebook)
+      const mobileToggleBtn = document.getElementById('mobileMenuToggle');
+      const desktopToggleBtn = document.getElementById('desktopSidebarToggle');
+
+      function atualizarAriaSidebar(aberta) {
+        if (desktopToggleBtn) desktopToggleBtn.setAttribute('aria-expanded', String(Boolean(aberta)));
+        if (mobileToggleBtn) mobileToggleBtn.setAttribute('aria-expanded', String(Boolean(aberta)));
+      }
+
       function abrirSidebarMobile() {
-        sidebarElem.classList.remove('-translate-x-full');
+        sidebarElem.classList.remove('-translate-x-full', 'nexus-sidebar-collapsed');
         mobileOverlay.classList.remove('hidden');
+        atualizarAriaSidebar(true);
       }
 
       function fecharSidebarMobile() {
         sidebarElem.classList.add('-translate-x-full');
+        sidebarElem.classList.remove('nexus-sidebar-collapsed');
         mobileOverlay.classList.add('hidden');
+        atualizarAriaSidebar(false);
       }
 
-      const mobileToggleBtn = document.getElementById('mobileMenuToggle');
+      function alternarSidebarDrawer() {
+        const estaFechada = sidebarElem.classList.contains('-translate-x-full');
+        if (estaFechada) abrirSidebarMobile();
+        else fecharSidebarMobile();
+      }
+
+      atualizarAriaSidebar(false);
+
       if (mobileToggleBtn) {
-        mobileToggleBtn.addEventListener('click', abrirSidebarMobile);
+        mobileToggleBtn.addEventListener('click', alternarSidebarDrawer);
       }
 
-      const desktopToggleBtn = document.getElementById('desktopSidebarToggle');
-      const aplicarEstadoSidebarDesktop = (recolhido) => {
-        sidebarElem.classList.toggle('nexus-sidebar-collapsed', Boolean(recolhido));
-        if (desktopToggleBtn) {
-          desktopToggleBtn.setAttribute('aria-expanded', String(!recolhido));
-        }
-      };
-      if (localStorage.getItem('nexus_sidebar_collapsed') === '1') {
-        aplicarEstadoSidebarDesktop(true);
-      }
       if (desktopToggleBtn) {
-        desktopToggleBtn.addEventListener('click', () => {
-          const recolhido = !sidebarElem.classList.contains('nexus-sidebar-collapsed');
-          aplicarEstadoSidebarDesktop(recolhido);
-          try {
-            localStorage.setItem('nexus_sidebar_collapsed', recolhido ? '1' : '0');
-          } catch (e) {}
-        });
+        desktopToggleBtn.addEventListener('click', alternarSidebarDrawer);
       }
 
       const closeMobileBtn = document.getElementById('closeMobileSidebarBtn');
@@ -291,6 +299,12 @@
       if (mobileOverlay) {
         mobileOverlay.addEventListener('click', fecharSidebarMobile);
       }
+
+      window.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape' && !sidebarElem.classList.contains('-translate-x-full')) {
+          fecharSidebarMobile();
+        }
+      });
 
       const navLinks = sidebarElem.querySelectorAll('.sidebar-nav-item');
       navLinks.forEach(link => link.addEventListener('click', fecharSidebarMobile));
@@ -557,7 +571,7 @@
       });
 
       const avisarAtiva = () => {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Emergência Já Ativa', 'O alarme já está ativo. A desativação é feita na página Manutenção & OS por um responsável autorizado.');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Emergência Já Ativa', 'O alarme já está ativo. A desativação é feita na página Manutenção & Tarefas por um responsável autorizado.');
       };
       confirmarBtn.addEventListener('click', async () => {
         // Também protege chamadas programáticas sem abrir/confirmar a tela.
@@ -596,6 +610,12 @@
       });
 
       window.abrirModalEmergencia = function () {
+        if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+          }
+          return;
+        }
         if (enviando) return;
         if (window.nexusEmergenciaAtiva && window.nexusEmergenciaAtiva()) {
           avisarAtiva();
@@ -610,6 +630,100 @@
       if (sidebarBtn) sidebarBtn.addEventListener('click', () => window.abrirModalEmergencia());
     })();
 
+    // Modal global de Configurações de Alerta no Aparelho (Vibração e Som) acionado pela engrenagem ao lado do Botão de Emergência
+    (function injetarModalConfiguracoesEmergencia() {
+      let modal = document.getElementById('hapticsSettingsModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'hapticsSettingsModal';
+        modal.className = 'fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-nexus-900/60 backdrop-blur-sm transition-all duration-200';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'hapticsModalTitle');
+        modal.setAttribute('tabindex', '-1');
+        modal.innerHTML = `
+          <div id="hapticsPanel" class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-5 md:p-6 flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-[22px]">vibration</span>
+                </div>
+                <div>
+                  <h3 id="hapticsModalTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Alerta no Aparelho (Vibração e Som)</h3>
+                  <p class="text-[11px] text-slate-600 dark:text-slate-300">Diagnóstico tátil e sonoro para o protocolo de emergência global</p>
+                </div>
+              </div>
+              <button type="button" id="closeHapticsSettingsModalBtn" aria-label="Fechar configurações de alerta" class="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-700 dark:text-slate-300">
+              <label for="hapticsEnabledToggle" class="inline-flex items-center gap-2 font-semibold p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 cursor-pointer">
+                <input id="hapticsEnabledToggle" type="checkbox" checked class="w-4 h-4 rounded border-slate-300 text-nexus-500 focus:ring-nexus-500" />
+                Vibrar neste aparelho durante a emergência
+              </label>
+              <label for="hapticsSoundToggle" class="inline-flex items-center gap-2 font-semibold p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800">
+                <input id="hapticsSoundToggle" type="checkbox" checked disabled class="w-4 h-4 rounded border-slate-300 text-nexus-500 focus:ring-nexus-500" />
+                Tocar alerta sonoro (obrigatório na aplicação)
+              </label>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="hapticsTestBtn" type="button" class="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">vibration</span>
+                Testar vibração e som agora
+              </button>
+              <button id="hapticsRefreshBtn" type="button" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs inline-flex items-center gap-1 transition-colors">
+                <span class="material-symbols-outlined text-[15px]">refresh</span>
+                Atualizar diagnóstico
+              </button>
+              <a href="teste-vibracao.html" class="px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs inline-flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 transition-colors">
+                <span class="material-symbols-outlined text-[15px]">smartphone</span>
+                Abrir página de teste no celular
+              </a>
+            </div>
+            <p id="hapticsStatus" class="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3 py-2 border border-slate-200 dark:border-slate-800" aria-live="polite">
+              Verificando suporte a vibração e áudio deste navegador...
+            </p>
+            <p id="hapticsFeedback" class="text-[11px] text-amber-800 dark:text-amber-300 font-medium" aria-live="polite"></p>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+
+      const closeBtn = modal.querySelector('#closeHapticsSettingsModalBtn');
+      const fecharModal = () => {
+        modal.classList.add('hidden');
+      };
+      if (closeBtn && !closeBtn.dataset.boundClose) {
+        closeBtn.dataset.boundClose = '1';
+        closeBtn.addEventListener('click', fecharModal);
+      }
+      if (!modal.dataset.boundBackdrop) {
+        modal.dataset.boundBackdrop = '1';
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) fecharModal();
+        });
+        modal.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+            e.stopPropagation();
+            fecharModal();
+          }
+        });
+      }
+
+      window.abrirModalConfiguracoesEmergencia = function () {
+        if (window.NexusHaptics && typeof window.NexusHaptics.bindUI === 'function') {
+          window.NexusHaptics.bindUI();
+        }
+        modal.classList.remove('hidden');
+      };
+
+      const settingsBtn = document.getElementById('sidebarEmergencySettingsBtn');
+      if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => window.abrirModalConfiguracoesEmergencia());
+      }
+    })();
+
     // Ajusta o contêiner principal para considerar a navbar fixa (Item 7).
     // A altura é limitada à viewport no desktop (md+) para que apenas o <main>
     // role: assim a barra lateral permanece fixa na tela durante a rolagem do
@@ -621,10 +735,59 @@
     if (mainWrapper) {
       mainWrapper.classList.add('pt-16', 'md:h-[calc(100vh-4rem)]', 'md:overflow-hidden');
     }
+
+    // Tarefa 15: Bloqueio global de formulários e ações de mutação para o perfil Espectador (MAT-1111)
+    if (!document.__nexusReadOnlyGuardsBound) {
+      document.__nexusReadOnlyGuardsBound = true;
+      const avisarSomenteLeitura = () => {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+        }
+      };
+
+      document.addEventListener('submit', (ev) => {
+        if (!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly())) return;
+        const formId = ev.target && ev.target.id ? ev.target.id : '';
+        if (formId === 'loginForm') return;
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        avisarSomenteLeitura();
+      }, true);
+
+      const BOTOES_MUTACAO_IDS = new Set([
+        'toggleAgendamentoFormBtn', 'toggleNavioFormBtn', 'toggleContainerFormBtn',
+        'toggleRotaFormBtn', 'toggleGuindasteFormBtn', 'toggleOsFormBtn',
+        'toggleNavioManutFormBtn', 'toggleFuncFormBtn', 'toggleVisFormBtn',
+        'revogarDelegacaoBtn', 'invalidateCodeBtn', 'aprovarCargaBtn',
+        'recusarCargaBtn', 'sidebarEmergencyBtn', 'panicButton',
+        'resetEmergencyBtn', 'confirmMoveBtn', 'confirmMovimentarModalBtn',
+        'confirmVincularModalBtn', 'confirmCancelCargoBtn'
+      ]);
+
+      document.addEventListener('click', (ev) => {
+        if (!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly())) return;
+        const btn = ev.target && typeof ev.target.closest === 'function' ? ev.target.closest('button, [role="button"]') : null;
+        if (!btn) return;
+        const btnId = btn.id || '';
+        const onclickAttr = btn.getAttribute('onclick') || '';
+        const ehMutacaoOnclick = /window\.(executarAcaoCarga|liberarNavioPeloDiretor|autorizarRetornoNavio|excluir|editar|alterar|alocar|desatracar|aprovar|recusar|concluir|registrarSaida|retificar|revogar)/.test(onclickAttr);
+        if (BOTOES_MUTACAO_IDS.has(btnId) || ehMutacaoOnclick) {
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+          avisarSomenteLeitura();
+        }
+      }, true);
+    }
   }
 
   // Modais de Confirmação e Prompt Globais (Item 6)
   window.nexusConfirm = function(titleOrMsg, msg) {
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly() && titleOrMsg !== 'Encerrar Sessão') {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return Promise.resolve(false);
+    }
     return new Promise((resolve) => {
       const modal = document.getElementById('nexusConfirmModal');
       if (!modal) {
@@ -664,6 +827,12 @@
   };
 
   window.nexusPrompt = function(titleOrMsg, msg, defaultValue = '') {
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return Promise.resolve(null);
+    }
     return new Promise((resolve) => {
       const modal = document.getElementById('nexusPromptModal');
       if (!modal) {

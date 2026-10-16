@@ -97,6 +97,7 @@ async function loadApp(pageFile, { scripts, seed, session = SESSION }) {
   // Sessão ativa (mesma estrutura gravada por js/pages/confirm-role.js)
   window.document.cookie = 'nexus_session=' + encodeURIComponent(JSON.stringify(session)) + '; path=/';
   window.localStorage.setItem('nexus_ghost_clean_v1', 'true');
+  window.localStorage.setItem('nexus_audit_clean_v2', 'true');
 
   // Semente de dados controlada pelo atacante
   Object.entries(seed || {}).forEach(([key, value]) => {

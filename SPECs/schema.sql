@@ -127,7 +127,7 @@ create table visitantes (
   motivo text,
   data_hora_entrada timestamptz not null default now(),
   data_hora_saida timestamptz,
-  registrado_por uuid references funcionarios(id) on delete restrict,
+  registrado_por uuid references funcionarios(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -277,7 +277,7 @@ create table agendamentos (
   id uuid primary key default gen_random_uuid(),
   carga_id uuid not null unique references cargas(id) on delete cascade,
   data_prevista_entrega date not null,
-  agendado_por uuid references funcionarios(id) on delete restrict,
+  agendado_por uuid references funcionarios(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -307,8 +307,8 @@ create table manutencoes (
   data_conclusao timestamptz,
   descricao text not null,
   status status_manutencao_enum not null default 'SOLICITADA',
-  solicitado_por uuid references funcionarios(id) on delete restrict,
-  aprovado_por uuid references funcionarios(id) on delete restrict,
+  solicitado_por uuid references funcionarios(id) on delete set null,
+  aprovado_por uuid references funcionarios(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -320,7 +320,7 @@ create table historico_manutencoes (
   guindaste_id uuid references guindastes(id) on delete cascade,
   data_manutencao date not null,
   descricao_servicos text not null,
-  registrado_por uuid references funcionarios(id) on delete restrict,
+  registrado_por uuid references funcionarios(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -331,7 +331,7 @@ create table inspecoes (
   id uuid primary key default gen_random_uuid(),
   carga_id uuid not null references cargas(id) on delete cascade,
   checklist_modelo_id uuid references checklist_modelos(id) on delete restrict,
-  inspetor_id uuid references funcionarios(id) on delete restrict,
+  inspetor_id uuid references funcionarios(id) on delete set null,
   data_inspecao timestamptz not null default now(),
   resultado resultado_inspecao_enum not null default 'PENDENTE',
   observacoes text,
@@ -359,7 +359,7 @@ create table inspecao_itens (
 create table logs_alteracoes (
   id uuid primary key default gen_random_uuid(),
   data_hora timestamptz not null default now(),
-  funcionario_id uuid references funcionarios(id) on delete restrict,
+  funcionario_id uuid references funcionarios(id) on delete set null,
   cargo cargo_enum not null,
   codigo_individual text not null,
   entidade_tipo tipo_entidade_enum not null,
@@ -372,7 +372,7 @@ create table logs_alteracoes (
 create table trail_decisoes (
   id uuid primary key default gen_random_uuid(),
   data_hora timestamptz not null default now(),
-  funcionario_id uuid references funcionarios(id) on delete restrict,
+  funcionario_id uuid references funcionarios(id) on delete set null,
   cargo cargo_enum not null,
   codigo_individual text not null,
   tipo_decisao tipo_decisao_enum not null,
@@ -386,7 +386,7 @@ create table trail_decisoes (
 create table retificacoes_trail (
   id uuid primary key default gen_random_uuid(),
   trail_id uuid not null references trail_decisoes(id) on delete restrict,
-  funcionario_id uuid references funcionarios(id) on delete restrict,
+  funcionario_id uuid references funcionarios(id) on delete set null,
   retificacao text not null,
   data_hora timestamptz not null default now(),
   created_at timestamptz not null default now()
@@ -415,7 +415,7 @@ create table delegacoes_supervisor (
 
 create table leituras_qr_code (
   id uuid primary key default gen_random_uuid(),
-  funcionario_id uuid references funcionarios(id) on delete restrict,
+  funcionario_id uuid references funcionarios(id) on delete set null,
   entidade_tipo tipo_entidade_enum not null,
   entidade_id text not null,
   data_hora timestamptz not null default now(),
@@ -520,6 +520,16 @@ insert into cargo_niveis (cargo, nivel) values
   ('DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'ESTRATEGICO'),
   ('CONSELHO_ADMINISTRACAO', 'ESTRATEGICO')
 on conflict (cargo) do nothing;
+
+-- Perfil de Apresentação Somente-Leitura (Espectador / MAT-1111)
+insert into funcionarios (id, matricula, codigo_individual, nome, cargo, ativo) values
+  ('11111111-1111-4111-8111-111111111111', 'MAT-1111', 'MAT-1111', 'Espectador', 'CONSELHO_ADMINISTRACAO', true)
+on conflict (matricula) do update set
+  codigo_individual = excluded.codigo_individual,
+  nome = excluded.nome,
+  cargo = excluded.cargo,
+  ativo = true,
+  updated_at = now();
 
 -- 14. POPULAÇÃO INICIAL DOS BERÇOS DO TERMINAL STS-01
 -- ============================================================

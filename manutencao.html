@@ -7,8 +7,8 @@
   <script defer src="js/analytics.js"></script>
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>NexusPort — Manutenção & OS</title>
-  <meta name="description" content="Manutenção e ordens de serviço no NexusPort: chamados, guindastes e botão de pânico global." />
+  <title>NexusPort — Manutenção & Tarefas</title>
+  <meta name="description" content="Manutenção e tarefas no NexusPort: chamados, guindastes e botão de pânico global." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
@@ -50,7 +50,7 @@
               <span class="material-symbols-outlined text-sm">build</span>
               <span>Engenharia & Ativos</span>
             </div>
-            <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Gestão de Manutenções & Ordens de Serviço (OS)</h1>
+            <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Manutenção & Tarefas</h1>
             <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Histórico operacional de manutenções, controle de ciclo preventivo e protocolos de emergência.</p>
           </div>
         </div>
@@ -70,8 +70,8 @@
           </button>
         </div>
 
-        <!-- Botão de Pânico e Protocolo de Emergência (GLOBAL) -->
-        <div class="p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <!-- Botão de Pânico e Protocolo de Emergência (Preservado oculto no DOM; acionamento exclusivo na Sidebar) -->
+        <div class="hidden p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 flex-col sm:flex-row items-center justify-between gap-4" aria-hidden="true">
           <div class="flex items-center gap-3">
             <span class="material-symbols-outlined text-red-600 text-[32px]">campaign</span>
             <div>
@@ -87,49 +87,56 @@
           </div>
         </div>
 
-        <!-- Alerta de emergência: som obrigatório e diagnóstico de vibração -->
-        <div id="hapticsPanel" class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-3">
-          <div class="flex items-start gap-3">
-            <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">vibration</span>
-            <div class="min-w-0">
-              <span class="font-bold text-sm text-nexus-900 dark:text-white block">Alerta no Aparelho (vibração / som)</span>
-              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Durante uma emergência ativa, o aparelho emite alerta sonoro contínuo e vibração periódica (em dispositivos Android compatíveis). Mantenha o som do aparelho ligado e toque em "Testar vibração e som" para validar seu dispositivo.</p>
+        <!-- Modal de Alerta no Aparelho (vibração / som) acionado pela engrenagem ao lado do Botão de Emergência na Sidebar -->
+        <div id="hapticsSettingsModal" role="dialog" aria-modal="true" aria-labelledby="hapticsModalTitle" tabindex="-1" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-nexus-900/60 backdrop-blur-sm transition-all duration-200">
+          <div id="hapticsPanel" class="p-5 md:p-6 rounded-2xl bg-white dark:bg-slate-900 w-full max-w-2xl border border-nexus-border dark:border-nexus-dark-border shadow-2xl flex flex-col gap-3 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div class="flex items-start gap-3">
+                <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">vibration</span>
+                <div class="min-w-0">
+                  <span id="hapticsModalTitle" class="font-bold text-sm text-nexus-900 dark:text-white block">Alerta no Aparelho (vibração / som)</span>
+                  <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Durante uma emergência ativa, o aparelho emite alerta sonoro contínuo e vibração periódica (em dispositivos Android compatíveis). Mantenha o som do aparelho ligado e toque em "Testar vibração e som" para validar seu dispositivo.</p>
+                </div>
+              </div>
+              <button type="button" id="closeHapticsSettingsModalBtn" aria-label="Fechar configurações de alerta" class="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors shrink-0">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
             </div>
-          </div>
-          <div class="grid sm:grid-cols-2 gap-3">
-            <label class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700 cursor-pointer">
-              <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-[18px]">vibration</span>
-                <span>Vibração</span>
-              </span>
-              <input type="checkbox" id="hapticsEnabledToggle" class="sr-only peer" />
-              <div class="relative w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:bg-nexus-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full shrink-0"></div>
-            </label>
-            <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700">
-              <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-[18px]" aria-hidden="true">volume_up</span>
-                <span>Alerta sonoro</span>
-              </span>
-              <input type="checkbox" id="hapticsSoundToggle" aria-label="Som de emergência obrigatório" class="sr-only" checked disabled />
-              <span class="text-xs font-bold text-nexus-500 dark:text-indigo-400">Obrigatório</span>
+            <div class="grid sm:grid-cols-2 gap-3">
+              <label class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700 cursor-pointer">
+                <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[18px]">vibration</span>
+                  <span>Vibração</span>
+                </span>
+                <input type="checkbox" id="hapticsEnabledToggle" class="sr-only peer" />
+                <div class="relative w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:bg-nexus-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full shrink-0"></div>
+              </label>
+              <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700">
+                <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[18px]" aria-hidden="true">volume_up</span>
+                  <span>Alerta sonoro</span>
+                </span>
+                <input type="checkbox" id="hapticsSoundToggle" aria-label="Som de emergência obrigatório" class="sr-only" checked disabled />
+                <span class="text-xs font-bold text-nexus-500 dark:text-indigo-400">Obrigatório</span>
+              </div>
             </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="hapticsTestBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px]">sensors</span>
+                <span>Testar vibração e som</span>
+              </button>
+              <button id="hapticsRefreshBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px]">refresh</span>
+                <span>Verificar novamente</span>
+              </button>
+              <a href="teste-vibracao.html" class="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-300 font-bold text-xs transition-colors flex items-center gap-1">
+                <span class="material-symbols-outlined text-[16px]">smartphone</span>
+                <span>Abrir teste no celular</span>
+              </a>
+            </div>
+            <p id="hapticsStatus" class="text-[11px] font-mono whitespace-pre-line text-slate-600 dark:text-slate-400">Verificando suporte do aparelho...</p>
+            <p id="hapticsFeedback" class="text-[11px] font-bold text-nexus-500 dark:text-nexus-300"></p>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <button id="hapticsTestBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm flex items-center gap-1">
-              <span class="material-symbols-outlined text-[16px]">sensors</span>
-              <span>Testar vibração e som</span>
-            </button>
-            <button id="hapticsRefreshBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors flex items-center gap-1">
-              <span class="material-symbols-outlined text-[16px]">refresh</span>
-              <span>Verificar novamente</span>
-            </button>
-            <a href="teste-vibracao.html" class="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-300 font-bold text-xs transition-colors flex items-center gap-1">
-              <span class="material-symbols-outlined text-[16px]">smartphone</span>
-              <span>Abrir teste no celular</span>
-            </a>
-          </div>
-          <p id="hapticsStatus" class="text-[11px] font-mono whitespace-pre-line text-slate-600 dark:text-slate-400">Verificando suporte do aparelho...</p>
-          <p id="hapticsFeedback" class="text-[11px] font-bold text-nexus-500 dark:text-nexus-300"></p>
         </div>
 
         <!-- Alerta de Manutenção Preventiva Sugerida (> 3 Anos) -->
@@ -143,90 +150,95 @@
           </div>
         </div>
 
-        <!-- Seção de Solicitação de Manutenção de Navios (Item 17) -->
+        <!-- Tabela e Painel Unificado de Solicitações e Ordens de Serviço (OS) -->
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
-          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500 text-[22px]">directions_boat</span>
+              <span class="material-symbols-outlined text-nexus-500 text-[22px]">assignment</span>
               <div>
-                <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Solicitação de Manutenção de Embarcações (Navios)</h2>
-                <p class="text-[11px] text-slate-600 dark:text-slate-400">Solicitação de manutenção técnica preventiva, corretiva, preditiva e geral.</p>
+                <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Ordens de Serviço e Solicitações de Manutenção (OS)</h2>
+                <p class="text-[11px] text-slate-600 dark:text-slate-400">Abertura unificada de solicitações para equipamentos de pátio, contêineres e embarcações atracadas.</p>
               </div>
             </div>
-            <button id="toggleNavioManutFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
-              <span class="material-symbols-outlined text-[16px]">build_circle</span>
-              <span>+ Solicitar Manutenção de Navio</span>
-            </button>
-          </div>
-
-          <form id="navioManutForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div>
-              <label class="block font-bold text-slate-600 mb-1">Selecione o Navio</label>
-              <select id="navioManutSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
-                <!-- Populado via JS -->
-              </select>
-            </div>
-            <div>
-              <label class="block font-bold text-slate-600 mb-1">Tipo de Manutenção</label>
-              <select id="navioTipoManutSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
-                <option value="PREVENTIVA">Manutenção Preventiva</option>
-                <option value="CORRETIVA">Manutenção Corretiva</option>
-                <option value="PREDITIVA">Manutenção Preditiva</option>
-                <option value="GERAL">Manutenção Geral (Requer >= 3 anos de uso)</option>
-              </select>
-            </div>
-            <div>
-              <label class="block font-bold text-slate-600 mb-1">Justificativa / Descrição</label>
-              <input type="text" id="navioDescManut" required placeholder="Ex: Revisão completa de casco e motores principais" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
-            </div>
-            <div class="sm:col-span-3 flex justify-end">
-              <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">save</span>
-                <span>Registrar Solicitação</span>
+            <div class="flex items-center gap-2">
+              <button id="toggleNavioManutFormBtn" type="button" class="hidden" aria-hidden="true">+ Solicitar Manutenção de Navio</button>
+              <button id="toggleOsFormBtn" type="button" class="px-3.5 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">add_circle</span>
+                <span>+ Nova Solicitação / Ordem de Serviço</span>
               </button>
             </div>
-          </form>
-        </div>
-
-
-        <!-- Tabela de Ordens de Serviço (OS) -->
-        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
-          <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
-            <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">assignment</span>
-              Ordens de Serviço de Manutenção (OS)
-            </h2>
-            <button id="toggleOsFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs">
-              + Nova Ordem de Serviço
-            </button>
           </div>
 
-          <form id="osForm" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div>
-              <label class="block font-bold text-slate-600 mb-1">Equipamento / Ativo</label>
-              <select id="osEquipamento" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
-                <option value="">Selecione o Equipamento / Ativo...</option>
-              </select>
-            </div>
-            <div>
-              <label class="block font-bold text-slate-600 mb-1">Prioridade</label>
-              <select id="osPrioridade" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
-                <option value="ALTA">Alta</option>
-                <option value="MEDIA">Média</option>
-                <option value="BAIXA">Baixa</option>
-              </select>
-            </div>
-            <div>
-              <label class="block font-bold text-slate-600 mb-1">Descrição da Falha</label>
-              <input type="text" id="osDescricao" required placeholder="Ex: Substituição das roldanas de elevação" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
-            </div>
-            <div class="sm:col-span-3 flex justify-end">
-              <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">save</span>
-                <span>Criar Ordem de Serviço</span>
+          <div id="unifiedManutFormPanel" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col gap-3">
+            <div id="unifiedManutTabs" class="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-1">Categoria do Ativo:</span>
+              <button type="button" id="tabOsEquipamentoBtn" data-target="EQUIPAMENTO" aria-pressed="true" class="px-3 py-1.5 rounded-lg bg-nexus-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm">
+                <span class="material-symbols-outlined text-[16px]">precision_manufacturing</span>
+                <span>Equipamento / Contêiner</span>
+              </button>
+              <button type="button" id="tabOsNavioBtn" data-target="NAVIO" aria-pressed="false" class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors">
+                <span class="material-symbols-outlined text-[16px]">directions_boat</span>
+                <span>Embarcação (Navio)</span>
               </button>
             </div>
-          </form>
+
+            <form id="osForm" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Equipamento / Ativo</label>
+                <select id="osEquipamento" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
+                  <option value="">Selecione o Equipamento / Ativo...</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Prioridade</label>
+                <select id="osPrioridade" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
+                  <option value="ALTA">Alta</option>
+                  <option value="MEDIA">Média</option>
+                  <option value="BAIXA">Baixa</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Descrição da Falha</label>
+                <input type="text" id="osDescricao" required placeholder="Ex: Substituição das roldanas de elevação" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
+              </div>
+              <div class="sm:col-span-3 flex justify-end">
+                <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[16px]">save</span>
+                  <span>Criar Ordem de Serviço</span>
+                </button>
+              </div>
+            </form>
+
+            <div id="navioManutSection">
+              <form id="navioManutForm" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Selecione o Navio</label>
+                  <select id="navioManutSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
+                    <!-- Populado via JS -->
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Tipo de Manutenção</label>
+                  <select id="navioTipoManutSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
+                    <option value="PREVENTIVA">Manutenção Preventiva</option>
+                    <option value="CORRETIVA">Manutenção Corretiva</option>
+                    <option value="PREDITIVA">Manutenção Preditiva</option>
+                    <option value="GERAL">Manutenção Geral (Requer >= 3 anos de uso)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-600 dark:text-slate-300 mb-1">Justificativa / Descrição</label>
+                  <input type="text" id="navioDescManut" required placeholder="Ex: Revisão completa de casco e motores principais" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
+                </div>
+                <div class="sm:col-span-3 flex justify-end">
+                  <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[16px]">save</span>
+                    <span>Registrar Solicitação</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
 
           <!-- Busca + filtros por status das OS (Backlog 3 - 7b/7h) -->
           <div class="flex flex-col gap-2">

@@ -21,6 +21,7 @@
   const CHAVE_PENDENCIA = 'nexus_pending_auth';
   const TURNO_SEGUNDOS = 12 * 60 * 60;
   const PENDENCIA_SEGUNDOS = 10 * 60;
+  const LIMITE_SEGURO_COOKIE_BYTES = 3800;
 
   // Cópias deixadas por versões anteriores (sessionStorage e localStorage). São removidas
   // ao entrar e ao sair, para que nenhuma cópia antiga continue valendo.
@@ -36,9 +37,30 @@
     return partes.join('; ');
   }
 
+  function compactarDadosSessao(dados) {
+    if (!dados || typeof dados !== 'object') return {};
+    const camposPermitidos = [
+      'id', 'matricula', 'codigo_individual', 'codigo', 'nome',
+      'cargo', 'cargo_nome', 'nivel', 'camada_visao', 'nivel_visao', 'status', 'ativo',
+      'login_at', 'supervisor_substituto', 'delegacao_ativa',
+      'somente_leitura', 'perfil_espectador'
+    ];
+    const compacto = {};
+    camposPermitidos.forEach((campo) => {
+      if (dados[campo] !== undefined) {
+        compacto[campo] = typeof dados[campo] === 'string' && dados[campo].length > 160
+          ? dados[campo].slice(0, 160)
+          : dados[campo];
+      }
+    });
+    return compacto;
+  }
+
   function gravar(nome, valor, maxAgeSegundos) {
     try {
-      document.cookie = `${nome}=${encodeURIComponent(String(valor))}; ${atributos(maxAgeSegundos)}`;
+      const codificado = encodeURIComponent(String(valor));
+      const linhaCookie = `${nome}=${codificado}; ${atributos(maxAgeSegundos)}`;
+      document.cookie = linhaCookie;
       return true;
     } catch (e) {
       console.warn('[NexusSessionCookies] Não foi possível gravar o cookie', nome, e);
@@ -64,7 +86,7 @@
 
   function remover(nome) {
     try {
-      document.cookie = `${nome}=; path=/; SameSite=Lax; max-age=0`;
+      document.cookie = `${nome}=; ${atributos(0)}; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
     } catch (e) { /* ambiente sem document.cookie: nada a remover */ }
   }
 
@@ -73,6 +95,8 @@
     TURNO_SEGUNDOS: TURNO_SEGUNDOS,
     /** Validade da identificação aguardando a confirmação do cargo (10 min). */
     PENDENCIA_SEGUNDOS: PENDENCIA_SEGUNDOS,
+    /** Limite seguro em bytes para evitar descarte silencioso do cookie (> 4 KB). */
+    LIMITE_SEGURO_COOKIE_BYTES: LIMITE_SEGURO_COOKIE_BYTES,
 
     /** Texto bruto do cookie da sessão (JSON) ou null. */
     lerSessao: function () {
@@ -81,7 +105,18 @@
 
     /** Grava a sessão ativa (objeto serializado em JSON) e limpa cópias legadas. */
     gravarSessao: function (dadosSessao) {
-      const ok = gravar(CHAVE_SESSAO, JSON.stringify(dadosSessao), TURNO_SEGUNDOS);
+      if (!dadosSessao || typeof dadosSessao !== 'object') return false;
+      let json = JSON.stringify(dadosSessao);
+      if (encodeURIComponent(json).length > LIMITE_SEGURO_COOKIE_BYTES) {
+        json = JSON.stringify(compactarDadosSessao(dadosSessao));
+      }
+      let ok = gravar(CHAVE_SESSAO, json, TURNO_SEGUNDOS);
+      if (ok && ler(CHAVE_SESSAO) === null) {
+        const jsonCompacto = JSON.stringify(compactarDadosSessao(dadosSessao));
+        if (jsonCompacto !== json) {
+          ok = gravar(CHAVE_SESSAO, jsonCompacto, TURNO_SEGUNDOS);
+        }
+      }
       remover(CHAVE_PENDENCIA);
       NexusSessionCookies.limparLegado();
       return ok;
@@ -115,6 +150,7 @@
         const bruto = ler(CHAVE_PENDENCIA);
         return bruto ? JSON.parse(bruto) : null;
       } catch (e) {
+        remover(CHAVE_PENDENCIA);
         return null;
       }
     },

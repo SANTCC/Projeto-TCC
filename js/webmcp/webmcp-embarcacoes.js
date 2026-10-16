@@ -421,39 +421,41 @@
   const cadastrarRota = {
     nome: 'cadastrar_rota',
     titulo: 'Cadastrar rota marítima',
-    descricao: 'Cadastra uma rota marítima entre dois portos com distância em km. A saída de navios depende de rota cadastrada. Só Supervisor ou Direção. Exige confirmação.',
+    descricao: 'Cadastra uma rota marítima a partir do Porto de Santos com distância em km. A saída de navios depende de rota cadastrada. Só Supervisor ou Direção. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: G.supervisao,
     permissao: 'CADASTRAR_ROTA',
     esquema: {
       type: 'object',
       properties: {
-        origem: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Origem', description: 'Porto de origem da rota.' },
+        origem: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Origem', description: 'Porto de origem da rota (fixo em Porto de Santos).' },
         destino: { type: 'string', minLength: 2, maxLength: 120, rotulo: 'Destino', description: 'Porto de destino da rota.' },
         distancia_km: { type: 'number', minimum: 1, maximum: 50000, rotulo: 'Distância (km)', description: 'Distância em quilômetros.' }
       },
-      required: ['origem', 'destino', 'distancia_km'],
+      required: ['destino', 'distancia_km'],
       additionalProperties: false
     },
     precondicao: (args) => {
-      if (args.origem !== undefined && args.destino !== undefined) {
-        const existe = rotasDaPagina().some((r) => String(r.origem).toLowerCase() === args.origem.toLowerCase() && String(r.destino).toLowerCase() === args.destino.toLowerCase());
+      const origemFixa = 'Porto de Santos';
+      if (args.destino !== undefined) {
+        const existe = rotasDaPagina().some((r) => String(r.origem).toLowerCase() === origemFixa.toLowerCase() && String(r.destino).toLowerCase() === args.destino.toLowerCase());
         if (existe) return { codigo: 'ROTA_DUPLICADA', mensagem: 'Já existe rota cadastrada entre estes portos.' };
       }
       return null;
     },
-    resumo: (args) => [`Cadastrar rota ${args.origem} → ${args.destino} (${args.distancia_km} km).`],
+    resumo: (args) => [`Cadastrar rota Porto de Santos → ${args.destino} (${args.distancia_km} km).`],
     executar: async (args) => {
+      const origemFixa = 'Porto de Santos';
       const f = formularioOuErro('rotaForm');
       if (f.erro) return f.erro;
-      const erroCampos = preencher(f.form, { rotaOrigem: args.origem, rotaDestino: args.destino, rotaDistancia: args.distancia_km });
+      const erroCampos = preencher(f.form, { rotaOrigem: origemFixa, rotaDestino: args.destino, rotaDistancia: args.distancia_km });
       if (erroCampos) return erroCampos;
       const invalido = camposInvalidos(f.form);
       if (invalido) return invalido;
       f.form.requestSubmit();
-      const ok = await D.esperar(() => rotasDaPagina().some((r) => r.origem === args.origem && r.destino === args.destino), 4000);
+      const ok = await D.esperar(() => rotasDaPagina().some((r) => r.origem === origemFixa && r.destino === args.destino), 4000);
       if (!ok) return falhaNaoConcluida();
-      return { mensagem: `Rota ${args.origem} → ${args.destino} cadastrada.`, dados: { origem: args.origem, destino: args.destino, distancia_km: args.distancia_km } };
+      return { mensagem: `Rota ${origemFixa} → ${args.destino} cadastrada.`, dados: { origem: origemFixa, destino: args.destino, distancia_km: args.distancia_km } };
     }
   };
 
@@ -496,6 +498,15 @@
               codigo: 'CARGAS_NAO_PRONTAS',
               mensagem: `O navio ${navio.nome} tem ${pendentes.length} carga(s) vinculada(s) que ainda não estão PRONTA PARA ENTREGA: ${lista}${resto}. Todas as cargas precisam estar prontas antes da liberação da saída (RN 3).`
             };
+          }
+          if (typeof window.nexusEmbarcacoesCargasProntasLiberacao === 'function') {
+            const prontas = await window.nexusEmbarcacoesCargasProntasLiberacao(navio.imo);
+            if (!Array.isArray(prontas) || prontas.length === 0) {
+              return {
+                codigo: 'SEM_CARGAS_VINCULADAS',
+                mensagem: `O navio ${navio.nome} não possui nenhuma carga vinculada pronta para entrega rumo a ${navio.destino}. Vincule ao menos uma carga antes de liberar a saída.`
+              };
+            }
           }
         } catch (e) {
           console.warn('[WebMCP Embarcações] Falha ao validar cargas para liberação de saída:', e);

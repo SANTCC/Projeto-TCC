@@ -196,21 +196,21 @@
           titulo: 'Minhas operações registradas (7 dias)',
           descricao: 'Volume diário de registros de auditoria efetuados por você.',
           icone: 'timeline',
-          badge: 'RF 12'
+          badge: 'AUDITORIA'
         },
         {
           id: 'minhas_cargas_status',
           titulo: 'Minhas cargas por status no fluxo',
           descricao: 'Situação atual das cargas sob sua responsabilidade operacional.',
           icone: 'inventory_2',
-          badge: 'RF 6'
+          badge: 'FLUXO'
         },
         {
           id: 'minhas_cargas_tipo',
           titulo: 'Minhas cargas por tipo',
           descricao: 'Top 5 tipos de carga (natureza da mercadoria) na sua fila de trabalho.',
           icone: 'category',
-          badge: 'RF 6'
+          badge: 'FLUXO'
         }
       ]
     },
@@ -225,23 +225,23 @@
         {
           id: 'navios_localizacao',
           titulo: 'Embarcações por localização (GPS)',
-          descricao: 'Classificação DENTRO / FORA do porto e porto de destino (RF 8).',
+          descricao: 'Classificação DENTRO / FORA do porto e porto de destino.',
           icone: 'sailing',
-          badge: 'RF 8'
+          badge: 'GPS'
         },
         {
           id: 'containers_estado',
           titulo: 'Contêineres por estado operacional',
           descricao: 'Distribuição da frota de contêineres entre operação e reforma.',
           icone: 'deployed_code',
-          badge: 'RF 3'
+          badge: 'EQUIPAMENTOS'
         },
         {
           id: 'minhas_operacoes_7d',
           titulo: 'Meus registros de atualização (7 dias)',
           descricao: 'Volume diário de atualizações de navios/contêineres efetuadas por você.',
           icone: 'timeline',
-          badge: 'RF 12'
+          badge: 'AUDITORIA'
         }
       ]
     },
@@ -249,37 +249,37 @@
     TECNICO_PORTOS: {
       cargo: 'TECNICO_PORTOS',
       titulo: 'Painel de gestão de pessoas no porto',
-      subtitulo: 'Visão Própria ampliada — visitantes temporários, efetivo cadastrado e seus próprios registros (RF 15).',
+      subtitulo: 'Visão Própria ampliada — visitantes temporários, efetivo cadastrado e seus próprios registros.',
       camada: 'Visão Própria (RLS)',
       fontes: ['visitantes', 'funcionarios', 'logs'],
       charts: [
         {
           id: 'visitantes_7d',
           titulo: 'Visitantes registrados (7 dias)',
-          descricao: 'Entradas temporárias registradas no porto por dia (RF 15).',
+          descricao: 'Entradas temporárias registradas no porto por dia.',
           icone: 'groups',
-          badge: 'RF 15'
+          badge: 'PESSOAS'
         },
         {
           id: 'visitantes_motivo',
           titulo: 'Visitantes por motivo de entrada',
           descricao: 'Top 5 motivos declarados no registro de visitantes.',
           icone: 'badge',
-          badge: 'RF 15'
+          badge: 'PESSOAS'
         },
         {
           id: 'funcionarios_cargo',
           titulo: 'Efetivo ativo por cargo',
           descricao: 'Distribuição dos funcionários ativos por cargo no terminal.',
           icone: 'workspace_premium',
-          badge: 'RF 15'
+          badge: 'PESSOAS'
         },
         {
           id: 'meus_registros_pessoas_7d',
           titulo: 'Meus registros de pessoas (7 dias)',
-          descricao: 'Volume diário de cadastros/liberações efetuados por você (RF 12).',
+          descricao: 'Volume diário de cadastros/liberações efetuados por você.',
           icone: 'timeline',
-          badge: 'RF 12'
+          badge: 'AUDITORIA'
         }
       ]
     },
@@ -287,37 +287,37 @@
     INSPETOR: {
       cargo: 'INSPETOR',
       titulo: 'Painel operacional do inspetor',
-      subtitulo: 'Visão Operacional — inspeções técnicas, fluxo de cargas e manutenções. Dados de pessoas não são exibidos (RF 1).',
+      subtitulo: 'Visão Operacional — inspeções técnicas, fluxo de cargas e manutenções. Dados de pessoas não são exibidos.',
       camada: 'Visão Operacional (RLS)',
       fontes: ['cargas', 'manutencoes', 'navios'],
       charts: [
         {
           id: 'inspecoes_resultado',
           titulo: 'Resultado das inspeções técnicas',
-          descricao: 'Cargas aprovadas, recusadas e pendentes de inspeção formal (RF 6 / RF 9).',
+          descricao: 'Cargas aprovadas, recusadas e pendentes de inspeção formal.',
           icone: 'fact_check',
-          badge: 'RF 9'
+          badge: 'INSPEÇÃO'
         },
         {
           id: 'cargas_fluxo',
           titulo: 'Cargas por status do fluxo',
           descricao: 'Posição da esteira de cargas nas 8 etapas do fluxo operacional.',
           icone: 'inventory_2',
-          badge: 'RF 6'
+          badge: 'FLUXO'
         },
         {
           id: 'manutencoes_status',
           titulo: 'Manutenções por status',
           descricao: 'Ordens de serviço de navios, contêineres e guindastes por etapa.',
           icone: 'build',
-          badge: 'RF 3'
+          badge: 'EQUIPAMENTOS'
         },
         {
           id: 'navios_localizacao',
           titulo: 'Embarcações por localização (GPS)',
           descricao: 'Cobertura operacional das embarcações monitoradas no terminal.',
           icone: 'sailing',
-          badge: 'RF 8'
+          badge: 'GPS'
         }
       ]
     },
@@ -325,37 +325,37 @@
     SUPERVISOR: {
       cargo: 'SUPERVISOR_GERENTE_OPERACOES',
       titulo: 'Painel tático de operações',
-      subtitulo: 'Visão Operacional — fila de liberação, manutenções, berços e trail de decisões. Dados de pessoas não são exibidos (RF 1).',
+      subtitulo: 'Visão Operacional — fila de liberação, manutenções, berços e trail de decisões. Dados de pessoas não são exibidos.',
       camada: 'Visão Operacional (RLS)',
       fontes: ['cargas', 'manutencoes', 'bercos', 'trail'],
       charts: [
         {
           id: 'fila_liberacao',
           titulo: 'Fila operacional por status de carga',
-          descricao: 'Cargas aguardando armazenagem, prontidão e liberação de saída (RN 3 / RN 16).',
+          descricao: 'Cargas aguardando armazenagem, prontidão e liberação de saída.',
           icone: 'conveyor_belt',
-          badge: 'RF 6'
+          badge: 'FLUXO'
         },
         {
           id: 'manutencoes_status',
           titulo: 'Manutenções por status (aprovação)',
-          descricao: 'Ordens aguardando sua aprovação, em execução e concluídas (RF 3).',
+          descricao: 'Ordens aguardando sua aprovação, em execução e concluídas.',
           icone: 'build',
-          badge: 'RF 3'
+          badge: 'EQUIPAMENTOS'
         },
         {
           id: 'bercos_ocupacao',
           titulo: 'Ocupação dos berços de atracação',
           descricao: '% de berços operacionais (ocupados) em relação à malha do terminal.',
           icone: 'anchor',
-          badge: 'RF 7'
+          badge: 'INDICADOR'
         },
         {
           id: 'trail_decisoes_tipo',
           titulo: 'Trail de decisões críticas por tipo',
-          descricao: 'Governança das liberações, cancelamentos e aprovações registradas (RF 13).',
+          descricao: 'Governança das liberações, cancelamentos e aprovações registradas.',
           icone: 'gavel',
-          badge: 'RF 13'
+          badge: 'GOVERNANÇA'
         }
       ]
     },
@@ -363,7 +363,7 @@
     DIRETOR: {
       cargo: 'DIRETOR_OPERACOES_LOGISTICA',
       titulo: 'Painel estratégico consolidado',
-      subtitulo: 'Visão Estratégica — consolidação total do terminal, incluindo indicadores financeiros exclusivos deste nível (RF 1 / RF 7).',
+      subtitulo: 'Visão Estratégica — consolidação total do terminal, incluindo indicadores financeiros exclusivos deste nível.',
       camada: 'Visão Estratégica (RLS)',
       fontes: ['cargas', 'navios', 'bercos', 'logs', 'funcionarios'],
       charts: [
@@ -372,28 +372,28 @@
           titulo: 'Taxa de aprovação e recusa de cargas',
           descricao: 'Resultado consolidado das inspeções técnicas no período.',
           icone: 'verified',
-          badge: 'RF 7'
+          badge: 'INDICADOR'
         },
         {
           id: 'embarcacoes_utilizadas',
           titulo: 'Embarcações mais utilizadas (Top 5)',
           descricao: 'Volume de cargas operadas por embarcação ativa no sistema.',
           icone: 'directions_boat',
-          badge: 'RF 2'
+          badge: 'FROTA'
         },
         {
           id: 'produtividade_cargo',
           titulo: 'Produtividade operacional por cargo (mês)',
           descricao: 'Operações registradas no mês corrente, considerando apenas operadores ativos.',
           icone: 'engineering',
-          badge: 'RF 16'
+          badge: 'PRODUTIVIDADE'
         },
         {
           id: 'bercos_ocupacao',
           titulo: 'Percentual de berços operacionais',
           descricao: 'Taxa de ocupação da malha de berços do Terminal STS-01.',
           icone: 'anchor',
-          badge: 'RF 7'
+          badge: 'INDICADOR'
         },
         {
           id: 'valor_declarado_mes',
@@ -1733,7 +1733,7 @@
               <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
             </div>
           </div>
-          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-600 dark:text-slate-400 shrink-0">${esc(definicao.badge || 'RF 7')}</span>
+          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-600 dark:text-slate-400 shrink-0">${esc(definicao.badge || 'INDICADOR')}</span>
         </div>
         <div class="relative w-full h-56">
           <canvas id="${esc(canvasId)}" role="img" aria-label="${esc(definicao.titulo)}"></canvas>
@@ -1754,7 +1754,7 @@
               <p class="text-[11px] text-slate-600 dark:text-slate-500 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
             </div>
           </div>
-          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-600 shrink-0">${esc(definicao.badge || 'RF 7')}</span>
+          <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-600 shrink-0">${esc(definicao.badge || 'INDICADOR')}</span>
         </div>
         <div class="flex flex-col items-center justify-center gap-2 h-56 text-center">
           <span class="material-symbols-outlined text-[36px] text-slate-300 dark:text-slate-600">bar_chart</span>
@@ -1834,7 +1834,7 @@
     const ordenados = cfg.charts ? cfg.charts.slice() : painel.charts;
     const definicoes = ordenados.map(item => {
       if (typeof item !== 'string') return item;
-      return Object.assign({}, CATALOGO_CHARTS[item] || painel.charts.find(c => c.id === item) || { id: item, titulo: item, descricao: '', icone: 'insights', badge: 'RF 7' });
+      return Object.assign({}, CATALOGO_CHARTS[item] || painel.charts.find(c => c.id === item) || { id: item, titulo: item, descricao: '', icone: 'insights', badge: 'INDICADOR' });
     });
     const fontes = cfg.fontes || painel.fontes;
 

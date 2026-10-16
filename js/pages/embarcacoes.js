@@ -973,6 +973,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleRotaBtn = document.getElementById('toggleRotaFormBtn');
   const rotaForm = document.getElementById('rotaForm');
   const rotasTableBody = document.getElementById('rotasTableBody');
+  const rotasCounter = document.getElementById('rotasCounter');
+  const mostrarMaisRotasBtn = document.getElementById('mostrarMaisRotasBtn');
+  const ROTAS_LIMITE_INICIAL = 4;
+  let rotasExpandidas = false;
+
+  if (mostrarMaisRotasBtn) {
+    mostrarMaisRotasBtn.addEventListener('click', () => {
+      rotasExpandidas = !rotasExpandidas;
+      renderRotasTable();
+    });
+  }
+
+  window.nexusAlternarRotasTabela = function (expandir) {
+    rotasExpandidas = typeof expandir === 'boolean' ? expandir : !rotasExpandidas;
+    renderRotasTable();
+    return rotasExpandidas;
+  };
 
   /**
    * Carrega as rotas marítimas SOMENTE do Supabase (tabela rotas_maritimas).
@@ -1048,7 +1065,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderRotasTable() {
     if (!rotasTableBody) return;
-    if (rotasMaritimasList.length === 0) {
+    const total = Array.isArray(rotasMaritimasList) ? rotasMaritimasList.length : 0;
+    if (total === 0) {
+      if (rotasCounter) rotasCounter.textContent = 'Exibindo 0 de 0 rotas';
+      if (mostrarMaisRotasBtn) {
+        mostrarMaisRotasBtn.classList.add('hidden');
+        mostrarMaisRotasBtn.disabled = true;
+        mostrarMaisRotasBtn.setAttribute('aria-expanded', 'false');
+        mostrarMaisRotasBtn.textContent = 'Mostrar mais';
+      }
       const texto = rotasCarregamentoFalhou
         ? 'Não foi possível carregar as rotas marítimas do Supabase.'
         : 'Nenhuma rota marítima cadastrada no sistema.';
@@ -1059,7 +1084,29 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       return;
     }
-    rotasTableBody.innerHTML = rotasMaritimasList.map(r => {
+
+    const visiveis = (rotasExpandidas || total <= ROTAS_LIMITE_INICIAL)
+      ? rotasMaritimasList
+      : rotasMaritimasList.slice(0, ROTAS_LIMITE_INICIAL);
+
+    if (rotasCounter) {
+      rotasCounter.textContent = `Exibindo ${visiveis.length} de ${total} rotas`;
+    }
+    if (mostrarMaisRotasBtn) {
+      if (total > ROTAS_LIMITE_INICIAL) {
+        mostrarMaisRotasBtn.classList.remove('hidden');
+        mostrarMaisRotasBtn.disabled = false;
+        mostrarMaisRotasBtn.setAttribute('aria-expanded', String(rotasExpandidas));
+        mostrarMaisRotasBtn.textContent = rotasExpandidas ? 'Mostrar menos' : 'Mostrar mais';
+      } else {
+        mostrarMaisRotasBtn.classList.add('hidden');
+        mostrarMaisRotasBtn.disabled = true;
+        mostrarMaisRotasBtn.setAttribute('aria-expanded', 'false');
+        mostrarMaisRotasBtn.textContent = 'Mostrar mais';
+      }
+    }
+
+    rotasTableBody.innerHTML = visiveis.map(r => {
       const dist = parseFloat(r.distancia_km);
       const temDistancia = dist > 0;
       const eta = temDistancia ? calcularETA(dist) : '—';
@@ -1076,14 +1123,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   carregarRotasMaritimas();
 
+  const PORTO_ORIGEM_FIXO = 'Porto de Santos';
+  const rotaOrigemInput = document.getElementById('rotaOrigem');
+  if (rotaOrigemInput) {
+    rotaOrigemInput.value = PORTO_ORIGEM_FIXO;
+    rotaOrigemInput.readOnly = true;
+  }
+
   if (toggleRotaBtn && rotaForm) {
-    toggleRotaBtn.addEventListener('click', () => rotaForm.classList.toggle('hidden'));
+    toggleRotaBtn.addEventListener('click', () => {
+      if (rotaOrigemInput) rotaOrigemInput.value = PORTO_ORIGEM_FIXO;
+      rotaForm.classList.toggle('hidden');
+    });
   }
 
   if (rotaForm) {
     rotaForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const origem = document.getElementById('rotaOrigem').value.trim();
+      if (rotaOrigemInput) rotaOrigemInput.value = PORTO_ORIGEM_FIXO;
+      const origem = PORTO_ORIGEM_FIXO;
       const destino = document.getElementById('rotaDestino').value.trim();
       const distancia_km = parseFloat(document.getElementById('rotaDistancia').value);
 
@@ -1121,6 +1179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       await carregarRotasMaritimas();
       rotaForm.reset();
+      if (rotaOrigemInput) rotaOrigemInput.value = PORTO_ORIGEM_FIXO;
       rotaForm.classList.add('hidden');
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Rota Cadastrada', `Rota Marítima "${origem} ➔ ${destino}" (${distancia_km} km) cadastrada com sucesso!`);
@@ -1144,8 +1203,9 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   async function avaliarCargasParaLiberacao(navio) {
     const pendentes = [];
+    const prontas = [];
     const containerIdsDoNavio = [];
-    if (!navio) return { pendentes, containerIdsDoNavio };
+    if (!navio) return { pendentes, prontas, containerIdsDoNavio };
 
     const statusTerminal = (s) => ['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(String(s || '').trim().toUpperCase());
     const vistos = new Set();
@@ -1154,6 +1214,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!chave || vistos.has(chave)) return;
       vistos.add(chave);
       pendentes.push({ id: String(idHumano), status: String(status || '').trim().toUpperCase() });
+    };
+    const registrarPronta = (idHumano) => {
+      const chave = String(idHumano || '').trim().toLowerCase();
+      if (!chave || vistos.has(chave)) return;
+      vistos.add(chave);
+      prontas.push({ id: String(idHumano), status: 'PRONTA_PARA_ENTREGA' });
     };
 
     // Contêineres do navio no cache local (identificacao, id, rawDbId, navio/navio_id).
@@ -1187,8 +1253,12 @@ document.addEventListener('DOMContentLoaded', () => {
           const status = String(c.status_fluxo || '').trim().toUpperCase();
           // O estado lido do banco prevalece sobre o cache local desatualizado:
           // carga pronta/finalizada não será reavaliada pela etapa do cache.
-          if (statusTerminal(status) || status === 'PRONTA_PARA_ENTREGA') {
+          if (statusTerminal(status)) {
             vistos.add(id.trim().toLowerCase());
+            return;
+          }
+          if (status === 'PRONTA_PARA_ENTREGA') {
+            registrarPronta(id);
             return;
           }
           // registrarPendente também marca `vistos` (deduplicação entre as fontes).
@@ -1219,17 +1289,22 @@ document.addEventListener('DOMContentLoaded', () => {
       (Array.isArray(fluxo) ? fluxo : []).forEach(c => {
         if (!c || typeof c !== 'object') return;
         const status = String(c.status || '').trim().toUpperCase();
-        if (statusTerminal(status) || status === 'PRONTA_PARA_ENTREGA') return;
+        if (statusTerminal(status)) return;
         const porNavio = cargaPertenceAoNavio(c, navio);
         const porCont = [c.container, c.container_id, c.containerId].filter(Boolean)
           .some(ref => chavesConts.has(String(ref).trim().toLowerCase()));
-        if (porNavio || porCont) registrarPendente(c.id, status);
+        if (!porNavio && !porCont) return;
+        if (status === 'PRONTA_PARA_ENTREGA') {
+          registrarPronta(c.id);
+          return;
+        }
+        registrarPendente(c.id, status);
       });
     } catch (e) {
       console.warn('[NexusPort] Liberação de saída: cache local de cargas inválido:', e);
     }
 
-    return { pendentes, containerIdsDoNavio };
+    return { pendentes, prontas, containerIdsDoNavio };
   }
 
   /**
@@ -1243,6 +1318,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!navio) return [];
     const { pendentes } = await avaliarCargasParaLiberacao(navio);
     return pendentes;
+  };
+
+  window.nexusEmbarcacoesCargasProntasLiberacao = async function (imo) {
+    const alvo = String(imo || '').trim().toUpperCase().replace(/\s+/g, '');
+    const navio = naviosList.find(n => String(n.imo || '').trim().toUpperCase().replace(/\s+/g, '') === alvo);
+    if (!navio) return [];
+    const { prontas } = await avaliarCargasParaLiberacao(navio);
+    return prontas;
   };
 
   // RN 3: Liberação de Saída de Navios pelo Supervisor de Operações / Diretor
@@ -1290,7 +1373,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const rotaCadastrada = rotaEntrePortos(navio.origem || 'Porto de Santos', navio.destino || '');
 
     if (!rotaCadastrada) {
-      const msgErro = `REGRA DE NEGÓCIO (RN 9): A saída do navio "${navio.nome}" foi BLOQUEADA pois não existe uma rota marítima cadastrada entre "${navio.origem || 'Porto de Santos'}" e "${navio.destino}". O Supervisor deve cadastrar a rota na seção "Gestão de Rotas Marítimas" antes da liberação!`;
+      const msgErro = `REGRA DE NEGÓCIO: A saída do navio "${navio.nome}" foi BLOQUEADA pois não existe uma rota marítima cadastrada entre "${navio.origem || 'Porto de Santos'}" e "${navio.destino}". O Supervisor deve cadastrar a rota na seção "Gestão de Rotas Marítimas" antes da liberação!`;
       if (window.mostrarFeedback) {
         window.mostrarFeedback('atencao', 'Rota Não Encontrada', msgErro);
       }
@@ -1311,7 +1394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // cargas vinculadas ao navio estão PRONTA_PARA_ENTREGA. Cargas ativas ainda
     // não prontas bloqueiam a liberação e a mensagem lista o id público e o
     // status atual de cada uma (status finais são histórico e não bloqueiam).
-    const { pendentes: cargasPendentes, containerIdsDoNavio } = await avaliarCargasParaLiberacao(navio);
+    const { pendentes: cargasPendentes, prontas: cargasProntas, containerIdsDoNavio } = await avaliarCargasParaLiberacao(navio);
     if (cargasPendentes.length > 0) {
       if (window.mostrarFeedback) {
         const lista = cargasPendentes.slice(0, 8).map(p => `${p.id} (${p.status})`).join(', ');
@@ -1319,6 +1402,18 @@ document.addEventListener('DOMContentLoaded', () => {
         window.mostrarFeedback('alerta', 'Liberação Bloqueada: Cargas Não Prontas',
           `O navio ${navio.nome} tem ${cargasPendentes.length} carga(s) vinculada(s) que ainda não estão PRONTA PARA ENTREGA: ${lista}${resto}. ` +
           'Pelo fluxo de cargas, o status "Em Trânsito" só pode vir de "Pronta para Entrega": conclua a preparação dessas cargas antes de liberar a saída.');
+      }
+      return;
+    }
+
+    // Tarefa 13: um navio não pode ser liberado para seu porto de destino sem estar
+    // vinculado a pelo menos uma carga ativa pronta para embarque; apenas o retorno
+    // ao Porto de Santos (autorizarRetornoNavio) pode ocorrer sem cargas vinculadas.
+    if (cargasProntas.length === 0) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Liberação Bloqueada: Navio Sem Cargas Vinculadas',
+          `O navio ${navio.nome} não possui nenhuma carga vinculada pronta para entrega rumo a ${navio.destino}. ` +
+          'Uma embarcação só pode ser liberada para o porto de destino quando estiver vinculada a pelo menos uma carga (apenas o retorno ao Porto de Santos é permitido sem cargas vinculadas).');
       }
       return;
     }
@@ -2088,7 +2183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleNavioBtn.addEventListener('click', () => {
       if (!isInspetorRole) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos navios (Spec.md RF 1)!');
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos navios!');
         }
         return;
       }
@@ -2135,7 +2230,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const rotaIdx = rotaSel ? parseInt(rotaSel.value, 10) : NaN;
       const rota = (!Number.isNaN(rotaIdx) && Array.isArray(rotasMaritimasList)) ? rotasMaritimasList[rotaIdx] : null;
       if (!rota) {
-        const msg = 'ROTA MARÍTIMA OBRIGATÓRIA (Backlog3): selecione uma das rotas cadastradas no sistema para o navio. Se a rota desejada não existir, solicite ao Supervisor o registro na seção "Gestão de Rotas Marítimas" — o cadastro de destino/distância manual não é permitido.';
+        const msg = 'ROTA MARÍTIMA OBRIGATÓRIA: selecione uma das rotas cadastradas no sistema para o navio. Se a rota desejada não existir, solicite ao Supervisor o registro na seção "Gestão de Rotas Marítimas" — o cadastro de destino/distância manual não é permitido.';
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Rota Não Selecionada', msg);
         return;
       }
@@ -2158,7 +2253,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Item 11: Validação de unicidade do IMO
       const imoExistente = naviosList.find(n => NexusCodigos.chave(n.imo) === NexusCodigos.chave(imo));
       if (imoExistente) {
-        const msg = `BLOQUEIO DE DUPLICIDADE (Item 11): Já existe um navio cadastrado com o número IMO "${imo}" (${imoExistente.nome}). Cada embarcação deve possuir IMO único!`;
+        const msg = `BLOQUEIO DE DUPLICIDADE: Já existe um navio cadastrado com o número IMO "${imo}" (${imoExistente.nome}). Cada embarcação deve possuir IMO único!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Duplicado', msg);
         return;
       }
@@ -2173,7 +2268,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .maybeSingle();
 
           if (imoDb) {
-            const msg = `BLOQUEIO DE DUPLICIDADE (Item 11): Já existe um navio cadastrado com o número IMO "${imo}" (${imoDb.nome}). Cada embarcação deve possuir IMO único!`;
+            const msg = `BLOQUEIO DE DUPLICIDADE: Já existe um navio cadastrado com o número IMO "${imo}" (${imoDb.nome}). Cada embarcação deve possuir IMO único!`;
             if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'IMO Duplicado', msg);
             return;
           }
@@ -2684,7 +2779,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const LIMITE_ESPACO_METROS = 300;
 
       if (pesoEstimadoComNovo > LIMITE_PESO_TONS || espacoOcupadoMetros > LIMITE_ESPACO_METROS) {
-        const msgErro = `BLOQUEIO DE CAPACIDADE (Tarefa 8): O navio "${navioAlvo.nome}" não possui suporte para vincular este contêiner! Capacidade limite excedida: O navio suporta no máximo 15.000 toneladas e 300 metros de espaço.`;
+        const msgErro = `BLOQUEIO DE CAPACIDADE: O navio "${navioAlvo.nome}" não possui suporte para vincular este contêiner! Capacidade limite excedida: O navio suporta no máximo 15.000 toneladas e 300 metros de espaço.`;
         if (window.mostrarFeedback) {
           window.mostrarFeedback('atencao', 'Capacidade Excedida', msgErro);
         }
@@ -2807,7 +2902,7 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleContainerBtn.addEventListener('click', () => {
       if (!isInspetorRole) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos contêineres (Spec.md RF 1)!');
+          window.mostrarFeedback('erro', 'Acesso Restrito', 'Apenas Inspetores têm permissão para cadastrar novos contêineres!');
         }
         return;
       }
@@ -2864,14 +2959,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Item 13: Validação de unicidade do código de contêiner
       const contExistente = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(identificacao));
       if (contExistente) {
-        const msg = `BLOQUEIO DE DUPLICIDADE (Item 13): O código de contêiner "${identificacao}" já está cadastrado no sistema. Não é permitido duplicar contêineres!`;
+        const msg = `BLOQUEIO DE DUPLICIDADE: O código de contêiner "${identificacao}" já está cadastrado no sistema. Não é permitido duplicar contêineres!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Contêiner Duplicado', msg);
         return;
       }
 
       // Item 14: Validação de coerência entre data de fabricação e manutenção
       if (dataFabr && dataManut && new Date(dataManut) < new Date(dataFabr)) {
-        const msg = 'DATA INCONSISTENTE (Item 14): A data da última manutenção não pode ser anterior à data de fabricação do contêiner!';
+        const msg = 'DATA INCONSISTENTE: A data da última manutenção não pode ser anterior à data de fabricação do contêiner!';
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Inconsistente', msg);
         return;
       }
@@ -2927,7 +3022,7 @@ document.addEventListener('DOMContentLoaded', () => {
       containerForm.reset();
       containerForm.classList.add('hidden');
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Contêiner Cadastrado', `Contêiner ${identificacao} cadastrado com sucesso com referência de tempo em "${refTempo}" (RN 7)!`);
+        window.mostrarFeedback('sucesso', 'Contêiner Cadastrado', `Contêiner ${identificacao} cadastrado com sucesso com referência de tempo em "${refTempo}"!`);
       }
     });
   }

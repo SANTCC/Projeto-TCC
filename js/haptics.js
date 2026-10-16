@@ -529,26 +529,30 @@
       if (feedbackEl && message) feedbackEl.textContent = message;
     }
 
-    if (toggle) {
+    if (toggle && !toggle.dataset.hapticsBound) {
+      toggle.dataset.hapticsBound = '1';
       toggle.addEventListener('change', function () {
         const on = setEnabled(toggle.checked);
         refresh(on ? 'Vibração ativada neste aparelho.' : 'Vibração desativada neste aparelho.');
       });
     }
-    if (soundToggle) {
+    if (soundToggle && !soundToggle.dataset.hapticsBound) {
+      soundToggle.dataset.hapticsBound = '1';
       soundToggle.addEventListener('change', function () {
         const on = setSoundEnabled(soundToggle.checked);
         refresh('O som de emergência é obrigatório na aplicação.');
         if (on) beep(1);
       });
     }
-    if (testBtn) {
+    if (testBtn && !testBtn.dataset.hapticsBound) {
+      testBtn.dataset.hapticsBound = '1';
       testBtn.addEventListener('click', function () {
         const result = test();
         refresh(`${result.fired ? 'Vibração solicitada à API.' : hint(result.reason)} ${result.sounded ? 'Sinal sonoro programado; confirme se foi ouvido no aparelho.' : soundHint(result.status.soundReason)}`);
       });
     }
-    if (refreshBtn) {
+    if (refreshBtn && !refreshBtn.dataset.hapticsBound) {
+      refreshBtn.dataset.hapticsBound = '1';
       refreshBtn.addEventListener('click', function () { refresh('Diagnóstico atualizado.'); });
     }
 

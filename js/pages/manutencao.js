@@ -14,9 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('navioManutForm')?.parentElement?.remove();
     document.getElementById('toggleOsFormBtn')?.classList.add('hidden');
     document.getElementById('osForm')?.remove();
+    document.getElementById('unifiedManutFormPanel')?.remove();
   }
   if (isEstivador) {
     document.getElementById('navioManutForm')?.parentElement?.remove();
+    document.getElementById('unifiedManutTabs')?.classList.add('hidden');
     document.getElementById('alertaPreventivaList')?.parentElement?.classList.add('hidden');
   }
 
@@ -28,6 +30,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleOsBtn = document.getElementById('toggleOsFormBtn');
   const osForm = document.getElementById('osForm');
   const osTableBody = document.getElementById('osTableBody');
+  const unifiedManutPanel = document.getElementById('unifiedManutFormPanel');
+  const tabOsEquipamentoBtn = document.getElementById('tabOsEquipamentoBtn');
+  const tabOsNavioBtn = document.getElementById('tabOsNavioBtn');
+  let abaManutencaoAtiva = 'EQUIPAMENTO';
 
   const panicBtn = document.getElementById('panicButton');
   const resetEmergencyBtn = document.getElementById('resetEmergencyBtn');
@@ -93,8 +99,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
   carregarNaviosParaManutencao();
 
+  function selecionarAbaManutencao(aba) {
+    const usarNavio = aba === 'NAVIO' && Boolean(navioManutForm && navioManutForm.isConnected);
+    abaManutencaoAtiva = usarNavio ? 'NAVIO' : 'EQUIPAMENTO';
+
+    if (usarNavio) {
+      navioManutForm.classList.remove('hidden');
+      if (osForm) osForm.classList.add('hidden');
+    } else {
+      if (osForm) osForm.classList.remove('hidden');
+      if (navioManutForm) navioManutForm.classList.add('hidden');
+    }
+
+    if (tabOsEquipamentoBtn) {
+      tabOsEquipamentoBtn.setAttribute('aria-pressed', String(!usarNavio));
+      tabOsEquipamentoBtn.className = !usarNavio
+        ? 'px-3 py-1.5 rounded-lg bg-nexus-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm'
+        : 'px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors';
+    }
+    if (tabOsNavioBtn) {
+      tabOsNavioBtn.setAttribute('aria-pressed', String(usarNavio));
+      tabOsNavioBtn.className = usarNavio
+        ? 'px-3 py-1.5 rounded-lg bg-nexus-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm'
+        : 'px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors';
+    }
+  }
+
+  if (tabOsEquipamentoBtn) {
+    tabOsEquipamentoBtn.addEventListener('click', () => selecionarAbaManutencao('EQUIPAMENTO'));
+  }
+  if (tabOsNavioBtn) {
+    tabOsNavioBtn.addEventListener('click', () => selecionarAbaManutencao('NAVIO'));
+  }
+
   if (toggleNavioManutBtn && navioManutForm) {
-    toggleNavioManutBtn.addEventListener('click', () => navioManutForm.classList.toggle('hidden'));
+    toggleNavioManutBtn.addEventListener('click', () => {
+      if (unifiedManutPanel) {
+        const estavaOculto = unifiedManutPanel.classList.contains('hidden');
+        if (estavaOculto || abaManutencaoAtiva !== 'NAVIO') {
+          unifiedManutPanel.classList.remove('hidden');
+          selecionarAbaManutencao('NAVIO');
+        } else {
+          unifiedManutPanel.classList.add('hidden');
+          navioManutForm.classList.add('hidden');
+        }
+      } else {
+        navioManutForm.classList.toggle('hidden');
+      }
+    });
   }
 
   if (navioManutForm) {
@@ -125,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Tarefa 9.3: Bloqueio de duplicidade de pedido de manutenção para o mesmo navio
       const osExistente = osList.find(o => o.equipamento.includes(navioNome) && o.status !== 'CONCLUIDA' && o.status !== 'REPROVADA');
       if (osExistente) {
-        const msgBloqueio = `BLOQUEIO DE DUPLICIDADE (Tarefa 9): O navio "${navioNome}" já possui uma solicitação ou ordem de serviço de manutenção ativa (${osExistente.id} - ${osExistente.status}). Não é permitido abrir solicitações duplicadas!`;
+        const msgBloqueio = `BLOQUEIO DE DUPLICIDADE: O navio "${navioNome}" já possui uma solicitação ou ordem de serviço de manutenção ativa (${osExistente.id} - ${osExistente.status}). Não é permitido abrir solicitações duplicadas!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Manutenção Ativa', msgBloqueio);
         return;
       }
@@ -138,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const diffMs = agora - new Date(dataRef).getTime();
 
         if (diffMs < tresAnosMs) {
-          const msgBloqueio = `OPÇÃO BLOQUEADA (Item 17): A opção "Manutenção Geral" só pode ser selecionada se o navio estiver em uso há 3 anos ou mais (ou se a última manutenção geral tiver ocorrido há 3 anos ou mais). A embarcação "${navioNome}" possui histórico recente (${new Date(dataRef).toLocaleDateString('pt-BR')}). Selecione Preventiva, Corretiva ou Preditiva.`;
+          const msgBloqueio = `OPÇÃO BLOQUEADA: A opção "Manutenção Geral" só pode ser selecionada se o navio estiver em uso há 3 anos ou mais (ou se a última manutenção geral tiver ocorrido há 3 anos ou mais). A embarcação "${navioNome}" possui histórico recente (${new Date(dataRef).toLocaleDateString('pt-BR')}). Selecione Preventiva, Corretiva ou Preditiva.`;
           if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Manutenção Bloqueada', msgBloqueio);
           return;
         }
@@ -190,6 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderOsTable();
       navioManutForm.reset();
       navioManutForm.classList.add('hidden');
+      if (unifiedManutPanel) unifiedManutPanel.classList.add('hidden');
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Manutenção Solicitada', `Solicitação de Manutenção (${tipoManut}) registrada com sucesso para o navio ${navioNome}! Ordem de Serviço ${newOsId} criada.`);
       }
@@ -264,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Tarefa 9.3: Não permite pedir mais de uma manutenção para o mesmo guindaste
     if (gnd && gnd.estado === 'EM_MANUTENCAO') {
-      const msg = `BLOQUEIO DE DUPLICIDADE (Tarefa 9): O guindaste "${identificacao}" já se encontra em manutenção. Não é permitido solicitar manutenção duplicada!`;
+      const msg = `BLOQUEIO DE DUPLICIDADE: O guindaste "${identificacao}" já se encontra em manutenção. Não é permitido solicitar manutenção duplicada!`;
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Guindaste em Manutenção', msg);
       return;
     }
@@ -709,7 +762,21 @@ document.addEventListener('DOMContentLoaded', () => {
   carregarEquipamentosEAlertas();
 
   if (toggleOsBtn && osForm) {
-    toggleOsBtn.addEventListener('click', () => osForm.classList.toggle('hidden'));
+    toggleOsBtn.addEventListener('click', () => {
+      if (unifiedManutPanel) {
+        const estavaOculto = unifiedManutPanel.classList.contains('hidden');
+        if (estavaOculto) {
+          unifiedManutPanel.classList.remove('hidden');
+          selecionarAbaManutencao(abaManutencaoAtiva);
+        } else {
+          unifiedManutPanel.classList.add('hidden');
+          osForm.classList.add('hidden');
+          if (navioManutForm) navioManutForm.classList.add('hidden');
+        }
+      } else {
+        osForm.classList.toggle('hidden');
+      }
+    });
   }
 
   if (osForm) {
@@ -733,7 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Tarefa 9.3: Bloqueio de duplicidade de pedido de manutenção para o mesmo equipamento
       const osExistente = osList.find(o => o.equipamento === equipamento && o.status !== 'CONCLUIDA' && o.status !== 'REPROVADA');
       if (osExistente) {
-        const msgBloqueio = `BLOQUEIO DE DUPLICIDADE (Tarefa 9): O equipamento "${equipamento}" já possui uma ordem de serviço de manutenção ativa (${osExistente.id} - ${osExistente.status}). Não é permitido abrir solicitações duplicadas!`;
+        const msgBloqueio = `BLOQUEIO DE DUPLICIDADE: O equipamento "${equipamento}" já possui uma ordem de serviço de manutenção ativa (${osExistente.id} - ${osExistente.status}). Não é permitido abrir solicitações duplicadas!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Equipamento em Manutenção', msgBloqueio);
         return;
       }
@@ -773,6 +840,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderOsTable();
       osForm.reset();
       osForm.classList.add('hidden');
+      if (unifiedManutPanel) unifiedManutPanel.classList.add('hidden');
       if (window.mostrarFeedback) {
         window.mostrarFeedback('sucesso', 'Ordem de Serviço Criada', `Ordem de Serviço ${newId} criada com sucesso para ${equipamento}! Enviada para aprovação do Supervisor.`);
       }

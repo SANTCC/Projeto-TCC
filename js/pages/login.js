@@ -250,6 +250,20 @@ document.addEventListener('DOMContentLoaded', () => {
           // Busca estrita apenas por código exato ou matrícula na base ativa
           employeeFound = allLocalEmployees.find(emp => (emp.codigo === codeValue || emp.codigo_individual === codeValue || emp.matricula === codeValue) && emp.ativo);
         }
+
+        // Tarefa 15: Fallback local para o perfil de apresentação Espectador (MAT-1111)
+        if (!employeeFound && codeValue.toUpperCase() === 'MAT-1111') {
+          employeeFound = {
+            id: '11111111-1111-4111-8111-111111111111',
+            matricula: 'MAT-1111',
+            codigo: 'MAT-1111',
+            codigo_individual: 'MAT-1111',
+            nome: 'Espectador',
+            cargo: 'CONSELHO_ADMINISTRACAO',
+            somente_leitura: true,
+            ativo: true
+          };
+        }
       }
 
       if (employeeFound) {

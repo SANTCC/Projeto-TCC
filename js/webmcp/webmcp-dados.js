@@ -392,6 +392,9 @@
   function podeUsar(def) {
     const s = sessao();
     if (!s || !s.cargo) return false;
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(s)) {
+      if (def.anotacoes && def.anotacoes.readOnlyHint === false) return false;
+    }
     if (def.cargos && !def.cargos.includes(s.cargo)) return false;
     if (def.permissao && !(window.NexusAuth && window.NexusAuth.hasPermission(def.permissao))) return false;
     return true;

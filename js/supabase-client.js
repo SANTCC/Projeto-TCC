@@ -98,6 +98,27 @@
       const metodo = String((init && init.method) || 'GET').toUpperCase();
 
       if (metodo !== 'GET' && metodo !== 'HEAD') {
+        const urlStr = String(input || '');
+        const ehRpcLeitura = /\/rpc\/(login_funcionario|login_tentativas_relatorio)\b/.test(urlStr);
+        if (!ehRpcLeitura && typeof window !== 'undefined' && window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+          if (typeof window.mostrarFeedback === 'function') {
+            window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+          }
+          const corpoErro = JSON.stringify({
+            code: 'READ_ONLY_PROFILE',
+            message: 'Perfil Espectador (MAT-1111) possui acesso somente leitura. Alterações não são permitidas.'
+          });
+          if (typeof Response === 'function') {
+            return Promise.resolve(new Response(corpoErro, { status: 403, headers: { 'Content-Type': 'application/json' } }));
+          }
+          return Promise.resolve({
+            ok: false,
+            status: 403,
+            json: () => Promise.resolve(JSON.parse(corpoErro)),
+            text: () => Promise.resolve(corpoErro),
+            clone: function () { return this; }
+          });
+        }
         // Escrita: nova geração antes e depois, para nenhuma leitura cruzar a mudança.
         avancarGeracao();
         return new Promise((resolve) => resolve(fetchBase(input, init))).finally(avancarGeracao);
@@ -629,11 +650,13 @@
       const passo = tamanhoPagina || 1000;
       const linhas = [];
       for (let inicio = 0; inicio < 10000000; inicio += passo) {
-        const res = await montar().range(inicio, inicio + passo - 1);
+        const consulta = montar();
+        const temRange = consulta && typeof consulta.range === 'function';
+        const res = temRange ? await consulta.range(inicio, inicio + passo - 1) : await consulta;
         if (res && res.error) throw res.error;
         const pagina = res && Array.isArray(res.data) ? res.data : [];
         for (let i = 0; i < pagina.length; i++) linhas.push(pagina[i]);
-        if (pagina.length < passo) break;
+        if (!temRange || pagina.length < passo) break;
       }
       return linhas;
     }

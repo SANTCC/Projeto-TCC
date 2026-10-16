@@ -52,7 +52,7 @@
               <span>Módulo de Gestão Operacional</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Cargas & Operações de Pátio</h1>
-            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Acompanhamento do fluxo em 8 etapas e controle de ações restritas por cargo (RF 1 / RF 6).</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Acompanhamento do fluxo em 8 etapas e controle de ações restritas por cargo.</p>
           </div>
 
           <button id="toggleAgendamentoFormBtn" type="button" class="px-4 py-2.5 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-2 transition-all shadow-md">
@@ -152,7 +152,7 @@
               Tabela de Cargas no Fluxo Operacional
             </span>
             <span id="roleNoticeTag" class="text-xs font-mono text-nexus-500 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded border border-indigo-200 dark:border-indigo-900">
-              Visualização por Cargo (RF 1)
+              Visualização por Cargo
             </span>
           </div>
 
@@ -172,7 +172,7 @@
             </div>
             <div>
               <label class="block font-bold text-slate-600 mb-1">2. Contêiner</label>
-              <input type="text" id="filterContainer" placeholder="Ex: CONT-991" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
+              <input type="text" id="filterContainer" placeholder="Ex: MPCZ-1234567" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
               <label class="block font-bold text-slate-600 mb-1">3. Tipo de Carga</label>
@@ -195,7 +195,6 @@
                 <option value="ARMAZENAGEM">ARMAZENAGEM</option>
                 <option value="PRONTA_PARA_ENTREGA">PRONTA_PARA_ENTREGA</option>
                 <option value="EM_TRANSITO">EM_TRANSITO</option>
-                <option value="ENTREGUE">ENTREGUE</option>
               </select>
             </div>
             <div class="flex items-end">
@@ -213,7 +212,6 @@
               <button type="button" data-status="ARMAZENAGEM" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-indigo-400">Armazenagem</button>
               <button type="button" data-status="PRONTA_PARA_ENTREGA" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-emerald-400">Pronta p/ Entrega</button>
               <button type="button" data-status="EM_TRANSITO" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-blue-400">Em Trânsito</button>
-              <button type="button" data-status="ENTREGUE" class="cargas-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[11px] hover:border-green-400">Entregue</button>
               <span id="cargasCounter" class="ml-auto text-[11px] font-mono text-slate-600">Exibindo 0 de 0 cargas</span>
             </div>
           </div>
@@ -228,7 +226,7 @@
                   <th class="p-3">Setor do Pátio</th>
                   <th class="p-3">Contêiner / Navio</th>
                   <th class="p-3">Status do Fluxo</th>
-                  <th class="p-3 text-right">Ações do Cargo (RF 1)</th>
+                  <th class="p-3 text-right">Ações do Cargo</th>
                 </tr>
               </thead>
               <tbody id="cargasTableBody" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">
@@ -259,6 +257,7 @@
                   <th class="p-3">Destino / Porto Descarga</th>
                   <th class="p-3">Contêiner / Navio</th>
                   <th class="p-3">Status</th>
+                  <th class="p-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody id="cargasEntreguesTableBody" class="divide-y divide-emerald-200 dark:divide-emerald-800/60 font-medium">
@@ -277,7 +276,7 @@
           <div class="flex items-center justify-between pb-3 border-b border-slate-300 dark:border-slate-700">
             <span class="font-display font-bold text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
               <span class="material-symbols-outlined text-slate-600">block</span>
-              Tabela de Cargas Canceladas (C9)
+              Tabela de Cargas Canceladas
             </span>
             <span class="text-xs font-mono text-slate-600">
               Histórico de Cancelamentos
@@ -293,6 +292,7 @@
                   <th class="p-3">Setor do Pátio</th>
                   <th class="p-3">Motivo do Cancelamento</th>
                   <th class="p-3">Status</th>
+                  <th class="p-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody id="cargasCanceladasTableBody" class="divide-y divide-slate-300 dark:divide-slate-700 font-medium">
