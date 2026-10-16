@@ -201,7 +201,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function carregarChecklistParaCarga(idCarga) {
     cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-    cargaAtual = cargas.find(c => c.id === idCarga);
+    const cargasCanceladas = JSON.parse(localStorage.getItem('nexus_cargas_canceladas') || '[]');
+    cargaAtual = cargas.find(c => c.id === idCarga || c.qrCode === idCarga)
+      || cargasCanceladas.find(c => c.id === idCarga || c.qrCode === idCarga);
+    if (cargaAtual && cargasCanceladas.some(c => c.id === cargaAtual.id)) {
+      cargaAtual = { ...cargaAtual, status: 'CANCELADA' };
+    }
 
     if (!cargaAtual) {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Carga Não Localizada', `Carga "${idCarga}" não foi localizada.`);
@@ -209,7 +214,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (cargaAtual.status === 'ENTREGUE') {
-      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', `A carga ${cargaAtual.id} já foi entregue e não pode mais ser inspecionada.`);
+      const idEntregue = cargaAtual.id;
+      cargaAtual = null;
+      if (formContainer) formContainer.classList.add('hidden');
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', `A carga ${idEntregue} já foi entregue e não pode mais ser inspecionada.`);
+      return;
+    }
+
+    if (cargaAtual.status === 'CANCELADA') {
+      const idCancelada = cargaAtual.id;
+      cargaAtual = null;
+      if (formContainer) formContainer.classList.add('hidden');
+      avisoCargaCancelada(idCancelada);
       return;
     }
 
@@ -219,6 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cargaAtual.status === 'EM_TRANSITO') {
       const idEmTransito = cargaAtual.id;
       cargaAtual = null;
+      if (formContainer) formContainer.classList.add('hidden');
       avisoCargaEmTransito(idEmTransito);
       return;
     }
@@ -311,6 +328,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function avisoCargaCancelada(idCarga) {
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('atencao', 'Carga Cancelada', `A carga ${idCarga} foi CANCELADA e não pode realizar ou refazer o checklist de inspeção, pois não retorna ao fluxo normal.`);
+    }
+  }
+
   // Conferência no banco no momento da gravação: o navio pode ter sido liberado
   // (carga → EM_TRANSITO) enquanto o checklist estava aberto nesta tela.
   // Retorna true somente quando o banco confirma o status EM_TRANSITO; falha de
@@ -330,6 +353,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function cargaCanceladaNoBanco() {
+    if (!window.nexusSupabase || !cargaAtual) return false;
+    try {
+      const targetDbId = cargaAtual.rawDbId || cargaAtual.id;
+      let consulta = window.nexusSupabase.from('cargas').select('id, status_fluxo');
+      consulta = isUUID(targetDbId)
+        ? consulta.eq('id', targetDbId)
+        : consulta.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+      const { data, error } = await consulta.maybeSingle();
+      return !error && Boolean(data) && String(data.status_fluxo || '').toUpperCase() === 'CANCELADA';
+    } catch (e) {
+      return false;
+    }
+  }
+
   // Motivo (em português) da recusa do banco ao gravar a inspeção formal.
   // 23505 = violação do índice uq_inspecoes_carga_ativa (só UMA inspeção ativa por carga).
   // Com o histórico de inspeções, isso só ocorre se outra gravação da mesma carga
@@ -343,19 +381,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Aprovar Carga (RN 14)
   async function aprovarCargaAtual() {
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(session)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return false;
+    }
     if (cargaAtual && cargaAtual.status === 'ENTREGUE') {
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', 'Cargas entregues não podem ter a inspeção alterada.');
       return;
     }
-      if (!cargaAtual) return false;
+    if (!cargaAtual) return false;
 
-      // Recusa na gravação: carga em trânsito não pode ser inspecionada — nem
-      // pelo estado local, nem pelo status confirmado no banco (corrida com a
-      // liberação do navio enquanto o checklist estava aberto).
-      if (cargaAtual.status === 'EM_TRANSITO' || await cargaEmTransitoNoBanco()) {
-        avisoCargaEmTransito(cargaAtual.id);
-        return false;
-      }
+    if (cargaAtual.status === 'CANCELADA' || await cargaCanceladaNoBanco()) {
+      avisoCargaCancelada(cargaAtual.id);
+      return false;
+    }
+
+    // Recusa na gravação: carga em trânsito não pode ser inspecionada — nem
+    // pelo estado local, nem pelo status confirmado no banco (corrida com a
+    // liberação do navio enquanto o checklist estava aberto).
+    if (cargaAtual.status === 'EM_TRANSITO' || await cargaEmTransitoNoBanco()) {
+      avisoCargaEmTransito(cargaAtual.id);
+      return false;
+    }
 
       cargaAtual.status = 'ARMAZENAGEM';
       cargaAtual.resultadoInspecao = 'APROVADA';
@@ -492,18 +541,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Recusar Carga (RN 14 & Item 10: campo obrigatório de motivo de recusa)
   async function recusarCargaAtual(opcoes) {
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(session)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return false;
+    }
     if (cargaAtual && cargaAtual.status === 'ENTREGUE') {
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', 'Cargas entregues não podem ter a inspeção alterada.');
       return;
     }
-      if (!cargaAtual) return false;
+    if (!cargaAtual) return false;
 
-      // Recusa na gravação: carga em trânsito já saiu do porto — a inspeção
-      // (aprovação ou recusa) não pode mais ser registrada (estado local e banco).
-      if (cargaAtual.status === 'EM_TRANSITO' || await cargaEmTransitoNoBanco()) {
-        avisoCargaEmTransito(cargaAtual.id);
-        return false;
-      }
+    if (cargaAtual.status === 'CANCELADA' || await cargaCanceladaNoBanco()) {
+      avisoCargaCancelada(cargaAtual.id);
+      return false;
+    }
+
+    // Recusa na gravação: carga em trânsito já saiu do porto — a inspeção
+    // (aprovação ou recusa) não pode mais ser registrada (estado local e banco).
+    if (cargaAtual.status === 'EM_TRANSITO' || await cargaEmTransitoNoBanco()) {
+      avisoCargaEmTransito(cargaAtual.id);
+      return false;
+    }
 
       if (motivoBox) motivoBox.classList.remove('hidden');
 

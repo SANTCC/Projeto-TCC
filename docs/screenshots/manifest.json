@@ -152,7 +152,7 @@
         {
           "pagina": "inspecao",
           "arquivoHtml": "inspecao.html",
-          "titulo": "Inspeção & Checklist",
+          "titulo": "Inspeção",
           "subtitulo": "Conformidade técnica com resultado auditável",
           "resumo": "Execução do checklist técnico de recebimento: cada item é marcado como conforme ou não conforme e a inspeção é concluída como aprovada ou recusada.",
           "destaques": [
@@ -168,7 +168,7 @@
         {
           "pagina": "scanner",
           "arquivoHtml": "scanner.html",
-          "titulo": "Scanner QR Code",
+          "titulo": "QR Code",
           "subtitulo": "Leitura móvel por câmera ou entrada manual",
           "resumo": "Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.",
           "destaques": [
@@ -184,7 +184,7 @@
         {
           "pagina": "embarcacoes",
           "arquivoHtml": "embarcacoes.html",
-          "titulo": "Embarcações, Contêineres & GPS",
+          "titulo": "Embarcações & Equipamentos",
           "subtitulo": "Atracação, berços, rotas e posição dos navios",
           "resumo": "Gestão das embarcações e do pátio: cadastro de navios e contêineres, estado operacional, berços do terminal, rotas marítimas e posicionamento GPS com ETA.",
           "destaques": [
@@ -200,7 +200,7 @@
         {
           "pagina": "manutencao",
           "arquivoHtml": "manutencao.html",
-          "titulo": "Manutenção & Ordens de Serviço",
+          "titulo": "Manutenção & Tarefas",
           "subtitulo": "Abertura, aprovação e conclusão de OS",
           "resumo": "Ciclo de manutenção de navios, contêineres e guindastes: solicitação, aprovação ou recusa e conclusão, com histórico de serviços e o botão de pânico global no cabeçalho.",
           "destaques": [
@@ -324,7 +324,7 @@
         {
           "pagina": "inspecao",
           "arquivoHtml": "inspecao.html",
-          "titulo": "Inspeção & Checklist",
+          "titulo": "Inspeção",
           "subtitulo": "Conformidade técnica com resultado auditável",
           "resumo": "Execução do checklist técnico de recebimento: cada item é marcado como conforme ou não conforme e a inspeção é concluída como aprovada ou recusada.",
           "destaques": [
@@ -340,7 +340,7 @@
         {
           "pagina": "inspecao",
           "arquivoHtml": "inspecao.html",
-          "titulo": "Inspeção & Checklist",
+          "titulo": "Inspeção",
           "subtitulo": "Conformidade técnica com resultado auditável",
           "resumo": "Execução do checklist técnico de recebimento: cada item é marcado como conforme ou não conforme e a inspeção é concluída como aprovada ou recusada.",
           "destaques": [
@@ -356,7 +356,7 @@
         {
           "pagina": "scanner",
           "arquivoHtml": "scanner.html",
-          "titulo": "Scanner QR Code",
+          "titulo": "QR Code",
           "subtitulo": "Leitura móvel por câmera ou entrada manual",
           "resumo": "Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.",
           "destaques": [
@@ -372,7 +372,7 @@
         {
           "pagina": "embarcacoes",
           "arquivoHtml": "embarcacoes.html",
-          "titulo": "Embarcações, Contêineres & GPS",
+          "titulo": "Embarcações & Equipamentos",
           "subtitulo": "Atracação, berços, rotas e posição dos navios",
           "resumo": "Gestão das embarcações e do pátio: cadastro de navios e contêineres, estado operacional, berços do terminal, rotas marítimas e posicionamento GPS com ETA.",
           "destaques": [
@@ -388,7 +388,7 @@
         {
           "pagina": "manutencao",
           "arquivoHtml": "manutencao.html",
-          "titulo": "Manutenção & Ordens de Serviço",
+          "titulo": "Manutenção & Tarefas",
           "subtitulo": "Abertura, aprovação e conclusão de OS",
           "resumo": "Ciclo de manutenção de navios, contêineres e guindastes: solicitação, aprovação ou recusa e conclusão, com histórico de serviços e o botão de pânico global no cabeçalho.",
           "destaques": [
@@ -480,7 +480,7 @@
         {
           "pagina": "scanner",
           "arquivoHtml": "scanner.html",
-          "titulo": "Scanner QR Code",
+          "titulo": "QR Code",
           "subtitulo": "Leitura móvel por câmera ou entrada manual",
           "resumo": "Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.",
           "destaques": [

@@ -183,16 +183,15 @@ async function main() {
   check('8b: cargas CANCELADA/RECUSADA preservadas (histórico)',
     banco.tabelas.cargas.some(c => c.id === 'carga-cancelada') && banco.tabelas.cargas.some(c => c.id === 'carga-recusada'));
 
-  log('\n9. Quem agendou cargas: bloqueio correto é o histórico (agendado_por), não "estivador"');
+  log('\n9. Quem agendou cargas (agendado_por): exclusão permitida com desvinculação (ON DELETE SET NULL)');
   banco = bancoBase();
   w = await repositorio(banco);
   r = await w.NexusRepository.deleteFuncionario('MAT-0007');
-  check('retorna erro com bloqueio', r.ok === false && r.bloqueio === true, JSON.stringify(r));
-  check('mensagem cita agendamento/histórico', /agendamento/.test(r.erro || ''), r.erro);
-  check('mensagem NÃO o chama de estivador', !/como estivador/.test(r.erro || ''), r.erro);
-  check('mensagem orienta desativar o cadastro em vez de excluir', /desative/i.test(r.erro || ''), r.erro);
-  check('funcionário preservado', existe(banco, 'MAT-0007'));
-  check('agendamento preservado', banco.tabelas.agendamentos.length === 1);
+  check('retorna ok (excluído)', r && r.ok === true && r.removido === 1, JSON.stringify(r));
+  check('funcionário removido do banco', !existe(banco, 'MAT-0007'));
+  check('agendamento preservado no histórico', banco.tabelas.agendamentos.length === 1);
+  check('agendado_por desvinculado (null)', banco.tabelas.agendamentos[0].agendado_por === null);
+  check('carga agendada preservada', banco.tabelas.cargas.some(c => c.id === 'carga-ativa'));
 
   log('\n10. Origem (cargas.js): estivador_cargas só para responsável ESTIVADOR');
   const cargasJs = fs.readFileSync(path.join(__dirname, '..', 'js', 'pages', 'cargas.js'), 'utf8');

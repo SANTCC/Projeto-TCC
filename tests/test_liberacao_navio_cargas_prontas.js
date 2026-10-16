@@ -355,6 +355,26 @@ async function main() {
     w.close();
   }
 
+  // ------------------------------------------------------------------
+  log('\n7. Navio sem nenhuma carga ativa vinculada não pode ser liberado para o destino');
+  {
+    const banco = bancoLiberacao({ g1: 'ENTREGUE', g2: 'ENTREGUE' });
+    banco.tabelas.cargas.forEach((c) => { c.navio_id = null; c.container_id = null; });
+    const w = await carregarEmbarcacoes(banco, [], { webmcp: true });
+    await w.liberarNavioPeloDiretor(IMO, { confirmado: true });
+    await aguardar(150);
+
+    const bloqueio = feedbackCom(w, 'Liberação Bloqueada: Navio Sem Cargas Vinculadas');
+    check('saída bloqueada quando o navio não tem nenhuma carga vinculada',
+      Boolean(bloqueio) && navioBanco(banco).localizacao === 'DENTRO_DO_PORTO',
+      JSON.stringify(ultimoFeedback(w)).slice(0, 160));
+    const rMcp = await w.NexusWebMCP.executar('liberar_saida_navio', { imo: IMO });
+    check('WebMCP também recusa com código SEM_CARGAS_VINCULADAS',
+      rMcp.codigo === 'SEM_CARGAS_VINCULADAS',
+      JSON.stringify(rMcp).slice(0, 180));
+    w.close();
+  }
+
   const r = resumo();
   log(`\nResultado: ${r.total - r.falhas}/${r.total} verificações aprovadas.`);
   if (r.falhas > 0) {

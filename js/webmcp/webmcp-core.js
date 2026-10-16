@@ -375,6 +375,9 @@
     if (!ativo()) return 'DESATIVADO';
     if (def.publica) return null;
     if (!sessao || !sessao.cargo) return 'SEM_SESSAO';
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(sessao)) {
+      if (def.anotacoes && def.anotacoes.readOnlyHint === false) return 'PERMISSAO_NEGADA';
+    }
     if (def.cargos && !def.cargos.includes(sessao.cargo)) return 'PERMISSAO_NEGADA';
     if (def.permissao && !(window.NexusAuth && window.NexusAuth.hasPermission(def.permissao))) return 'PERMISSAO_NEGADA';
     if (def.pagina && window.NexusAuth && typeof window.NexusAuth.canAccessPage === 'function'

@@ -108,8 +108,29 @@ document.addEventListener('DOMContentLoaded', () => {
       nivel: 'Nível Estratégico',
       camada: 'Visão Estratégica',
       descricaoVisao: 'Acesso total de leitura ao sistema, dashboards executivos consolidados com gráficos e exportação de dados históricos.'
+    },
+    'ESPECTADOR': {
+      nome: 'Espectador (Somente Leitura)',
+      sigla: 'ESP',
+      nivel: 'Nível Estratégico',
+      camada: 'Visão Estratégica',
+      descricaoVisao: 'Perfil de apresentação com acesso de leitura a todas as telas, painéis e relatórios do sistema, sem permissão para realizar alterações.'
     }
   };
+
+  function ehPerfilEspectador(dados) {
+    if (!dados || typeof dados !== 'object') return false;
+    if (dados.somente_leitura === true || dados.perfil_espectador === true) return true;
+    const cargo = String(dados.cargo || '').trim().toUpperCase();
+    const cargoNome = String(dados.cargo_nome || '').trim().toUpperCase();
+    if (cargo === 'ESPECTADOR' || cargoNome.includes('ESPECTADOR')) return true;
+    const nome = String(dados.nome || '').trim().toUpperCase();
+    const mat = String(dados.matricula || '').trim().toUpperCase();
+    const cod = String(dados.codigo_individual || dados.codigo || '').trim().toUpperCase();
+    if (nome === 'ESPECTADOR') return true;
+    if ((mat === 'MAT-1111' || cod === 'MAT-1111') && (!nome || nome === 'ESPECTADOR')) return true;
+    return false;
+  }
 
   // 1. Gestão do Tema Claro / Escuro
   function initTheme() {
@@ -144,13 +165,16 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = 'index.html';
     return;
   }
-  const metadata = roleMetadata[employee.cargo] || {
-    nome: employee.cargo,
-    sigla: 'OP',
-    nivel: 'Nível Operacional',
-    camada: 'Visão Própria',
-    descricaoVisao: 'Acesso às funcionalidades atribuídas ao seu perfil.'
-  };
+  const isEspectador = ehPerfilEspectador(employee);
+  const metadata = isEspectador
+    ? roleMetadata['ESPECTADOR']
+    : (roleMetadata[employee.cargo] || {
+        nome: employee.cargo,
+        sigla: 'OP',
+        nivel: 'Nível Operacional',
+        camada: 'Visão Própria',
+        descricaoVisao: 'Acesso às funcionalidades atribuídas ao seu perfil.'
+      });
 
   // 3. Preenchimento dos Campos na Interface
   const nameParts = (employee.nome || 'Operador').split(' ');
@@ -185,10 +209,12 @@ document.addEventListener('DOMContentLoaded', () => {
         matricula: employee.matricula,
         codigo_individual: employee.codigo || employee.codigo_individual,
         nome: employee.nome,
-        cargo: employee.cargo,
+        cargo: isEspectador && (!employee.cargo || employee.cargo === 'ESPECTADOR') ? 'CONSELHO_ADMINISTRACAO' : employee.cargo,
         cargo_nome: metadata.nome,
         nivel: metadata.nivel,
         camada_visao: metadata.camada,
+        somente_leitura: isEspectador,
+        perfil_espectador: isEspectador,
         login_at: new Date().toISOString()
       };
 

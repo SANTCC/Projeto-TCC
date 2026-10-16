@@ -226,10 +226,21 @@
       });
     },
 
+    _bloquearSeSomenteLeitura: function () {
+      if (typeof window !== 'undefined' && window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+        if (typeof window.mostrarFeedback === 'function') {
+          window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+        }
+        return true;
+      }
+      return false;
+    },
+
     /**
      * SALVAR / ATUALIZAR FUNCIONÁRIO
      */
     saveFuncionario: async function (funcionario) {
+      if (this._bloquearSeSomenteLeitura()) return funcionario;
       const client = this.getSupabase();
       if (client) {
         try {
@@ -262,6 +273,9 @@
      * vínculos RESTRICT do banco (agendamentos, inspeções, logs etc.).
      */
     deleteFuncionario: async function (matricula) {
+      if (this._bloquearSeSomenteLeitura()) {
+        return { ok: false, motivo: 'SOMENTE_LEITURA', erro: 'Perfil Espectador (MAT-1111) possui acesso somente leitura.' };
+      }
       const client = this.getSupabase();
       if (!client) {
         return { ok: false, erro: 'Sem conexão com o banco de dados. O funcionário não foi excluído.' };
@@ -313,15 +327,11 @@
           }
         }
 
-        // Histórico de agendamento (agendamentos.agendado_por, RESTRICT):
-        // quem agendou cargas não é apagado, para preservar a auditoria de
-        // quem registrou cada carga. A mensagem precisa dizer isso — não é
-        // vínculo de estivador.
+        // Histórico de agendamento (agendamentos.agendado_por):
+        // quem agendou cargas pode ser excluído; o registro do agendamento e a
+        // carga permanecem preservados com agendado_por = null (ON DELETE SET NULL).
         const agendamentos = await client.from('agendamentos').select('id').eq('agendado_por', id);
         if (agendamentos.error) return { ok: false, erro: 'não foi possível verificar os agendamentos do funcionário (' + (agendamentos.error.message || 'erro') + ').' };
-        if (agendamentos.data && agendamentos.data.length > 0) {
-          return { ok: false, bloqueio: true, erro: 'o funcionário foi registrado como responsável pelo agendamento de ' + agendamentos.data.length + ' carga(s). Esse histórico é preservado e impede a exclusão; desative o funcionário em vez de excluí-lo.' };
-        }
 
         const delegTitular = await client.from('delegacoes_supervisor').select('id').eq('supervisor_titular_id', id);
         const delegSubst = await client.from('delegacoes_supervisor').select('id').eq('substituto_id', id);
@@ -332,6 +342,33 @@
         const delegacoes = (delegTitular.data || []).length + (delegSubst.data || []).length;
         if (delegacoes > 0) {
           return { ok: false, bloqueio: true, erro: 'o funcionário participa de ' + delegacoes + ' delegação(ões) de supervisão. Encerre as delegações antes de excluí-lo.' };
+        }
+
+        if (agendamentos.data && agendamentos.data.length > 0) {
+          const desvincularAg = await client.from('agendamentos').update({ agendado_por: null }).eq('agendado_por', id);
+          if (desvincularAg && desvincularAg.error) {
+            return { ok: false, erro: 'não foi possível desvincular os agendamentos do funcionário (' + (desvincularAg.error.message || 'erro') + ').' };
+          }
+        }
+
+        // Desvincula referências históricas passivas (ON DELETE SET NULL) antes do DELETE
+        const fksPassivas = [
+          ['visitantes', 'registrado_por'],
+          ['manutencoes', 'solicitado_por'],
+          ['manutencoes', 'aprovado_por'],
+          ['historico_manutencoes', 'registrado_por'],
+          ['inspecoes', 'inspetor_id'],
+          ['logs_alteracoes', 'funcionario_id'],
+          ['trail_decisoes', 'funcionario_id'],
+          ['retificacoes_trail', 'funcionario_id'],
+          ['leituras_qr_code', 'funcionario_id']
+        ];
+        for (const [tabelaFk, colunaFk] of fksPassivas) {
+          try {
+            const payloadNull = {};
+            payloadNull[colunaFk] = null;
+            await client.from(tabelaFk).update(payloadNull).eq(colunaFk, id);
+          } catch (e) { /* tabela opcional ou sem permissão: segue para o DELETE */ }
         }
 
         const { data, error } = await client.from('funcionarios').delete().eq('id', id).select();
@@ -370,6 +407,7 @@
     },
 
     _removerFuncionarioLocal: function (matricula) {
+      if (this._bloquearSeSomenteLeitura()) return;
       let list = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
       list = list.filter(f => f.matricula !== matricula);
       localStorage.setItem('nexus_func_list', JSON.stringify(list));
@@ -417,6 +455,35 @@
             return clonarCargas(lerCacheCargas());
           }
 
+          let mapaContainersLocal = new Map();
+          try {
+            const listaConts = JSON.parse(window.localStorage.getItem('nexus_containers_list') || '[]');
+            if (Array.isArray(listaConts)) {
+              listaConts.forEach((ct) => {
+                if (!ct) return;
+                const codigo = String(ct.identificacao || ct.numero_identificacao || '').trim();
+                if (!codigo) return;
+                [ct.id, ct.rawDbId, ct.identificacao, ct.numero_identificacao].forEach((ch) => {
+                  if (ch) mapaContainersLocal.set(String(ch).trim().toLowerCase(), codigo);
+                });
+              });
+            }
+          } catch (e) {}
+
+          const resolverContainerIdLegivel = (val) => {
+            const bruto = String(val || '').trim();
+            if (!bruto) return '';
+            return mapaContainersLocal.get(bruto.toLowerCase()) || bruto;
+          };
+
+          const resolverSetorPatioLegivel = (setor) => {
+            const txt = String(setor || 'Terminal STS-01');
+            return txt.replace(/^(Cont[eê]iner\s+)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, (_, prefixo, uuid) => {
+              const cod = mapaContainersLocal.get(String(uuid).toLowerCase());
+              return cod ? `${prefixo}${cod}` : txt;
+            });
+          };
+
           const mapped = result.data.map((c) => {
             const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0
               ? c.estivador_cargas[0]
@@ -437,10 +504,10 @@
               volume: `${c.volume || 0} m³`,
               valor: `R$ ${(c.valor_declarado || 0).toLocaleString('pt-BR')}`,
               natureza: c.natureza || 'Geral',
-              portoDescarga: c.porto_descarga || 'Terminal STS-01',
+              portoDescarga: resolverSetorPatioLegivel(c.porto_descarga || 'Terminal STS-01'),
               destino: c.destino || 'Destino Geral',
               status,
-              container: finalizada ? '' : (c.container_id || ''),
+              container: finalizada ? '' : resolverContainerIdLegivel(c.container_id || ''),
               container_id: finalizada ? null : (c.container_id || null),
               containerIdentificacaoHistorico,
               container_identificacao_historico: containerIdentificacaoHistorico,
@@ -486,6 +553,7 @@
      * SALVAR CARGA
      */
     saveCarga: async function (carga) {
+      if (this._bloquearSeSomenteLeitura()) return carga;
       const entregue = String(carga && carga.status || '').toUpperCase() === 'ENTREGUE';
       if (entregue) aplicarHistoricoEntrega(carga);
       const client = this.getSupabase();
@@ -533,6 +601,7 @@
      * EXCLUIR / CANCELAR CARGA REAL
      */
     deleteCarga: async function (idCarga) {
+      if (this._bloquearSeSomenteLeitura()) return;
       const client = this.getSupabase();
       if (client) {
         try {
@@ -579,6 +648,7 @@
      * upsert falhar com 23514 e a linha nunca era persistida.
      */
     saveBerco: async function (berco) {
+      if (this._bloquearSeSomenteLeitura()) return berco;
       const resultado = (window.NexusSupabaseUtils && window.NexusSupabaseUtils.normalizarBerco)
         ? window.NexusSupabaseUtils.normalizarBerco(berco)
         : { payload: null, corrigido: false, motivo: 'utilitário de normalização indisponível' };
@@ -648,6 +718,39 @@
     },
 
     /**
+     * BUSCAR CONTÊINERES
+     */
+    getContainers: function () {
+      const repository = this;
+      return this._executarLeituraInFlight('containers', async function () {
+        const client = repository.getSupabase();
+        if (client) {
+          try {
+            const { data, error } = await client.from('containers').select('*');
+            if (!error && Array.isArray(data)) {
+              const mapped = data.map(c => ({
+                id: c.id,
+                rawDbId: c.id,
+                identificacao: c.numero_identificacao || c.identificacao || `CONT-${c.id}`,
+                numero_identificacao: c.numero_identificacao || c.identificacao || `CONT-${c.id}`,
+                tipo: window.getNexusTipoCarga?.(c.tipo_carga_id)?.nome || c.tipo_carga_id || 'Geral',
+                tipo_carga_id: c.tipo_carga_id || null,
+                estado: c.estado || 'OPERANTE',
+                navio_id: c.navio_id || null,
+                navioId: c.navio_id || null
+              }));
+              salvarCacheSeMudou('nexus_containers_list', JSON.stringify(mapped));
+              return mapped;
+            }
+          } catch (err) {
+            console.warn('[NexusRepository] Erro ao buscar containers do Supabase:', err);
+          }
+        }
+        return JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+      });
+    },
+
+    /**
      * BUSCAR VISITANTES
      */
     getVisitantes: function () {
@@ -682,6 +785,7 @@
      * SALVAR VISITANTE
      */
     saveVisitante: async function (vis) {
+      if (this._bloquearSeSomenteLeitura()) return vis;
       const client = this.getSupabase();
       if (client) {
         try {
@@ -705,6 +809,7 @@
      * EXCLUIR VISITANTE
      */
     deleteVisitante: async function (docOuId) {
+      if (this._bloquearSeSomenteLeitura()) return;
       const client = this.getSupabase();
       if (client) {
         try {

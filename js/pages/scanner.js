@@ -184,8 +184,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const localCargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const localCanceladas = JSON.parse(localStorage.getItem('nexus_cargas_canceladas') || '[]');
     if (!match) {
       match = localCargas.find(c => c.id === rawCode || c.qrCode === rawCode || c.id === rawCode.replace('QR-', ''));
+    }
+    if (!match) {
+      match = localCanceladas.find(c => c.id === rawCode || c.qrCode === rawCode || c.id === rawCode.replace('QR-', ''));
+    } else if (match && match.status !== 'CANCELADA' && localCanceladas.some(c => c.id === match.id || c.qrCode === rawCode)) {
+      match = { ...match, status: 'CANCELADA' };
     }
 
     // Tarefa 3 (Backlog Parte 2): leitura bem-sucedida SÓ para código válido/
@@ -233,20 +239,34 @@ document.addEventListener('DOMContentLoaded', () => {
       : 'Não vinculado';
 
     const displayIdParam = encodeURIComponent(String(displayId));
-    targetChecklistUrl = `inspecao.html?carga=${displayIdParam}`;
+    const semChecklist = displayStatus === 'ENTREGUE' || displayStatus === 'CANCELADA';
+    targetChecklistUrl = semChecklist
+      ? `cargas.html?carga=${displayIdParam}`
+      : `inspecao.html?carga=${displayIdParam}`;
+    if (irChecklistBtn) {
+      irChecklistBtn.classList.toggle('hidden', semChecklist);
+    }
 
     // Grava log de leitura QR Code no pátio (T5.8 & Supabase leituras_qr_code)
-    const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
-    logs.unshift({
-      data_hora: new Date().toISOString(),
-      cargo: session.cargo_nome || session.cargo,
-      codigo_usuario: session.codigo_individual || session.codigo,
-      entidade: displayId,
-      tipo_alteracao: 'Leitura QR Code no Pátio (Scan)'
-    });
-    localStorage.setItem('nexus_audit_logs', JSON.stringify(logs));
+    const isSomenteLeitura = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(session));
+    const nowIso = new Date().toISOString();
+    const entidadeTipoScan = displayId.startsWith('CONT') ? 'CONTAINER' : 'CARGA';
+    if (!isSomenteLeitura) {
+      const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+      logs.unshift({
+        data_hora: nowIso,
+        cargo: session.cargo_nome || session.cargo,
+        codigo_usuario: session.codigo_individual || session.codigo,
+        entidade: displayId,
+        entidade_tipo: entidadeTipoScan,
+        entidade_id: displayId,
+        tipo_alteracao: 'Leitura QR Code no Pátio (Scan)',
+        descricao: `Leitura QR Code no Pátio (${displayId})`
+      });
+      localStorage.setItem('nexus_audit_logs', JSON.stringify(logs));
+    }
 
-    if (window.nexusSupabase) {
+    if (!isSomenteLeitura && window.nexusSupabase) {
       try {
         const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
         let funcId = isUuid(session.id) ? session.id : null;
@@ -257,9 +277,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const leituraPayload = {
-          entidade_tipo: displayId.startsWith('CONT') ? 'CONTAINER' : 'CARGA',
+          entidade_tipo: entidadeTipoScan,
           entidade_id: displayId,
-          data_hora: new Date().toISOString()
+          data_hora: nowIso
         };
         if (funcId) leituraPayload.funcionario_id = funcId;
 
@@ -270,13 +290,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const logPayload = {
-          data_hora: new Date().toISOString(),
+          data_hora: nowIso,
           cargo: session.cargo || 'ESTIVADOR',
           codigo_individual: session.codigo_individual || session.codigo || '--',
-          entidade_tipo: displayId.startsWith('CONT') ? 'CONTAINER' : 'CARGA',
+          entidade_tipo: entidadeTipoScan,
           entidade_id: displayId,
           tipo_alteracao: 'REIMPRESSAO_ETIQUETA',
-          detalhes: { acao: 'Leitura QR Code no Pátio' }
+          detalhes: { acao: 'Leitura QR Code no Pátio', descricao: `Leitura QR Code no Pátio (${displayId})` }
         };
         if (funcId) logPayload.funcionario_id = funcId;
 
@@ -303,6 +323,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (cargo === 'INSPETOR' && displayStatus === 'ENTREGUE') {
       // Carga entregue não tem mais inspeção: o inspetor vê a ficha da carga, sem checklist.
       msgAcao = 'Carga entregue: inspeção não disponível. Redirecionamento para a ficha da carga.';
+      targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
+    } else if (cargo === 'INSPETOR' && displayStatus === 'CANCELADA') {
+      // Carga cancelada não possui checklist nem retorna ao fluxo normal.
+      msgAcao = 'Carga cancelada: inspeção não disponível (não retorna ao fluxo normal). Redirecionamento para a ficha da carga.';
       targetRedirectUrl = `cargas.html?carga=${displayIdParam}`;
     } else if (cargo === 'INSPETOR') {
       msgAcao = 'Redirecionamento para o Checklist Técnico de Inspeção.';
@@ -355,6 +379,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (irChecklistBtn) {
     irChecklistBtn.addEventListener('click', () => {
+      const statusAtual = (resStatus && resStatus.textContent || '').trim().toUpperCase();
+      if (statusAtual === 'CANCELADA') {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Carga Cancelada', 'Esta carga foi cancelada e não pode realizar ou refazer o checklist de inspeção.');
+        }
+        return;
+      }
+      if (statusAtual === 'ENTREGUE') {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('atencao', 'Carga Entregue', 'Esta carga já foi entregue e não pode mais ser inspecionada.');
+        }
+        return;
+      }
       window.location.href = targetChecklistUrl;
     });
   }

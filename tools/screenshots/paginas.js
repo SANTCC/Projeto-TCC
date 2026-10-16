@@ -87,7 +87,7 @@ const PAGINAS = [
   {
     chave: 'inspecao',
     arquivo: 'inspecao.html',
-    titulo: 'Inspeção & Checklist',
+    titulo: 'Inspeção',
     subtitulo: 'Conformidade técnica com resultado auditável',
     publica: false,
     resumo: 'Execução do checklist técnico de recebimento: cada item é marcado como conforme ou não conforme e a inspeção é concluída como aprovada ou recusada.',
@@ -102,12 +102,12 @@ const PAGINAS = [
   {
     chave: 'scanner',
     arquivo: 'scanner.html',
-    titulo: 'Scanner QR Code',
+    titulo: 'QR Code',
     subtitulo: 'Leitura móvel por câmera ou entrada manual',
     publica: false,
     resumo: 'Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.',
     destaques: [
-      'Aceita o código impresso (QR-DEMO-CRG-003), o identificador (DEMO-CRG-003) e o QR da etiqueta.',
+      'Aceita o código impresso na etiqueta QR Code ou o identificador operacional do ativo.',
       'Fallback de digitação manual para ambientes sem câmera.',
       'Cada leitura é registrada em leituras_qr_code para rastreabilidade.'
     ],
@@ -117,7 +117,7 @@ const PAGINAS = [
   {
     chave: 'embarcacoes',
     arquivo: 'embarcacoes.html',
-    titulo: 'Embarcações, Contêineres & GPS',
+    titulo: 'Embarcações & Equipamentos',
     subtitulo: 'Atracação, berços, rotas e posição dos navios',
     publica: false,
     resumo: 'Gestão das embarcações e do pátio: cadastro de navios e contêineres, estado operacional, berços do terminal, rotas marítimas e posicionamento GPS com ETA.',
@@ -131,7 +131,7 @@ const PAGINAS = [
   {
     chave: 'manutencao',
     arquivo: 'manutencao.html',
-    titulo: 'Manutenção & Ordens de Serviço',
+    titulo: 'Manutenção & Tarefas',
     subtitulo: 'Abertura, aprovação e conclusão de OS',
     publica: false,
     resumo: 'Ciclo de manutenção de navios, contêineres e guindastes: solicitação, aprovação ou recusa e conclusão, com histórico de serviços e o botão de pânico global no cabeçalho.',
@@ -164,7 +164,7 @@ const PAGINAS = [
     publica: false,
     resumo: 'Cadastro e manutenção do quadro funcional e dos visitantes, emissão de códigos individuais, controle de documentos e reemissão de credenciais (RN 15).',
     destaques: [
-      'Cadastro no padrão MAT-4 dígitos com CPF validado e bloqueio de duplicidade.',
+      'Cadastro funcional com matrícula institucional, CPF validado e bloqueio de duplicidade.',
       'Registro de entrada e saída de visitantes com motivo da visita.',
       'Reemissão de código invalida o anterior e mantém a mesma matrícula.'
     ],
@@ -202,7 +202,7 @@ const PAGINAS = [
 ];
 
 /** Páginas exibidas no about.html (a de diagnóstico fica só no material de apoio). */
-const PAGINAS_DO_ABOUT = PAGINAS;
+const PAGINAS_DO_ABOUT = PAGINAS.filter((p) => p.chave !== 'teste-vibracao');
 
 /**
  * Páginas capturadas para uma conta, na ordem do catálogo.

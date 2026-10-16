@@ -826,6 +826,9 @@ video {
 .min-h-\[32px\] {
   min-height: 32px;
 }
+.min-h-\[36px\] {
+  min-height: 36px;
+}
 .min-h-\[40px\] {
   min-height: 40px;
 }
@@ -873,6 +876,9 @@ video {
 }
 .w-7 {
   width: 1.75rem;
+}
+.w-72 {
+  width: 18rem;
 }
 .w-9 {
   width: 2.25rem;
@@ -948,9 +954,6 @@ video {
 }
 .flex-1 {
   flex: 1 1 0%;
-}
-.flex-shrink {
-  flex-shrink: 1;
 }
 .flex-shrink-0 {
   flex-shrink: 0;
@@ -1247,6 +1250,9 @@ video {
 .border-slate-700\/60 {
   border-color: rgb(51 65 85 / 0.6);
 }
+.border-slate-700\/80 {
+  border-color: rgb(51 65 85 / 0.8);
+}
 .border-slate-800 {
   --tw-border-opacity: 1;
   border-color: rgb(30 41 59 / var(--tw-border-opacity, 1));
@@ -1477,6 +1483,10 @@ video {
   padding-left: 0.75rem;
   padding-right: 0.75rem;
 }
+.px-3\.5 {
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
+}
 .px-4 {
   padding-left: 1rem;
   padding-right: 1rem;
@@ -1600,6 +1610,9 @@ video {
 }
 .text-\[14px\] {
   font-size: 14px;
+}
+.text-\[15px\] {
+  font-size: 15px;
 }
 .text-\[16px\] {
   font-size: 16px;
@@ -2069,9 +2082,26 @@ html.dark :focus-visible {
   white-space: nowrap;
 }
 #appSidebar {
-  width: min(16rem, 100vw);
+  position: fixed !important;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(18rem, 90vw) !important;
+  height: 100vh;
+  height: 100dvh;
   max-height: 100vh;
   max-height: 100dvh;
+  z-index: 50 !important;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease !important;
+}
+#appSidebar.-translate-x-full,
+#appSidebar.nexus-sidebar-collapsed {
+  transform: translateX(-100%) !important;
+  width: min(18rem, 90vw) !important;
+}
+#appSidebar:not(.-translate-x-full):not(.nexus-sidebar-collapsed) {
+  transform: translateX(0) !important;
+  box-shadow: 0 24px 48px -12px rgba(2, 6, 23, 0.65);
 }
 #sidebarScrollArea {
   min-height: 0;
@@ -2122,32 +2152,11 @@ html.dark :focus-visible {
     display: none;
   }
   #appSidebar {
-    position: sticky !important;
+    position: fixed !important;
     top: 4rem;
     height: calc(100vh - 4rem);
     max-height: calc(100vh - 4rem);
-    align-self: flex-start;
-    transition: width 0.22s ease, transform 0.3s ease;
-  }
-  #appSidebar.nexus-sidebar-collapsed {
-    width: 4.5rem;
-  }
-  #appSidebar.nexus-sidebar-collapsed #sidebarScrollArea {
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-  }
-  #appSidebar.nexus-sidebar-collapsed .sidebar-nav-label,
-  #appSidebar.nexus-sidebar-collapsed #sidebarEmergencyBtn span:last-child,
-  #appSidebar.nexus-sidebar-collapsed #sidebarFooter > span:first-child,
-  #appSidebar.nexus-sidebar-collapsed #sidebarFooter a span:last-child {
-    display: none;
-  }
-  #appSidebar.nexus-sidebar-collapsed .sidebar-nav-item,
-  #appSidebar.nexus-sidebar-collapsed #sidebarEmergencyBtn,
-  #appSidebar.nexus-sidebar-collapsed #sidebarFooter {
-    justify-content: center;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
+    width: min(18rem, 90vw) !important;
   }
 }
 
@@ -2195,42 +2204,59 @@ html.dark select option {
   color: #f8fafc;
 }
 
-/* Microinterações corporativas sutis para KPIs, tabelas, chips e modais (V-22 a V-30) */
+/* Microinterações e animações corporativas perceptíveis para KPIs, cards, formulários retráteis, tabelas, chips e modais (V-22 a V-30 / Tarefa 12) */
 button[onclick*="abrirModalDetalheCard"] {
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
 }
 button[onclick*="abrirModalDetalheCard"]:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.08), 0 3px 6px -2px rgba(15, 23, 42, 0.04);
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 12px 24px -6px rgba(15, 23, 42, 0.12), 0 4px 10px -3px rgba(15, 23, 42, 0.06);
 }
 button[onclick*="abrirModalDetalheCard"]:active {
-  transform: translateY(0) scale(0.995);
+  transform: translateY(0) scale(0.99);
+}
+
+main > div > div.rounded-2xl {
+  transition: box-shadow 0.22s ease, border-color 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 table tbody tr {
-  transition: background-color 0.15s ease;
+  transition: background-color 0.16s ease, transform 0.16s ease;
 }
 
+.cargas-chip,
 .os-chip,
 .periodo-chip,
 .status-chip {
-  transition: transform 0.14s ease, background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
+.cargas-chip:hover:not(:disabled),
 .os-chip:hover:not(:disabled),
 .periodo-chip:hover:not(:disabled),
 .status-chip:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 10px -2px rgba(15, 23, 42, 0.08);
 }
+.cargas-chip:active:not(:disabled),
 .os-chip:active:not(:disabled),
 .periodo-chip:active:not(:disabled),
 .status-chip:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.97);
+}
+
+@keyframes nexusModalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes nexusModalFadeIn {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.985);
+    transform: translateY(14px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -2238,15 +2264,57 @@ table tbody tr {
   }
 }
 
+@keyframes nexusPanelSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scaleY(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+[role="dialog"]:not(.hidden),
+[role="alertdialog"]:not(.hidden),
+.fixed.inset-0.z-50:not(.hidden) {
+  animation: nexusModalBackdropIn 0.2s ease-out;
+}
+
+[role="dialog"]:not(.hidden) > div,
+[role="alertdialog"]:not(.hidden) > div,
+.fixed.inset-0.z-50:not(.hidden) > div,
+#nexusConfirmModal:not(.hidden) > div,
+#nexusPromptModal:not(.hidden) > div,
+#nexusEmergencyModal:not(.hidden) > div,
+#hapticsSettingsModal:not(.hidden) > div,
 #globalConfirmModal:not(.hidden) > div,
 #globalFeedbackModal:not(.hidden) > div,
 #modalDetalheCard:not(.hidden) > div {
-  animation: nexusModalFadeIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: nexusModalFadeIn 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#agendamentoCargaForm:not(.hidden),
+#tipoCargaFormContainer:not(.hidden),
+#navioForm:not(.hidden),
+#containerForm:not(.hidden),
+#rotaForm:not(.hidden),
+#guindasteForm:not(.hidden),
+#unifiedManutFormPanel:not(.hidden),
+#osForm:not(.hidden),
+#navioManutForm:not(.hidden),
+#funcionarioForm:not(.hidden),
+#visitanteForm:not(.hidden),
+#checklistFormContainer:not(.hidden) {
+  transform-origin: top center;
+  animation: nexusPanelSlideDown 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
   button[onclick*="abrirModalDetalheCard"],
+  main > div > div.rounded-2xl,
   table tbody tr,
+  .cargas-chip,
   .os-chip,
   .periodo-chip,
   .status-chip,
@@ -2254,14 +2322,37 @@ table tbody tr {
     transition: none !important;
   }
   button[onclick*="abrirModalDetalheCard"]:hover,
+  .cargas-chip:hover:not(:disabled),
   .os-chip:hover:not(:disabled),
   .periodo-chip:hover:not(:disabled),
   .status-chip:hover:not(:disabled) {
     transform: none !important;
   }
+  [role="dialog"]:not(.hidden),
+  [role="alertdialog"]:not(.hidden),
+  .fixed.inset-0.z-50:not(.hidden),
+  [role="dialog"]:not(.hidden) > div,
+  [role="alertdialog"]:not(.hidden) > div,
+  .fixed.inset-0.z-50:not(.hidden) > div,
+  #nexusConfirmModal:not(.hidden) > div,
+  #nexusPromptModal:not(.hidden) > div,
+  #nexusEmergencyModal:not(.hidden) > div,
+  #hapticsSettingsModal:not(.hidden) > div,
   #globalConfirmModal:not(.hidden) > div,
   #globalFeedbackModal:not(.hidden) > div,
-  #modalDetalheCard:not(.hidden) > div {
+  #modalDetalheCard:not(.hidden) > div,
+  #agendamentoCargaForm:not(.hidden),
+  #tipoCargaFormContainer:not(.hidden),
+  #navioForm:not(.hidden),
+  #containerForm:not(.hidden),
+  #rotaForm:not(.hidden),
+  #guindasteForm:not(.hidden),
+  #unifiedManutFormPanel:not(.hidden),
+  #osForm:not(.hidden),
+  #navioManutForm:not(.hidden),
+  #funcionarioForm:not(.hidden),
+  #visitanteForm:not(.hidden),
+  #checklistFormContainer:not(.hidden) {
     animation: none !important;
   }
 }
@@ -2338,11 +2429,6 @@ table tbody tr {
   border-color: rgb(52 211 153 / var(--tw-border-opacity, 1));
 }
 
-.hover\:border-green-400:hover {
-  --tw-border-opacity: 1;
-  border-color: rgb(74 222 128 / var(--tw-border-opacity, 1));
-}
-
 .hover\:border-indigo-400:hover {
   --tw-border-opacity: 1;
   border-color: rgb(129 140 248 / var(--tw-border-opacity, 1));
@@ -2375,6 +2461,11 @@ table tbody tr {
 .hover\:bg-emerald-800:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(6 95 70 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:bg-indigo-100:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(224 231 255 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-indigo-700:hover {
@@ -2626,6 +2717,11 @@ table tbody tr {
 
 .dark\:border-emerald-900\/60:is(.dark *) {
   border-color: rgb(6 78 59 / 0.6);
+}
+
+.dark\:border-indigo-800:is(.dark *) {
+  --tw-border-opacity: 1;
+  border-color: rgb(55 48 163 / var(--tw-border-opacity, 1));
 }
 
 .dark\:border-indigo-900:is(.dark *) {
@@ -2984,6 +3080,10 @@ table tbody tr {
   background-color: rgb(6 78 59 / 0.4);
 }
 
+.dark\:hover\:bg-indigo-900\/60:hover:is(.dark *) {
+  background-color: rgb(49 46 129 / 0.6);
+}
+
 .dark\:hover\:bg-red-900\/60:hover:is(.dark *) {
   background-color: rgb(127 29 29 / 0.6);
 }
@@ -3118,18 +3218,6 @@ table tbody tr {
     position: static;
   }
 
-  .md\:sticky {
-    position: sticky;
-  }
-
-  .md\:top-16 {
-    top: 4rem;
-  }
-
-  .md\:z-40 {
-    z-index: 40;
-  }
-
   .md\:z-50 {
     z-index: 50;
   }
@@ -3183,12 +3271,12 @@ table tbody tr {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
-  .md\:self-start {
-    align-self: flex-start;
-  }
-
   .md\:overflow-hidden {
     overflow: hidden;
+  }
+
+  .md\:p-6 {
+    padding: 1.5rem;
   }
 }
 

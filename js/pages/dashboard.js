@@ -498,13 +498,29 @@ document.addEventListener('DOMContentLoaded', () => {
           // entidade (tipo/id normalizado) + tipo de alteração.
           const chaveEventoLog = (x) => {
             const tempo = x && x.data_hora ? new Date(x.data_hora).getTime() : NaN;
-            const idEnt = String((x && x.entidade_id) || 'N/A').trim() || 'N/A';
+            let tipoEnt = String((x && x.entidade_tipo) || '').trim().toUpperCase();
+            let idEnt = String((x && x.entidade_id) || '').trim();
+            if ((!tipoEnt || !idEnt) && x && x.entidade) {
+              const partes = String(x.entidade).trim().split(/\s+/);
+              if (partes.length >= 2) {
+                tipoEnt = tipoEnt || partes[0].toUpperCase();
+                idEnt = idEnt || partes.slice(1).join(' ');
+              } else if (partes.length === 1) {
+                idEnt = idEnt || partes[0];
+                tipoEnt = tipoEnt || (idEnt.toUpperCase().startsWith('CONT') ? 'CONTAINER' : 'CARGA');
+              }
+            }
+            let tipoAlt = String((x && x.tipo_alteracao) || '').trim().toUpperCase();
+            if (tipoAlt.includes('LEITURA QR') || tipoAlt.includes('ETIQUETA')) tipoAlt = 'REIMPRESSAO_ETIQUETA';
+            else if (tipoAlt.includes('CRI')) tipoAlt = 'CRIACAO';
+            else if (tipoAlt.includes('EXCLU') || tipoAlt.includes('DELET')) tipoAlt = 'EXCLUSAO';
+            else if (tipoAlt && !['CRIACAO', 'EDICAO', 'EXCLUSAO', 'REIMPRESSAO_ETIQUETA', 'EXPORTACAO'].includes(tipoAlt)) tipoAlt = 'EDICAO';
             return [
               Number.isNaN(tempo) ? String((x && x.data_hora) || '') : tempo,
               (x && x.codigo_usuario) || '--',
-              (x && x.entidade_tipo) || '',
-              idEnt,
-              (x && x.tipo_alteracao) || ''
+              tipoEnt,
+              idEnt || 'N/A',
+              tipoAlt
             ].join('|');
           };
           const keys = new Set(mappedDbLogs.map(chaveEventoLog));
@@ -652,10 +668,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (window.nexusSupabase) {
       try {
-        const { data: dbTrail, error } = await window.nexusSupabase
+        const montarConsultaTrail = () => window.nexusSupabase
           .from('trail_decisoes')
           .select('*, funcionarios(nome, cargo), retificacoes_trail(*)')
           .order('data_hora', { ascending: false });
+        let dbTrail = null;
+        let error = null;
+        if (window.NexusSupabaseUtils && typeof window.NexusSupabaseUtils.lerTodasAsLinhas === 'function') {
+          dbTrail = await window.NexusSupabaseUtils.lerTodasAsLinhas(montarConsultaTrail);
+        } else {
+          const consulta = montarConsultaTrail();
+          if (consulta && typeof consulta.range === 'function') {
+            dbTrail = [];
+            for (let inicio = 0; inicio < 10000000; inicio += 1000) {
+              const res = await montarConsultaTrail().range(inicio, inicio + 999);
+              if (res && res.error) { error = res.error; break; }
+              const pagina = res && Array.isArray(res.data) ? res.data : [];
+              dbTrail.push(...pagina);
+              if (pagina.length < 1000) break;
+            }
+          } else {
+            const res = await consulta;
+            error = res && res.error;
+            dbTrail = res && res.data;
+          }
+        }
 
         if (!error && Array.isArray(dbTrail)) {
           contextoPrivacidade.push(...dbTrail.map(t => ({ codigo_individual: t.codigo_individual })));
@@ -783,10 +820,21 @@ document.addEventListener('DOMContentLoaded', () => {
             mappedDbTrail.forEach(x => { delete x._codigoPendente; });
           }
 
-          // Unir com localTrail para preservar registros inseridos localmente ou offline
+          // Unir com localTrail para preservar registros inseridos localmente ou offline,
+          // deduplicando tanto por id/dbId quanto pela assinatura do evento (instante + decisão + entidade + motivo).
+          const chaveEventoTrail = (x) => {
+            const tempo = x && x.data_hora ? new Date(x.data_hora).getTime() : NaN;
+            return [
+              Number.isNaN(tempo) ? String((x && x.data_hora) || '') : tempo,
+              String((x && x.decisao) || '').trim().toUpperCase(),
+              String((x && x.entidade) || '').trim().toUpperCase(),
+              String((x && x.motivo) || '').trim()
+            ].join('|');
+          };
           const keys = new Set(mappedDbTrail.map(x => x.dbId || x.id));
+          const eventKeys = new Set(mappedDbTrail.map(chaveEventoTrail));
           localTrail.forEach(lt => {
-            if (!keys.has(lt.dbId) && !keys.has(lt.id)) {
+            if (!keys.has(lt.dbId) && !keys.has(lt.id) && !eventKeys.has(chaveEventoTrail(lt))) {
               mappedDbTrail.push(lt);
             }
           });

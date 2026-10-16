@@ -19,7 +19,9 @@ function bancoBase() {
       { id: UUID(1), origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10000 },
       { id: UUID(2), origem: 'Porto de Santos', destino: 'Porto de Paranaguá', distancia_km: 330 }
     ],
-    cargas: [], bercos: [], containers: [], guindastes: [], manutencoes: [], historico_manutencoes: []
+    cargas: [
+      { id: UUID(501), qr_code_url: 'QR-CRG-JAG-1', status_fluxo: 'PRONTA_PARA_ENTREGA', navio_id: NAVIO_JAGUAR }
+    ], bercos: [], containers: [], guindastes: [], manutencoes: [], historico_manutencoes: []
   });
 }
 
@@ -34,7 +36,7 @@ async function carregar(banco) {
     url: 'https://nexusport.test/embarcacoes.html',
     html: htmlDaPagina('embarcacoes.html'),
     session: sessao('SUPERVISOR_GERENTE_OPERACOES'),
-    storage: { nexus_navios_list: naviosLocais(), nexus_bercos_list: [], nexus_containers_list: [], nexus_guindastes_list: [], nexus_cargas_fluxo: [] },
+    storage: { nexus_navios_list: naviosLocais(), nexus_bercos_list: [], nexus_containers_list: [], nexus_guindastes_list: [], nexus_cargas_fluxo: [{ id: 'CRG-JAG-1', status: 'PRONTA_PARA_ENTREGA', navio: 'Jaguar', navioId: NAVIO_JAGUAR }] },
     scripts: [
       'js/security.js',
       'js/session-cookies.js',

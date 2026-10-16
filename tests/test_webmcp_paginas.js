@@ -453,7 +453,7 @@ async function testesEmbarcacoes() {
     nexus_bercos_list: [{ id: 'B1', nome: 'Berço 01', estado: 'LIVRE', navio_nome: null, navio_imo: null, navio_id: null }],
     nexus_containers_list: [{ identificacao: 'MSCU1234567', tipo: "Contêiner 20' Dry", estado: 'OPERANTE', navio: '' }],
     nexus_guindastes_list: [{ identificacao: 'ABC123DEF', estado: 'OPERANTE', dataManut: '2026-01-01' }],
-    nexus_cargas_fluxo: []
+    nexus_cargas_fluxo: [{ id: 'CRG-STAR-1', status: 'PRONTA_PARA_ENTREGA', navio: 'MV Santos Star', navioId: '11111111-1111-4111-8111-111111111111' }]
   };
   const adapt = ['js/webmcp/webmcp-embarcacoes.js'];
   const scr = ['js/padronizacao-codigos.js', 'js/pages/embarcacoes.js'];
