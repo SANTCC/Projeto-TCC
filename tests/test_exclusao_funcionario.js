@@ -163,6 +163,26 @@ async function main() {
   check('vínculo operacional desfeito', !banco.tabelas.estivador_cargas.some(v => v.estivador_id === FUNC6));
   check('carga entregue (histórico) preservada', banco.tabelas.cargas.some(c => c.id === 'carga-entregue' && c.status_fluxo === 'ENTREGUE'));
 
+  // Tarefa 8 (Correções): ENTREGUE, CANCELADA e RECUSADA são histórico —
+  // nenhuma delas pode bloquear a exclusão de ninguém.
+  log('\n8b. Estivador com cargas CANCELADA/RECUSADA (histórico): exclusão liberada');
+  banco = bancoBase();
+  banco.tabelas.cargas.push(
+    { id: 'carga-cancelada', qr_code_url: 'QR-CRG-CANCELADA', status_fluxo: 'CANCELADA' },
+    { id: 'carga-recusada', qr_code_url: 'QR-CRG-RECUSADA', status_fluxo: 'RECUSADA' }
+  );
+  banco.tabelas.estivador_cargas.push(
+    { id: 'ec-8b-1', estivador_id: FUNC6, carga_id: 'carga-cancelada' },
+    { id: 'ec-8b-2', estivador_id: FUNC6, carga_id: 'carga-recusada' }
+  );
+  w = await repositorio(banco);
+  r = await w.NexusRepository.deleteFuncionario('MAT-0006');
+  check('8b: retorna ok (excluído)', r && r.ok === true && r.removido === 1, JSON.stringify(r));
+  check('8b: vínculos com cargas cancelada/recusada desfeitos junto com a exclusão',
+    !banco.tabelas.estivador_cargas.some(v => v.estivador_id === FUNC6));
+  check('8b: cargas CANCELADA/RECUSADA preservadas (histórico)',
+    banco.tabelas.cargas.some(c => c.id === 'carga-cancelada') && banco.tabelas.cargas.some(c => c.id === 'carga-recusada'));
+
   log('\n9. Quem agendou cargas: bloqueio correto é o histórico (agendado_por), não "estivador"');
   banco = bancoBase();
   w = await repositorio(banco);
@@ -170,6 +190,7 @@ async function main() {
   check('retorna erro com bloqueio', r.ok === false && r.bloqueio === true, JSON.stringify(r));
   check('mensagem cita agendamento/histórico', /agendamento/.test(r.erro || ''), r.erro);
   check('mensagem NÃO o chama de estivador', !/como estivador/.test(r.erro || ''), r.erro);
+  check('mensagem orienta desativar o cadastro em vez de excluir', /desative/i.test(r.erro || ''), r.erro);
   check('funcionário preservado', existe(banco, 'MAT-0007'));
   check('agendamento preservado', banco.tabelas.agendamentos.length === 1);
 
