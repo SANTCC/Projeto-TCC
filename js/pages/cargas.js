@@ -743,7 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
         [cont.identificacao, cont.numero_identificacao, cont.id, cont.rawDbId].forEach(val => {
           const chave = String(val || '').trim().toLowerCase();
           if (chave) mapa.set(chave, cont);
-=======
+
         // Tarefa 4 (Correções): o repositório de dados mapeia o `container` da
         // carga com o UUID (container_id), enquanto a vinculação na tela grava a
         // identificação textual. Indexa o contêiner pelas duas formas
