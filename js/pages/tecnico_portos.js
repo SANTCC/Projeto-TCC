@@ -1145,18 +1145,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
 
-      // C14 / V-06: Impedir cadastro de visitantes com documento/CPF duplicado (entre visitantes e funcionários)
-      const docNormalizado = documento.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const visitanteExistente = visList.find(v =>
-        (v.documento || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === docNormalizado
-        || fatiarCpfSomenteDigitos(v.documento || '') === docClean
-      );
-      if (visitanteExistente) {
-        const msg = `BLOQUEIO DE SEGURANÇA (C14): O documento "${documento}" já está cadastrado para o visitante "${visitanteExistente.nome}". Cada visitante deve possuir documento único!`;
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
-        return;
-      }
-
       const funcComMesmoCpf = (mergedFuncList || []).find(f => fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === docClean);
       if (funcComMesmoCpf) {
         const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${funcComMesmoCpf.nome}". Cada pessoa deve possuir CPF único no sistema!`;
@@ -1164,7 +1152,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-=======
       // ── Tarefa 6 (Correções): identidade do visitante por CPF × nome ──────
       // Substitui o bloqueio C14 antigo (que recusava QUALQUER documento
       // repetido) pela regra de identidade:
@@ -1195,15 +1182,6 @@ document.addEventListener('DOMContentLoaded', () => {
           // distinguia mesma pessoa de nome diferente).
           const { data: visitasDb } = await window.nexusSupabase
             .from('visitantes')
-
-            .select('nome, documento')
-            .or(`documento.eq.${documento},documento.eq.${docClean},documento.eq.${formatarCpfExibicao(docClean)}`)
-            .maybeSingle();
-
-          if (dupVis) {
-            const msg = `BLOQUEIO DE SEGURANÇA (C14): Documento "${documento}" já registrado no banco de dados para "${dupVis.nome}". Duplicação bloqueada.`;
-            if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
-=======
             .select('id, nome, documento, data_hora_saida');
           const candidatosDb = Array.isArray(visitasDb) ? visitasDb : (visitasDb ? [visitasDb] : []);
           visitasMesmoCpfDb = candidatosDb.filter(v => somenteDigitosDoc(v.documento) === docClean);
@@ -1212,7 +1190,6 @@ document.addEventListener('DOMContentLoaded', () => {
           if (conflitoDb) {
             const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${documento}" já está registrado no banco de dados para outro visitante ("${conflitoDb.nome}"). O mesmo CPF não pode pertencer a dois nomes diferentes.`;
             if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado com Outro Nome', msg);
-
             return;
           }
 
@@ -1222,8 +1199,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .eq('cpf', docClean)
             .maybeSingle();
 
-          if (!dupFuncErr && dupFuncCpf) {
-            const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${dupFuncCpf.nome}" no banco de dados. Duplicação bloqueada.`;
+          const funcCpfRegistro = Array.isArray(dupFuncCpf) ? dupFuncCpf[0] : dupFuncCpf;
+          if (!dupFuncErr && funcCpfRegistro && (funcCpfRegistro.nome || funcCpfRegistro.cpf)) {
+            const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${funcCpfRegistro.nome}" no banco de dados. Duplicação bloqueada.`;
             if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
             return;
           }
