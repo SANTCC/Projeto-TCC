@@ -528,6 +528,85 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGpsTable();
   }
 
+  // Tarefa 5 (Backlog Parte 2): na entrega, navio/contêiner deixam de ser
+  // vínculos ativos, mas nome/identificação são preservados como histórico.
+  function textoHistoricoEntrega(valor) {
+    return typeof valor === 'string' ? valor.trim() : '';
+  }
+
+  function snapshotHistoricoEntrega(carga, navioConhecido) {
+    if (!carga) return { navio_nome_historico: '', container_identificacao_historico: '' };
+    let navio = textoHistoricoEntrega(carga.navioNomeHistorico)
+      || textoHistoricoEntrega(carga.navio_nome_historico)
+      || textoHistoricoEntrega(carga.navioHistorico)
+      || textoHistoricoEntrega(carga.navio_historico)
+      || textoHistoricoEntrega(navioConhecido && navioConhecido.nome)
+      || textoHistoricoEntrega(carga.navio);
+    if (!navio) {
+      const navioId = carga.navioId || carga.navio_id;
+      if (navioId) {
+        const encontrado = naviosList.find((n) => String(n.id || '') === String(navioId));
+        if (encontrado) navio = textoHistoricoEntrega(encontrado.nome);
+      }
+    }
+
+    let container = textoHistoricoEntrega(carga.containerIdentificacaoHistorico)
+      || textoHistoricoEntrega(carga.container_identificacao_historico)
+      || textoHistoricoEntrega(carga.containerHistorico)
+      || textoHistoricoEntrega(carga.container_historico);
+    const referencias = [carga.container, carga.container_id, carga.containerId]
+      .map(textoHistoricoEntrega).filter(Boolean);
+    if (!container && referencias.length > 0) {
+      let containers = [];
+      try { containers = Array.isArray(containersList) ? containersList : []; } catch (e) { containers = []; }
+      if (containers.length === 0) {
+        try {
+          const locais = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+          if (Array.isArray(locais)) containers = locais;
+        } catch (e) { /* cache indisponível */ }
+      }
+      for (const referencia of referencias) {
+        const encontrado = containers.find((cont) => [cont.identificacao, cont.numero_identificacao, cont.id, cont.rawDbId]
+          .some((valor) => textoHistoricoEntrega(valor).toLowerCase() === referencia.toLowerCase()));
+        if (encontrado) {
+          container = textoHistoricoEntrega(encontrado.identificacao || encontrado.numero_identificacao);
+          if (container) break;
+        }
+      }
+    }
+    if (!container) {
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      container = referencias.find((referencia) => !UUID_RE.test(referencia)
+        && referencia !== 'Vinculado' && referencia !== 'Não Vinculado') || '';
+    }
+    return { navio_nome_historico: navio, container_identificacao_historico: container };
+  }
+
+  function finalizarEntregaLocal(carga, navioOuHistorico) {
+    if (!carga) return { navio_nome_historico: '', container_identificacao_historico: '' };
+    const historico = navioOuHistorico && (
+      Object.prototype.hasOwnProperty.call(navioOuHistorico, 'navio_nome_historico')
+      || Object.prototype.hasOwnProperty.call(navioOuHistorico, 'container_identificacao_historico'))
+      ? {
+        navio_nome_historico: textoHistoricoEntrega(navioOuHistorico.navio_nome_historico),
+        container_identificacao_historico: textoHistoricoEntrega(navioOuHistorico.container_identificacao_historico)
+      }
+      : snapshotHistoricoEntrega(carga, navioOuHistorico);
+    carga.navioNomeHistorico = historico.navio_nome_historico;
+    carga.navio_nome_historico = historico.navio_nome_historico;
+    carga.containerIdentificacaoHistorico = historico.container_identificacao_historico;
+    carga.container_identificacao_historico = historico.container_identificacao_historico;
+    carga.navio = '';
+    carga.navioId = null;
+    carga.navio_id = null;
+    carga.container = '';
+    carga.container_id = null;
+    if ('containerId' in carga) carga.containerId = null;
+    carga.herdarNavioDoContainer = false;
+    return historico;
+  }
+  window.nexusFinalizarEntregaCarga = finalizarEntregaLocal;
+
   // Renderiza Tabela de GPS com atualização viva em tempo real e entrega automática
   function renderGpsTable() {
     if (!gpsTableBody) return;
@@ -545,12 +624,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // C10 & RN 12 & Tarefa 1: só as cargas vinculadas ao navio que chegou ao porto de destino viram ENTREGUE.
-    // Quando a carga chega ao destino (ENTREGUE), ela se desvincula do navio (navio_id = null).
+    // C10 & RN 12 & Tarefa 1/5: só as cargas vinculadas ao navio que chegou ao
+    // porto de destino viram ENTREGUE. A entrega libera navio_id/container_id
+    // ativos, preservando navio/contêiner nos snapshots históricos.
     const UUID_CARGA_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-    const idsRemotosEntregues = [];
-    const idsRemotosDesvinculados = [];
+    const atualizacoesRemotasEntregues = [];
+    const atualizacoesRemotasDesvinculadas = [];
     let cargasAtualizadas = false;
 
     const cargaPertenceAoNavio = (c, n) => {
@@ -563,49 +643,61 @@ document.addEventListener('DOMContentLoaded', () => {
     cargasFluxo.forEach((c) => {
       if (!c) return;
       if (['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)) {
-        // Tarefa 1: se a carga já está ENTREGUE mas ainda continua vinculada a um navio, desvincula
-        if (c.status === 'ENTREGUE' && (c.navio || c.navioId || c.navio_id)) {
-          c.navio = '';
-          c.navioId = null;
-          c.navio_id = null;
+        // Entrega legada ainda com vínculo ativo: registra o histórico antes
+        // de liberar navio e contêiner (local e, abaixo, no banco).
+        if (c.status === 'ENTREGUE' && (c.navio || c.navioId || c.navio_id || c.container || c.container_id || c.containerId)) {
+          const historico = finalizarEntregaLocal(c);
           cargasAtualizadas = true;
           const idBanco = String(c.rawDbId || '');
-          if (UUID_CARGA_RE.test(idBanco)) idsRemotosDesvinculados.push(idBanco);
+          if (UUID_CARGA_RE.test(idBanco)) {
+            atualizacoesRemotasDesvinculadas.push({ id: idBanco, historico });
+          }
         }
         return;
       }
       const navio = naviosList.find((n) => n.localizacao === 'NO_PORTO_DE_DESTINO' && cargaPertenceAoNavio(c, n));
       if (!navio) return;
+      const historico = snapshotHistoricoEntrega(c, navio);
       c.status = 'ENTREGUE';
-      c.navio = '';
-      c.navioId = null;
-      c.navio_id = null;
+      finalizarEntregaLocal(c, historico);
       cargasAtualizadas = true;
       const idBanco = String(c.rawDbId || '');
-      if (UUID_CARGA_RE.test(idBanco)) idsRemotosEntregues.push(idBanco);
+      if (UUID_CARGA_RE.test(idBanco)) {
+        atualizacoesRemotasEntregues.push({ id: idBanco, historico });
+      }
     });
 
     if (cargasAtualizadas) {
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
       if (window.nexusSupabase) {
-        if (idsRemotosEntregues.length > 0) {
-          window.nexusSupabase.from('cargas')
-            .update({ status_fluxo: 'ENTREGUE', navio_id: null })
-            .in('id', idsRemotosEntregues)
-            .then(({ error }) => {
-              if (error) console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
-            })
-            .catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
-        }
-        if (idsRemotosDesvinculados.length > 0) {
-          window.nexusSupabase.from('cargas')
-            .update({ navio_id: null })
-            .in('id', idsRemotosDesvinculados)
-            .then(({ error }) => {
-              if (error) console.warn('[NexusPort] Erro ao desvincular cargas entregues no Supabase:', error);
-            })
-            .catch(e => console.warn('[NexusPort] Erro ao desvincular entregue no Supabase:', e));
-        }
+        // Agrupa por snapshot: cargas do mesmo navio podem ter contêineres
+        // históricos diferentes e não podem compartilhar um único payload.
+        const executarAtualizacoes = (atualizacoes, incluirStatus) => {
+          const grupos = new Map();
+          atualizacoes.forEach(({ id, historico }) => {
+            const chave = JSON.stringify(historico || {});
+            if (!grupos.has(chave)) grupos.set(chave, { historico: historico || {}, ids: [] });
+            grupos.get(chave).ids.push(id);
+          });
+          grupos.forEach(({ historico, ids }) => {
+            const payload = {
+              navio_id: null,
+              container_id: null,
+              navio_nome_historico: historico.navio_nome_historico || null,
+              container_identificacao_historico: historico.container_identificacao_historico || null
+            };
+            if (incluirStatus) payload.status_fluxo = 'ENTREGUE';
+            window.nexusSupabase.from('cargas')
+              .update(payload)
+              .in('id', ids)
+              .then(({ error }) => {
+                if (error) console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
+              })
+              .catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
+          });
+        };
+        executarAtualizacoes(atualizacoesRemotasEntregues, true);
+        executarAtualizacoes(atualizacoesRemotasDesvinculadas, false);
       }
     }
 
@@ -1991,9 +2083,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     containersTableBody.innerHTML = containersList.map(c => {
-      // C3: Busca cargas vinculadas a este contêiner
+      // C3: Busca cargas vinculadas a este contêiner.
+      // Tarefa 7: status terminal (ENTREGUE/CANCELADA/RECUSADA) não ocupa mais
+      // o contêiner — mesmo que um cache antigo ainda traga a referência
+      // textual, a carga entregue não pode aparecer como "dentro" dele.
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-      const cargasDoCont = cargasFluxo.filter(crg => crg.container && (crg.container.toLowerCase() === c.identificacao.toLowerCase() || crg.container.toLowerCase() === c.id.toLowerCase()));
+      const cargasDoCont = cargasFluxo.filter(crg => !['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(crg.status) && crg.container && (crg.container.toLowerCase() === c.identificacao.toLowerCase() || crg.container.toLowerCase() === c.id.toLowerCase()));
 
       let cargasVinculadasHtml = '<span class="text-slate-600 italic text-[11px]">Nenhuma carga</span>';
       if (cargasDoCont.length > 0) {
@@ -2035,7 +2130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     let atualizadas = 0;
     cargasLocais.forEach(c => {
-      if (!c || c.status === 'CANCELADA' || c.status === 'RECUSADA') return;
+      if (!c || ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)) return;
       const mesmoCont = c.container && String(c.container).trim().toLowerCase() === chaveCont;
       if (!mesmoCont) return;
       const deveHerdar = c.herdarNavioDoContainer === true || !c.navio;
@@ -2053,7 +2148,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           const idsUuid = cargasLocais
-            .filter(c => c.container && String(c.container).trim().toLowerCase() === chaveCont && isUuid.test(String(c.rawDbId || '')))
+            .filter(c => c && !['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)
+              && c.container && String(c.container).trim().toLowerCase() === chaveCont && isUuid.test(String(c.rawDbId || '')))
             .map(c => c.rawDbId);
           if (idsUuid.length > 0) {
             await window.nexusSupabase.from('cargas').update({ navio_id: navioAlvo.id }).in('id', idsUuid);

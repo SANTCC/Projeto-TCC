@@ -42,11 +42,47 @@ document.addEventListener('DOMContentLoaded', () => {
   const isGestorRole = isSupervisorRole || isInspetorRole;
   const exigeEtapasPronta = ['ARRUMADOR_CONSERTADOR', 'INSPETOR'].includes(userCargo);
 
+  // Backlog Parte 2 — Tarefa 6: Arrumador e Consertador NÃO cadastra cargas
+  // (a atribuição do cargo é marcar "pronta para entrega" — Spec RF 1).
+  // A decisão vem da matriz RBAC (ação CADASTRAR_CARGA); sem o NexusAuth
+  // carregado, a tela mantém o comportamento atual e não bloqueia.
+  const podeCadastrarCarga = !(window.NexusAuth && typeof window.NexusAuth.hasPermission === 'function')
+    || window.NexusAuth.hasPermission('CADASTRAR_CARGA');
+  // Uso programático (testes/WebMCP): mesma decisão aplicada à tela.
+  window.nexusPodeCadastrarCarga = () => podeCadastrarCarga;
+
+  function textoAlocacaoContainer(valor) {
+    return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  /**
+   * Backlog Parte 2 — Tarefa 9: a carga só está "alocada no contêiner" quando
+   * a movimentação física até ele foi CONCLUÍDA. A conclusão (Embarcações &
+   * GPS → concluirTarefaGuindaste) grava portoDescarga = "Contêiner <id>", que
+   * é a evidência durável — o simples vínculo administrativo não basta.
+   */
+  function cargaAlocadaNoContainer(carga) {
+    if (!carga) return false;
+    const destino = textoAlocacaoContainer(carga.portoDescarga || carga.porto_descarga);
+    if (!destino.startsWith('conteiner ')) return false;
+    const alvo = destino.slice('conteiner '.length).trim();
+    if (!alvo) return false;
+    return [carga.container, carga.container_id, carga.containerId]
+      .map(textoAlocacaoContainer)
+      .filter(Boolean)
+      .includes(alvo);
+  }
+  // Uso programático (testes/WebMCP): mesma decisão aplicada à tela.
+  window.nexusCargaAlocadaNoContainer = cargaAlocadaNoContainer;
+
   // ARMAZENAGEM comprova a passagem pelo recebimento/inspeção no fluxo.
   // A vinculação não é um status separado: precisa ser conferida explicitamente.
+  // A alocação física no contêiner (Tarefa 9) também é requisito: vincular sem
+  // movimentar não torna a carga pronta.
   function requisitosProntaConcluidos(carga) {
     return carga.status === 'ARMAZENAGEM' &&
       Boolean(carga.container || carga.container_id) &&
+      cargaAlocadaNoContainer(carga) &&
       Boolean(carga.navio || carga.navio_id || carga.navioId) &&
       !carga.movimentacaoPendente &&
       !JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]').some(t => t.cargaId === carga.id) &&
@@ -166,6 +202,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  // Tarefa 1 (Backlog Parte 2): `estivador_cargas` é o vínculo de movimentação
+  // do cargo ESTIVADOR. O responsável pelo agendamento pode ser de qualquer
+  // cargo (fica em agendamentos.agendado_por); só vira linha em
+  // estivador_cargas quando o responsável é estivador de fato. Sem isso, um
+  // Técnico em Portos designado responsável era gravado "como estivador" e
+  // depois não podia ser excluído em Gestão de Pessoas.
+  // Aceita o enum do banco ('ESTIVADOR') e o rótulo exibido ('Estivador').
+  function ehCargoEstivador(cargo) {
+    const normalizado = String(cargo || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+    return normalizado === 'ESTIVADOR';
+  }
+  // Compartilhado para testes/regressão sem depender do formulário.
+  window.nexusEhCargoEstivador = ehCargoEstivador;
+
   // Preenche o select de tipos de carga usando a lista compartilhada NEXUS_TIPOS_CARGA
   const selectTipoCarga = document.getElementById('agTipoCarga');
   const preencherTiposAgendamento = () => window.preencherNexusTiposCargaSelect?.(selectTipoCarga);
@@ -182,6 +233,89 @@ document.addEventListener('DOMContentLoaded', () => {
   let cargasRefreshTimer = null;
   const transicoesStatusEmVoo = new Map();
   const CARGA_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // Tarefa 5 (Backlog Parte 2): entregar não é "apagar o passado". Antes de
+  // liberar navio_id/container_id, guardamos nome/identificação em snapshots
+  // históricos — é isso que tabelas, gráficos e relatórios passam a exibir.
+  function textoHistoricoEntrega(valor) {
+    return typeof valor === 'string' ? valor.trim() : '';
+  }
+
+  function lerListaLocalCargas(chave) {
+    try {
+      const valor = JSON.parse(localStorage.getItem(chave) || '[]');
+      return Array.isArray(valor) ? valor : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function snapshotHistoricoEntrega(carga, navioConhecido) {
+    if (!carga) return { navio_nome_historico: '', container_identificacao_historico: '' };
+    let navio = textoHistoricoEntrega(carga.navioNomeHistorico)
+      || textoHistoricoEntrega(carga.navio_nome_historico)
+      || textoHistoricoEntrega(carga.navioHistorico)
+      || textoHistoricoEntrega(carga.navio_historico)
+      || textoHistoricoEntrega(navioConhecido && navioConhecido.nome)
+      || textoHistoricoEntrega(carga.navio);
+    if (!navio) {
+      const navioId = carga.navioId || carga.navio_id;
+      if (navioId) {
+        const encontrado = lerListaLocalCargas('nexus_navios_list')
+          .find((n) => String(n.id || '') === String(navioId));
+        if (encontrado) navio = textoHistoricoEntrega(encontrado.nome);
+      }
+    }
+
+    let container = textoHistoricoEntrega(carga.containerIdentificacaoHistorico)
+      || textoHistoricoEntrega(carga.container_identificacao_historico)
+      || textoHistoricoEntrega(carga.containerHistorico)
+      || textoHistoricoEntrega(carga.container_historico);
+    const referencias = [carga.container, carga.container_id, carga.containerId]
+      .map(textoHistoricoEntrega).filter(Boolean);
+    if (!container && referencias.length > 0) {
+      const containers = lerListaLocalCargas('nexus_containers_list');
+      for (const referencia of referencias) {
+        const encontrado = containers.find((cont) => [cont.identificacao, cont.numero_identificacao, cont.id, cont.rawDbId]
+          .some((valor) => textoHistoricoEntrega(valor).toLowerCase() === referencia.toLowerCase()));
+        if (encontrado) {
+          container = textoHistoricoEntrega(encontrado.identificacao || encontrado.numero_identificacao);
+          if (container) break;
+        }
+      }
+    }
+    if (!container) {
+      container = referencias.find((referencia) => !CARGA_UUID_RE.test(referencia)
+        && referencia !== 'Vinculado' && referencia !== 'Não Vinculado') || '';
+    }
+    return { navio_nome_historico: navio, container_identificacao_historico: container };
+  }
+
+  function finalizarEntregaLocal(carga, navioOuHistorico) {
+    if (!carga) return { navio_nome_historico: '', container_identificacao_historico: '' };
+    const historico = navioOuHistorico && (
+      Object.prototype.hasOwnProperty.call(navioOuHistorico, 'navio_nome_historico')
+      || Object.prototype.hasOwnProperty.call(navioOuHistorico, 'container_identificacao_historico'))
+      ? {
+        navio_nome_historico: textoHistoricoEntrega(navioOuHistorico.navio_nome_historico),
+        container_identificacao_historico: textoHistoricoEntrega(navioOuHistorico.container_identificacao_historico)
+      }
+      : snapshotHistoricoEntrega(carga, navioOuHistorico);
+    carga.navioNomeHistorico = historico.navio_nome_historico;
+    carga.navio_nome_historico = historico.navio_nome_historico;
+    carga.containerIdentificacaoHistorico = historico.container_identificacao_historico;
+    carga.container_identificacao_historico = historico.container_identificacao_historico;
+    carga.navio = '';
+    carga.navioId = null;
+    carga.navio_id = null;
+    carga.container = '';
+    carga.container_id = null;
+    if ('containerId' in carga) carga.containerId = null;
+    carga.herdarNavioDoContainer = false;
+    return historico;
+  }
+  // Mesmo comportamento da transição automática, para testes/WebMCP.
+  window.nexusFinalizarEntregaCarga = finalizarEntregaLocal;
 
   function obterTransicoesAutomaticas(cargas) {
     let naviosLocais = [];
@@ -211,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (localizacao === 'FORA_DO_PORTO' && !['EM_TRANSITO', 'ENTREGUE'].includes(carga.status)) {
         statusNovo = 'EM_TRANSITO';
       }
-      if (statusNovo) transicoes.push({ carga, statusAnterior: carga.status, statusNovo });
+      if (statusNovo) transicoes.push({ carga, statusAnterior: carga.status, statusNovo, navio });
     });
     return transicoes;
   }
@@ -222,6 +356,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (transicoes.length === 0) return false;
 
     const client = window.nexusSupabase || null;
+    // O snapshot precisa ser resolvido ANTES de qualquer vínculo ser liberado.
+    transicoes.forEach((t) => {
+      if (t.statusNovo === 'ENTREGUE') t.historicoEntrega = snapshotHistoricoEntrega(t.carga, t.navio);
+    });
     const locais = transicoes.filter((t) => !client || !CARGA_UUID_RE.test(String(t.carga.rawDbId || '')));
     const remotas = transicoes.filter((t) => client && CARGA_UUID_RE.test(String(t.carga.rawDbId || '')));
     const promessasPorChave = new Map();
@@ -229,11 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     locais.forEach((t) => {
       t.carga.status = t.statusNovo;
-      if (t.statusNovo === 'ENTREGUE') {
-        t.carga.navio = '';
-        t.carga.navioId = null;
-        t.carga.navio_id = null;
-      }
+      if (t.statusNovo === 'ENTREGUE') finalizarEntregaLocal(t.carga, t.historicoEntrega);
     });
 
     remotas.forEach((t) => {
@@ -244,11 +378,16 @@ document.addEventListener('DOMContentLoaded', () => {
         promessasPorChave.set(chave, existente);
         return;
       }
-      const chaveGrupo = JSON.stringify([t.statusAnterior, t.statusNovo]);
+      // Entregas só agrupam quando o snapshot também é o mesmo: cada carga
+      // carrega o seu contêiner histórico, mesmo vindo no mesmo navio.
+      const chaveGrupo = t.statusNovo === 'ENTREGUE'
+        ? JSON.stringify([t.statusAnterior, t.statusNovo, t.historicoEntrega || {}])
+        : JSON.stringify([t.statusAnterior, t.statusNovo]);
       if (!gruposNovos.has(chaveGrupo)) {
         gruposNovos.set(chaveGrupo, {
           statusAnterior: t.statusAnterior,
           statusNovo: t.statusNovo,
+          historicoEntrega: t.historicoEntrega || null,
           ids: new Set(),
           chaves: new Set()
         });
@@ -266,6 +405,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const updatePayload = { status_fluxo: grupo.statusNovo };
         if (grupo.statusNovo === 'ENTREGUE') {
           updatePayload.navio_id = null;
+          updatePayload.container_id = null;
+          updatePayload.navio_nome_historico = grupo.historicoEntrega?.navio_nome_historico || null;
+          updatePayload.container_identificacao_historico = grupo.historicoEntrega?.container_identificacao_historico || null;
         }
         const { data, error } = await client
           .from('cargas')
@@ -306,11 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const resultado = resultadoPorPromessa.get(promessasPorChave.get(chave));
       if (resultado && resultado.atualizados && resultado.atualizados.has(id)) {
         t.carga.status = t.statusNovo;
-        if (t.statusNovo === 'ENTREGUE') {
-          t.carga.navio = '';
-          t.carga.navioId = null;
-          t.carga.navio_id = null;
-        }
+        if (t.statusNovo === 'ENTREGUE') finalizarEntregaLocal(t.carga, t.historicoEntrega);
         houveGravacaoRemota = true;
       }
     });
@@ -334,7 +472,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const id = String(t.carga.rawDbId);
       const chave = JSON.stringify([id, t.statusAnterior, t.statusNovo]);
       const resultado = resultadoPorPromessa.get(promessasPorChave.get(chave));
-      if (resultado && resultado.erro && !resultado.obsoleta) t.carga.status = t.statusNovo;
+      if (resultado && resultado.erro && !resultado.obsoleta) {
+        t.carga.status = t.statusNovo;
+        if (t.statusNovo === 'ENTREGUE') finalizarEntregaLocal(t.carga, t.historicoEntrega);
+      }
     });
 
     return true;
@@ -387,12 +528,74 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Tarefa 4 (Backlog Parte 2): limite visual das tabelas de histórico.
+  // Cada tabela (Entregues/Canceladas/Recusadas) mostra 4 registros e tem o
+  // seu próprio "Mostrar mais/menos" — expandir uma não expande as outras.
+  // É só exibição: a lista completa continua intacta em cargasFluxoList.
+  const LIMITE_HISTORICO_CARGAS = 4;
+  const historicoCargasExpandido = { entregues: false, canceladas: false, recusadas: false };
+  const ultimasCargasHistorico = { entregues: [], canceladas: [], recusadas: [] };
+  const HISTORICO_CARGAS_UI = {
+    entregues: { botao: 'mostrarMaisEntreguesBtn', contador: 'cargasEntreguesContador' },
+    canceladas: { botao: 'mostrarMaisCanceladasBtn', contador: 'cargasCanceladasContador' },
+    recusadas: { botao: 'mostrarMaisRecusadasBtn', contador: 'cargasRecusadasContador' }
+  };
+
+  function atualizarResumoHistoricoCargas(tipo, visiveis, total) {
+    const ui = HISTORICO_CARGAS_UI[tipo];
+    if (!ui) return;
+    const contador = document.getElementById(ui.contador);
+    if (contador) contador.textContent = total > 0 ? `Exibindo ${visiveis} de ${total} registros` : '';
+    const botao = document.getElementById(ui.botao);
+    if (botao) {
+      const temMais = total > LIMITE_HISTORICO_CARGAS;
+      botao.classList.toggle('hidden', !temMais);
+      botao.disabled = !temMais;
+      botao.textContent = historicoCargasExpandido[tipo] ? 'Mostrar menos' : 'Mostrar mais';
+      botao.setAttribute('aria-expanded', String(!!historicoCargasExpandido[tipo]));
+    }
+  }
+
+  function cargasVisiveisHistorico(tipo, lista) {
+    return historicoCargasExpandido[tipo] ? lista : lista.slice(0, LIMITE_HISTORICO_CARGAS);
+  }
+
+  function alternarHistoricoCargas(tipo) {
+    if (!(tipo in historicoCargasExpandido)) return;
+    historicoCargasExpandido[tipo] = !historicoCargasExpandido[tipo];
+    if (tipo === 'entregues') renderCargasEntreguesTable(ultimasCargasHistorico.entregues);
+    if (tipo === 'canceladas') renderCargasCanceladasTable(ultimasCargasHistorico.canceladas);
+    if (tipo === 'recusadas') renderCargasRecusadasTable(ultimasCargasHistorico.recusadas);
+  }
+  // Uso programático (testes/WebMCP): mesmo comportamento do botão da tela.
+  window.nexusAlternarHistoricoCargas = alternarHistoricoCargas;
+
+  Object.keys(HISTORICO_CARGAS_UI).forEach((tipo) => {
+    const botao = document.getElementById(HISTORICO_CARGAS_UI[tipo].botao);
+    if (botao) botao.addEventListener('click', () => alternarHistoricoCargas(tipo));
+  });
+
+  function navioExibicaoEntregue(carga) {
+    return snapshotHistoricoEntrega(carga).navio_nome_historico || textoHistoricoEntrega(carga && carga.navio) || 'Desvinculado';
+  }
+
+  function containerExibicaoEntregue(carga) {
+    const historico = snapshotHistoricoEntrega(carga).container_identificacao_historico;
+    if (historico) return historico;
+    const ativo = textoHistoricoEntrega(carga && carga.container);
+    // container_id (UUID) é vínculo interno, não identificação para a tabela.
+    return ativo && !CARGA_UUID_RE.test(ativo) ? ativo : 'Sem contêiner';
+  }
+
   // Renderização de cargas entregues na Tabela de Cargas Entregues (verde - Tarefa 6)
   function renderCargasEntreguesTable(cargasEntregues = []) {
     const entreguesTableBody = document.getElementById('cargasEntreguesTableBody');
     if (!entreguesTableBody) return;
+    const lista = Array.isArray(cargasEntregues) ? cargasEntregues : [];
+    ultimasCargasHistorico.entregues = lista;
 
-    if (!cargasEntregues || cargasEntregues.length === 0) {
+    if (lista.length === 0) {
+      atualizarResumoHistoricoCargas('entregues', 0, 0);
       entreguesTableBody.innerHTML = `
         <tr>
           <td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhuma carga entregue no sistema.</td>
@@ -401,12 +604,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    entreguesTableBody.innerHTML = cargasEntregues.map(c => `
+    const visiveis = cargasVisiveisHistorico('entregues', lista);
+    atualizarResumoHistoricoCargas('entregues', visiveis.length, lista.length);
+    entreguesTableBody.innerHTML = visiveis.map(c => `
       <tr class="hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 transition-colors">
         <td class="p-3 font-mono font-bold text-emerald-950 dark:text-emerald-200">${esc(c.id)}</td>
         <td class="p-3 font-bold">${esc(c.tipo || c.natureza || 'Carga Geral')}</td>
         <td class="p-3 font-mono text-xs">${esc(c.destino || c.portoDescarga || 'Porto de Destino')}</td>
-        <td class="p-3 font-mono text-xs">${esc(c.container || 'Sem contêiner')} / ${esc(c.navio || 'Desvinculado')}</td>
+        <td class="p-3 font-mono text-xs">${esc(containerExibicaoEntregue(c))} / ${esc(navioExibicaoEntregue(c))}</td>
         <td class="p-3">
           <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100">ENTREGUE</span>
         </td>
@@ -418,8 +623,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderCargasCanceladasTable(cargasCanceladas = []) {
     const canceladasTableBody = document.getElementById('cargasCanceladasTableBody');
     if (!canceladasTableBody) return;
+    const lista = Array.isArray(cargasCanceladas) ? cargasCanceladas : [];
+    ultimasCargasHistorico.canceladas = lista;
 
-    if (!cargasCanceladas || cargasCanceladas.length === 0) {
+    if (lista.length === 0) {
+      atualizarResumoHistoricoCargas('canceladas', 0, 0);
       canceladasTableBody.innerHTML = `
         <tr>
           <td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhuma carga cancelada no sistema.</td>
@@ -428,7 +636,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    canceladasTableBody.innerHTML = cargasCanceladas.map(c => `
+    const visiveis = cargasVisiveisHistorico('canceladas', lista);
+    atualizarResumoHistoricoCargas('canceladas', visiveis.length, lista.length);
+    canceladasTableBody.innerHTML = visiveis.map(c => `
       <tr class="hover:bg-slate-200/60 dark:hover:bg-slate-700/40 transition-colors">
         <td class="p-3 font-mono font-bold text-slate-600 dark:text-slate-300">${esc(c.id)}</td>
         <td class="p-3 font-bold">${esc(c.tipo || 'Carga Geral')}</td>
@@ -445,8 +655,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderCargasRecusadasTable(cargasRecusadas = []) {
     const recusadasTableBody = document.getElementById('cargasRecusadasTableBody');
     if (!recusadasTableBody) return;
+    const lista = Array.isArray(cargasRecusadas) ? cargasRecusadas : [];
+    ultimasCargasHistorico.recusadas = lista;
 
-    if (!cargasRecusadas || cargasRecusadas.length === 0) {
+    if (lista.length === 0) {
+      atualizarResumoHistoricoCargas('recusadas', 0, 0);
       recusadasTableBody.innerHTML = `
         <tr>
           <td colspan="6" class="p-4 text-center text-slate-600 italic">Nenhuma carga recusada no sistema.</td>
@@ -456,7 +669,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const podeAbrirChecklist = window.NexusAuth?.canAccessPage('inspecao.html') === true;
-    recusadasTableBody.innerHTML = cargasRecusadas.map(c => `
+    const visiveis = cargasVisiveisHistorico('recusadas', lista);
+    atualizarResumoHistoricoCargas('recusadas', visiveis.length, lista.length);
+    recusadasTableBody.innerHTML = visiveis.map(c => `
       <tr class="hover:bg-red-100/60 dark:hover:bg-red-950/40 transition-colors">
         <td class="p-3 font-mono font-bold text-red-700 dark:text-red-300">${esc(c.id)}</td>
         <td class="p-3 font-bold">${esc(c.tipo || 'Carga Geral')}</td>
@@ -493,7 +708,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
     let alterado = false;
     cargasFluxoList.forEach(c => {
-      if (!c || c.status === 'CANCELADA' || c.status === 'RECUSADA') return;
+      // ENTREGUE é terminal: seu navio é histórico e nunca pode ser "herdado"
+      // de volta como vínculo ativo a partir do contêiner.
+      if (!c || ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)) return;
       // Herdam: cargas marcadas com a opção de herança OU (legado) cargas com
       // contêiner e sem navio vinculado.
       const deveHerdar = c.herdarNavioDoContainer === true || (c.container && !c.navio);
@@ -899,8 +1116,19 @@ document.addEventListener('DOMContentLoaded', () => {
   preencherSelectDestinoRota();
   carregarRotasCacheCargas().then(() => renderTable());
 
+  // Sem permissão de cadastro, o botão nem aparece e o formulário nunca abre
+  // (a trava definitiva está no submit, logo abaixo).
+  if (!podeCadastrarCarga) {
+    if (toggleFormBtn) toggleFormBtn.classList.add('hidden');
+    if (agendamentoForm) agendamentoForm.classList.add('hidden');
+  }
+
   if (toggleFormBtn && agendamentoForm) {
     toggleFormBtn.addEventListener('click', () => {
+      if (!podeCadastrarCarga) {
+        agendamentoForm.classList.add('hidden');
+        return;
+      }
       agendamentoForm.classList.toggle('hidden');
       if (!agendamentoForm.classList.contains('hidden')) {
         preencherSelectEstivadorResponsavel();
@@ -913,6 +1141,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (agendamentoForm) {
     agendamentoForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      // Backlog Parte 2 — Tarefa 6: sem permissão de cadastro, nada é gravado.
+      // Vale para o envio humano e para envios programáticos (ex.: WebMCP,
+      // que agenda através deste mesmo formulário).
+      if (!podeCadastrarCarga) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Acesso Negado', `Seu cargo (${session.cargo_nome || userCargo}) não tem permissão para cadastrar cargas.`);
+        }
+        return;
+      }
 
       // Backlog 3 (Anotação 3.4) — atribuição do funcionário responsável:
       // gestor escolhe na lista de funcionários em escala; funcionário
@@ -934,6 +1172,9 @@ document.addEventListener('DOMContentLoaded', () => {
           cargo: (proprio && proprio.cargo) || session.cargo
         };
       }
+      // O responsável só é persistido como estivador se o cargo for ESTIVADOR;
+      // nos demais casos ele fica apenas como agendador (agendamentos).
+      const responsavelEhEstivador = ehCargoEstivador(estivadorResp && estivadorResp.cargo);
 
       const tipo = document.getElementById('agTipoCarga').value;
       const tipoCompartilhado = window.getNexusTipoCarga?.(tipo);
@@ -1062,9 +1303,14 @@ document.addEventListener('DOMContentLoaded', () => {
           created_at: resCarga.created_at || nowIso,
           dataPrevista,
           data_prevista_entrega: dataPrevista,
-          estivador_id: estivadorResp ? estivadorResp.id : null,
-          estivadorMatricula: estivadorResp ? estivadorResp.matricula : null,
-          estivador: estivadorResp ? estivadorResp.nome : null
+          // Espelha o que será relido do banco: estivador só se for ESTIVADOR;
+          // o responsável pelo agendamento fica registrado à parte (agendado_por).
+          estivador_id: responsavelEhEstivador && estivadorResp ? estivadorResp.id : null,
+          estivadorMatricula: responsavelEhEstivador && estivadorResp ? estivadorResp.matricula : null,
+          estivador: responsavelEhEstivador && estivadorResp ? estivadorResp.nome : null,
+          agendado_por: estivadorResp ? estivadorResp.id : null,
+          responsavelMatricula: estivadorResp ? estivadorResp.matricula : null,
+          responsavel: estivadorResp ? estivadorResp.nome : null
         };
 
         const { error: agendamentoErr } = await window.nexusSupabase.from('agendamentos').insert({
@@ -1086,16 +1332,20 @@ document.addEventListener('DOMContentLoaded', () => {
           throw new Error(`Não foi possível registrar o agendamento: ${agendamentoErr.message}.${detalheRollback}`);
         }
 
-        if (estivadorResp && isUuid.test(String(estivadorResp.id)) && isUuid.test(String(resCarga.id))) {
+        // estivador_cargas só para responsável ESTIVADOR (vínculo de movimentação).
+        // Responsável de outro cargo já foi registrado em agendamentos.agendado_por
+        // acima — gravá-lo também como "estivador" criava o bloqueio indevido de
+        // exclusão em Gestão de Pessoas (Tarefa 1, Backlog Parte 2).
+        if (responsavelEhEstivador && estivadorResp && isUuid.test(String(estivadorResp.id)) && isUuid.test(String(resCarga.id))) {
           try {
             const { error: attrErr } = await window.nexusSupabase.from('estivador_cargas').upsert({
               estivador_id: estivadorResp.id,
               carga_id: resCarga.id,
               data_inicio: nowIso
             }, { onConflict: 'estivador_id,carga_id' });
-            if (attrErr) console.warn('[NexusPort] Falha ao persistir a atribuição do responsável:', attrErr);
+            if (attrErr) console.warn('[NexusPort] Falha ao persistir a atribuição do estivador:', attrErr);
           } catch (attrErr) {
-            console.warn('[NexusPort] Falha ao persistir a atribuição do responsável:', attrErr);
+            console.warn('[NexusPort] Falha ao persistir a atribuição do estivador:', attrErr);
           }
         }
 
@@ -1279,7 +1529,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!window.nexusTiposCargaCompativeis?.(targetCargaParaVinculacao, cont)) return;
       // Tarefa 5: volume já ocupado em cada contêiner, com limite de 75 m³
       const volCargasNoCont = cargasFluxoList
-        .filter(c => c.status !== 'CANCELADA' && c.status !== 'RECUSADA' && (
+        .filter(c => !['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status) && (
           (c.container && (c.container === cont.identificacao || c.container === cont.id)) ||
           (c.container_id && (c.container_id === cont.id || c.container_id === cont.rawDbId))
         ))
@@ -1901,6 +2151,23 @@ document.addEventListener('DOMContentLoaded', () => {
         window.mostrarFeedback('sucesso', 'Recebimento Registrado', `Recebimento físico da carga ${idCarga} registrado pelo Conferente em ${carga.dataChegada}.`);
       }
     } else if (acao === 'PRONTA') {
+      // Item 4: A opção "Pronta" só é permitida se a carga já tiver sido vinculada a um contêiner
+      if (!carga.container && !carga.container_id) {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', `BLOQUEIO DE SEGURANÇA (Item 4): A carga ${idCarga} só pode ser alterada para "Pronta" se já tiver sido vinculada a um contêiner! Use o botão "Vincular" primeiro.`);
+        }
+        return;
+      }
+      // Backlog Parte 2 — Tarefa 9: vínculo não basta — a carga precisa ter
+      // sido movimentada até o contêiner e a movimentação concluída. Vale
+      // para todos os cargos (a supervisão não pula a etapa física).
+      if (!cargaAlocadaNoContainer(carga)) {
+        const contRef = carga.container || carga.container_id;
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('alerta', 'Movimentação até o Contêiner Pendente', `A carga ${idCarga} está vinculada ao contêiner ${contRef}, mas ainda não foi movimentada até ele. Use "Movimentar" com destino "Contêiner ${contRef}", conclua a movimentação em Embarcações & GPS e só então marque como pronta.`);
+        }
+        return;
+      }
       if (exigeEtapasPronta && !requisitosProntaConcluidos(carga)) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Etapas Pendentes', 'Conclua o recebimento, a inspeção, a vinculação ao contêiner e navio e as movimentações pendentes antes de marcar a carga como pronta.');
         return;
@@ -1909,13 +2176,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!isArrumadorRole) {
         if (window.mostrarFeedback) {
           window.mostrarFeedback('erro', 'Acesso Restrito', 'Acesso Restrito (RF 1.8): Apenas Arrumadores e Consertadores (ou Supervisão/Direção) podem alterar o status da carga para Pronta para Entrega!');
-        }
-        return;
-      }
-      // Item 4: A opção "Pronta" só é permitida se a carga já tiver sido vinculada a um contêiner
-      if (!carga.container && !carga.container_id) {
-        if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Vínculo Obrigatório', `BLOQUEIO DE SEGURANÇA (Item 4): A carga ${idCarga} só pode ser alterada para "Pronta" se já tiver sido vinculada a um contêiner! Use o botão "Vincular" primeiro.`);
         }
         return;
       }

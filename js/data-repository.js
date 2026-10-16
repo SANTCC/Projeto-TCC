@@ -43,7 +43,10 @@
   function lerCacheCargas() {
     try {
       const lista = JSON.parse(window.localStorage.getItem('nexus_cargas_fluxo') || '[]');
-      return Array.isArray(lista) ? lista : [];
+      if (!Array.isArray(lista)) return [];
+      // Cache legado pode ter carga ENTREGUE ainda com vínculo ativo: a leitura
+      // já devolve snapshot + vínculos liberados, sem reescrever o cache aqui.
+      return lista.map((carga) => aplicarHistoricoEntrega(Object.assign({}, carga)));
     } catch (error) {
       console.warn('[NexusRepository] Cache local de cargas inválido:', error);
       return [];
@@ -52,6 +55,58 @@
 
   function clonarCargas(lista) {
     return Array.isArray(lista) ? lista.map((carga) => Object.assign({}, carga)) : [];
+  }
+
+  // Tarefa 5 (Backlog Parte 2): a entrega libera navio_id/container_id ativos,
+  // mas preserva nome/identificação em snapshots históricos. Estes helpers são
+  // a tradução única entre o formato do banco (snake_case) e o do cache local.
+  const CARGA_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function textoHistoricoCarga(valor) {
+    return typeof valor === 'string' ? valor.trim() : '';
+  }
+
+  function navioHistoricoDe(carga) {
+    if (!carga) return '';
+    return textoHistoricoCarga(carga.navioNomeHistorico)
+      || textoHistoricoCarga(carga.navio_nome_historico)
+      || textoHistoricoCarga(carga.navioHistorico)
+      || textoHistoricoCarga(carga.navio_historico);
+  }
+
+  function containerHistoricoDe(carga) {
+    if (!carga) return '';
+    const snapshot = textoHistoricoCarga(carga.containerIdentificacaoHistorico)
+      || textoHistoricoCarga(carga.container_identificacao_historico)
+      || textoHistoricoCarga(carga.containerHistorico)
+      || textoHistoricoCarga(carga.container_historico);
+    if (snapshot) return snapshot;
+    // Antes da entrega, `container` pode ser a própria identificação textual.
+    // UUID é chave ativa, não identificação para exibir como histórico.
+    const referencias = [carga.containerIdentificacao, carga.container_identificacao, carga.container];
+    for (const referencia of referencias) {
+      const texto = textoHistoricoCarga(referencia);
+      if (texto && !CARGA_UUID_RE.test(texto) && texto !== 'Vinculado' && texto !== 'Não Vinculado') return texto;
+    }
+    return '';
+  }
+
+  function aplicarHistoricoEntrega(carga, navioNome) {
+    if (!carga || String(carga.status || carga.status_fluxo || '').toUpperCase() !== 'ENTREGUE') return carga;
+    const navio = navioHistoricoDe(carga) || textoHistoricoCarga(navioNome) || textoHistoricoCarga(carga.navio);
+    const container = containerHistoricoDe(carga);
+    carga.navioNomeHistorico = navio;
+    carga.navio_nome_historico = navio;
+    carga.containerIdentificacaoHistorico = container;
+    carga.container_identificacao_historico = container;
+    carga.navio = '';
+    carga.navioId = null;
+    carga.navio_id = null;
+    carga.container = '';
+    carga.container_id = null;
+    if ('containerId' in carga) carga.containerId = null;
+    carga.herdarNavioDoContainer = false;
+    return carga;
   }
 
   const NexusRepository = {
@@ -68,6 +123,11 @@
       this._cargasRevision += 1;
       this._cargasInFlight.clear();
       return this._cargasRevision;
+    },
+
+    /** Normaliza uma carga ENTREGUE: snapshot histórico + vínculos ativos liberados. */
+    prepararHistoricoEntrega: function (carga, navioNome) {
+      return aplicarHistoricoEntrega(carga, navioNome);
     },
 
 
@@ -143,6 +203,18 @@
 
     /**
      * EXCLUIR FUNCIONÁRIO
+     *
+     * Regra (Tarefa 1 — Backlog Parte 2): `estivador_cargas` é o vínculo de
+     * movimentação do cargo ESTIVADOR (schema: ON DELETE CASCADE, ou seja,
+     * vínculo operacional descartável, não histórico). O agendamento de cargas
+     * registra o RESPONSÁVEL pela carga nessa tabela apenas quando ele é
+     * estivador; para os demais cargos o responsável fica em
+     * `agendamentos.agendado_por` (ON DELETE RESTRICT, histórico preservado).
+     * Por isso a exclusão NÃO pode bloquear um funcionário de outro cargo só
+     * por existir linha em `estivador_cargas` (atribuição indevida legada):
+     * esse vínculo é desfeito junto com a exclusão. Bloqueiam de verdade:
+     * estivador com cargas ainda não finalizadas, delegações de supervisão e
+     * vínculos RESTRICT do banco (agendamentos, inspeções, logs etc.).
      */
     deleteFuncionario: async function (matricula) {
       const client = this.getSupabase();
@@ -150,22 +222,62 @@
         return { ok: false, erro: 'Sem conexão com o banco de dados. O funcionário não foi excluído.' };
       }
       try {
-        const busca = await client.from('funcionarios').select('id').eq('matricula', matricula);
+        const busca = await client.from('funcionarios').select('id, cargo').eq('matricula', matricula);
         if (busca.error) return { ok: false, erro: 'não foi possível consultar o funcionário (' + (busca.error.message || 'erro') + ').' };
-        const id = busca.data && busca.data[0] && busca.data[0].id;
+        const registro = busca.data && busca.data[0];
+        const id = registro && registro.id;
         if (!id) {
           // Não existe no banco: só o cache local precisa ser limpo.
           this._removerFuncionarioLocal(matricula);
           return { ok: true, removido: 0 };
         }
 
-        // Vínculos que o banco apagaria em cascata (dados operacionais de cargas e de supervisão).
-        // Excluir o funcionário com esses vínculos é bloqueado, com justificativa.
-        const estivador = await client.from('estivador_cargas').select('id').eq('estivador_id', id);
+        const normalizarCargo = (cargo) => String(cargo || '')
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+        const cargoFuncionario = normalizarCargo(registro.cargo);
+        // Sem cargo conhecido (registro legado), trata como possível estivador
+        // por segurança; com cargo conhecido, só ESTIVADOR é estivador.
+        const podeSerEstivador = !cargoFuncionario || cargoFuncionario === 'ESTIVADOR';
+
+        const estivador = await client.from('estivador_cargas').select('id, carga_id').eq('estivador_id', id);
         if (estivador.error) return { ok: false, erro: 'não foi possível verificar os vínculos de carga (' + (estivador.error.message || 'erro') + ').' };
-        if (estivador.data && estivador.data.length > 0) {
-          return { ok: false, bloqueio: true, erro: 'o funcionário está vinculado a ' + estivador.data.length + ' carga(s) como estivador. Desvincule-o das cargas antes de excluí-lo.' };
+        const vinculosEstivador = Array.isArray(estivador.data) ? estivador.data : [];
+
+        if (vinculosEstivador.length > 0 && podeSerEstivador) {
+          // Estivador só é bloqueado por carga ainda não finalizada. Carga
+          // ENTREGUE/CANCELADA/RECUSADA é histórico: o vínculo operacional é
+          // desfeito na exclusão (CASCADE no banco) sem apagar a carga.
+          const STATUS_FINAIS = ['ENTREGUE', 'CANCELADA', 'RECUSADA'];
+          let bloqueantes = vinculosEstivador.length; // conservador se não confirmar os status
+          try {
+            const idsCargas = vinculosEstivador.map(v => v.carga_id).filter(Boolean);
+            if (idsCargas.length > 0) {
+              const cargasVinculadas = await client.from('cargas').select('id, status_fluxo').in('id', idsCargas);
+              if (!cargasVinculadas.error && Array.isArray(cargasVinculadas.data)) {
+                const finalizadas = new Set(
+                  cargasVinculadas.data
+                    .filter(c => STATUS_FINAIS.includes(String(c.status_fluxo || '').toUpperCase()))
+                    .map(c => String(c.id))
+                );
+                bloqueantes = vinculosEstivador.filter(v => !finalizadas.has(String(v.carga_id))).length;
+              }
+            }
+          } catch (e) { /* sem confirmação de status: mantém o bloqueio conservador */ }
+          if (bloqueantes > 0) {
+            return { ok: false, bloqueio: true, erro: 'o funcionário está vinculado a ' + bloqueantes + ' carga(s) ativa(s) como estivador. Desvincule-o das cargas antes de excluí-lo.' };
+          }
         }
+
+        // Histórico de agendamento (agendamentos.agendado_por, RESTRICT):
+        // quem agendou cargas não é apagado, para preservar a auditoria de
+        // quem registrou cada carga. A mensagem precisa dizer isso — não é
+        // vínculo de estivador.
+        const agendamentos = await client.from('agendamentos').select('id').eq('agendado_por', id);
+        if (agendamentos.error) return { ok: false, erro: 'não foi possível verificar os agendamentos do funcionário (' + (agendamentos.error.message || 'erro') + ').' };
+        if (agendamentos.data && agendamentos.data.length > 0) {
+          return { ok: false, bloqueio: true, erro: 'o funcionário foi registrado como responsável pelo agendamento de ' + agendamentos.data.length + ' carga(s). Esse histórico é preservado e impede a exclusão; desative o funcionário em vez de excluí-lo.' };
+        }
+
         const delegTitular = await client.from('delegacoes_supervisor').select('id').eq('supervisor_titular_id', id);
         const delegSubst = await client.from('delegacoes_supervisor').select('id').eq('substituto_id', id);
         if (delegTitular.error || delegSubst.error) {
@@ -194,6 +306,16 @@
             ok: false,
             erro: 'o banco de dados não removeu nenhuma linha (nenhum registro afetado ou bloqueio por política RLS).'
           };
+        }
+        // O banco remove estivador_cargas em cascata; a limpeza explícita cobre
+        // vínculos legados e mantém o mesmo resultado em qualquer ambiente.
+        // Falha aqui não desfaz a exclusão já confirmada pelo banco.
+        if (vinculosEstivador.length > 0) {
+          try {
+            await client.from('estivador_cargas').delete().eq('estivador_id', id);
+          } catch (limpezaErr) {
+            console.warn('[NexusRepository] Funcionário excluído; limpeza de estivador_cargas falhou:', limpezaErr);
+          }
         }
         this._removerFuncionarioLocal(matricula);
         return { ok: true, removido: 1 };
@@ -254,7 +376,14 @@
             const vinculo = Array.isArray(c.estivador_cargas) && c.estivador_cargas.length > 0
               ? c.estivador_cargas[0]
               : null;
-            const isEntregue = (c.status_fluxo === 'ENTREGUE' || c.status_fluxo === 'CANCELADA' || c.status_fluxo === 'RECUSADA');
+            const status = c.status_fluxo || 'AGENDAMENTO';
+            const finalizada = ['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(status);
+            const entregue = status === 'ENTREGUE';
+            // Snapshot gravado na entrega; para linha legada ainda vinculada,
+            // o join com navios é a última fonte disponível do nome histórico.
+            const navioNomeHistorico = navioHistoricoDe(c)
+              || (entregue && c.navios ? textoHistoricoCarga(c.navios.nome) : '');
+            const containerIdentificacaoHistorico = entregue ? containerHistoricoDe(c) : '';
             return {
               id: c.qr_code_url ? c.qr_code_url.replace('QR-', '') : `CRG-${c.id}`,
               tipo: window.getNexusTipoCarga?.(c.tipo_carga_id)?.nome || c.natureza || '',
@@ -265,10 +394,16 @@
               natureza: c.natureza || 'Geral',
               portoDescarga: c.porto_descarga || 'Terminal STS-01',
               destino: c.destino || 'Destino Geral',
-              status: c.status_fluxo || 'AGENDAMENTO',
-              container: c.container_id || '',
-              navio: isEntregue ? '' : ((c.navios && c.navios.nome) ? c.navios.nome : ''),
-              navioId: isEntregue ? null : (c.navio_id || null),
+              status,
+              container: finalizada ? '' : (c.container_id || ''),
+              container_id: finalizada ? null : (c.container_id || null),
+              containerIdentificacaoHistorico,
+              container_identificacao_historico: containerIdentificacaoHistorico,
+              navio: finalizada ? '' : ((c.navios && c.navios.nome) ? c.navios.nome : ''),
+              navioId: finalizada ? null : (c.navio_id || null),
+              navio_id: finalizada ? null : (c.navio_id || null),
+              navioNomeHistorico,
+              navio_nome_historico: navioNomeHistorico,
               qrCode: c.qr_code_url || `QR-CRG-${c.id}`,
               motivoCancelamento: c.motivo_recusa || null,
               rawDbId: c.id,
@@ -306,6 +441,8 @@
      * SALVAR CARGA
      */
     saveCarga: async function (carga) {
+      const entregue = String(carga && carga.status || '').toUpperCase() === 'ENTREGUE';
+      if (entregue) aplicarHistoricoEntrega(carga);
       const client = this.getSupabase();
       if (client) {
         try {
@@ -318,8 +455,10 @@
             destino: carga.destino,
             status_fluxo: carga.status,
             qr_code_url: carga.qrCode || `QR-${carga.id}`,
-            container_id: carga.container || null,
-            navio_id: carga.navioId || carga.navio_id || null,
+            container_id: entregue ? null : (carga.container_id || carga.container || null),
+            navio_id: entregue ? null : (carga.navioId || carga.navio_id || null),
+            navio_nome_historico: entregue ? (navioHistoricoDe(carga) || null) : null,
+            container_identificacao_historico: entregue ? (containerHistoricoDe(carga) || null) : null,
             motivo_recusa: carga.motivoCancelamento || null
           };
 

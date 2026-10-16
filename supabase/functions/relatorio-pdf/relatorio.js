@@ -93,11 +93,29 @@ export function rotulo(grupo, valor) {
 
 /**
  * Converte a linha de `cargas` (com `containers` e, dentro dele, `navios`) em um modelo estável.
- * O navio chega pelo contêiner: `cargas` não tem navio_id.
+ * Carga ENTREGUE não tem mais vínculo ativo: navio/contêiner vêm dos snapshots
+ * históricos gravados na entrega (navio_nome_historico /
+ * container_identificacao_historico), sem inventar os demais dados cadastrais.
  */
 export function montarModelo(linha) {
-  const cont = linha.containers || null;
-  const navio = cont && cont.navios ? cont.navios : null;
+  const cont = linha.containers || (linha.container_identificacao_historico
+    ? {
+      numero_identificacao: linha.container_identificacao_historico,
+      material_carregado: null,
+      estado: null,
+      data_fabricacao: null,
+      tempo_uso_referencia: null,
+      navios: null
+    }
+    : null);
+  const navio = (cont && cont.navios) || linha.navios || (linha.navio_nome_historico
+    ? {
+      nome: linha.navio_nome_historico,
+      numero_imo: null,
+      porto_origem: null,
+      porto_destino: null
+    }
+    : null);
   return {
     versao: VERSAO_MODELO,
     carga: {

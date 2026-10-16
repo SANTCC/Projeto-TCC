@@ -94,8 +94,10 @@
     const f = filtros || {};
     return lista.filter((c) => {
       if (f.status && c.status !== f.status) return false;
-      if (f.navio && !contem(c.navio, f.navio)) return false;
-      if (f.container && !contem(c.container, f.container)) return false;
+      if (f.navio && !(contem(c.navio, f.navio)
+        || contem(c.navioNomeHistorico, f.navio) || contem(c.navio_nome_historico, f.navio))) return false;
+      if (f.container && !(contem(c.container, f.container)
+        || contem(c.containerIdentificacaoHistorico, f.container) || contem(c.container_identificacao_historico, f.container))) return false;
       if (f.tipo && !(contem(c.tipo, f.tipo) || contem(c.natureza, f.tipo))) return false;
       if (f.data_inicio || f.data_fim) {
         const bruto = c.data_cadastro || c.created_at || c.data_entrada || c.dataAgendamento || c.dataChegada;
@@ -125,6 +127,8 @@
       destino: c.destino || null,
       container: c.container || null,
       navio: c.navio || null,
+      container_historico: c.containerIdentificacaoHistorico || c.container_identificacao_historico || null,
+      navio_historico: c.navioNomeHistorico || c.navio_nome_historico || null,
       guindaste: c.guindasteDesignado || null,
       codigo_qr: c.qrCode || `QR-${c.id}`,
       chegada: dataHora(c.dataChegada),
@@ -359,7 +363,7 @@
 
   function disponibilidadeContainer(identificacao, listaCargas) {
     const usado = (listaCargas || [])
-      .filter((c) => c.status !== 'CANCELADA' && c.status !== 'RECUSADA' && c.container === identificacao)
+      .filter((c) => !['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status) && c.container === identificacao)
       .reduce((soma, c) => soma + volumeNumero(c.volume), 0);
     return Math.max(0, CAPACIDADE_CONTAINER_M3 - usado);
   }

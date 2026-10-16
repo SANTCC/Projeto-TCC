@@ -70,20 +70,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (simulateBtn && simulatedInput) {
-    simulateBtn.addEventListener('click', () => {
+    simulateBtn.addEventListener('click', async () => {
       const val = simulatedInput.value.trim();
       if (!val) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campo Obrigatório', 'Informe o texto do QR Code para simular.');
         return;
       }
-      processarScan(val);
-      simulatedInput.value = '';
+      const resultado = await processarScan(val);
+      // Só limpa o campo após uma leitura válida: código não localizado fica
+      // visível para o operador corrigir a digitação e tentar de novo.
+      if (resultado && resultado.encontrado) simulatedInput.value = '';
     });
   }
 
   async function processarScan(qrCodeText) {
-    if (window.NexusAnalytics) window.NexusAnalytics.track('qr_lido');
-    let rawCode = qrCodeText;
+    let rawCode = String(qrCodeText || '').trim();
+    if (!rawCode) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Campo Obrigatório', 'Informe o texto do QR Code para simular.');
+      return { encontrado: false, codigo_lido: '', status: 'NAO_LOCALIZADO' };
+    }
     if (rawCode.includes('?scan=') || rawCode.includes('?qr=')) {
       try {
         const url = new URL(rawCode, window.location.origin);
@@ -115,7 +120,9 @@ document.addEventListener('DOMContentLoaded', () => {
             destino: cDb.destino || 'Destino Geral',
             status: cDb.status_fluxo || 'AGENDAMENTO',
             container: cDb.containers ? cDb.containers.numero_identificacao : (cDb.container_id || ''),
-            navio: cDb.navios ? cDb.navios.nome : ''
+            navio: cDb.navios ? cDb.navios.nome : '',
+            containerIdentificacaoHistorico: cDb.container_identificacao_historico || '',
+            navioNomeHistorico: cDb.navio_nome_historico || ''
           };
         } else if (rawCode.toUpperCase().includes('CONT') || rawCode.toUpperCase().includes('GND')) {
           const { data: contDb } = await window.nexusSupabase.from('containers').select('*').or(`numero_identificacao.eq.${rawCode},numero_identificacao.eq.${rawCode.replace('CONT-', '')}`).maybeSingle();
@@ -143,6 +150,29 @@ document.addEventListener('DOMContentLoaded', () => {
       match = localCargas.find(c => c.id === rawCode || c.qrCode === rawCode || c.id === rawCode.replace('QR-', ''));
     }
 
+    // Tarefa 3 (Backlog Parte 2): leitura bem-sucedida SÓ para código válido/
+    // existente (banco ou cache). Qualquer outro texto — inclusive na
+    // simulação manual — é leitura não realizada: sem cartão de resultado,
+    // sem registro em leituras_qr_code/auditoria e sem redirecionamento.
+    // Vale para câmera e simulação, pois os dois caminhos usam processarScan.
+    if (!match) {
+      if (resultCard) resultCard.classList.add('hidden');
+      targetRedirectUrl = 'cargas.html';
+      targetChecklistUrl = 'inspecao.html';
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'QR Code Não Localizado', `O código "${rawCode}" não corresponde a nenhuma carga ou contêiner cadastrado. Verifique o código e tente novamente — a leitura não foi registrada.`);
+      }
+      return {
+        encontrado: false,
+        codigo_lido: rawCode,
+        id: rawCode,
+        status: 'NAO_LOCALIZADO',
+        acao_sugerida: 'Nenhuma ação disponível: código não cadastrado no sistema.'
+      };
+    }
+
+    if (window.NexusAnalytics) window.NexusAnalytics.track('qr_lido');
+
     const displayId = match ? match.id : rawCode;
     const displayTipo = match ? match.tipo : 'Não identificado';
     const displayNatureza = match ? (match.natureza || 'Geral') : 'Não informada';
@@ -150,9 +180,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const displayValor = match ? (match.valor || 'R$ 0,00') : 'R$ 0,00';
     const displayPorto = match ? (match.portoDescarga || 'Não informado') : 'Não informado';
     const displayDestino = match ? (match.destino || 'Não informado') : 'Não informado';
-    const displayContainer = match ? (match.container || 'Não vinculado') : 'Não vinculado';
-    const displayNavio = match ? (match.navio || 'Não vinculado') : 'Não vinculado';
     const displayStatus = match ? (match.status || 'NÃO_LOCALIZADO') : 'NÃO_LOCALIZADO';
+    const containerHistorico = match
+      ? (match.containerIdentificacaoHistorico || match.container_identificacao_historico || match.containerHistorico || '')
+      : '';
+    const navioHistorico = match
+      ? (match.navioNomeHistorico || match.navio_nome_historico || match.navioHistorico || '')
+      : '';
+    const displayContainer = match
+      ? (match.container || (displayStatus === 'ENTREGUE' && containerHistorico ? `${containerHistorico} (histórico)` : 'Não vinculado'))
+      : 'Não vinculado';
+    const displayNavio = match
+      ? (match.navio || (displayStatus === 'ENTREGUE' && navioHistorico ? `${navioHistorico} (histórico)` : 'Não vinculado'))
+      : 'Não vinculado';
 
     const displayIdParam = encodeURIComponent(String(displayId));
     targetChecklistUrl = `inspecao.html?carga=${displayIdParam}`;
@@ -267,6 +307,8 @@ document.addEventListener('DOMContentLoaded', () => {
       destino: displayDestino,
       container: displayContainer,
       navio: displayNavio,
+      container_historico: containerHistorico || null,
+      navio_historico: navioHistorico || null,
       status: displayStatus,
       acao_sugerida: msgAcao
     };

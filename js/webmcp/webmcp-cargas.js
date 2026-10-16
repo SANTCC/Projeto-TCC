@@ -379,7 +379,7 @@
   const prontaEntrega = {
     nome: 'marcar_pronta_entrega',
     titulo: 'Marcar pronta para entrega',
-    descricao: 'Marca a carga como PRONTA_PARA_ENTREGA. Para Arrumador e Inspetor, exige as etapas anteriores concluídas, incluindo contêiner, navio e movimentações. Só Arrumador, Inspetor ou Direção.',
+    descricao: 'Marca a carga como PRONTA_PARA_ENTREGA. Exige contêiner vinculado E movimentação física concluída até ele (Backlog Parte 2 — Tarefa 9); para Arrumador e Inspetor, exige também as demais etapas anteriores concluídas, incluindo navio e movimentações. Só Arrumador, Inspetor ou Direção.',
     anotacoes: { consequentialHint: true },
     cargos: ['ARRUMADOR_CONSERTADOR', 'INSPETOR', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'],
     permissao: 'ALTERAR_PRONTA_ENTREGA',
@@ -389,12 +389,18 @@
       if (!carga) return naoEncontrada(args.id);
       const estado = estadoEsperado(carga, ['ARMAZENAGEM']);
       if (estado) return estado;
+      if (!carga.container && !carga.container_id) return { codigo: 'VINCULO_OBRIGATORIO', mensagem: 'A carga precisa estar vinculada a um contêiner antes de ficar pronta (Item 4).' };
+      // Backlog Parte 2 — Tarefa 9: vínculo sem movimentação concluída até o
+      // contêiner não basta (mesma decisão da tela, via helper da página).
+      if (typeof window.nexusCargaAlocadaNoContainer === 'function' && !window.nexusCargaAlocadaNoContainer(carga)) {
+        const contRef = carga.container || carga.container_id;
+        return { codigo: 'MOVIMENTACAO_PENDENTE', mensagem: `A carga ${carga.id} está vinculada ao contêiner ${contRef}, mas ainda não foi movimentada até ele. Movimente com destino "Contêiner ${contRef}" e conclua a movimentação antes de marcar como pronta.` };
+      }
       if (['ARRUMADOR_CONSERTADOR', 'INSPETOR'].includes(window.NexusAuth?.getSession()?.cargo)) {
         if (typeof window.nexusEtapasProntaConcluidas !== 'function' || !window.nexusEtapasProntaConcluidas(carga)) {
           return { codigo: 'ETAPAS_PENDENTES', mensagem: 'Conclua a inspeção, os vínculos de contêiner e navio e as movimentações pendentes antes de marcar a carga como pronta.' };
         }
       }
-      if (!carga.container && !carga.container_id) return { codigo: 'VINCULO_OBRIGATORIO', mensagem: 'A carga precisa estar vinculada a um contêiner antes de ficar pronta (Item 4).' };
       return null;
     },
     resumo: (args) => [`Marcar a carga ${args.id} como Pronta para Entrega.`],

@@ -51,7 +51,9 @@ async function abrir(pagina, storage = {}, cargo = 'ARRUMADOR_CONSERTADOR') {
   assert.equal(ler().length, 2);
   m.close();
 
-  const base = {id:'CRG-1', status:'ARMAZENAGEM', container:'CONT-1', navio:'Navio Teste', resultadoInspecao:'APROVADA'};
+  // Backlog Parte 2 — Tarefa 9: "pronta" também exige a movimentação física
+  // concluída até o contêiner (portoDescarga = "Contêiner CONT-1").
+  const base = {id:'CRG-1', status:'ARMAZENAGEM', container:'CONT-1', portoDescarga:'Contêiner CONT-1', navio:'Navio Teste', resultadoInspecao:'APROVADA'};
   for (const mudanca of [{status:'AGENDAMENTO'}, {status:'RECEBIMENTO_INSPECAO'}, {status:'RECUSADA'}, {status:'EM_TRANSITO'}, {container:''}, {navio:''}, {movimentacaoPendente:{destino:'Setor B'}}, {resultadoInspecao:'RECUSADA'}, {}]) {
     const c = {...base, ...mudanca};
     const w = await abrir('cargas', {nexus_cargas_fluxo:[c]});

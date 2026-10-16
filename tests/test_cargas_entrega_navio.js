@@ -85,8 +85,18 @@ async function main() {
     check('CRG-2026-304 (outro navio, fora do porto) continua EM_TRANSITO', st('CRG-2026-304') === 'EM_TRANSITO', st('CRG-2026-304'));
     check('CRG-2026-305 (sem navio) continua EM_TRANSITO', st('CRG-2026-305') === 'EM_TRANSITO', st('CRG-2026-305'));
 
+    const entregueLocal = locais.find((c) => c.id === 'CRG-2026-303') || {};
+    check('entrega libera vínculos ativos e preserva o navio histórico localmente',
+      entregueLocal.navio === '' && entregueLocal.navioId === null && entregueLocal.container === ''
+      && entregueLocal.navioNomeHistorico === 'Jaguar',
+      JSON.stringify(entregueLocal));
+
     const dbStatus = (n) => (banco.tabelas.cargas.find((c) => c.id === UUID(n)) || {}).status_fluxo;
+    const dbEntregue = banco.tabelas.cargas.find((c) => c.id === UUID(1)) || {};
     check('banco: carga 303 gravada como ENTREGUE', dbStatus(1) === 'ENTREGUE', dbStatus(1));
+    check('banco: entrega grava snapshot e libera navio/contêiner ativos',
+      dbEntregue.navio_id === null && dbEntregue.container_id === null && dbEntregue.navio_nome_historico === 'Jaguar',
+      JSON.stringify(dbEntregue));
     check('banco: cargas 304 e 305 não foram alteradas', dbStatus(2) === 'EM_TRANSITO' && dbStatus(3) === 'EM_TRANSITO', `${dbStatus(2)} / ${dbStatus(3)}`);
 
     const updates = banco.log.filter((l) => l.tabela === 'cargas' && l.op === 'update');

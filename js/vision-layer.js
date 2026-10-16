@@ -221,7 +221,8 @@
               volume: c.volume || 0,
               valor: c.valor_declarado || 0,
               status: c.status_fluxo || 'ARMAZENAGEM',
-              container_id: c.container_id || 'N/A',
+              container_id: c.container_identificacao_historico || c.container_id || 'N/A',
+              navio: c.navio_nome_historico || 'N/A',
               porto_descarga: c.porto_descarga || 'N/A',
               data: c.created_at || c.data_entrada || new Date().toISOString()
             }));
@@ -240,13 +241,14 @@
           volume: c.volume || 0,
           valor: c.valor || 0,
           status: c.status || 'ARMAZENAGEM',
-          container_id: c.container || c.container_id || 'N/A',
+          container_id: c.containerIdentificacaoHistorico || c.container_identificacao_historico || c.container || c.container_id || 'N/A',
+          navio: c.navioNomeHistorico || c.navio_nome_historico || c.navio || 'N/A',
           porto_descarga: c.portoDescarga || c.porto_descarga || 'N/A',
           data: c.dataChegada || new Date().toISOString()
         }));
       }
 
-      const headers = ['ID', 'Natureza/Tipo', 'Peso (t)', 'Volume (m3)', 'Valor Declarado (R$)', 'Status Fluxo', 'Container ID', 'Porto Descarga', 'Data Registro'];
+      const headers = ['ID', 'Natureza/Tipo', 'Peso (t)', 'Volume (m3)', 'Valor Declarado (R$)', 'Status Fluxo', 'Container ID', 'Navio', 'Porto Descarga', 'Data Registro'];
 
       // Codificação segura de célula CSV: neutraliza injeção de fórmula
       // (=, +, -, @, TAB, CR) e aspas/quebras de linha vindas dos dados.
@@ -265,6 +267,7 @@
         csvCell(c.valor),
         csvCell(c.status),
         csvCell(c.container_id),
+        csvCell(c.navio),
         csvCell(c.porto_descarga),
         csvCell(c.data)
       ]);
