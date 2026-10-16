@@ -493,10 +493,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Sincronização viva e atualização automática ao registrar produtividade / alterar dados (Tarefa 6)
-  window.addEventListener('nexus_data_changed', () => {
-    popularCargas();
-    renderProdutividadeTable();
+  // Sincronização viva e atualização automática ao registrar produtividade / alterar dados (Tarefa 6 / L-06)
+  const ENTIDADES_CARGAS_RELATORIO = new Set([
+    'cargas', 'navios', 'containers', 'nexus_cargas_fluxo', 'nexus_navios_list', 'nexus_containers_list'
+  ]);
+  const ENTIDADES_PRODUTIVIDADE_RELATORIO = new Set([
+    'funcionarios', 'logs_alteracoes', 'nexus_func_list', 'nexus_audit_logs'
+  ]);
+  const ENTIDADES_SYNC_GERAL_RELATORIO = new Set([
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    const geral = !entity || ENTIDADES_SYNC_GERAL_RELATORIO.has(entity);
+    if (!geral && !ENTIDADES_CARGAS_RELATORIO.has(entity) && !ENTIDADES_PRODUTIVIDADE_RELATORIO.has(entity)) {
+      return;
+    }
+    if (geral || ENTIDADES_CARGAS_RELATORIO.has(entity)) {
+      popularCargas();
+    }
+    if (geral || ENTIDADES_PRODUTIVIDADE_RELATORIO.has(entity)) {
+      renderProdutividadeTable();
+    }
   });
 
   // Sem intervalo próprio nesta tela: a atualização chega pelo evento nexus_data_changed

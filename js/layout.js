@@ -106,9 +106,9 @@
       navItemsHtml = menuItems.filter(item => item.visible()).map(item => {
         const isActive = activePage === item.id;
         return `
-        <a href="${esc(item.href)}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
-          <span class="material-symbols-outlined text-[20px]">${esc(item.icon)}</span>
-          <span>${esc(item.label)}</span>
+        <a href="${esc(item.href)}" title="${esc(item.label)}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
+          <span class="material-symbols-outlined text-[20px] shrink-0">${esc(item.icon)}</span>
+          <span class="sidebar-nav-label truncate">${esc(item.label)}</span>
         </a>
       `;
       }).join('');
@@ -116,14 +116,17 @@
     }
     montarNavItemsHtml();
 
-    // Injeta Topbar com Posicionamento Fixo e Z-Index Elevado (Item 7)
+    // Injeta Topbar com Posicionamento Fixo e Z-Index Elevado (Item 7 / V-02)
     const topbarElem = document.getElementById('appTopbar') || document.querySelector('header');
     if (topbarElem) {
-      topbarElem.className = 'w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 shadow-sm';
+      topbarElem.className = 'w-full h-16 px-4 sm:px-6 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 fixed top-0 left-0 right-0 z-40 md:z-50 shadow-sm';
       topbarElem.innerHTML = `
         <div id="headerBrand" class="flex items-center gap-3">
           <button id="mobileMenuToggle" type="button" aria-label="Abrir menu de navegação" class="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
             <span class="material-symbols-outlined text-[24px]">menu</span>
+          </button>
+          <button id="desktopSidebarToggle" type="button" aria-label="Recolher ou expandir menu lateral" aria-expanded="true" title="Recolher ou expandir menu lateral" class="hidden md:inline-flex p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <span class="material-symbols-outlined text-[20px]">menu</span>
           </button>
           <picture class="w-9 h-9 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img src="design/logo_porto.png" alt="NexusPort Logo" width="36" height="36" class="w-9 h-9 object-contain rounded-lg" /></picture>
           <div id="headerBrandText" class="flex flex-col min-w-0">
@@ -172,10 +175,10 @@
       document.body.appendChild(mobileOverlay);
     }
 
-    // Injeta Sidebar se contêiner existir
+    // Injeta Sidebar se contêiner existir (V-01: sticky no desktop abaixo da topbar)
     const sidebarElem = document.getElementById('appSidebar') || document.querySelector('aside');
     if (sidebarElem) {
-      sidebarElem.className = 'w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0';
+      sidebarElem.className = 'w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:self-start inset-y-0 left-0 z-50 md:z-40 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0';
       sidebarElem.innerHTML = `
         <div id="sidebarScrollArea" class="p-4 flex flex-col gap-6 overflow-y-auto h-full justify-between">
           <div class="flex flex-col gap-6">
@@ -258,6 +261,26 @@
       const mobileToggleBtn = document.getElementById('mobileMenuToggle');
       if (mobileToggleBtn) {
         mobileToggleBtn.addEventListener('click', abrirSidebarMobile);
+      }
+
+      const desktopToggleBtn = document.getElementById('desktopSidebarToggle');
+      const aplicarEstadoSidebarDesktop = (recolhido) => {
+        sidebarElem.classList.toggle('nexus-sidebar-collapsed', Boolean(recolhido));
+        if (desktopToggleBtn) {
+          desktopToggleBtn.setAttribute('aria-expanded', String(!recolhido));
+        }
+      };
+      if (localStorage.getItem('nexus_sidebar_collapsed') === '1') {
+        aplicarEstadoSidebarDesktop(true);
+      }
+      if (desktopToggleBtn) {
+        desktopToggleBtn.addEventListener('click', () => {
+          const recolhido = !sidebarElem.classList.contains('nexus-sidebar-collapsed');
+          aplicarEstadoSidebarDesktop(recolhido);
+          try {
+            localStorage.setItem('nexus_sidebar_collapsed', recolhido ? '1' : '0');
+          } catch (e) {}
+        });
       }
 
       const closeMobileBtn = document.getElementById('closeMobileSidebarBtn');

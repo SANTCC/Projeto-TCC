@@ -51,7 +51,7 @@
               <span>Engenharia & Ativos</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Gestão de Manutenções & Ordens de Serviço (OS)</h1>
-            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Histórico operacional de manutenções, controle de ciclo preventivo e protocolos de emergência (RF 2, 3, 7 / T4.1 - T4.6).</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Histórico operacional de manutenções, controle de ciclo preventivo e protocolos de emergência.</p>
           </div>
         </div>
 
@@ -76,7 +76,7 @@
             <span class="material-symbols-outlined text-red-600 text-[32px]">campaign</span>
             <div>
               <span class="font-bold text-sm text-red-900 dark:text-red-200 block">Protocolo de Emergência / Botão de Pânico Global (Inspetor)</span>
-              <p class="text-xs text-red-700 dark:text-red-300">Acione em caso de incêndio, vazamento químico ou sinistro grave no terminal. O alerta é processado pela Edge Function <code class="font-mono font-bold">panic-alert</code> e transmitido em tempo real (WebSocket) para <strong>todos os clientes conectados</strong>, exibindo aviso no rodapé de cada tela.</p>
+              <p class="text-xs text-red-700 dark:text-red-300">Acione em caso de incêndio, vazamento químico ou acidente grave no pátio. O alerta bloqueia imediatamente as operações e avisa todas as telas do terminal em tempo real.</p>
             </div>
           </div>
           <div class="flex items-center gap-2 w-full sm:w-auto">
@@ -93,7 +93,7 @@
             <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">vibration</span>
             <div class="min-w-0">
               <span class="font-bold text-sm text-nexus-900 dark:text-white block">Alerta no Aparelho (vibração / som)</span>
-              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Enquanto a emergência estiver ativa, o sistema tenta emitir sirene obrigatória e pulsos de vibração mais longos. Após o SOS inicial, o alerta se repete a cada 3s com a página visível e após interação do usuário. A API não controla a força do motor; Safari no iPhone/iPad não oferece vibração. Toque em Testar vibração e som para verificar o aparelho. O navegador não garante áudio no modo silencioso, com volume zerado, tela bloqueada ou em segundo plano. O banner visual permanece disponível.</p>
+              <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Durante uma emergência ativa, o aparelho emite alerta sonoro contínuo e vibração periódica (em dispositivos Android compatíveis). Mantenha o som do aparelho ligado e toque em "Testar vibração e som" para validar seu dispositivo.</p>
             </div>
           </div>
           <div class="grid sm:grid-cols-2 gap-3">
@@ -150,7 +150,7 @@
               <span class="material-symbols-outlined text-nexus-500 text-[22px]">directions_boat</span>
               <div>
                 <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Solicitação de Manutenção de Embarcações (Navios)</h2>
-                <p class="text-[11px] text-slate-600 dark:text-slate-400">Solicitação de manutenção técnica preventiva, corretiva, preditiva e geral (Item 17)</p>
+                <p class="text-[11px] text-slate-600 dark:text-slate-400">Solicitação de manutenção técnica preventiva, corretiva, preditiva e geral.</p>
               </div>
             </div>
             <button id="toggleNavioManutFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">

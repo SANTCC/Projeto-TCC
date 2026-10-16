@@ -264,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elCargasArmaz) elCargasArmaz.textContent = indic.cargasArmazenagem.total;
     if (elCargasProntas) elCargasProntas.textContent = indic.cargasProntas.total;
     if (elCargasRecusadas) elCargasRecusadas.textContent = `${indic.recusadas.totalRecusadas} (${indic.recusadas.totalCanceladas} Canc.)`;
-    if (elOcupacao) elOcupacao.textContent = `${indic.ocupacaoPatio.taxa}% (${indic.ocupacaoPatio.ocupados}/${indic.ocupacaoPatio.capacidade})`;
+    if (elOcupacao) elOcupacao.textContent = `${indic.ocupacaoPatio.taxa}%`;
     if (elPreventiva) elPreventiva.textContent = `${indic.preventiva.total} Equipamento(s)`;
 
     aplicarVisibilidadeCardsPorCargo();
@@ -643,7 +643,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const revisao = ++trailLeituraRevision;
     let trail = [];
     const localTrail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
-    const contextoPrivacidade = [session, ...JSON.parse(localStorage.getItem('nexus_func_list') || '[]')];
+    const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+    const localNavios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    const localCargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const contextoPrivacidade = [session, ...localFuncs];
+    const TRAIL_UUID_EXATO_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const TRAIL_UUID_GLOBAL_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
     if (window.nexusSupabase) {
       try {
@@ -653,11 +658,90 @@ document.addEventListener('DOMContentLoaded', () => {
           .order('data_hora', { ascending: false });
 
         if (!error && Array.isArray(dbTrail)) {
-          const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
           contextoPrivacidade.push(...dbTrail.map(t => ({ codigo_individual: t.codigo_individual })));
+
+          // Coleta UUIDs referenciados em funcionario_id, supervisor_id ou no texto do motivo (V-04)
+          const idsFuncConhecidos = new Set(localFuncs.filter(f => f && f.id).map(f => String(f.id).toLowerCase()));
+          const uuidsParaResolver = new Set();
+          dbTrail.forEach(t => {
+            const fId = t.funcionario_id || t.supervisor_id;
+            if (fId && TRAIL_UUID_EXATO_RE.test(String(fId)) && !idsFuncConhecidos.has(String(fId).toLowerCase())) {
+              uuidsParaResolver.add(String(fId));
+            }
+            const textoMotivo = String(t.motivo || '');
+            const matches = textoMotivo.match(TRAIL_UUID_GLOBAL_RE);
+            if (matches) {
+              matches.forEach(u => {
+                if (!idsFuncConhecidos.has(u.toLowerCase())) uuidsParaResolver.add(u);
+              });
+            }
+          });
+          const mapaPorId = uuidsParaResolver.size > 0
+            ? await buscarFuncionariosPorChaves('id', [...uuidsParaResolver])
+            : {};
+          contextoPrivacidade.push(...Object.values(mapaPorId));
+
+          const obterFuncPorId = (idVal) => {
+            if (!idVal) return null;
+            const chave = String(idVal);
+            return mapaPorId[chave]
+              || localFuncs.find(f => f && f.id && String(f.id).toLowerCase() === chave.toLowerCase())
+              || null;
+          };
+
+          const resolverEntidadeTrail = (t) => {
+            const tipoBruto = String(t.entidade_tipo || 'REGISTRO').trim();
+            const tipoUpper = tipoBruto.toUpperCase();
+            const idBruto = String(t.entidade_id || '').trim();
+            if (!TRAIL_UUID_EXATO_RE.test(idBruto)) {
+              return `${tipoBruto} ${idBruto}`.trim();
+            }
+            const idLower = idBruto.toLowerCase();
+            if (tipoUpper === 'FUNCIONARIO' || tipoUpper === 'FUNCIONARIOS') {
+              return `FUNCIONARIO ${idBruto}`;
+            }
+            if (tipoUpper === 'NAVIO' || tipoUpper === 'NAVIOS') {
+              const nav = localNavios.find(n => n && n.id && String(n.id).toLowerCase() === idLower);
+              if (nav && nav.nome) return `NAVIO ${nav.nome}${nav.imo ? ' (' + nav.imo + ')' : ''}`;
+              const matchMotivo = String(t.motivo || '').match(/Navio\s+([^\(]+?\s*\(IMO-[0-9]+\))/i);
+              if (matchMotivo) return `NAVIO ${matchMotivo[1].trim()}`;
+              return `NAVIO #${idBruto.substring(0, 8).toUpperCase()}`;
+            }
+            if (tipoUpper === 'CARGA' || tipoUpper === 'CARGAS') {
+              const crg = localCargas.find(c => c && String(c.rawDbId || c.id).toLowerCase() === idLower);
+              if (crg && crg.id) return `CARGA ${crg.id}`;
+              return `CARGA #${idBruto.substring(0, 8).toUpperCase()}`;
+            }
+            if (tipoUpper === 'DELEGACOES_SUPERVISOR') {
+              return `DELEGAÇÃO #${idBruto.substring(0, 8).toUpperCase()}`;
+            }
+            if (tipoUpper === 'MANUTENCOES' || tipoUpper === 'MANUTENCAO') {
+              return `MANUTENÇÃO #${idBruto.substring(0, 8).toUpperCase()}`;
+            }
+            return `${tipoUpper} #${idBruto.substring(0, 8).toUpperCase()}`;
+          };
+
+          const resolverMotivoTrail = (motivoBruto) => {
+            const txt = String(motivoBruto || 'Decisão homologada conforme fluxo operacional');
+            return txt.replace(TRAIL_UUID_GLOBAL_RE, (uuidMatch) => {
+              const func = obterFuncPorId(uuidMatch);
+              if (func && func.nome) return func.nome;
+              const nav = localNavios.find(n => n && n.id && String(n.id).toLowerCase() === uuidMatch.toLowerCase());
+              if (nav && nav.nome) return nav.nome;
+              return `#${uuidMatch.substring(0, 8).toUpperCase()}`;
+            });
+          };
+
           const mappedDbTrail = dbTrail.map(t => {
             let respNome = t.funcionarios ? t.funcionarios.nome : null;
             let respCargo = t.funcionarios && t.funcionarios.cargo ? t.funcionarios.cargo : t.cargo;
+            if (!respNome && (t.funcionario_id || t.supervisor_id)) {
+              const matchId = obterFuncPorId(t.funcionario_id || t.supervisor_id);
+              if (matchId) {
+                respNome = matchId.nome;
+                respCargo = matchId.cargo || respCargo;
+              }
+            }
             if (!respNome && t.codigo_individual) {
               const match = localFuncs.find(f => f.codigo_individual === t.codigo_individual || f.matricula === t.codigo_individual);
               if (match) {
@@ -676,8 +760,8 @@ document.addEventListener('DOMContentLoaded', () => {
               data_hora: t.data_hora,
               responsavel: `${respNome || 'Responsável'} (${respCargo || 'Supervisor'}) - ${t.codigo_individual}`,
               decisao: t.tipo_decisao,
-              entidade: `${t.entidade_tipo} ${t.entidade_id}`,
-              motivo: t.motivo || 'Decisão homologada conforme fluxo operacional',
+              entidade: resolverEntidadeTrail(t),
+              motivo: resolverMotivoTrail(t.motivo),
               retificacao: retificacaoTxt,
               _codigoPendente: pendenteNome ? t.codigo_individual : null
             };
@@ -729,6 +813,27 @@ document.addEventListener('DOMContentLoaded', () => {
     renderizarTrailVisivel();
   }
 
+  function formatarDatasIsoEmTexto(texto) {
+    if (!texto) return '';
+    return String(texto).replace(
+      /\b(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+-]\d{2}:\d{2})?\b/g,
+      (match, ano, mes, dia, hora, min, _seg, tz) => {
+        if (tz) {
+          const dt = new Date(match);
+          if (!Number.isNaN(dt.getTime())) {
+            const d = String(dt.getDate()).padStart(2, '0');
+            const m = String(dt.getMonth() + 1).padStart(2, '0');
+            const y = dt.getFullYear();
+            const hh = String(dt.getHours()).padStart(2, '0');
+            const mm = String(dt.getMinutes()).padStart(2, '0');
+            return `${d}/${m}/${y} ${hh}:${mm}`;
+          }
+        }
+        return `${dia}/${mes}/${ano} ${hora}:${min}`;
+      }
+    );
+  }
+
   function renderizarTrailVisivel() {
     const trailContainer = document.getElementById('trailDecisoesContainer');
     if (!trailContainer) return;
@@ -751,33 +856,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     trailContainer.innerHTML = trail.map(t => `
-      <div class="p-4 rounded-xl border border-nexus-border dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex flex-col gap-3">
+      <div class="p-4 rounded-xl border border-nexus-border dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex flex-col gap-3 overflow-hidden">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700/80 pb-2">
-          <div class="flex items-center gap-2">
-            <span class="font-mono font-bold text-xs text-nexus-500">${esc(t.id)}</span>
-            <span class="text-slate-300 dark:text-slate-600">•</span>
-            <span class="px-2 py-0.5 rounded text-xs font-bold uppercase bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300">${esc(t.decisao)}</span>
-            <span class="font-mono text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">${esc(t.entidade)}</span>
+          <div class="flex flex-wrap items-center gap-2 min-w-0">
+            <span class="font-mono font-bold text-xs text-nexus-500 shrink-0">${esc(t.id)}</span>
+            <span class="text-slate-300 dark:text-slate-600 hidden sm:inline">•</span>
+            <span class="px-2 py-0.5 rounded text-xs font-bold uppercase bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 break-words">${esc(t.decisao)}</span>
+            <span class="font-mono text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 break-words max-w-full">${esc(t.entidade)}</span>
           </div>
-          <span class="text-slate-600 font-mono text-[11px]">${esc(new Date(t.data_hora).toLocaleString('pt-BR'))}</span>
+          <span class="text-slate-600 font-mono text-[11px] shrink-0">${esc(new Date(t.data_hora).toLocaleString('pt-BR'))}</span>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-          <div>
+          <div class="min-w-0 break-words">
             <span class="font-bold text-slate-600 block text-[10px] uppercase">Responsável Operacional</span>
-            <span class="font-bold text-nexus-900 dark:text-white">${esc(t.responsavel)}</span>
+            <span class="font-bold text-nexus-900 dark:text-white break-words">${esc(t.responsavel)}</span>
           </div>
-          <div>
+          <div class="min-w-0 break-words">
             <span class="font-bold text-slate-600 block text-[10px] uppercase">Justificativa / Motivo Formal</span>
-            <span class="text-slate-700 dark:text-slate-300">${esc(t.motivo)}</span>
+            <span class="text-slate-700 dark:text-slate-300 whitespace-normal break-words">${esc(formatarDatasIsoEmTexto(t.motivo))}</span>
           </div>
         </div>
 
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-700/60 text-xs">
-          <div class="flex items-start gap-1.5 min-w-0">
+          <div class="flex items-start gap-1.5 min-w-0 break-words">
             <span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0 mt-0.5">edit_note</span>
-            <span class="font-mono text-[11px] italic text-amber-700 dark:text-amber-400 leading-snug">
-              ${t.retificacao ? esc(t.retificacao) : '<span class="text-slate-600 not-italic">Nenhuma retificação vinculada.</span>'}
+            <span class="font-mono text-[11px] italic text-amber-700 dark:text-amber-400 leading-snug break-words">
+              ${t.retificacao ? esc(formatarDatasIsoEmTexto(t.retificacao)) : '<span class="text-slate-600 not-italic">Nenhuma retificação vinculada.</span>'}
             </span>
           </div>
           <button type="button" onclick="window.anexarRetificacaoTrail(${jsArg(t.id)}, ${jsArg(t.dbId || '')})" class="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] shrink-0 transition-colors">
@@ -1026,11 +1131,62 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Sincronização viva em tempo real (Item 2)
-  window.addEventListener('nexus_data_changed', () => {
-    renderCardsOperacionais();
-    renderIndicadoresExecutivosTable();
-    renderAuditLogTable();
-    renderTrailDecisoesTable();
+  // Sincronização viva em tempo real (Item 2 / L-05):
+  // filtra por entidade afetada e agrupa rajadas curtas (debounce de 60 ms).
+  const ENTIDADES_CARDS_DASHBOARD = new Set([
+    'cargas', 'navios', 'manutencoes', 'historico_manutencoes', 'containers',
+    'guindastes', 'inspecoes', 'nexus_cargas_fluxo', 'nexus_navios_list', 'nexus_os_list'
+  ]);
+  const ENTIDADES_KPIS_DASHBOARD = new Set([
+    'cargas', 'navios', 'bercos', 'funcionarios', 'logs_alteracoes',
+    'leituras_qr_code', 'inspecoes', 'visitantes', 'trail_decisoes'
+  ]);
+  const ENTIDADES_AUDITORIA_DASHBOARD = new Set([
+    'logs_alteracoes', 'trail_decisoes', 'funcionarios', 'cargas', 'nexus_audit_logs'
+  ]);
+  const ENTIDADES_TRAIL_DASHBOARD = new Set([
+    'trail_decisoes', 'retificacoes_trail', 'funcionarios', 'cargas',
+    'navios', 'manutencoes', 'nexus_trail_decisoes'
+  ]);
+  const ENTIDADES_SYNC_GERAL_DASHBOARD = new Set([
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+
+  let dashboardSyncTimer = null;
+  let dashboardSyncGeral = false;
+  const dashboardEntidadesPendentes = new Set();
+
+  window.addEventListener('nexus_data_changed', (event) => {
+    const detalhe = (event && event.detail) || {};
+    const entity = detalhe.entity || null;
+    const entities = Array.isArray(detalhe.entities) ? detalhe.entities : (entity ? [entity] : []);
+
+    if (entities.length === 0 || entities.some((e) => !e || ENTIDADES_SYNC_GERAL_DASHBOARD.has(e))) {
+      dashboardSyncGeral = true;
+    } else {
+      entities.forEach((e) => dashboardEntidadesPendentes.add(e));
+    }
+
+    if (dashboardSyncTimer !== null) return;
+    dashboardSyncTimer = Promise.resolve().then(() => {
+      dashboardSyncTimer = null;
+      const geral = dashboardSyncGeral;
+      const lote = Array.from(dashboardEntidadesPendentes);
+      dashboardSyncGeral = false;
+      dashboardEntidadesPendentes.clear();
+
+      if (geral || lote.some((e) => ENTIDADES_CARDS_DASHBOARD.has(e))) {
+        renderCardsOperacionais();
+      }
+      if (geral || lote.some((e) => ENTIDADES_KPIS_DASHBOARD.has(e))) {
+        renderIndicadoresExecutivosTable();
+      }
+      if (geral || lote.some((e) => ENTIDADES_AUDITORIA_DASHBOARD.has(e))) {
+        renderAuditLogTable();
+      }
+      if (geral || lote.some((e) => ENTIDADES_TRAIL_DASHBOARD.has(e))) {
+        renderTrailDecisoesTable();
+      }
+    });
   });
 });

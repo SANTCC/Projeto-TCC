@@ -224,29 +224,64 @@ document.addEventListener('DOMContentLoaded', () => {
     return { liberados: meus.length - falhas.length, falhas };
   }
 
+  let liberandoBercosOrfaosEmVoo = false;
+  let ultimaAssinaturaNaviosOrfaos = null;
+
   /**
    * Rede de segurança: libera no banco berços OCUPADOS cujo navio não existe mais.
-   * Lê os berços antes dos navios: um berço ocupado sempre tem seu navio já cadastrado.
+   * Reutiliza a lista de navios recém-carregada e evita execuções concorrentes ou
+   * releituras repetidas quando o conjunto de navios não mudou (L-03).
    */
-  async function liberarBercosOrfaos() {
+  async function liberarBercosOrfaos(naviosConhecidos) {
+    if (liberandoBercosOrfaosEmVoo) return;
     const client = window.nexusSupabase;
     if (!client || !clienteBercos()) return;
-    const atual = await lerBercosAtuais();
-    if (!atual.ok || atual.origem !== 'banco') return;
-    const ocupados = atual.lista.filter(b => b.estado === 'OCUPADO');
-    if (ocupados.length === 0) return;
-    const { data, error } = await client.from('navios').select('numero_imo, nome');
-    if (error || !Array.isArray(data)) return;
-    const imos = new Set(data.map(n => String(n.numero_imo || '').toLowerCase()).filter(Boolean));
-    const nomes = new Set(data.map(n => String(n.nome || '').toLowerCase()).filter(Boolean));
-    for (const b of ocupados) {
-      const existe = (b.navio_imo && imos.has(String(b.navio_imo).toLowerCase()))
-        || (b.navio_nome && nomes.has(String(b.navio_nome).toLowerCase()));
-      if (existe) continue;
-      const r = await liberarBercoNoBanco(b.nome, { imo: b.navio_imo, nome: b.navio_nome });
-      if (r.ok) refletirBercoLocal(b.nome, CAMPOS_BERCO_LIVRE);
+
+    const listaNavios = Array.isArray(naviosConhecidos) ? naviosConhecidos : null;
+    const assinaturaAtual = listaNavios
+      ? listaNavios
+          .map(n => `${String(n.imo || n.numero_imo || '').toLowerCase()}:${String(n.nome || '').toLowerCase()}`)
+          .sort()
+          .join('|')
+      : null;
+
+    if (assinaturaAtual !== null && assinaturaAtual === ultimaAssinaturaNaviosOrfaos) return;
+
+    liberandoBercosOrfaosEmVoo = true;
+    try {
+      const atual = await lerBercosAtuais();
+      if (!atual.ok || atual.origem !== 'banco') return;
+      const ocupados = atual.lista.filter(b => b.estado === 'OCUPADO');
+      if (ocupados.length === 0) {
+        if (assinaturaAtual !== null) ultimaAssinaturaNaviosOrfaos = assinaturaAtual;
+        return;
+      }
+
+      let fonteNavios = listaNavios;
+      if (!fonteNavios) {
+        const { data, error } = await client.from('navios').select('numero_imo, nome');
+        if (error || !Array.isArray(data)) return;
+        fonteNavios = data;
+      }
+
+      const imos = new Set(fonteNavios.map(n => String(n.imo || n.numero_imo || '').toLowerCase()).filter(Boolean));
+      const nomes = new Set(fonteNavios.map(n => String(n.nome || '').toLowerCase()).filter(Boolean));
+      let liberouAlgum = false;
+      for (const b of ocupados) {
+        const existe = (b.navio_imo && imos.has(String(b.navio_imo).toLowerCase()))
+          || (b.navio_nome && nomes.has(String(b.navio_nome).toLowerCase()));
+        if (existe) continue;
+        const r = await liberarBercoNoBanco(b.nome, { imo: b.navio_imo, nome: b.navio_nome });
+        if (r.ok) {
+          refletirBercoLocal(b.nome, CAMPOS_BERCO_LIVRE);
+          liberouAlgum = true;
+        }
+      }
+      if (assinaturaAtual !== null) ultimaAssinaturaNaviosOrfaos = assinaturaAtual;
+      if (liberouAlgum) renderBercosPanel();
+    } finally {
+      liberandoBercosOrfaosEmVoo = false;
     }
-    renderBercosPanel();
   }
 
   /**
@@ -514,9 +549,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // Nunca inventa horário de saída: sem data persistida, o ETA fica indisponível.
             dataSaida: n.data_saida || null
           }));
-          localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
+          const novoNaviosJson = JSON.stringify(naviosList);
+          if (localStorage.getItem('nexus_navios_list') !== novoNaviosJson) {
+            localStorage.setItem('nexus_navios_list', novoNaviosJson);
+          }
           renderGpsTable();
-          liberarBercosOrfaos().catch(e => console.warn('[NexusPort] Verificação de berços órfãos falhou:', e));
+          if (typeof renderContainersTable === 'function') {
+            renderContainersTable();
+          }
+          liberarBercosOrfaos(naviosList).catch(e => console.warn('[NexusPort] Verificação de berços órfãos falhou:', e));
           return;
         }
       } catch (err) {
@@ -607,6 +648,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   window.nexusFinalizarEntregaCarga = finalizarEntregaLocal;
 
+
+  const entregasEmConfirmacao = new Set();
+  const entregasJaSincronizadas = new Set();
+=======
   /**
    * Indica se uma carga do cache local pertence a um navio: pelo UUID do navio
    * (navio_id/navioId) ou pelo nome (campo legado `navio`). Compartilhada pela
@@ -621,6 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const nomeNavio = String(n.nome || '').trim().toLowerCase();
     return !!nomeNavio && String(c.navio || '').trim().toLowerCase() === nomeNavio;
   };
+
 
   // Renderiza Tabela de GPS com atualização viva em tempo real e entrega automática
   function renderGpsTable() {
@@ -643,7 +689,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // porto de destino viram ENTREGUE. A entrega libera navio_id/container_id
     // ativos, preservando navio/contêiner nos snapshots históricos.
     const UUID_CARGA_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const cargasFluxoRaw = localStorage.getItem('nexus_cargas_fluxo') || '[]';
+    const cargasFluxo = JSON.parse(cargasFluxoRaw);
     const atualizacoesRemotasEntregues = [];
     const atualizacoesRemotasDesvinculadas = [];
     let cargasAtualizadas = false;
@@ -676,18 +723,27 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (cargasAtualizadas) {
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
+      const novoCargasFluxoRaw = JSON.stringify(cargasFluxo);
+      if (novoCargasFluxoRaw !== cargasFluxoRaw) {
+        localStorage.setItem('nexus_cargas_fluxo', novoCargasFluxoRaw);
+      }
       if (window.nexusSupabase) {
-        // Agrupa por snapshot: cargas do mesmo navio podem ter contêineres
-        // históricos diferentes e não podem compartilhar um único payload.
+        // Agrupa por snapshot e aplica trava contra loop de 1s (L-01):
+        // cada transição de carga só é enviada se não estiver em voo nem já sincronizada.
         const executarAtualizacoes = (atualizacoes, incluirStatus) => {
           const grupos = new Map();
           atualizacoes.forEach(({ id, historico }) => {
-            const chave = JSON.stringify(historico || {});
-            if (!grupos.has(chave)) grupos.set(chave, { historico: historico || {}, ids: [] });
-            grupos.get(chave).ids.push(id);
+            const chaveHistorico = JSON.stringify(historico || {});
+            const chaveUnica = `${id}:${incluirStatus ? 'status' : 'desvinc'}:${chaveHistorico}`;
+            if (entregasEmConfirmacao.has(chaveUnica) || entregasJaSincronizadas.has(chaveUnica)) return;
+            entregasEmConfirmacao.add(chaveUnica);
+            if (!grupos.has(chaveHistorico)) {
+              grupos.set(chaveHistorico, { historico: historico || {}, ids: [], chaves: [] });
+            }
+            grupos.get(chaveHistorico).ids.push(id);
+            grupos.get(chaveHistorico).chaves.push(chaveUnica);
           });
-          grupos.forEach(({ historico, ids }) => {
+          grupos.forEach(({ historico, ids, chaves }) => {
             const payload = {
               navio_id: null,
               container_id: null,
@@ -699,9 +755,19 @@ document.addEventListener('DOMContentLoaded', () => {
               .update(payload)
               .in('id', ids)
               .then(({ error }) => {
+                chaves.forEach((ch) => {
+                  entregasEmConfirmacao.delete(ch);
+                  entregasJaSincronizadas.add(ch);
+                });
                 if (error) console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
               })
-              .catch(e => console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e));
+              .catch(e => {
+                chaves.forEach((ch) => {
+                  entregasEmConfirmacao.delete(ch);
+                  entregasJaSincronizadas.add(ch);
+                });
+                console.warn('[NexusPort] Erro ao atualizar entregue no Supabase:', e);
+              });
           });
         };
         executarAtualizacoes(atualizacoesRemotasEntregues, true);
@@ -818,12 +884,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let bercosInfoHtml = '<span class="text-slate-600 italic text-[11px]">Sem carga vinculada</span>';
       if (cargasDoNavio.length > 0) {
-        bercosInfoHtml = cargasDoNavio.map(c => `
+        bercosInfoHtml = cargasDoNavio.map(c => {
+          const refCont = String(c.container || c.container_id || '').trim();
+          const contMatch = refCont && Array.isArray(containersList)
+            ? containersList.find(ct => ct && (String(ct.id) === refCont || String(ct.rawDbId) === refCont || String(ct.identificacao).toLowerCase() === refCont.toLowerCase()))
+            : null;
+          const nomeContExibicao = contMatch && contMatch.identificacao ? contMatch.identificacao : (refCont || 'Não vinculado');
+          return `
           <div class="text-[11px] leading-tight">
             <strong class="text-nexus-500">${esc(c.id)}</strong>: <span class="font-bold text-slate-700 dark:text-slate-200">${esc(c.portoDescarga || 'Berço não atrelado')}</span>
-            <span class="block text-[10px] text-slate-600">Contêiner: ${esc(c.container || 'Não vinculado')}</span>
+            <span class="block text-[10px] text-slate-600">Contêiner: ${esc(nomeContExibicao)}</span>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
 
       // RN 3: Liberação de saída de navios é competência do Supervisor de Operações e Direção
@@ -2215,19 +2288,24 @@ document.addEventListener('DOMContentLoaded', () => {
           .select('*');
 
         if (!error && Array.isArray(data) && data.length > 0) {
-          const supConts = data.map(c => ({
-            id: c.id || `CONT-${c.numero_identificacao}`,
-            rawDbId: c.id,
-            identificacao: c.numero_identificacao,
-            tipo: c.material_carregado || '',
-            tipo_carga_id: c.tipo_carga_id || null,
-            dataFabr: c.data_fabricacao || '',
-            dataManut: c.data_ultima_manutencao || 'Sem Manutenção',
-            refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
-            navio_id: c.navio_id || null,
-            navio: c.navio_id ? 'Vinculado' : 'Não Vinculado',
-            estado: c.estado || 'OPERANTE'
-          }));
+          const supConts = data.map(c => {
+            const navioVinculado = c.navio_id
+              ? naviosList.find(n => n && n.id && String(n.id) === String(c.navio_id))
+              : null;
+            return {
+              id: c.id || `CONT-${c.numero_identificacao}`,
+              rawDbId: c.id,
+              identificacao: c.numero_identificacao,
+              tipo: c.material_carregado || '',
+              tipo_carga_id: c.tipo_carga_id || null,
+              dataFabr: c.data_fabricacao || '',
+              dataManut: c.data_ultima_manutencao || 'Sem Manutenção',
+              refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
+              navio_id: c.navio_id || null,
+              navio: (navioVinculado && navioVinculado.nome) ? navioVinculado.nome : (c.navio_id ? 'Vinculado' : 'Não Vinculado'),
+              estado: c.estado || 'OPERANTE'
+            };
+          });
 
           // Mescla contêineres locais com o banco Supabase para preservar cadastros
           const supIdSet = new Set(supConts.map(x => (x.identificacao || '').toUpperCase()));
@@ -2340,6 +2418,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const manutDisplay = c.dataManut || 'Sem Manutenção';
+      const navioMatch = c.navio_id
+        ? naviosList.find(n => n && n.id && String(n.id) === String(c.navio_id))
+        : null;
+      if (navioMatch && navioMatch.nome) {
+        c.navio = navioMatch.nome;
+      }
+      const nomeNavioExibicao = (navioMatch && navioMatch.nome)
+        ? navioMatch.nome
+        : (c.navio && c.navio !== 'Vinculado' ? c.navio : (c.navio_id ? 'Vinculado' : 'Não Vinculado'));
 
       // Tarefa 10 (Correções): o botão de vincular fica DESATIVADO (com o
       // motivo no title/aria-label) quando o vínculo está travado pela regra A
@@ -2363,7 +2450,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 font-mono text-xs">${cargasVinculadasHtml}</td>
           <td class="p-3 font-mono text-xs">Fab: ${esc(c.dataFabr)}<br>Manut: ${esc(manutDisplay)}</td>
           <td class="p-3 font-mono text-xs"><span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-bold">${esc(c.refTempo)}</span></td>
-          <td class="p-3 font-bold text-xs">${esc(c.navio || 'Não Vinculado')}</td>
+          <td class="p-3 font-bold text-xs">${esc(nomeNavioExibicao)}</td>
           <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-xs font-bold">${esc(c.estado)}</span></td>
           <td class="p-3 text-right whitespace-nowrap">${contAcoesHtml}</td>
         </tr>
@@ -3185,13 +3272,27 @@ document.addEventListener('DOMContentLoaded', () => {
     'nexus_guindastes_list', 'nexus_cargas_fluxo',
     'periodic_sync', 'window_focus', 'visibility_sync'
   ]);
+  const ENTIDADES_SYNC_GERAL_EMBARCACOES = new Set([
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
   window.addEventListener('nexus_data_changed', (event) => {
     const entity = event && event.detail ? event.detail.entity : null;
     if (entity && !ENTIDADES_QUE_AFETAM_EMBARCACOES.has(entity)) return;
-    carregarBercosSupabase();
-    carregarNaviosSupabase();
-    carregarContainersSupabase();
-    carregarGuindastesSupabase();
-    carregarRotasMaritimas();
+    const geral = !entity || ENTIDADES_SYNC_GERAL_EMBARCACOES.has(entity);
+    if (geral || entity === 'bercos' || entity === 'nexus_bercos_list' || entity === 'navios' || entity === 'nexus_navios_list') {
+      carregarBercosSupabase();
+    }
+    if (geral || entity === 'navios' || entity === 'nexus_navios_list' || entity === 'cargas' || entity === 'nexus_cargas_fluxo' || entity === 'rotas_maritimas') {
+      carregarNaviosSupabase();
+    }
+    if (geral || entity === 'containers' || entity === 'nexus_containers_list' || entity === 'cargas' || entity === 'nexus_cargas_fluxo' || entity === 'navios' || entity === 'nexus_navios_list') {
+      carregarContainersSupabase();
+    }
+    if (geral || entity === 'guindastes' || entity === 'nexus_guindastes_list') {
+      carregarGuindastesSupabase();
+    }
+    if (geral || entity === 'rotas_maritimas' || entity === 'navios' || entity === 'nexus_navios_list') {
+      carregarRotasMaritimas();
+    }
   });
 });

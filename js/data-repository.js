@@ -57,6 +57,22 @@
     return Array.isArray(lista) ? lista.map((carga) => Object.assign({}, carga)) : [];
   }
 
+  function clonarListaObjetos(lista) {
+    return Array.isArray(lista) ? lista.map((item) => (item && typeof item === 'object' ? Object.assign({}, item) : item)) : [];
+  }
+
+  function salvarCacheSeMudou(chave, valorJson) {
+    try {
+      if (window.localStorage.getItem(chave) !== valorJson) {
+        window.localStorage.setItem(chave, valorJson);
+        return true;
+      }
+    } catch (error) {
+      /* localStorage indisponível ou cheio */
+    }
+    return false;
+  }
+
   // Tarefa 5 (Backlog Parte 2): a entrega libera navio_id/container_id ativos,
   // mas preserva nome/identificação em snapshots históricos. Estes helpers são
   // a tradução única entre o formato do banco (snake_case) e o do cache local.
@@ -113,6 +129,30 @@
     ENABLE_MOCKS: ENABLE_MOCKS,
     _cargasRevision: 0,
     _cargasInFlight: new Map(),
+    _entidadesRevision: 0,
+    _entidadesInFlight: new Map(),
+
+    /**
+     * Compartilha uma única leitura lógica enquanto a requisição para a mesma
+     * entidade e revisão estiver em voo (L-08). Não mantém cache após concluir.
+     */
+    _executarLeituraInFlight: function (chave, executor) {
+      const repository = this;
+      const token = `${chave}:${this._entidadesRevision}`;
+      const existente = this._entidadesInFlight.get(token);
+      if (existente) return existente.then(clonarListaObjetos);
+
+      let requisicaoRastreada;
+      requisicaoRastreada = Promise.resolve()
+        .then(executor)
+        .finally(() => {
+          if (repository._entidadesInFlight.get(token) === requisicaoRastreada) {
+            repository._entidadesInFlight.delete(token);
+          }
+        });
+      this._entidadesInFlight.set(token, requisicaoRastreada);
+      return requisicaoRastreada.then(clonarListaObjetos);
+    },
 
     /**
      * Invalida leituras em andamento após uma alteração canônica de cargas/navios.
@@ -122,6 +162,8 @@
     invalidarLeiturasCargas: function () {
       this._cargasRevision += 1;
       this._cargasInFlight.clear();
+      this._entidadesRevision += 1;
+      this._entidadesInFlight.clear();
       return this._cargasRevision;
     },
 
@@ -162,23 +204,26 @@
     /**
      * BUSCAR FUNCIONÁRIOS
      */
-    getFuncionarios: async function () {
-      const client = this.getSupabase();
-      if (client) {
-        try {
-          const { data, error, count } = await client
-            .from('funcionarios')
-            .select('*', { count: 'exact' })
-            .order('nome', { ascending: true });
-          if (!error && Array.isArray(data)) {
-            localStorage.setItem('nexus_func_list', JSON.stringify(data));
-            return data;
+    getFuncionarios: function () {
+      const repository = this;
+      return this._executarLeituraInFlight('funcionarios', async function () {
+        const client = repository.getSupabase();
+        if (client) {
+          try {
+            const { data, error } = await client
+              .from('funcionarios')
+              .select('*', { count: 'exact' })
+              .order('nome', { ascending: true });
+            if (!error && Array.isArray(data)) {
+              salvarCacheSeMudou('nexus_func_list', JSON.stringify(data));
+              return data;
+            }
+          } catch (err) {
+            console.warn('[NexusRepository] Erro ao buscar funcionarios do Supabase:', err);
           }
-        } catch (err) {
-          console.warn('[NexusRepository] Erro ao buscar funcionarios do Supabase:', err);
         }
-      }
-      return JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+        return JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+      });
     },
 
     /**
@@ -418,7 +463,7 @@
           // Uma resposta de geração antiga pode resolver para o chamador, mas não
           // pode retroceder o cache após uma alteração mais recente.
           if (repository._cargasRevision === revision) {
-            window.localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(mapped));
+            salvarCacheSeMudou('nexus_cargas_fluxo', JSON.stringify(mapped));
           }
           return mapped;
         } catch (error) {
@@ -504,23 +549,26 @@
     /**
      * BUSCAR BERÇOS DO TERMINAL
      */
-    getBercos: async function () {
-      const client = this.getSupabaseTabela('bercos');
-      if (client) {
-        try {
-          const { data, error } = await client.from('bercos').select('*').order('nome', { ascending: true });
-          if (error) this.tratarErroTabela('bercos', error);
-          if (!error && Array.isArray(data) && data.length > 0) {
-            localStorage.setItem('nexus_bercos_list', JSON.stringify(data));
-            return data;
-          }
-        } catch (err) {
-          if (!this.tratarErroTabela('bercos', err)) {
-            console.warn('[NexusRepository] Erro ao buscar bercos do Supabase:', err);
+    getBercos: function () {
+      const repository = this;
+      return this._executarLeituraInFlight('bercos', async function () {
+        const client = repository.getSupabaseTabela('bercos');
+        if (client) {
+          try {
+            const { data, error } = await client.from('bercos').select('*').order('nome', { ascending: true });
+            if (error) repository.tratarErroTabela('bercos', error);
+            if (!error && Array.isArray(data) && data.length > 0) {
+              salvarCacheSeMudou('nexus_bercos_list', JSON.stringify(data));
+              return data;
+            }
+          } catch (err) {
+            if (!repository.tratarErroTabela('bercos', err)) {
+              console.warn('[NexusRepository] Erro ao buscar bercos do Supabase:', err);
+            }
           }
         }
-      }
-      return JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+        return JSON.parse(localStorage.getItem('nexus_bercos_list') || '[]');
+      });
     },
 
     /**
@@ -569,59 +617,65 @@
     /**
      * BUSCAR NAVIOS
      */
-    getNavios: async function () {
-      const client = this.getSupabase();
-      if (client) {
-        try {
-          const { data, error } = await client.from('navios').select('*');
-          if (!error && Array.isArray(data)) {
-            const mapped = data.map(n => ({
-              id: n.id,
-              nome: n.nome,
-              imo: n.numero_imo || n.imo,
-              estado: n.estado_operacional || n.estado || 'OPERANTE',
-              localizacao: n.localizacao || 'DENTRO_DO_PORTO',
-              origem: n.porto_origem || n.origem || 'Porto de Santos',
-              destino: n.porto_destino || n.destino || 'Destino',
-              operacoes: n.quantidade_cargas_realizadas || n.operacoes || 0,
-              data_saida: n.data_saida || null
-            }));
-            localStorage.setItem('nexus_navios_list', JSON.stringify(mapped));
-            return mapped;
+    getNavios: function () {
+      const repository = this;
+      return this._executarLeituraInFlight('navios', async function () {
+        const client = repository.getSupabase();
+        if (client) {
+          try {
+            const { data, error } = await client.from('navios').select('*');
+            if (!error && Array.isArray(data)) {
+              const mapped = data.map(n => ({
+                id: n.id,
+                nome: n.nome,
+                imo: n.numero_imo || n.imo,
+                estado: n.estado_operacional || n.estado || 'OPERANTE',
+                localizacao: n.localizacao || 'DENTRO_DO_PORTO',
+                origem: n.porto_origem || n.origem || 'Porto de Santos',
+                destino: n.porto_destino || n.destino || 'Destino',
+                operacoes: n.quantidade_cargas_realizadas || n.operacoes || 0,
+                data_saida: n.data_saida || null
+              }));
+              salvarCacheSeMudou('nexus_navios_list', JSON.stringify(mapped));
+              return mapped;
+            }
+          } catch (err) {
+            console.warn('[NexusRepository] Erro ao buscar navios do Supabase:', err);
           }
-        } catch (err) {
-          console.warn('[NexusRepository] Erro ao buscar navios do Supabase:', err);
         }
-      }
-      return JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+        return JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+      });
     },
 
     /**
      * BUSCAR VISITANTES
      */
-    getVisitantes: async function () {
-      const client = this.getSupabase();
-      if (client) {
-        try {
-          const { data, error } = await client.from('visitantes').select('*');
-          if (!error && Array.isArray(data)) {
-            const mapped = data.map(v => ({
-              id: v.id,
-              nome: v.nome,
-              documento: v.documento,
-              motivo: v.motivo,
-              registrado_por: v.registrado_por,
-              data: v.data_hora_entrada ? new Date(v.data_hora_entrada).toLocaleDateString('pt-BR') : (v.created_at ? new Date(v.created_at).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')),
-              data_saida: v.data_hora_saida ? new Date(v.data_hora_saida).toLocaleDateString('pt-BR') : null
-            }));
-            localStorage.setItem('nexus_vis_list', JSON.stringify(mapped));
-            return mapped;
+    getVisitantes: function () {
+      const repository = this;
+      return this._executarLeituraInFlight('visitantes', async function () {
+        const client = repository.getSupabase();
+        if (client) {
+          try {
+            const { data, error } = await client.from('visitantes').select('*');
+            if (!error && Array.isArray(data)) {
+              const mapped = data.map(v => ({
+                id: v.id,
+                nome: v.nome,
+                documento: v.documento,
+                motivo: v.motivo,
+                registrado_por: v.registrado_por,
+                data: v.data_hora_entrada ? new Date(v.data_hora_entrada).toLocaleDateString('pt-BR') : (v.created_at ? new Date(v.created_at).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')),
+                data_saida: v.data_hora_saida ? new Date(v.data_hora_saida).toLocaleDateString('pt-BR') : null
+              }));
+              salvarCacheSeMudou('nexus_vis_list', JSON.stringify(mapped));
+              return mapped;
+            }
+          } catch (err) {
+            console.warn('[NexusRepository] Erro ao buscar visitantes do Supabase:', err);
           }
-        } catch (err) {
-          console.warn('[NexusRepository] Erro ao buscar visitantes do Supabase:', err);
         }
-      }
-      return JSON.parse(localStorage.getItem('nexus_vis_list') || '[]');
+        return JSON.parse(localStorage.getItem('nexus_vis_list') || '[]');
+      });
     },
 
     /**
@@ -994,6 +1048,7 @@
     _realtimeChannel: null,
     _realtimeDebounce: null,
     _realtimePendentes: new Set(),
+    _realtimePrecisaRessincronizar: false,
 
     iniciarSincronizacaoRealtime: function () {
       const client = this.getSupabase();
@@ -1051,6 +1106,7 @@
         try { client.removeChannel(this._realtimeChannel); } catch (e) {}
       }
       this._realtimeChannel = null;
+      this._realtimePrecisaRessincronizar = false;
       if (this._realtimeDebounce !== null) clearTimeout(this._realtimeDebounce);
       this._realtimeDebounce = null;
       this._realtimePendentes.clear();
@@ -1087,25 +1143,52 @@
   window.addEventListener('nexus_data_changed', (event) => {
     const entity = event && event.detail ? event.detail.entity : null;
     const entities = event && event.detail && Array.isArray(event.detail.entities) ? event.detail.entities : [];
+    NexusRepository._entidadesRevision += 1;
+    NexusRepository._entidadesInFlight.clear();
     if (!entity || EVENTOS_QUE_INVALIDAM_CARGAS.has(entity) || entities.some(e => EVENTOS_QUE_INVALIDAM_CARGAS.has(e))) {
       NexusRepository.invalidarLeiturasCargas();
     }
   }, true);
 
+  const CHAVES_CACHE_LEITURA = new Set([
+    'nexus_func_list',
+    'nexus_cargas_fluxo',
+    'nexus_bercos_list',
+    'nexus_navios_list',
+    'nexus_vis_list',
+    'nexus_containers_list',
+    'nexus_guindastes_list',
+    'nexus_os_list',
+    'nexus_audit_logs',
+    'nexus_trail_decisoes'
+  ]);
+
   window.addEventListener('storage', (e) => {
-    if (e.key && e.key.startsWith('nexus_')) {
-      window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: e.key } }));
-    }
+    if (!e || !e.key || !e.key.startsWith('nexus_')) return;
+    if (e.oldValue === e.newValue) return;
+    // Gravações de cache de leitura vindas de outra aba não disparam novas
+    // consultas ao Supabase (L-02); mutações reais usam BroadcastChannel e Realtime.
+    if (CHAVES_CACHE_LEITURA.has(e.key)) return;
+    window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: e.key } }));
   });
 
-  // Sincronização periódica e em foco da janela para atualização entre dispositivos/abas (Item 2)
+  // Sincronização periódica e em foco da janela para atualização entre dispositivos/abas (Item 2 / L-07)
+  let ultimoSyncFocoTs = 0;
+  const COOLDOWN_FOCO_MS = 15000;
+
   window.addEventListener('focus', () => {
     NexusRepository.iniciarSincronizacaoRealtime();
+    const agora = Date.now();
+    if (agora - ultimoSyncFocoTs < COOLDOWN_FOCO_MS) return;
+    ultimoSyncFocoTs = agora;
     NexusRepository.notifyChange('window_focus');
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       NexusRepository.iniciarSincronizacaoRealtime();
+      const agora = Date.now();
+      if (agora - ultimoSyncFocoTs < COOLDOWN_FOCO_MS) return;
+      ultimoSyncFocoTs = agora;
       NexusRepository.notifyChange('visibility_sync');
     }
   });
@@ -1116,8 +1199,9 @@
   });
 
   // Polling de segurança: sem o Realtime (ou entre eventos perdidos), as telas são
-  // reconsultadas a cada POLLING_SEGURANCA_MS (60 s por padrão).
+  // reconsultadas a cada POLLING_SEGURANCA_MS (60 s por padrão). Pausa quando a aba está oculta.
   setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     NexusRepository.notifyChange('periodic_sync');
   }, NexusRepository.POLLING_SEGURANCA_MS);
 

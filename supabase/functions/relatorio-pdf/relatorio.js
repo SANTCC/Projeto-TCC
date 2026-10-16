@@ -13,11 +13,7 @@ export const NAO_INFORMADO = 'Não informado';
 
 /** Cargos que podem emitir o relatório. Deve coincidir com js/auth-guard.js (relatorios.html). */
 export const CARGOS_PERMITIDOS = [
-  'ESTIVADOR',
   'CONFERENTE_CARGA',
-  'ARRUMADOR_CONSERTADOR',
-  'PLANEJADOR_PATIO_NAVIOS',
-  'TECNICO_PORTOS',
   'SUPERVISOR_GERENTE_OPERACOES',
   'INSPETOR',
   'DIRETOR_OPERACOES_LOGISTICA',

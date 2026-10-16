@@ -1040,10 +1040,25 @@ document.addEventListener('DOMContentLoaded', () => {
     if (evt.key === 'nexus_emergency_active') aplicarEstadoEmergencia(emergenciaJaAtiva());
   });
 
-  // Sincronização viva em tempo real (Item 2)
-  window.addEventListener('nexus_data_changed', () => {
+  // Sincronização viva em tempo real (Item 2 / L-06)
+  const ENTIDADES_QUE_AFETAM_MANUTENCAO = new Set([
+    'manutencoes', 'historico_manutencoes', 'navios', 'containers', 'guindastes',
+    'nexus_os_list', 'nexus_navios_list', 'nexus_containers_list', 'nexus_guindastes_list',
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+  const ENTIDADES_SYNC_GERAL_MANUT = new Set([
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    if (entity && !ENTIDADES_QUE_AFETAM_MANUTENCAO.has(entity)) return;
+    const geral = !entity || ENTIDADES_SYNC_GERAL_MANUT.has(entity);
     // Backlog 3 (tempo real): recarrega do Supabase antes de redesenhar (OS e navios)
-    carregarNaviosParaManutencao();
-    carregarOsSupabase();
+    if (geral || entity === 'navios' || entity === 'containers' || entity === 'guindastes' || entity === 'nexus_navios_list') {
+      carregarNaviosParaManutencao();
+    }
+    if (geral || entity === 'manutencoes' || entity === 'historico_manutencoes' || entity === 'nexus_os_list' || entity === 'navios') {
+      carregarOsSupabase();
+    }
   });
 });

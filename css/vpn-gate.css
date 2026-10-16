@@ -6,3 +6,8 @@ html.nexus-vpn-gate-checking body {
 html.nexus-vpn-gate-checking {
   background: #fff !important;
 }
+
+html.dark.nexus-vpn-gate-checking,
+html.dark.nexus-vpn-gate-checking body {
+  background: #0f172a !important;
+}

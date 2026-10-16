@@ -654,8 +654,15 @@ document.addEventListener('DOMContentLoaded', () => {
     recusarBtn.addEventListener('click', () => recusarCargaAtual({}));
   }
 
-  // Sincronização viva em tempo real (Item 2)
-  window.addEventListener('nexus_data_changed', () => {
+  // Sincronização viva em tempo real (Item 2 / L-06)
+  const ENTIDADES_QUE_AFETAM_INSPECAO = new Set([
+    'cargas', 'inspecoes', 'inspecao_itens', 'checklist_modelos', 'checklist_itens',
+    'tipos_carga', 'nexus_cargas_fluxo',
+    'periodic_sync', 'window_focus', 'visibility_sync', 'online_sync', 'realtime_sync'
+  ]);
+  window.addEventListener('nexus_data_changed', (event) => {
+    const entity = event && event.detail ? event.detail.entity : null;
+    if (entity && !ENTIDADES_QUE_AFETAM_INSPECAO.has(entity)) return;
     popularSeletor();
   });
 });
