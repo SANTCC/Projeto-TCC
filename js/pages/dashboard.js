@@ -264,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elCargasArmaz) elCargasArmaz.textContent = indic.cargasArmazenagem.total;
     if (elCargasProntas) elCargasProntas.textContent = indic.cargasProntas.total;
     if (elCargasRecusadas) elCargasRecusadas.textContent = `${indic.recusadas.totalRecusadas} (${indic.recusadas.totalCanceladas} Canc.)`;
-    if (elOcupacao) elOcupacao.textContent = `${indic.ocupacaoPatio.taxa}% (${indic.ocupacaoPatio.ocupados}/${indic.ocupacaoPatio.capacidade})`;
+    if (elOcupacao) elOcupacao.textContent = `${indic.ocupacaoPatio.taxa}%`;
     if (elPreventiva) elPreventiva.textContent = `${indic.preventiva.total} Equipamento(s)`;
 
     aplicarVisibilidadeCardsPorCargo();

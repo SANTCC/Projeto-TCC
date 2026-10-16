@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="light">
+<html lang="pt-BR" class="dark">
 <head>
   <meta charset="utf-8" />
   <!-- Google Analytics 4 (Backlog 3, item F): configuração e eventos em js/analytics.js.
@@ -18,7 +18,7 @@
     (js/haptics.js), portanto o resultado reflete o comportamento real do SOS.
   -->
   <style>
-    :root { color-scheme: light; }
+    :root { color-scheme: dark; }
     * { box-sizing: border-box; }
     body {
       margin: 0; padding: 20px 16px 40px;
@@ -28,10 +28,11 @@
     .wrap { max-width: 620px; margin: 0 auto; }
     header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
     .badge {
-      width: 42px; height: 42px; border-radius: 12px; background: #dc2626;
+      width: 42px; height: 42px; border-radius: 12px; background: #1e293b; border: 1px solid #334155;
       display: flex; align-items: center; justify-content: center;
-      font-size: 22px; flex: 0 0 auto;
+      font-size: 22px; flex: 0 0 auto; overflow: hidden;
     }
+    .badge img { width: 34px; height: 34px; object-fit: contain; border-radius: 8px; }
     h1 { font-size: 18px; margin: 0; }
     header p { margin: 2px 0 0; font-size: 12px; color: #94a3b8; }
     .card {
@@ -71,7 +72,7 @@
 <body>
   <div class="wrap">
     <header>
-      <div class="badge" aria-hidden="true">📳</div>
+      <picture class="badge"><source srcset="design/logo_porto.webp" type="image/webp" /><img src="design/logo_porto.png" alt="NexusPort Logo" width="34" height="34" /></picture>
       <div>
         <h1>Teste de Vibração do Botão de Pânico</h1>
         <p>NexusPort · Terminal STS-01 · diagnóstico do aparelho</p>

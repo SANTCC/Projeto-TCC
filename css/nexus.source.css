@@ -207,3 +207,75 @@ html.dark select option {
   background-color: #0f172a;
   color: #f8fafc;
 }
+
+/* Microinterações corporativas sutis para KPIs, tabelas, chips e modais (V-22 a V-30) */
+button[onclick*="abrirModalDetalheCard"] {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, border-color 0.18s ease;
+}
+button[onclick*="abrirModalDetalheCard"]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.08), 0 3px 6px -2px rgba(15, 23, 42, 0.04);
+}
+button[onclick*="abrirModalDetalheCard"]:active {
+  transform: translateY(0) scale(0.995);
+}
+
+table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.os-chip,
+.periodo-chip,
+.status-chip {
+  transition: transform 0.14s ease, background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+.os-chip:hover:not(:disabled),
+.periodo-chip:hover:not(:disabled),
+.status-chip:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.os-chip:active:not(:disabled),
+.periodo-chip:active:not(:disabled),
+.status-chip:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+@keyframes nexusModalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+#globalConfirmModal:not(.hidden) > div,
+#globalFeedbackModal:not(.hidden) > div,
+#modalDetalheCard:not(.hidden) > div {
+  animation: nexusModalFadeIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button[onclick*="abrirModalDetalheCard"],
+  table tbody tr,
+  .os-chip,
+  .periodo-chip,
+  .status-chip,
+  #appSidebar {
+    transition: none !important;
+  }
+  button[onclick*="abrirModalDetalheCard"]:hover,
+  .os-chip:hover:not(:disabled),
+  .periodo-chip:hover:not(:disabled),
+  .status-chip:hover:not(:disabled) {
+    transform: none !important;
+  }
+  #globalConfirmModal:not(.hidden) > div,
+  #globalFeedbackModal:not(.hidden) > div,
+  #modalDetalheCard:not(.hidden) > div {
+    animation: none !important;
+  }
+}
+

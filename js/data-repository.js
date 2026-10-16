@@ -1084,17 +1084,9 @@
         channel.subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             console.log('[NexusRepository] Sincronização Realtime ativa.');
-            // Evita duplicar todas as leituras logo na abertura da página (L-04):
-            // só dispara realtime_sync quando reconectar após queda/erro.
-            if (this._realtimePrecisaRessincronizar) {
-              this._realtimePrecisaRessincronizar = false;
-              this.notifyChange('realtime_sync');
-            }
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            this._realtimePrecisaRessincronizar = true;
-            if (status !== 'CLOSED') {
-              console.warn('[NexusRepository] Realtime indisponível (' + status + '); o polling de segurança (' + (this.POLLING_SEGURANCA_MS / 1000) + ' s) mantém os dados atualizados.');
-            }
+            this.notifyChange('realtime_sync');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.warn('[NexusRepository] Realtime indisponível (' + status + '); o polling de segurança (' + (this.POLLING_SEGURANCA_MS / 1000) + ' s) mantém os dados atualizados.');
           }
         });
         this._realtimeChannel = channel;

@@ -96,7 +96,7 @@ const PAGINAS = [
       'Inspeção ativa única por carga: as anteriores permanecem como histórico.',
       'Leitura do QR Code da carga direto na tela para abrir a inspeção correspondente.'
     ],
-    cargos: ['INSPETOR', ...GESTAO]
+    cargos: ['CONFERENTE_CARGA', 'INSPETOR', ...GESTAO]
   },
   {
     chave: 'scanner',
@@ -110,7 +110,7 @@ const PAGINAS = [
       'Fallback de digitação manual para ambientes sem câmera.',
       'Cada leitura é registrada em leituras_qr_code para rastreabilidade.'
     ],
-    cargos: TODOS_OPERACIONAIS.filter(c => !['ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS'].includes(c))
+    cargos: TODOS_OPERACIONAIS.filter(c => !['ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS'].includes(c))
   },
   {
     chave: 'embarcacoes',
@@ -180,7 +180,7 @@ const PAGINAS = [
       'Relatório PDF A4 gerado no servidor (Edge Function relatorio-pdf) com cache por hash do conteúdo.',
       'Exportação de histórico com registro de auditoria da operação.'
     ],
-    cargos: TODOS_OPERACIONAIS.filter(c => !['ESTIVADOR', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS'].includes(c))
+    cargos: TODOS_OPERACIONAIS.filter(c => !['ESTIVADOR', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS'].includes(c))
   },
   {
     chave: 'teste-vibracao',

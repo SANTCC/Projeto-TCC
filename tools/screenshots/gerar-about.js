@@ -114,9 +114,9 @@ const ARQUITETURA = [
     titulo: 'Front-end estático',
     itens: [
       'HTML5 + Tailwind CSS + JavaScript ES6 (módulos por página em js/pages/).',
-      'Sem framework de build em tempo de execução: o Tailwind é carregado por CDN.',
-      'Bibliotecas: Chart.js (gráficos), qrcode.js (etiquetas), html5-qrcode (leitura por câmera) e jsPDF (documentos no cliente).',
-      'Layout compartilhado em js/layout.js (topbar, sidebar, tema e contadores).'
+      'CSS compilado localmente (css/nexus.css) e fontes auto-hospedadas, sem dependência de CDNs externos.',
+      'Bibliotecas locais sob demanda: Chart.js (gráficos), qrcode.js (etiquetas) e html5-qrcode (leitura por câmera).',
+      'Layout compartilhado em js/layout.js (topbar, sidebar retrátil, tema e presença em tempo real).'
     ]
   },
   {
@@ -237,8 +237,8 @@ function blocoHero(manifest, totalCapturas) {
         </ul>
         <p class="nota">
           <span class="material-symbols-outlined" aria-hidden="true">info</span>
-          <span>As capturas desta página foram geradas em ambiente local com dados fictícios de demonstração
-          (equivalente ao <code>supabase/seed.sql</code>) e sem credenciais de produção.</span>
+          <span>As capturas desta página foram geradas em ambiente isolado com dados fictícios de demonstração,
+          sem exposição de credenciais ou dados operacionais reais.</span>
         </p>
       </div>
       <div class="hero-ilustracao">
