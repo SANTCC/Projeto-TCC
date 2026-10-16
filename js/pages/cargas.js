@@ -704,8 +704,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapa = new Map();
     try {
       (JSON.parse(localStorage.getItem('nexus_containers_list') || '[]') || []).forEach(cont => {
-        const chave = String(cont.identificacao || cont.id || '').trim().toLowerCase();
-        if (chave) mapa.set(chave, cont);
+        // Tarefa 4 (Correções): o repositório de dados mapeia o `container` da
+        // carga com o UUID (container_id), enquanto a vinculação na tela grava a
+        // identificação textual. Indexa o contêiner pelas duas formas
+        // (identificação, id e rawDbId) para a herança casar em qualquer uma.
+        if (!cont) return;
+        [cont.identificacao, cont.id, cont.rawDbId].forEach(valor => {
+          if (valor === undefined || valor === null) return;
+          const chave = String(valor).trim().toLowerCase();
+          if (chave && !mapa.has(chave)) mapa.set(chave, cont);
+        });
       });
     } catch (e) { /* cache indisponível */ }
     return mapa;
@@ -720,11 +728,19 @@ document.addEventListener('DOMContentLoaded', () => {
       // ENTREGUE é terminal: seu navio é histórico e nunca pode ser "herdado"
       // de volta como vínculo ativo a partir do contêiner.
       if (!c || ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)) return;
+      // Tarefa 4 (Correções): a referência ao contêiner pode ser a identificação
+      // textual (vínculo feito na tela) ou o UUID (container_id, forma mapeada
+      // pelo repositório de dados). A herança precisa valer para as duas formas,
+      // nas duas ordens de vinculação (carga→contêiner→navio e navio→contêiner→carga).
+      const refsCont = [c.container, c.container_id, c.containerId]
+        .filter(v => v !== undefined && v !== null && String(v).trim() !== '');
+      if (refsCont.length === 0) return;
       // Herdam: cargas marcadas com a opção de herança OU (legado) cargas com
-      // contêiner e sem navio vinculado.
-      const deveHerdar = c.herdarNavioDoContainer === true || (c.container && !c.navio);
-      if (!deveHerdar || !c.container) return;
-      const cont = mapaConts.get(String(c.container).trim().toLowerCase());
+      // contêiner e sem navio vinculado. Navio escolhido manualmente nunca é
+      // sobrescrito pela herança.
+      const deveHerdar = c.herdarNavioDoContainer === true || !c.navio;
+      if (!deveHerdar) return;
+      const cont = refsCont.map(ref => mapaConts.get(String(ref).trim().toLowerCase())).find(Boolean);
       if (!cont) return;
       const nomeNavioCont = cont.navio && String(cont.navio).trim() !== '' && cont.navio !== 'Não Vinculado' && cont.navio !== 'Vinculado'
         ? cont.navio

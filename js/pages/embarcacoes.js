@@ -2305,14 +2305,36 @@ document.addEventListener('DOMContentLoaded', () => {
   async function propagarNavioParaCargasDoContainer(contIdentificacao, navioAlvo) {
     const chaveCont = String(contIdentificacao || '').trim().toLowerCase();
     if (!chaveCont || !navioAlvo) return 0;
+    // Tarefa 4 (Correções): casa a carga pelo contêiner nas DUAS formas —
+    // identificação textual (vínculo feito na tela) e UUID (container_id, forma
+    // mapeada pelo repositório de dados) — para a herança funcionar quando o
+    // contêiner é vinculado ao navio DEPOIS de a carga já estar no contêiner.
+    const contCadastro = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
+    const chavesCont = new Set();
+    [contIdentificacao, contCadastro && contCadastro.identificacao, contCadastro && contCadastro.id, contCadastro && contCadastro.rawDbId]
+      .filter(Boolean)
+      .forEach(v => chavesCont.add(String(v).trim().toLowerCase()));
+    const cargaDoCont = (c) => !!c && [c.container, c.container_id, c.containerId]
+      .filter(Boolean)
+      .some(ref => chavesCont.has(String(ref).trim().toLowerCase()));
+    const ehTerminal = (c) => ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status);
+    // Só herda quem optou pela herança ou ainda não tem navio — o navio
+    // escolhido manualmente nunca é sobrescrito (nem no cache, nem no banco).
+    const deveHerdar = (c) => c.herdarNavioDoContainer === true || !c.navio;
+
     const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // Os ids a persistir são coletados ANTES da alteração local: depois dela o
+    // navio já está preenchido e `deveHerdar` deixaria as mesmas cargas de fora
+    // (contagem/ persistência em duplicidade).
+    const idsUuidCache = cargasLocais
+      .filter(c => c && !ehTerminal(c) && deveHerdar(c) && cargaDoCont(c) && isUuid.test(String(c.rawDbId || '')))
+      .map(c => c.rawDbId);
     let atualizadas = 0;
     cargasLocais.forEach(c => {
-      if (!c || ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)) return;
-      const mesmoCont = c.container && String(c.container).trim().toLowerCase() === chaveCont;
-      if (!mesmoCont) return;
-      const deveHerdar = c.herdarNavioDoContainer === true || !c.navio;
-      if (!deveHerdar) return;
+      if (!c || ehTerminal(c)) return;
+      if (!cargaDoCont(c)) return;
+      if (!deveHerdar(c)) return;
       c.navio = navioAlvo.nome;
       if (navioAlvo.id) {
         c.navioId = navioAlvo.id;
@@ -2322,25 +2344,52 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (atualizadas > 0) {
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
-      if (window.nexusSupabase && navioAlvo.id) {
-        try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          const idsUuid = cargasLocais
-            .filter(c => c && !['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)
-              && c.container && String(c.container).trim().toLowerCase() === chaveCont && isUuid.test(String(c.rawDbId || '')))
-            .map(c => c.rawDbId);
-          if (idsUuid.length > 0) {
-            await window.nexusSupabase.from('cargas').update({ navio_id: navioAlvo.id }).in('id', idsUuid);
+    }
+
+    // Persistência no Supabase: cargas do contêiner conhecidas localmente +
+    // cargas que só existem no banco (vinculadas em outro dispositivo), estas
+    // últimas apenas quando ainda não têm navio (navio_id nulo).
+    let herdadasSomenteBanco = 0;
+    if (window.nexusSupabase && navioAlvo.id) {
+      try {
+        const idsUuid = idsUuidCache.slice();
+        const contUuid = [contCadastro && contCadastro.rawDbId, contCadastro && contCadastro.id, chaveCont]
+          .find(v => v && isUuid.test(String(v))) || null;
+        if (contUuid) {
+          const { data: linhas, error: errSel } = await window.nexusSupabase
+            .from('cargas')
+            .select('id, navio_id, status_fluxo')
+            .eq('container_id', contUuid);
+          if (!errSel && Array.isArray(linhas)) {
+            linhas.forEach(l => {
+              if (!l || !l.id || idsUuid.includes(l.id)) return;
+              if (l.navio_id) return; // navio manual/já herdado: não sobrescrever
+              if (['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(String(l.status_fluxo || ''))) return;
+              idsUuid.push(l.id);
+            });
           }
-        } catch (e) {
-          console.warn('Erro ao propagar navio herdado para cargas no Supabase:', e);
         }
+        if (idsUuid.length > 0) {
+          const { error: errUp } = await window.nexusSupabase
+            .from('cargas')
+            .update({ navio_id: navioAlvo.id })
+            .in('id', idsUuid);
+          if (errUp) {
+            console.warn('Erro ao propagar navio herdado para cargas no Supabase:', errUp);
+          } else {
+            herdadasSomenteBanco = idsUuid.length - idsUuidCache.length;
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao propagar navio herdado para cargas no Supabase:', e);
       }
+    }
+    if (atualizadas > 0 || herdadasSomenteBanco > 0) {
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('cargas');
       }
     }
-    return atualizadas;
+    return atualizadas + herdadasSomenteBanco;
   }
 
   // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
