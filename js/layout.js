@@ -178,7 +178,7 @@
     // Injeta Sidebar se contêiner existir (V-01: sticky no desktop abaixo da topbar)
     const sidebarElem = document.getElementById('appSidebar') || document.querySelector('aside');
     if (sidebarElem) {
-      sidebarElem.className = 'w-64 bg-nexus-900 text-white flex-col justify-between fixed md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:self-start inset-y-0 left-0 z-50 md:z-40 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0';
+      sidebarElem.className = 'w-64 bg-nexus-900 text-white flex-col justify-between fixed md:static md:sticky md:top-16 md:h-[calc(100vh-4rem)] md:self-start inset-y-0 left-0 z-50 md:z-40 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0';
       sidebarElem.innerHTML = `
         <div id="sidebarScrollArea" class="p-4 flex flex-col gap-6 overflow-y-auto h-full justify-between">
           <div class="flex flex-col gap-6">

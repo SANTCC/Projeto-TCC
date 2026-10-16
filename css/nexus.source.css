@@ -135,7 +135,7 @@ html.dark :focus-visible {
     display: none;
   }
   #appSidebar {
-    position: sticky;
+    position: sticky !important;
     top: 4rem;
     height: calc(100vh - 4rem);
     max-height: calc(100vh - 4rem);
@@ -162,4 +162,48 @@ html.dark :focus-visible {
     padding-left: 0.5rem;
     padding-right: 0.5rem;
   }
+}
+
+/* Estilização corporativa unificada para seletores <select> em todo o sistema (V-10) */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23445987' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem !important;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+select:hover:not(:disabled) {
+  border-color: #64748b;
+}
+select:focus-visible {
+  outline: none;
+  border-color: #445987;
+  box-shadow: 0 0 0 3px rgba(68, 89, 135, 0.22);
+}
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+html.dark select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+html.dark select:hover:not(:disabled) {
+  border-color: #64748b;
+}
+html.dark select:focus-visible {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+}
+html.dark select option {
+  background-color: #0f172a;
+  color: #f8fafc;
 }

@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!session) return;
 
   const iniciarCameraBtn = document.getElementById('iniciarCameraBtn');
+  const stopScannerBtn = document.getElementById('stopScannerBtn');
   const simulatedInput = document.getElementById('simulatedQrInput');
   const simulateBtn = document.getElementById('simulateScanBtn');
 
@@ -33,9 +34,42 @@ document.addEventListener('DOMContentLoaded', () => {
   let targetRedirectUrl = 'cargas.html';
   let targetChecklistUrl = 'inspecao.html';
 
+  function restaurarPlaceholderCamera() {
+    const elem = document.getElementById('qrReader');
+    if (elem) {
+      elem.innerHTML = `
+        <div class="p-6 text-center text-slate-300 flex flex-col items-center gap-2">
+          <span class="material-symbols-outlined text-4xl text-slate-400">camera_alt</span>
+          <span>Clique no botão acima para iniciar a câmera do dispositivo móvel.</span>
+        </div>
+      `;
+    }
+    if (stopScannerBtn) stopScannerBtn.classList.add('hidden');
+    if (iniciarCameraBtn) iniciarCameraBtn.classList.remove('hidden');
+  }
+
+  async function pararCamera() {
+    if (html5QrCodeScanner) {
+      try {
+        await html5QrCodeScanner.stop();
+      } catch (e) {}
+      try {
+        if (typeof html5QrCodeScanner.clear === 'function') html5QrCodeScanner.clear();
+      } catch (e) {}
+      html5QrCodeScanner = null;
+    }
+    restaurarPlaceholderCamera();
+  }
+
   if (iniciarCameraBtn) {
     iniciarCameraBtn.addEventListener('click', () => {
       iniciarCamera();
+    });
+  }
+
+  if (stopScannerBtn) {
+    stopScannerBtn.addEventListener('click', () => {
+      pararCamera();
     });
   }
 
@@ -59,11 +93,15 @@ document.addEventListener('DOMContentLoaded', () => {
         { fps: 10, qrbox: { width: ladoLeitura, height: ladoLeitura } },
         (decodedText) => {
           processarScan(decodedText);
-          html5QrCodeScanner.stop();
+          pararCamera();
         },
         () => {}
-      ).catch(err => {
+      ).then(() => {
+        if (iniciarCameraBtn) iniciarCameraBtn.classList.add('hidden');
+        if (stopScannerBtn) stopScannerBtn.classList.remove('hidden');
+      }).catch(err => {
         console.warn("Câmera indisponível ou permissão negada:", err);
+        restaurarPlaceholderCamera();
         if (window.mostrarFeedback) window.mostrarFeedback('info', 'Câmera Indisponível', "Câmera indisponível. Utilize o campo de simulação manual abaixo para testar a leitura de QR Code.");
       });
     }
