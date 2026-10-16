@@ -342,7 +342,11 @@ document.addEventListener('DOMContentLoaded', () => {
       let statusNovo = null;
       if (localizacao === 'NO_PORTO_DE_DESTINO' && carga.status !== 'ENTREGUE') {
         statusNovo = 'ENTREGUE';
-      } else if (localizacao === 'FORA_DO_PORTO' && !['EM_TRANSITO', 'ENTREGUE'].includes(carga.status)) {
+      } else if (localizacao === 'FORA_DO_PORTO' && carga.status === 'PRONTA_PARA_ENTREGA') {
+        // Tarefa 2 (Correções): a saída do navio só leva para EM_TRANSITO as cargas
+        // PRONTA_PARA_ENTREGA — a mesma regra aplicada pela liberação de saída em
+        // Embarcações & GPS e pelo trigger do banco. Status como ARMAZENAGEM não
+        // podem pular a etapa de "pronta para entrega" por nenhuma via automática.
         statusNovo = 'EM_TRANSITO';
       }
       if (statusNovo) transicoes.push({ carga, statusAnterior: carga.status, statusNovo, navio });

@@ -463,7 +463,7 @@
   const liberarSaida = {
     nome: 'liberar_saida_navio',
     titulo: 'Liberar saída de navio',
-    descricao: 'Libera a saída de um navio atracado no porto, pela rota cadastrada (RN 9). Bloqueado em emergência. Só Supervisor ou Direção. Exige confirmação.',
+    descricao: 'Libera a saída de um navio atracado no porto, pela rota cadastrada (RN 9). Exige que todas as cargas vinculadas estejam PRONTA_PARA_ENTREGA (RN 3); caso contrário, retorna CARGAS_NAO_PRONTAS com a lista de pendências. Bloqueado em emergência. Só Supervisor ou Direção. Exige confirmação.',
     anotacoes: { consequentialHint: true },
     cargos: G.supervisao,
     permissao: 'LIBERAR_NAVIO',
@@ -482,6 +482,24 @@
         && String(r.destino || '').trim().toLowerCase() === destino);
       if (!rota) {
         return { codigo: 'ROTA_NAO_CADASTRADA', mensagem: `Não há rota cadastrada de ${navio.origem || 'Porto de Santos'} para ${navio.destino} (RN 9).` };
+      }
+      // Tarefa 2 (Correções) — RN 3: a saída só pode ser liberada quando TODAS as
+      // cargas vinculadas ao navio (diretas ou via contêiner) estão
+      // PRONTA_PARA_ENTREGA; a mensagem lista as pendências (id + status atual).
+      if (typeof window.nexusEmbarcacoesCargasPendentesLiberacao === 'function') {
+        try {
+          const pendentes = await window.nexusEmbarcacoesCargasPendentesLiberacao(navio.imo);
+          if (Array.isArray(pendentes) && pendentes.length > 0) {
+            const lista = pendentes.slice(0, 8).map((p) => `${p.id} (${p.status})`).join(', ');
+            const resto = pendentes.length > 8 ? ` e mais ${pendentes.length - 8}` : '';
+            return {
+              codigo: 'CARGAS_NAO_PRONTAS',
+              mensagem: `O navio ${navio.nome} tem ${pendentes.length} carga(s) vinculada(s) que ainda não estão PRONTA PARA ENTREGA: ${lista}${resto}. Todas as cargas precisam estar prontas antes da liberação da saída (RN 3).`
+            };
+          }
+        } catch (e) {
+          console.warn('[WebMCP Embarcações] Falha ao validar cargas para liberação de saída:', e);
+        }
       }
       return null;
     },
