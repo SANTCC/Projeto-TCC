@@ -479,15 +479,37 @@ document.addEventListener('DOMContentLoaded', () => {
               cargo: cargoFunc || 'OPERACIONAL',
               codigo_usuario: l.codigo_individual || '--',
               entidade: `${l.entidade_tipo || ''} ${l.entidade_id || ''}`.trim(),
-              tipo_alteracao: l.tipo_alteracao
+              entidade_tipo: l.entidade_tipo || '',
+              entidade_id: l.entidade_id || '',
+              tipo_alteracao: l.tipo_alteracao,
+              // Tarefa 9 (Correções): frase do que foi feito (gravada em
+              // detalhes.descricao); logs legados sem a frase recebem uma
+              // síntese na projeção, via NexusAuditoria.descricaoDoLog.
+              descricao: (l.detalhes && (l.detalhes.descricao || '')) || ''
             };
           });
 
-          // Logs locais só entram se ainda não estiverem no banco (mesma data e mesmo código)
-          const keys = new Set(mappedDbLogs.map(x => `${x.data_hora}-${x.codigo_usuario}`));
+          // Tarefa 9 (Correções): deduplicação robusta — o MESMO evento (gravado
+          // localmente e no banco na mesma chamada de registrarLogAlteracao)
+          // aparecia DUPLICADO porque a chave comparava as strings cruas de
+          // data_hora: o banco (timestamptz/PostgREST) devolve o instante em
+          // formato/precisão diferentes do ISO local ("...+00:00" × "...Z").
+          // A chave agora compara o INSTANTE (epoch ms) + código do usuário +
+          // entidade (tipo/id normalizado) + tipo de alteração.
+          const chaveEventoLog = (x) => {
+            const tempo = x && x.data_hora ? new Date(x.data_hora).getTime() : NaN;
+            const idEnt = String((x && x.entidade_id) || 'N/A').trim() || 'N/A';
+            return [
+              Number.isNaN(tempo) ? String((x && x.data_hora) || '') : tempo,
+              (x && x.codigo_usuario) || '--',
+              (x && x.entidade_tipo) || '',
+              idEnt,
+              (x && x.tipo_alteracao) || ''
+            ].join('|');
+          };
+          const keys = new Set(mappedDbLogs.map(chaveEventoLog));
           localLogs.forEach(ll => {
-            const key = `${ll.data_hora}-${ll.codigo_usuario}`;
-            if (!keys.has(key)) mappedDbLogs.push(ll);
+            if (!keys.has(chaveEventoLog(ll))) mappedDbLogs.push(ll);
           });
           logs = mappedDbLogs;
         }
@@ -511,7 +533,15 @@ document.addEventListener('DOMContentLoaded', () => {
       nome_funcionario: privacidade.texto(l.nome_funcionario || l.nome || 'Não identificado'),
       cargo: privacidade.texto(l.cargo || 'OPERACIONAL'),
       entidade: privacidade.entidade(l.entidade || 'Sistema', l.entidade_tipo),
-      tipo_alteracao: privacidade.texto(l.tipo_alteracao || 'EDICAO')
+      tipo_alteracao: privacidade.texto(l.tipo_alteracao || 'EDICAO'),
+      // Tarefa 9 (Correções): frase legível do que foi feito — herdada do log
+      // (detalhes.descricao) ou sintetizada para registros legados; passa pela
+      // mesma projeção de privacidade das demais células.
+      descricao: privacidade.texto(
+        l.descricao ||
+        ((window.NexusAuditoria && typeof window.NexusAuditoria.descricaoDoLog === 'function')
+          ? window.NexusAuditoria.descricaoDoLog(l) : '')
+      )
     }));
 
     // Backlog 3 (7b): busca local no log de auditoria + contador "X de Y"
@@ -519,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalAuditRegistros = logs.length;
     const logsVisiveis = logs.filter(l => {
       if (!buscaAuditVal) return true;
-      const haystack = `${l.nome_funcionario || l.nome || ''} ${l.cargo || ''} ${l.entidade || ''} ${l.tipo_alteracao || ''}`.toLowerCase();
+      const haystack = `${l.nome_funcionario || l.nome || ''} ${l.cargo || ''} ${l.entidade || ''} ${l.tipo_alteracao || ''} ${l.descricao || ''}`.toLowerCase();
       return haystack.includes(buscaAuditVal);
     });
 
@@ -542,7 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-2.5 text-slate-600 whitespace-nowrap">${l.data_hora ? esc(new Date(l.data_hora).toLocaleString('pt-BR')) : 'N/A'}</td>
         <td class="p-2.5 font-bold text-nexus-900 dark:text-white whitespace-nowrap">${esc(l.nome_funcionario)}</td>
         <td class="p-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">${esc(l.cargo || 'OPERACIONAL')}</td>
-        <td class="p-2.5 font-bold whitespace-nowrap">${esc(l.entidade || 'Sistema')}</td>
+        <td class="p-2.5 font-bold">${esc(l.entidade || 'Sistema')}${l.descricao ? `<span class="block font-sans font-normal normal-case text-slate-600 dark:text-slate-400 mt-0.5">${esc(l.descricao)}</span>` : ''}</td>
         <td class="p-2.5">
           <span class="px-2 py-0.5 rounded text-xs font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 whitespace-nowrap">${esc(l.tipo_alteracao || 'EDICAO')}</span>
         </td>

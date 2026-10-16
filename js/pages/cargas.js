@@ -342,7 +342,11 @@ document.addEventListener('DOMContentLoaded', () => {
       let statusNovo = null;
       if (localizacao === 'NO_PORTO_DE_DESTINO' && carga.status !== 'ENTREGUE') {
         statusNovo = 'ENTREGUE';
-      } else if (localizacao === 'FORA_DO_PORTO' && !['EM_TRANSITO', 'ENTREGUE'].includes(carga.status)) {
+      } else if (localizacao === 'FORA_DO_PORTO' && carga.status === 'PRONTA_PARA_ENTREGA') {
+        // Tarefa 2 (Correções): a saída do navio só leva para EM_TRANSITO as cargas
+        // PRONTA_PARA_ENTREGA — a mesma regra aplicada pela liberação de saída em
+        // Embarcações & GPS e pelo trigger do banco. Status como ARMAZENAGEM não
+        // podem pular a etapa de "pronta para entrega" por nenhuma via automática.
         statusNovo = 'EM_TRANSITO';
       }
       if (statusNovo) transicoes.push({ carga, statusAnterior: carga.status, statusNovo, navio });
@@ -483,6 +487,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function carregarCargasSupabase(revision) {
     const requestRevision = revision === undefined ? ++cargasLoadRevision : revision;
+    // Tarefa 3 (Correções): navios frescos do banco antes de ler as cargas — as
+    // transições automáticas (entrega/chegada) não podem depender de um cache
+    // local obsoleto escrito por outra página.
+    await atualizarNaviosCacheDoBanco();
+    if (requestRevision !== cargasLoadRevision) return;
     if (window.NexusRepository) {
       try {
         const loadedCargas = await window.NexusRepository.getCargas();
@@ -695,8 +704,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapa = new Map();
     try {
       (JSON.parse(localStorage.getItem('nexus_containers_list') || '[]') || []).forEach(cont => {
-        const chave = String(cont.identificacao || cont.id || '').trim().toLowerCase();
-        if (chave) mapa.set(chave, cont);
+        // Tarefa 4 (Correções): o repositório de dados mapeia o `container` da
+        // carga com o UUID (container_id), enquanto a vinculação na tela grava a
+        // identificação textual. Indexa o contêiner pelas duas formas
+        // (identificação, id e rawDbId) para a herança casar em qualquer uma.
+        if (!cont) return;
+        [cont.identificacao, cont.id, cont.rawDbId].forEach(valor => {
+          if (valor === undefined || valor === null) return;
+          const chave = String(valor).trim().toLowerCase();
+          if (chave && !mapa.has(chave)) mapa.set(chave, cont);
+        });
       });
     } catch (e) { /* cache indisponível */ }
     return mapa;
@@ -711,11 +728,19 @@ document.addEventListener('DOMContentLoaded', () => {
       // ENTREGUE é terminal: seu navio é histórico e nunca pode ser "herdado"
       // de volta como vínculo ativo a partir do contêiner.
       if (!c || ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)) return;
+      // Tarefa 4 (Correções): a referência ao contêiner pode ser a identificação
+      // textual (vínculo feito na tela) ou o UUID (container_id, forma mapeada
+      // pelo repositório de dados). A herança precisa valer para as duas formas,
+      // nas duas ordens de vinculação (carga→contêiner→navio e navio→contêiner→carga).
+      const refsCont = [c.container, c.container_id, c.containerId]
+        .filter(v => v !== undefined && v !== null && String(v).trim() !== '');
+      if (refsCont.length === 0) return;
       // Herdam: cargas marcadas com a opção de herança OU (legado) cargas com
-      // contêiner e sem navio vinculado.
-      const deveHerdar = c.herdarNavioDoContainer === true || (c.container && !c.navio);
-      if (!deveHerdar || !c.container) return;
-      const cont = mapaConts.get(String(c.container).trim().toLowerCase());
+      // contêiner e sem navio vinculado. Navio escolhido manualmente nunca é
+      // sobrescrito pela herança.
+      const deveHerdar = c.herdarNavioDoContainer === true || !c.navio;
+      if (!deveHerdar) return;
+      const cont = refsCont.map(ref => mapaConts.get(String(ref).trim().toLowerCase())).find(Boolean);
       if (!cont) return;
       const nomeNavioCont = cont.navio && String(cont.navio).trim() !== '' && cont.navio !== 'Não Vinculado' && cont.navio !== 'Vinculado'
         ? cont.navio
@@ -768,6 +793,106 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     const km = rota ? parseFloat(rota.distancia_km) : NaN;
     return km > 0 ? km : null;
+  }
+
+  // ── Tarefa 3 (Correções): chegada do navio independente da página Embarcações ──
+  // A classificação de chegada (ETA zerado → NO_PORTO_DE_DESTINO, ou
+  // DENTRO_DO_PORTO quando o destino é o próprio Porto de Santos) rodava apenas
+  // no render da página Embarcações & GPS. Sem abrir aquela tela, o navio
+  // seguia FORA_DO_PORTO no banco e as cargas ficavam presas em EM_TRANSITO,
+  // mesmo com o ETA da página de cargas zerado. Cargas & Pátio agora:
+  //   1) atualiza os navios do banco no cache local (fonte de verdade), e
+  //   2) confirma as chegadas vencidas com o MESMO compare-and-set de
+  //      embarcacoes.js — o trigger fn_propagar_status_navio marca as cargas
+  //      EM_TRANSITO como ENTREGUE no banco e as transições automáticas desta
+  //      página cobrem as cargas restantes ao carregar.
+  const VELOCIDADE_MEDIA_KMH = 33; // RN 9 — mesma premissa do ETA de embarcacoes.js
+
+  function ehPortoSantosCargas(nomePorto) {
+    return /santos/i.test(String(nomePorto || ''));
+  }
+
+  /**
+   * Atualiza o cache nexus_navios_list a partir do banco. Resposta vazia ou
+   * erro mantém o cache (degradação graciosa: a página continua funcionando
+   * offline, como no restante do sistema).
+   */
+  async function atualizarNaviosCacheDoBanco() {
+    if (!window.nexusSupabase) return;
+    try {
+      const { data, error } = await window.nexusSupabase.from('navios').select('*');
+      if (error || !Array.isArray(data) || data.length === 0) return;
+      const navios = data.map(n => ({
+        id: n.id,
+        nome: n.nome,
+        imo: n.numero_imo || n.imo,
+        localizacao: n.localizacao || 'DENTRO_DO_PORTO',
+        origem: n.porto_origem || 'Porto de Santos',
+        destino: n.porto_destino || '',
+        // A distância não é gravada no navio: vem da rota marítima cadastrada.
+        distancia: null,
+        // Nunca inventa horário de saída: sem data persistida, não há ETA.
+        dataSaida: n.data_saida || null
+      }));
+      localStorage.setItem('nexus_navios_list', JSON.stringify(navios));
+    } catch (e) {
+      console.warn('[NexusPort] Cargas: não foi possível atualizar os navios do banco:', e);
+    }
+  }
+
+  /**
+   * Confirma no banco as chegadas vencidas (ETA zerado), com a mesma regra de
+   * embarcacoes.js: compare-and-set FORA_DO_PORTO → NO_PORTO_DE_DESTINO (ou
+   * DENTRO_DO_PORTO no retorno a Santos). O estado local/cache só muda após a
+   * confirmação remota; falha em um navio não impede os demais.
+   */
+  async function confirmarChegadasVencidas() {
+    if (!window.nexusSupabase) return;
+    let navios = [];
+    try {
+      navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    } catch (e) {
+      navios = [];
+    }
+    if (!Array.isArray(navios)) return;
+    const candidatos = navios.filter(n => n && n.localizacao === 'FORA_DO_PORTO'
+      && CARGA_UUID_RE.test(String(n.id || '')) // padrão UUID (mesmo formato do id de navio)
+      && Number.isFinite(n.dataSaida ? new Date(n.dataSaida).getTime() : NaN));
+    if (candidatos.length === 0) return;
+    await carregarRotasCacheCargas();
+    for (const navio of candidatos) {
+      try {
+        const saida = new Date(navio.dataSaida).getTime();
+        const km = parseFloat(navio.distancia) || distanciaRotaCargas(navio.origem, navio.destino);
+        if (!(km > 0)) continue; // sem rota cadastrada não há ETA — nunca um valor padrão
+        const msPrevistos = (km / VELOCIDADE_MEDIA_KMH) * 3600 * 1000;
+        if (Date.now() - saida < msPrevistos) continue; // ainda em viagem
+        const novaLocalizacao = ehPortoSantosCargas(navio.destino) ? 'DENTRO_DO_PORTO' : 'NO_PORTO_DE_DESTINO';
+        const { data, error } = await window.nexusSupabase
+          .from('navios')
+          .update({ localizacao: novaLocalizacao })
+          .eq('id', navio.id)
+          .eq('localizacao', 'FORA_DO_PORTO')
+          .select('id, localizacao, data_saida')
+          .maybeSingle();
+        if (error) continue;
+        // Alguns dublês devolvem lista mesmo com maybeSingle; o Supabase atual
+        // devolve o objeto único (mesma normalização de embarcacoes.js).
+        const registro = Array.isArray(data) ? data[0] : data;
+        if (!registro || registro.localizacao !== novaLocalizacao) continue;
+        navio.localizacao = registro.localizacao;
+        navio.dataSaida = registro.data_saida || navio.dataSaida;
+        localStorage.setItem('nexus_navios_list', JSON.stringify(navios));
+      } catch (e) {
+        console.warn('[NexusPort] Cargas: falha ao confirmar chegada vencida do navio:', e);
+      }
+    }
+  }
+
+  /** Sincronização completa de chegada usada ao abrir a página (Tarefa 3). */
+  async function sincronizarChegadasNavios() {
+    await atualizarNaviosCacheDoBanco();
+    await confirmarChegadasVencidas();
   }
 
   function etaCargaTexto(carga, naviosLocais) {
@@ -2270,8 +2395,20 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTable();
   };
 
-  // Carregamento inicial ao abrir a página
-  carregarCargasSupabase();
+  // Carregamento inicial ao abrir a página.
+  // Tarefa 3 (Correções): antes da primeira leitura de cargas, confirma no banco
+  // as chegadas vencidas (ETA zerado) — o trigger fn_propagar_status_navio
+  // entrega as cargas EM_TRANSITO do navio e as transições automáticas desta
+  // página concluem o restante. Assim a carga aparece na tabela de entregues ao
+  // abrir/recarregar Cargas & Pátio, sem depender de abrir Embarcações & GPS.
+  (async () => {
+    try {
+      await sincronizarChegadasNavios();
+    } catch (e) {
+      console.warn('[NexusPort] Cargas: sincronização de chegada dos navios falhou:', e);
+    }
+    await carregarCargasSupabase();
+  })();
 
   // Sincronização viva: somente entidades que afetam a carga disparam uma leitura.
   // A rajada de eventos é consolidada em um timer único; cada evento invalida a

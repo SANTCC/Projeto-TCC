@@ -92,6 +92,32 @@
       ENTREGUE: '#2E7D32',
       RECUSADA: '#C62828',
       CANCELADA: '#7E57C2'
+    },
+    // Tarefa 7 (Correções): cores POR CHAVE (status/localização/estado) —
+    // fonte única para todos os perfis. Antes, navios_localizacao,
+    // containers_estado e manutencoes_status usavam arrays/ternários
+    // POSICIONAIS sobre a saída de ordenarMapa (ordenada por quantidade):
+    // como cada cargo vê subconjuntos/ordenações diferentes, a mesma chave
+    // mudava de cor entre perfis (ex.: Conferente × Diretor). Valores
+    // canônicos do design system: SPECs/design/design.md §3.2, §4.2, §4.3.
+    localizacaoNavio: {
+      DENTRO_DO_PORTO: '#2E7D32',    // success (design.md §4.3)
+      FORA_DO_PORTO: '#445987',      // info (design.md §4.3)
+      NO_PORTO_DE_DESTINO: '#1B5E20' // success escuro (design.md §4.3)
+    },
+    estadoContainer: {
+      OPERANTE: '#2E7D32',              // success (design.md §4.2)
+      APROVADO_PARA_REFORMA: '#445987', // info (design.md §4.2)
+      AGENDADO_PARA_REFORMA: '#D97706', // warning (design.md §4.2)
+      EM_REFORMA: '#B45309',            // warning-strong (design.md §4.2)
+      EM_MANUTENCAO: '#D97706'          // warning "em andamento" (design.md §3.2)
+    },
+    statusManutencao: {
+      SOLICITADA: '#D97706',    // aguardando aprovação (warning — §3.2/§4.4)
+      APROVADA: '#D97706',      // aprovada, aguardando execução (warning)
+      EM_MANUTENCAO: '#D97706', // em andamento (warning)
+      CONCLUIDA: '#2E7D32',     // success (§3.2)
+      RECUSADA: '#C62828'       // danger (§3.2/§4.4)
     }
   };
 
@@ -1186,7 +1212,9 @@
         datasets: [{
           label: 'Embarcações',
           data: entradas.map(([, qtd]) => qtd),
-          backgroundColor: ['#445987', '#0D9488', '#D97706', '#64748B'],
+          // Tarefa 7 (Correções): cor por CHAVE de localização (design.md
+          // §4.3) — nunca posicional, para não variar entre perfis.
+          backgroundColor: entradas.map(([loc], i) => CORES.localizacaoNavio[loc] || CORES.paleta[i % CORES.paleta.length]),
           borderWidth: 0
         }],
         resumo: `${dados.navios.length} embarcação(ões) monitorada(s) • ${dentro} atracada(s) no terminal (${percentual(dentro, dados.navios.length)}%)`
@@ -1202,7 +1230,8 @@
       return {
         tipo: 'bar',
         labels: entradas.map(([estado]) => ROTULOS_ESTADO_CONTAINER[estado] || estado),
-        datasets: [datasetBarras('Contêineres', entradas.map(([, qtd]) => qtd), ['#445987', '#D97706', '#C62828', '#7E57C2', '#64748B'])],
+        // Tarefa 7 (Correções): cor por CHAVE de estado (design.md §4.2).
+        datasets: [datasetBarras('Contêineres', entradas.map(([, qtd]) => qtd), entradas.map(([estado], i) => CORES.estadoContainer[estado] || CORES.paleta[i % CORES.paleta.length]))],
         resumo: `${dados.containers.length} contêiner(es) cadastrado(s) • ${manutencao} fora de operação (reforma/manutenção)`
       };
     },
@@ -1346,7 +1375,9 @@
       return {
         tipo: 'bar',
         labels: entradas.map(([status]) => ROTULOS_MANUTENCAO[status] || status),
-        datasets: [datasetBarras('Ordens de serviço', entradas.map(([, qtd]) => qtd), entradas.map(([status]) => status === 'RECUSADA' ? '#C62828' : status === 'CONCLUIDA' ? '#2E7D32' : '#D97706'))],
+        // Tarefa 7 (Correções): cor por CHAVE de status da OS (fonte única
+        // CORES.statusManutencao — valores canônicos do design.md §3.2/§4.4).
+        datasets: [datasetBarras('Ordens de serviço', entradas.map(([, qtd]) => qtd), entradas.map(([status]) => CORES.statusManutencao[status] || '#D97706'))],
         resumo: `${dados.manutencoes.length} ordem(ns) de serviço registrada(s) • ${pendentes} aguardando aprovação/execução`
       };
     },

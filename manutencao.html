@@ -240,7 +240,7 @@
               <button type="button" data-status="EM_MANUTENCAO" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-amber-300 text-amber-700 dark:text-amber-400 font-bold text-[11px]">Em manutenção</button>
               <button type="button" data-status="CONCLUIDA" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 text-emerald-700 dark:text-emerald-400 font-bold text-[11px]">Concluída</button>
               <button type="button" data-status="REPROVADA" aria-pressed="false" class="os-chip px-2.5 py-1 min-h-[32px] rounded-lg bg-white dark:bg-slate-900 border border-red-300 text-red-600 dark:text-red-400 font-bold text-[11px]">Reprovada</button>
-              <span id="osCounter" class="ml-auto text-[11px] font-mono text-slate-600">Exibindo 0 de 0 OS</span>
+              <span id="osCounter" aria-live="polite" class="ml-auto text-[11px] font-mono text-slate-600">Exibindo 0 de 0 registros</span>
             </div>
           </div>
 
@@ -261,6 +261,12 @@
                 <!-- Renderizado via JS -->
               </tbody>
             </table>
+          </div>
+          <!-- Tarefa 5 (Correções): limite visual de 4 registros (mesmo padrão das
+               tabelas de histórico de cargas) — botão "Mostrar mais/menos". O
+               contador "Exibindo X de Y registros" fica na régua de filtros (osCounter). -->
+          <div class="p-3 border-t border-nexus-border dark:border-slate-800 text-center">
+            <button id="mostrarMaisOsBtn" type="button" aria-controls="osTableBody" aria-expanded="false" class="hidden min-h-[44px] px-4 py-2 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors">Mostrar mais</button>
           </div>
         </div>
 
