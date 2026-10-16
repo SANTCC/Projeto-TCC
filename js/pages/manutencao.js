@@ -385,6 +385,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // lista para evitar erro de TDZ quando carregarOsSupabase renderiza primeiro).
   let filtroStatusOsAtual = '';
 
+  // Tarefa 5 (Correções): estado do limite visual da tabela de OS — 4 registros
+  // iniciais + botão "Mostrar mais/menos" (mesmo padrão de
+  // LIMITE_HISTORICO_CARGAS/historicoCargasExpandido em cargas.js). Declarado
+  // junto da lista pelo MESMO motivo de TDZ: carregarOsSupabase() renderiza a
+  // tabela antes do restante do script executar. Puramente visual: osList nunca
+  // é recortada e nenhuma ação das OS é afetada.
+  const LIMITE_OS_TABELA = 4;
+  let osTabelaExpandida = false;
+
   async function carregarOsSupabase() {
     if (window.nexusSupabase) {
       try {
@@ -471,10 +480,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
   carregarOsSupabase();
 
+  // Tarefa 5 (Correções): limite visual da tabela de Ordens de Serviço — mesmo
+  // padrão das tabelas de histórico de cargas (LIMITE_HISTORICO_CARGAS): 4
+  // registros iniciais, botão "Mostrar mais"/"Mostrar menos" e contador
+  // "Exibindo X de Y registros". O estado (LIMITE_OS_TABELA/osTabelaExpandida)
+  // é declarado junto de osList por causa do TDZ de carregarOsSupabase.
+
+  // Espelho de atualizarResumoHistoricoCargas (js/pages/cargas.js): contador +
+  // visibilidade/rótulo do botão conforme o total de registros da tabela.
+  function atualizarResumoOsTabela(visiveis, total) {
+    const contador = document.getElementById('osCounter');
+    if (contador) contador.textContent = `Exibindo ${visiveis} de ${total} registros`;
+    const btn = document.getElementById('mostrarMaisOsBtn');
+    if (!btn) return;
+    if (total <= LIMITE_OS_TABELA) {
+      btn.classList.add('hidden');
+      btn.disabled = true;
+      btn.setAttribute('aria-expanded', 'false');
+    } else {
+      btn.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = osTabelaExpandida ? 'Mostrar menos' : 'Mostrar mais';
+      btn.setAttribute('aria-expanded', String(osTabelaExpandida));
+    }
+  }
+
+  function alternarOsTabela() {
+    osTabelaExpandida = !osTabelaExpandida;
+    renderOsTable();
+  }
+  // Exposto para uso programático (testes/agentes assistivos), no mesmo padrão
+  // de window.nexusAlternarHistoricoCargas.
+  window.nexusAlternarOsTabela = alternarOsTabela;
+
   function renderOsTable() {
     if (!osTableBody) return;
 
     if (osList.length === 0) {
+      atualizarResumoOsTabela(0, 0);
       osTableBody.innerHTML = `
         <tr>
           <td colspan="7" class="p-8 text-center">
@@ -498,10 +541,12 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     });
 
-    const osCounterEl = document.getElementById('osCounter');
-    if (osCounterEl) {
-      osCounterEl.textContent = `Exibindo ${osVisiveis.length} de ${osList.length} OS`;
-    }
+    // Tarefa 5 (Correções): aplica o limite de 4 registros SOBRE a lista já
+    // filtrada (busca/chips de status/perfil), como nas tabelas de histórico de
+    // cargas — o contador mostra exibidos/total disponíveis na tabela atual.
+    const osRenderizados = osTabelaExpandida ? osVisiveis : osVisiveis.slice(0, LIMITE_OS_TABELA);
+
+    atualizarResumoOsTabela(osRenderizados.length, osVisiveis.length);
 
     if (osVisiveis.length === 0) {
       const statusTxt = filtroStatusOsAtual ? ` para o status "${(STATUS_OS[filtroStatusOsAtual] || {}).txt || filtroStatusOsAtual}"` : '';
@@ -517,7 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    osTableBody.innerHTML = osVisiveis.map(os => {
+    osTableBody.innerHTML = osRenderizados.map(os => {
       const statusHtml = statusBadgeOs(os.status);
       const prioridadeHtml = prioridadeBadgeOs(os.prioridade);
 
@@ -571,6 +616,13 @@ document.addEventListener('DOMContentLoaded', () => {
         renderOsTable();
       });
     });
+  }
+
+  // Tarefa 5 (Correções): botão "Mostrar mais/menos" da tabela de OS — mesmo
+  // padrão de mostrarMaisEntreguesBtn e demais tabelas de histórico de cargas.
+  const mostrarMaisOsBtn = document.getElementById('mostrarMaisOsBtn');
+  if (mostrarMaisOsBtn) {
+    mostrarMaisOsBtn.addEventListener('click', alternarOsTabela);
   }
 
   async function carregarEquipamentosEAlertas() {

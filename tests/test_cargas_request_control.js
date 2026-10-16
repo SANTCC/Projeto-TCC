@@ -186,13 +186,13 @@ async function testarRespostaObsoleta() {
   w.close();
 }
 
-async function carregarPaginaCargas({ falharAtualizacao = false, deferirAtualizacao = false, statusDuranteGravacao = null, localizacaoNavio = 'NO_PORTO_DE_DESTINO', herdarNavioDoContainer = false } = {}) {
+async function carregarPaginaCargas({ falharAtualizacao = false, deferirAtualizacao = false, statusDuranteGravacao = null, localizacaoNavio = 'NO_PORTO_DE_DESTINO', herdarNavioDoContainer = false, statusInicial = 'AGENDAMENTO' } = {}) {
   const estado = {
     leituras: 0,
     atualizacoes: 0,
     invalidacoes: 0,
     notificacoes: 0,
-    statusBanco: 'AGENDAMENTO',
+    statusBanco: statusInicial,
     falharAtualizacao,
     deferirAtualizacao,
     statusDuranteGravacao,
@@ -327,8 +327,11 @@ async function testarCicloDeInterface() {
 }
 
 async function testarTransicaoSaidaNavio() {
-  log('\n5. Transição de saída: navio fora do porto move a carga para EM_TRANSITO');
-  const { janela, w, estado } = await carregarPaginaCargas({ localizacaoNavio: 'FORA_DO_PORTO' });
+  // Tarefa 2 (Correções): a saída do navio só move para EM_TRANSITO a carga que
+  // está PRONTA_PARA_ENTREGA — nenhuma via automática pula a etapa de prontidão.
+  // O controle de requisições (1 leitura, 1 atualização, sem repetir) é o mesmo.
+  log('\n5. Transição de saída: navio fora do porto move a carga PRONTA_PARA_ENTREGA para EM_TRANSITO');
+  const { janela, w, estado } = await carregarPaginaCargas({ localizacaoNavio: 'FORA_DO_PORTO', statusInicial: 'PRONTA_PARA_ENTREGA' });
   const textoTabela = w.document.getElementById('cargasTableBody').textContent || '';
   check('a liberação do navio persiste EM_TRANSITO e mantém a carga na listagem',
     estado.leituras === 1 && estado.atualizacoes === 1 && estado.statusBanco === 'EM_TRANSITO' && /EM_TRANSITO/.test(textoTabela),

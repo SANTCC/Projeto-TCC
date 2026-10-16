@@ -648,8 +648,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   window.nexusFinalizarEntregaCarga = finalizarEntregaLocal;
 
+
   const entregasEmConfirmacao = new Set();
   const entregasJaSincronizadas = new Set();
+=======
+  /**
+   * Indica se uma carga do cache local pertence a um navio: pelo UUID do navio
+   * (navio_id/navioId) ou pelo nome (campo legado `navio`). Compartilhada pela
+   * renderização do GPS, pela liberação de saída e pela validação de cargas
+   * prontas (Tarefa 2, Correções) — antes vivia apenas dentro de renderGpsTable
+   * e era referenciada por liberarNavioPeloDiretor, o que causava ReferenceError
+   * sempre que havia cargas no cache durante a liberação.
+   */
+  const cargaPertenceAoNavio = (c, n) => {
+    const navioIdCarga = c.navioId || c.navio_id;
+    if (navioIdCarga && n.id) return String(navioIdCarga) === String(n.id);
+    const nomeNavio = String(n.nome || '').trim().toLowerCase();
+    return !!nomeNavio && String(c.navio || '').trim().toLowerCase() === nomeNavio;
+  };
+
 
   // Renderiza Tabela de GPS com atualização viva em tempo real e entrega automática
   function renderGpsTable() {
@@ -677,13 +694,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const atualizacoesRemotasEntregues = [];
     const atualizacoesRemotasDesvinculadas = [];
     let cargasAtualizadas = false;
-
-    const cargaPertenceAoNavio = (c, n) => {
-      const navioIdCarga = c.navioId || c.navio_id;
-      if (navioIdCarga && n.id) return String(navioIdCarga) === String(n.id);
-      const nomeNavio = String(n.nome || '').trim().toLowerCase();
-      return !!nomeNavio && String(c.navio || '').trim().toLowerCase() === nomeNavio;
-    };
 
     cargasFluxo.forEach((c) => {
       if (!c) return;
@@ -1117,6 +1127,123 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  /**
+   * Tarefa 2 (Correções) — RN 3 + fluxo de cargas (SPEC §6): a liberação da saída
+   * exige que TODAS as cargas vinculadas ao navio (diretamente por navio_id/nome
+   * ou por meio dos contêineres do navio) estejam PRONTA_PARA_ENTREGA. Status
+   * finais (ENTREGUE/CANCELADA/RECUSADA) são histórico e não bloqueiam a saída.
+   *
+   * Retorna as cargas ATIVAS ainda não prontas (id público + status atual) e os
+   * UUIDs dos contêineres do navio no banco (usados na transição das cargas
+   * vinculadas via contêiner depois da liberação confirmada).
+   *
+   * Fonte da verdade: Supabase (cargas + containers). O cache local complementa
+   * quando o banco não responde à consulta (modo degradado/offline), no mesmo
+   * espírito dos demais fallbacks da página.
+   */
+  async function avaliarCargasParaLiberacao(navio) {
+    const pendentes = [];
+    const containerIdsDoNavio = [];
+    if (!navio) return { pendentes, containerIdsDoNavio };
+
+    const statusTerminal = (s) => ['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(String(s || '').trim().toUpperCase());
+    const vistos = new Set();
+    const registrarPendente = (idHumano, status) => {
+      const chave = String(idHumano || '').trim().toLowerCase();
+      if (!chave || vistos.has(chave)) return;
+      vistos.add(chave);
+      pendentes.push({ id: String(idHumano), status: String(status || '').trim().toUpperCase() });
+    };
+
+    // Contêineres do navio no cache local (identificacao, id, rawDbId, navio/navio_id).
+    const nomeNavio = String(navio.nome || '').trim().toLowerCase();
+    const contsLocaisDoNavio = containersList.filter(ct => ct && (
+      (navio.id && (ct.navio_id === navio.id || ct.navioId === navio.id)) ||
+      (ct.navio && String(ct.navio).trim().toLowerCase() === nomeNavio)
+    ));
+    const chavesConts = new Set();
+    contsLocaisDoNavio.forEach(ct => {
+      [ct.identificacao, ct.id, ct.rawDbId].filter(Boolean).forEach(v => chavesConts.add(String(v).trim().toLowerCase()));
+    });
+
+    // 1) Banco de dados (fonte de verdade)
+    if (window.nexusSupabase && navio.id) {
+      try {
+        const { data: contsDb, error: errConts } = await window.nexusSupabase
+          .from('containers')
+          .select('id, numero_identificacao, navio_id')
+          .eq('navio_id', navio.id);
+        const linhasConts = (!errConts && Array.isArray(contsDb)) ? contsDb : [];
+        linhasConts.forEach(ct => {
+          if (ct && ct.id) containerIdsDoNavio.push(ct.id);
+          [ct && ct.id, ct && ct.numero_identificacao].filter(Boolean).forEach(v => chavesConts.add(String(v).trim().toLowerCase()));
+        });
+
+        const idHumanoDb = (c) => (c && c.qr_code_url ? String(c.qr_code_url).replace('QR-', '') : `CRG-${c && c.id}`);
+        const avaliarLinhaDb = (c) => {
+          if (!c) return;
+          const id = idHumanoDb(c);
+          const status = String(c.status_fluxo || '').trim().toUpperCase();
+          // O estado lido do banco prevalece sobre o cache local desatualizado:
+          // carga pronta/finalizada não será reavaliada pela etapa do cache.
+          if (statusTerminal(status) || status === 'PRONTA_PARA_ENTREGA') {
+            vistos.add(id.trim().toLowerCase());
+            return;
+          }
+          // registrarPendente também marca `vistos` (deduplicação entre as fontes).
+          registrarPendente(id, status);
+        };
+
+        const { data: diretas, error: errDiretas } = await window.nexusSupabase
+          .from('cargas')
+          .select('id, qr_code_url, status_fluxo')
+          .eq('navio_id', navio.id);
+        if (!errDiretas && Array.isArray(diretas)) diretas.forEach(avaliarLinhaDb);
+
+        if (containerIdsDoNavio.length > 0) {
+          const { data: viaCont, error: errViaCont } = await window.nexusSupabase
+            .from('cargas')
+            .select('id, qr_code_url, status_fluxo')
+            .in('container_id', containerIdsDoNavio);
+          if (!errViaCont && Array.isArray(viaCont)) viaCont.forEach(avaliarLinhaDb);
+        }
+      } catch (e) {
+        console.warn('[NexusPort] Liberação de saída: falha ao consultar cargas/contêineres no banco; usando apenas o cache local:', e);
+      }
+    }
+
+    // 2) Cache local (modo degradado: complementa com cargas que o banco não confirmou)
+    try {
+      const fluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      (Array.isArray(fluxo) ? fluxo : []).forEach(c => {
+        if (!c || typeof c !== 'object') return;
+        const status = String(c.status || '').trim().toUpperCase();
+        if (statusTerminal(status) || status === 'PRONTA_PARA_ENTREGA') return;
+        const porNavio = cargaPertenceAoNavio(c, navio);
+        const porCont = [c.container, c.container_id, c.containerId].filter(Boolean)
+          .some(ref => chavesConts.has(String(ref).trim().toLowerCase()));
+        if (porNavio || porCont) registrarPendente(c.id, status);
+      });
+    } catch (e) {
+      console.warn('[NexusPort] Liberação de saída: cache local de cargas inválido:', e);
+    }
+
+    return { pendentes, containerIdsDoNavio };
+  }
+
+  /**
+   * Tarefa 2 (Correções): interface pública usada pelo adaptador WebMCP
+   * (liberar_saida_navio) para bloquear a liberação com código explícito quando
+   * há cargas vinculadas fora de PRONTA_PARA_ENTREGA. Lista vazia = liberação ok.
+   */
+  window.nexusEmbarcacoesCargasPendentesLiberacao = async function (imo) {
+    const alvo = String(imo || '').trim().toUpperCase().replace(/\s+/g, '');
+    const navio = naviosList.find(n => String(n.imo || '').trim().toUpperCase().replace(/\s+/g, '') === alvo);
+    if (!navio) return [];
+    const { pendentes } = await avaliarCargasParaLiberacao(navio);
+    return pendentes;
+  };
+
   // RN 3: Liberação de Saída de Navios pelo Supervisor de Operações / Diretor
   window.liberarNavioPeloDiretor = async function(imo, opcoes) {
     if (isEstivador) return;
@@ -1179,6 +1306,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     navio.distancia = kmRota;
 
+    // Tarefa 2 (Correções) — RN 3: a saída só pode ser liberada quando TODAS as
+    // cargas vinculadas ao navio estão PRONTA_PARA_ENTREGA. Cargas ativas ainda
+    // não prontas bloqueiam a liberação e a mensagem lista o id público e o
+    // status atual de cada uma (status finais são histórico e não bloqueiam).
+    const { pendentes: cargasPendentes, containerIdsDoNavio } = await avaliarCargasParaLiberacao(navio);
+    if (cargasPendentes.length > 0) {
+      if (window.mostrarFeedback) {
+        const lista = cargasPendentes.slice(0, 8).map(p => `${p.id} (${p.status})`).join(', ');
+        const resto = cargasPendentes.length > 8 ? ` e mais ${cargasPendentes.length - 8}` : '';
+        window.mostrarFeedback('alerta', 'Liberação Bloqueada: Cargas Não Prontas',
+          `O navio ${navio.nome} tem ${cargasPendentes.length} carga(s) vinculada(s) que ainda não estão PRONTA PARA ENTREGA: ${lista}${resto}. ` +
+          'Pelo fluxo de cargas, o status "Em Trânsito" só pode vir de "Pronta para Entrega": conclua a preparação dessas cargas antes de liberar a saída.');
+      }
+      return;
+    }
+
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm 
       ? await window.nexusConfirm('Liberar Saída de Navio', `Confirmar liberação de saída do navio ${navio.nome} (${navio.imo}) pela rota cadastrada ${rotaCadastrada.origem} ➔ ${rotaCadastrada.destino} (${navio.distancia} km)?`) 
       : true;
@@ -1211,10 +1354,14 @@ document.addEventListener('DOMContentLoaded', () => {
           .maybeSingle();
 
         if (error) throw error;
-        if (!data || data.localizacao !== 'FORA_DO_PORTO' || !data.data_saida) {
+        // Alguns dublês de teste devolvem lista mesmo com maybeSingle; o Supabase
+        // atual devolve o objeto único diretamente (mesma normalização de
+        // confirmarChegadaNavio e autorizarRetornoNavio).
+        const registroLiberado = Array.isArray(data) ? data[0] : data;
+        if (!registroLiberado || registroLiberado.localizacao !== 'FORA_DO_PORTO' || !registroLiberado.data_saida) {
           throw new Error('Nenhuma embarcação em estado DENTRO_DO_PORTO foi atualizada. Ela pode ter sido alterada em outro dispositivo.');
         }
-        navioAtualizado = data;
+        navioAtualizado = registroLiberado;
       } catch (err) {
         if (window.mostrarFeedback) {
           window.mostrarFeedback('erro', 'Saída Não Registrada', `O banco de dados não confirmou a saída: ${err.message || err}`);
@@ -1240,17 +1387,31 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Atualiza somente as cargas elegíveis e verifica a resposta. O trigger do
-      // banco também pode aplicar esta transição; a operação é idempotente.
+      // Tarefa 2 (Correções): EM_TRANSITO só pode vir de PRONTA_PARA_ENTREGA — a
+      // validação antes da confirmação já garantiu que não há outras cargas ativas
+      // vinculadas, e status finais (ENTREGUE/CANCELADA/RECUSADA, histórico) nunca
+      // são tocados. A mesma regra vale para as cargas vinculadas via contêineres
+      // do navio; no banco, o trigger fn_propagar_status_navio também aplica essa
+      // transição e a operação é idempotente.
       const { error: cargasError } = await window.nexusSupabase
         .from('cargas')
         .update({ status_fluxo: 'EM_TRANSITO' })
         .eq('navio_id', navio.id)
-        .not('status_fluxo', 'in', '("ENTREGUE","CANCELADA","RECUSADA")');
+        .eq('status_fluxo', 'PRONTA_PARA_ENTREGA');
 
-      if (cargasError) {
+      let cargasContError = null;
+      if (!cargasError && containerIdsDoNavio.length > 0) {
+        const respostaCont = await window.nexusSupabase
+          .from('cargas')
+          .update({ status_fluxo: 'EM_TRANSITO' })
+          .in('container_id', containerIdsDoNavio)
+          .eq('status_fluxo', 'PRONTA_PARA_ENTREGA');
+        cargasContError = respostaCont ? respostaCont.error : null;
+      }
+
+      if (cargasError || cargasContError) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('erro', 'Saída Parcialmente Registrada', `O navio saiu do porto, mas não foi possível sincronizar todas as cargas vinculadas: ${cargasError.message}. Recarregue a página e informe o suporte.`);
+          window.mostrarFeedback('erro', 'Saída Parcialmente Registrada', `O navio saiu do porto, mas não foi possível sincronizar todas as cargas vinculadas: ${(cargasError || cargasContError).message}. Recarregue a página e informe o suporte.`);
         }
         await carregarNaviosSupabase();
         return;
@@ -1262,8 +1423,27 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('nexus_navios_list', JSON.stringify(naviosList));
 
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      // Contêineres do navio (cache) para reconhecer também as cargas vinculadas
+      // por contêiner — o banco já as atualizou acima; o cache espelha o mesmo estado.
+      const contsDoNavioSaida = containersList.filter(ct => ct && (
+        (navio.id && (ct.navio_id === navio.id || ct.navioId === navio.id)) ||
+        (ct.navio && String(ct.navio).trim().toLowerCase() === String(navio.nome || '').trim().toLowerCase())
+      ));
+      const chavesContsSaida = new Set();
+      contsDoNavioSaida.forEach(ct => {
+        [ct.identificacao, ct.id, ct.rawDbId].filter(Boolean).forEach(v => chavesContsSaida.add(String(v).trim().toLowerCase()));
+      });
       cargasFluxo.forEach(c => {
-        if (cargaPertenceAoNavio(c, navio) && !['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)) {
+        if (!c) return;
+        // Tarefa 2 (Correções): no cache, EM_TRANSITO só vem de PRONTA_PARA_ENTREGA
+        // para cargas vinculadas ao navio (direto ou via contêiner). Demais cargas
+        // mantêm o status atual — a validação anterior já barrou cargas ativas não
+        // prontas, e status finais (histórico) nunca são alterados aqui.
+        if (c.status !== 'PRONTA_PARA_ENTREGA') return;
+        const porNavio = cargaPertenceAoNavio(c, navio);
+        const porCont = [c.container, c.container_id, c.containerId].filter(Boolean)
+          .some(ref => chavesContsSaida.has(String(ref).trim().toLowerCase()));
+        if (porNavio || porCont) {
           c.status = 'EM_TRANSITO';
         }
       });
@@ -1273,7 +1453,8 @@ document.addEventListener('DOMContentLoaded', () => {
         await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id, `Navio ${navio.nome} (${navio.imo}) liberado para saída com destino a ${navio.destino} por ${session.nome || session.cargo}. Horário: ${new Date(navio.dataSaida).toLocaleString('pt-BR')}`);
       }
       if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id, { localizacao: 'FORA_DO_PORTO', data_saida: navio.dataSaida });
+        // Tarefa 9 (Correções): frase explícita do que foi feito no log geral.
+        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id, { localizacao: 'FORA_DO_PORTO', data_saida: navio.dataSaida, descricao: `Liberou a saída do navio ${navio.nome || navio.imo || 'sem nome'} com destino a ${navio.destino || navio.origem || '—'} (agora Fora do Porto)` });
       }
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('navios');
@@ -1351,7 +1532,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { porto_origem: navio.origem, porto_destino: navio.destino, localizacao: 'FORA_DO_PORTO' });
+        // Tarefa 9 (Correções): frase explícita do que foi feito no log geral.
+        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { porto_origem: navio.origem, porto_destino: navio.destino, localizacao: 'FORA_DO_PORTO', descricao: `Liberou o navio ${navio.nome || navio.imo || 'sem nome'} para retorno ao porto ${navio.destino || navio.origem || '—'} (agora Fora do Porto)` });
       }
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
@@ -2146,6 +2328,68 @@ document.addEventListener('DOMContentLoaded', () => {
     renderContainersTable();
   }
 
+  // Tarefa 10 (Correções): travas de vinculação contêiner → navio.
+  //  A) O contêiner NÃO pode trocar de navio enquanto o navio atual dele estiver
+  //     fora do porto (o embarque já aconteceu; re-vincular causaria divergência).
+  //  B) Contêiner que JÁ tem navio E cargas ativas não pode desfazer o vínculo e
+  //     se vincular a outro navio — evita falhas de destino final. Cargas em
+  //     status terminal (ENTREGUE/CANCELADA/RECUSADA) são histórico e não
+  //     ocupam mais o contêiner (mesma regra das Tarefas 3/7).
+  const chaveVinculo = (valor) => String(valor || '').trim().toLowerCase();
+  // Tarefa 10 (Correções): comparação tolerante de IMO (caixa, hífen, prefixo e
+  // espaços), necessária porque a automação/WebMCP informa o IMO normalizado
+  // enquanto o cadastro/cache guarda o IMO exibido.
+  const normalizarRefImo = (valor) => String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // O cache de contêineres guarda RÓTULOS de exibição quando o vínculo é
+  // resolvido pelo id ('Não Vinculado', 'Vinculado', 'Sem navio'). Eles não são
+  // nomes de navio e não podem ser tratados como vínculo real — a fonte da
+  // verdade é navio_id/navio_nome (e o texto só quando é nome de fato).
+  const ROTULOS_NAVIO_EXIBICAO = /^(n[ãa]o\s+vinculado|vinculado|sem\s+navio|nenhum|—|-+)$/i;
+  function refsNavioDoContainer(cont) {
+    if (!cont) return [];
+    const refs = [cont.navio_id, cont.navioId, cont.navio_nome].filter(Boolean).map(chaveVinculo);
+    const nome = String(cont.navio || '').trim();
+    if (nome && !ROTULOS_NAVIO_EXIBICAO.test(nome)) refs.push(chaveVinculo(nome));
+    return Array.from(new Set(refs));
+  }
+  function navioAtualDoContainer(cont) {
+    const refs = refsNavioDoContainer(cont);
+    if (refs.length === 0) return null;
+    return naviosList.find(n => [n.id, n.rawDbId, n.nome, n.imo].filter(Boolean)
+      .some(k => refs.includes(chaveVinculo(k)))) || null;
+  }
+  function cargasAtivasDoContainer(cont) {
+    if (!cont) return [];
+    const refs = new Set([cont.identificacao, cont.id, cont.rawDbId].filter(Boolean).map(chaveVinculo));
+    return JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]').filter(c => c
+      && !['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)
+      && [c.container, c.container_id, c.containerId].filter(Boolean).some(ref => refs.has(chaveVinculo(ref))));
+  }
+  // Devolve { titulo, mensagem } quando o vínculo está travado; caso contrário, null.
+  function motivoBloqueioVinculoContainer(cont) {
+    if (!cont || refsNavioDoContainer(cont).length === 0) return null;
+    const navioAtual = navioAtualDoContainer(cont);
+    const localizacaoAtual = navioAtual ? (navioAtual.localizacao || 'DENTRO_DO_PORTO') : null;
+    const nomeCadastro = String(cont.navio || '').trim();
+    const nomeNavio = (navioAtual && navioAtual.nome) || cont.navio_nome
+      || (nomeCadastro && !ROTULOS_NAVIO_EXIBICAO.test(nomeCadastro) ? nomeCadastro : '')
+      || 'navio vinculado';
+    if (localizacaoAtual && localizacaoAtual !== 'DENTRO_DO_PORTO') {
+      return {
+        titulo: 'Vínculo Bloqueado',
+        mensagem: `O contêiner ${cont.identificacao} está vinculado ao navio ${nomeNavio}, que está fora do porto (${localizacaoInfo(localizacaoAtual).txt}). Não é possível re-vincular enquanto o navio não retornar ao Porto de Santos.`
+      };
+    }
+    const cargasAtivas = cargasAtivasDoContainer(cont);
+    if (cargasAtivas.length > 0) {
+      return {
+        titulo: 'Vínculo Travado',
+        mensagem: `O contêiner ${cont.identificacao} já está vinculado ao navio ${nomeNavio} e possui ${cargasAtivas.length} carga(s) ativa(s) (${cargasAtivas.map(c => c.id).slice(0, 5).join(', ')}${cargasAtivas.length > 5 ? ', ...' : ''}). Desfazer o vínculo atual causaria falhas de destino final; libere as cargas antes de trocar de navio.`
+      };
+    }
+    return null;
+  }
+
   function renderContainersTable() {
     if (!containersTableBody) return;
 
@@ -2184,9 +2428,17 @@ document.addEventListener('DOMContentLoaded', () => {
         ? navioMatch.nome
         : (c.navio && c.navio !== 'Vinculado' ? c.navio : (c.navio_id ? 'Vinculado' : 'Não Vinculado'));
 
+      // Tarefa 10 (Correções): o botão de vincular fica DESATIVADO (com o
+      // motivo no title/aria-label) quando o vínculo está travado pela regra A
+      // (navio atual fora do porto) ou B (contêiner com navio e cargas ativas).
+      const bloqueioVinculo = motivoBloqueioVinculoContainer(c);
+      const botaoVincularHtml = bloqueioVinculo
+        ? `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="true" disabled aria-disabled="true" title="${esc(bloqueioVinculo.mensagem)}" aria-label="${esc(bloqueioVinculo.mensagem)}" class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold flex items-center gap-1 cursor-not-allowed opacity-70"><span class="material-symbols-outlined text-[13px]">link_off</span><span>Vincular</span></button>`
+        : `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="false" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>`;
+
       let contAcoesHtml = `
         <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
-          <button type="button" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>
+          ${botaoVincularHtml}
           <button type="button" onclick="window.excluirContainer(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
         </div>
       `;
@@ -2212,14 +2464,36 @@ document.addEventListener('DOMContentLoaded', () => {
   async function propagarNavioParaCargasDoContainer(contIdentificacao, navioAlvo) {
     const chaveCont = String(contIdentificacao || '').trim().toLowerCase();
     if (!chaveCont || !navioAlvo) return 0;
+    // Tarefa 4 (Correções): casa a carga pelo contêiner nas DUAS formas —
+    // identificação textual (vínculo feito na tela) e UUID (container_id, forma
+    // mapeada pelo repositório de dados) — para a herança funcionar quando o
+    // contêiner é vinculado ao navio DEPOIS de a carga já estar no contêiner.
+    const contCadastro = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
+    const chavesCont = new Set();
+    [contIdentificacao, contCadastro && contCadastro.identificacao, contCadastro && contCadastro.id, contCadastro && contCadastro.rawDbId]
+      .filter(Boolean)
+      .forEach(v => chavesCont.add(String(v).trim().toLowerCase()));
+    const cargaDoCont = (c) => !!c && [c.container, c.container_id, c.containerId]
+      .filter(Boolean)
+      .some(ref => chavesCont.has(String(ref).trim().toLowerCase()));
+    const ehTerminal = (c) => ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status);
+    // Só herda quem optou pela herança ou ainda não tem navio — o navio
+    // escolhido manualmente nunca é sobrescrito (nem no cache, nem no banco).
+    const deveHerdar = (c) => c.herdarNavioDoContainer === true || !c.navio;
+
     const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // Os ids a persistir são coletados ANTES da alteração local: depois dela o
+    // navio já está preenchido e `deveHerdar` deixaria as mesmas cargas de fora
+    // (contagem/ persistência em duplicidade).
+    const idsUuidCache = cargasLocais
+      .filter(c => c && !ehTerminal(c) && deveHerdar(c) && cargaDoCont(c) && isUuid.test(String(c.rawDbId || '')))
+      .map(c => c.rawDbId);
     let atualizadas = 0;
     cargasLocais.forEach(c => {
-      if (!c || ['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)) return;
-      const mesmoCont = c.container && String(c.container).trim().toLowerCase() === chaveCont;
-      if (!mesmoCont) return;
-      const deveHerdar = c.herdarNavioDoContainer === true || !c.navio;
-      if (!deveHerdar) return;
+      if (!c || ehTerminal(c)) return;
+      if (!cargaDoCont(c)) return;
+      if (!deveHerdar(c)) return;
       c.navio = navioAlvo.nome;
       if (navioAlvo.id) {
         c.navioId = navioAlvo.id;
@@ -2229,25 +2503,52 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (atualizadas > 0) {
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
-      if (window.nexusSupabase && navioAlvo.id) {
-        try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          const idsUuid = cargasLocais
-            .filter(c => c && !['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(c.status)
-              && c.container && String(c.container).trim().toLowerCase() === chaveCont && isUuid.test(String(c.rawDbId || '')))
-            .map(c => c.rawDbId);
-          if (idsUuid.length > 0) {
-            await window.nexusSupabase.from('cargas').update({ navio_id: navioAlvo.id }).in('id', idsUuid);
+    }
+
+    // Persistência no Supabase: cargas do contêiner conhecidas localmente +
+    // cargas que só existem no banco (vinculadas em outro dispositivo), estas
+    // últimas apenas quando ainda não têm navio (navio_id nulo).
+    let herdadasSomenteBanco = 0;
+    if (window.nexusSupabase && navioAlvo.id) {
+      try {
+        const idsUuid = idsUuidCache.slice();
+        const contUuid = [contCadastro && contCadastro.rawDbId, contCadastro && contCadastro.id, chaveCont]
+          .find(v => v && isUuid.test(String(v))) || null;
+        if (contUuid) {
+          const { data: linhas, error: errSel } = await window.nexusSupabase
+            .from('cargas')
+            .select('id, navio_id, status_fluxo')
+            .eq('container_id', contUuid);
+          if (!errSel && Array.isArray(linhas)) {
+            linhas.forEach(l => {
+              if (!l || !l.id || idsUuid.includes(l.id)) return;
+              if (l.navio_id) return; // navio manual/já herdado: não sobrescrever
+              if (['CANCELADA', 'RECUSADA', 'ENTREGUE'].includes(String(l.status_fluxo || ''))) return;
+              idsUuid.push(l.id);
+            });
           }
-        } catch (e) {
-          console.warn('Erro ao propagar navio herdado para cargas no Supabase:', e);
         }
+        if (idsUuid.length > 0) {
+          const { error: errUp } = await window.nexusSupabase
+            .from('cargas')
+            .update({ navio_id: navioAlvo.id })
+            .in('id', idsUuid);
+          if (errUp) {
+            console.warn('Erro ao propagar navio herdado para cargas no Supabase:', errUp);
+          } else {
+            herdadasSomenteBanco = idsUuid.length - idsUuidCache.length;
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao propagar navio herdado para cargas no Supabase:', e);
       }
+    }
+    if (atualizadas > 0 || herdadasSomenteBanco > 0) {
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('cargas');
       }
     }
-    return atualizadas;
+    return atualizadas + herdadasSomenteBanco;
   }
 
   // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
@@ -2255,6 +2556,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isEstivador) return;
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
     if (!cont) return;
+
+    // Tarefa 10 (Correções): travas de vínculo (regra A: navio atual fora do
+    // porto; regra B: contêiner com navio e cargas ativas). O botão da tabela
+    // já fica desativado nesses casos; esta guarda cobre chamadas diretas
+    // (automação/WebMCP) e estados de DOM defasados.
+    const bloqueioVinculo = motivoBloqueioVinculoContainer(cont);
+    if (bloqueioVinculo) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', bloqueioVinculo.titulo, bloqueioVinculo.mensagem);
+      }
+      return;
+    }
 
     if (naviosList.length === 0) {
       if (window.mostrarFeedback) {
@@ -2277,9 +2590,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let navioAlvo = null;
     if (opcoes && opcoes.navioImo !== undefined) {
       // Uso de agente ou automação: escolhe pelo IMO diretamente
-      navioAlvo = naviosElegiveis.find((n) => n.imo === opcoes.navioImo) || null;
+      navioAlvo = naviosElegiveis.find((n) => normalizarRefImo(n.imo) === normalizarRefImo(opcoes.navioImo)) || null;
       if (!navioAlvo && window.mostrarFeedback) {
-        const navioPedido = naviosList.find((n) => n.imo === opcoes.navioImo);
+        const navioPedido = naviosList.find((n) => normalizarRefImo(n.imo) === normalizarRefImo(opcoes.navioImo));
         const nomePedido = navioPedido ? `${navioPedido.nome} (${navioPedido.imo})` : `IMO ${opcoes.navioImo}`;
         window.mostrarFeedback('alerta', 'Navio Fora do Porto', `A embarcação ${nomePedido} não está atracada no Porto de Santos (situação: ${navioPedido ? localizacaoInfo(navioPedido.localizacao).txt : 'não encontrada'}) e não pode receber contêineres.`);
       }
@@ -2321,7 +2634,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (!navioImoSelecionado) return;
-        navioAlvo = naviosElegiveis.find(n => n.imo === navioImoSelecionado) || null;
+        navioAlvo = naviosElegiveis.find(n => normalizarRefImo(n.imo) === normalizarRefImo(navioImoSelecionado)) || null;
       } else {
         // Fallback em código legado sem modal na árvore DOM
         const optionsText = naviosElegiveis.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo})`).join('\n');

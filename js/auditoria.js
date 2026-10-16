@@ -28,7 +28,53 @@ function resolverEntidadeAuditoria(entidade, referencia) {
   // Compatibilidade com a API histórica de códigos de carga sem metadados.
   return {tipo: tipo || 'CARGA', codigo, id:null};
 }
-window.NexusAuditoria = { resolverEntidade: resolverEntidadeAuditoria };
+window.NexusAuditoria = { resolverEntidade: resolverEntidadeAuditoria, descricaoDoLog: descricaoDoLog };
+
+// Tarefa 9 (Correções): frase legível e única do que foi feito no sistema —
+// gravada no log local e no banco (detalhes.descricao) e exibida no log geral
+// do Painel Geral, no lugar da leitura vaga "entidade + tipo". Detalhes
+// informados como texto (ex.: "Recebimento físico registrado pelo Conferente
+// de Carga") têm precedência; sem eles, a frase é montada com o verbo do tipo
+// de alteração + o rótulo da entidade + o código legível (nunca UUID cru).
+const AUDIT_VERBOS = {
+  CRIACAO: 'Criou',
+  EDICAO: 'Editou',
+  EXCLUSAO: 'Excluiu',
+  REIMPRESSAO_ETIQUETA: 'Reimprimiu a etiqueta de',
+  EXPORTACAO: 'Exportou'
+};
+const AUDIT_ROTULOS_ENTIDADE = {
+  CARGA: 'a carga',
+  NAVIO: 'o navio',
+  CONTAINER: 'o contêiner',
+  GUINDASTE: 'o guindaste',
+  FUNCIONARIO: 'o funcionário',
+  MANUTENCAO: 'a ordem de serviço',
+  VISITANTE: 'o visitante',
+  CHECKLIST: 'o checklist',
+  ROTA: 'a rota marítima',
+  TIPO_CARGA: 'o tipo de carga',
+  EMERGENCIA: 'a emergência'
+};
+function descricaoDoLog(registro) {
+  if (!registro) return '';
+  const det = registro.detalhes;
+  const textoDet = typeof det === 'string' ? det.trim() : String((det && det.descricao) || '').trim();
+  if (textoDet) return textoDet;
+  const tipo = String(registro.tipo_alteracao || '').toUpperCase();
+  const verbo = AUDIT_VERBOS[tipo] || 'Alterou';
+  const rotulo = AUDIT_ROTULOS_ENTIDADE[String(registro.entidade_tipo || '').toUpperCase()] || 'o registro';
+  const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+  let codigo = String(registro.entidade_id || '').trim();
+  if (!codigo || codigo.toUpperCase() === 'N/A' || ehUuid(codigo)) {
+    // UUID cru não comunica nada ao operador: prefere um código legível dos
+    // detalhes (id/código/matrícula/nome) e, não havendo, omite o complemento.
+    codigo = (det && typeof det === 'object')
+      ? String([det.codigo, !ehUuid(det.id) ? det.id : '', det.matricula, det.nome].find((v) => v && !ehUuid(v)) || '').trim()
+      : '';
+  }
+  return codigo ? `${verbo} ${rotulo} ${codigo}` : `${verbo} ${rotulo}`;
+}
 
 // Funções utilitárias globais exigidas para integração (T7.1, T7.3, T8.3 - T8.6, T6.8)
 window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes = '', referencia = null) {
@@ -81,8 +127,14 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
 
   const nowIso = new Date().toISOString();
 
+  // Tarefa 9 (Correções): frase única do que foi feito (texto explícito nos
+  // detalhes tem precedência; sem ele, verbo + entidade + código legível).
+  const descricaoLog = descricaoDoLog({ tipo_alteracao: tipoEnum, entidade_tipo: entidadeTipo, entidade_id: entidadeId, detalhes });
+
   if (window.nexusSupabase) {
     try {
+      const detalhesPayload = Object.assign({}, typeof detalhes === 'object' ? detalhes : { descricao: detalhes }, { referencia_id: alvo.id });
+      if (!detalhesPayload.descricao) detalhesPayload.descricao = descricaoLog;
       const payload = {
         data_hora: nowIso,
         cargo: cargoEnum,
@@ -90,7 +142,7 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
         entidade_tipo: entidadeTipo,
         entidade_id: entidadeId || 'N/A',
         tipo_alteracao: tipoEnum,
-        detalhes: Object.assign({}, typeof detalhes === 'object' ? detalhes : { descricao: detalhes }, { referencia_id: alvo.id })
+        detalhes: detalhesPayload
       };
       if (funcId) payload.funcionario_id = funcId;
 
@@ -129,6 +181,7 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
     entidade_tipo: entidadeTipo,
     entidade_id: entidadeId,
     tipo_alteracao: tipoEnum,
+    descricao: descricaoLog,
     detalhes: detalhes
   };
   logs.unshift(newLog);

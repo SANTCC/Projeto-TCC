@@ -1098,6 +1098,18 @@ document.addEventListener('DOMContentLoaded', () => {
     return true;
   }
 
+  // Tarefa 6 (Correções): auxiliares de identidade do visitante — o CPF é
+  // comparado apenas pelos dígitos (ignora máscara/pontuação) e o nome é
+  // comparado ignorando apenas diferenças de caixa e espaços extras, conforme
+  // o critério de "mesma pessoa" do cadastro de visitantes.
+  function somenteDigitosDoc(doc) {
+    return String(doc == null ? '' : doc).replace(/\D/g, '');
+  }
+
+  function normalizarNomePessoa(nomePessoa) {
+    return String(nomePessoa == null ? '' : nomePessoa).trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
   function aplicarMascaraCPF(value) {
     const digits = value.replace(/\D/g, '').slice(0, 11);
     return digits
@@ -1132,6 +1144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+
       // C14 / V-06: Impedir cadastro de visitantes com documento/CPF duplicado (entre visitantes e funcionários)
       const docNormalizado = documento.toUpperCase().replace(/[^A-Z0-9]/g, '');
       const visitanteExistente = visList.find(v =>
@@ -1151,10 +1164,38 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+=======
+      // ── Tarefa 6 (Correções): identidade do visitante por CPF × nome ──────
+      // Substitui o bloqueio C14 antigo (que recusava QUALQUER documento
+      // repetido) pela regra de identidade:
+      //  • CPF igual (só dígitos) + nome idêntico (ignorando caixa e espaços
+      //    extras) ⇒ MESMA pessoa: cadastro aceito sem erro de duplicidade e
+      //    sem criar registro conflitante (a visita em andamento é
+      //    reaproveitada; caso contrário abre-se uma nova visita da pessoa).
+      //  • CPF igual + nome diferente (mesmo que minimamente) ⇒ RECUSADO com
+      //    mensagem clara: o mesmo CPF não pode pertencer a dois nomes.
+      //  • CPF novo ⇒ cadastro normal, sem mudanças.
+      const nomeNormalizado = normalizarNomePessoa(nome);
+      const mesmoCpfLocal = visList.filter(v => somenteDigitosDoc(v.documento) === docClean);
+      const conflitoLocal = mesmoCpfLocal.find(v => normalizarNomePessoa(v.nome) !== nomeNormalizado);
+      if (conflitoLocal) {
+        const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${documento}" já está cadastrado para outro visitante ("${conflitoLocal.nome}"). O mesmo CPF não pode pertencer a dois nomes diferentes — confira o nome e o CPF informados.`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado com Outro Nome', msg);
+        return;
+      }
+
+      // Mesmo CPF + mesmo nome ⇒ mesma pessoa; sem correspondência ⇒ CPF novo.
+      let visitasMesmoCpfDb = [];
+
       if (window.nexusSupabase) {
         try {
-          const { data: dupVis } = await window.nexusSupabase
+          // Busca os candidatos e compara localmente pelos dígitos do CPF: o
+          // documento pode estar gravado com ou sem máscara (o .eq('documento')
+          // exato do bloqueio antigo não cobria variações de formato nem
+          // distinguia mesma pessoa de nome diferente).
+          const { data: visitasDb } = await window.nexusSupabase
             .from('visitantes')
+
             .select('nome, documento')
             .or(`documento.eq.${documento},documento.eq.${docClean},documento.eq.${formatarCpfExibicao(docClean)}`)
             .maybeSingle();
@@ -1162,6 +1203,16 @@ document.addEventListener('DOMContentLoaded', () => {
           if (dupVis) {
             const msg = `BLOQUEIO DE SEGURANÇA (C14): Documento "${documento}" já registrado no banco de dados para "${dupVis.nome}". Duplicação bloqueada.`;
             if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
+=======
+            .select('id, nome, documento, data_hora_saida');
+          const candidatosDb = Array.isArray(visitasDb) ? visitasDb : (visitasDb ? [visitasDb] : []);
+          visitasMesmoCpfDb = candidatosDb.filter(v => somenteDigitosDoc(v.documento) === docClean);
+
+          const conflitoDb = visitasMesmoCpfDb.find(v => normalizarNomePessoa(v.nome) !== nomeNormalizado);
+          if (conflitoDb) {
+            const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${documento}" já está registrado no banco de dados para outro visitante ("${conflitoDb.nome}"). O mesmo CPF não pode pertencer a dois nomes diferentes.`;
+            if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado com Outro Nome', msg);
+
             return;
           }
 
@@ -1181,6 +1232,72 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
+      // Mesma pessoa com visita EM ANDAMENTO: não cria registro conflitante —
+      // reaproveita a visita ativa (atualizando motivo/data-hora/responsável),
+      // mantendo uma única identidade no livro de visitas. Visitas já
+      // concluídas permanecem no histórico; uma nova visita cria novo registro.
+      const ehUuidVis = (valor) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(valor || ''));
+      const visitaAtivaLocal = mesmoCpfLocal.find(v => !v.data_saida && v.status !== 'CONCLUIDO') || null;
+      const visitaAtivaDb = !visitaAtivaLocal ? (visitasMesmoCpfDb.find(v => !v.data_hora_saida) || null) : null;
+      const visitaAtiva = visitaAtivaLocal || visitaAtivaDb;
+      if (visitaAtiva) {
+        const agoraVisita = new Date();
+        if (visitaAtivaLocal) {
+          visitaAtivaLocal.motivo = motivo;
+          visitaAtivaLocal.data = agoraVisita.toLocaleString('pt-BR');
+          visitaAtivaLocal.por = session.matricula;
+          visitaAtivaLocal.status = status;
+        } else {
+          // Visita ativa vista apenas no banco (espelho local desatualizado,
+          // ex.: registro feito em outro dispositivo): traz para a lista como
+          // a mesma pessoa, sem duplicar.
+          visList.unshift({
+            id: visitaAtivaDb.id,
+            nome,
+            documento,
+            motivo,
+            status,
+            data: agoraVisita.toLocaleString('pt-BR'),
+            data_saida: null,
+            vistoria: null,
+            por: session.matricula
+          });
+        }
+        localStorage.setItem('nexus_vis_list', JSON.stringify(visList));
+
+        if (window.nexusSupabase && ehUuidVis(visitaAtiva.id)) {
+          try {
+            await window.nexusSupabase.from('visitantes')
+              .update({ motivo, data_hora_entrada: agoraVisita.toISOString() })
+              .eq('id', visitaAtiva.id);
+          } catch (err) {
+            console.warn('[NexusPort] Erro ao atualizar visita ativa no Supabase:', err);
+          }
+        }
+        if (window.registrarLogAlteracao) {
+          try {
+            await window.registrarLogAlteracao('EDICAO', 'visitantes', ehUuidVis(visitaAtiva.id) ? visitaAtiva.id : null, { nome, documento, motivo, mesma_pessoa: true });
+          } catch (err) {
+            console.warn('[NexusPort] Erro ao auditar reaproveitamento de visita:', err);
+          }
+        }
+
+        if (window.NexusRepository && window.NexusRepository.notifyChange) {
+          window.NexusRepository.notifyChange('visitantes');
+        }
+
+        renderVisTables();
+        visForm.reset();
+        visForm.classList.add('hidden');
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('sucesso', 'Visitante Registrado', `Entrada de ${nome} (Status: ${status}) registrada — visitante já cadastrado com o mesmo CPF e o mesmo nome (mesma pessoa), sem duplicidade.`);
+        }
+        return;
+      }
+
+      // CPF novo OU mesma pessoa sem visita em andamento (nova visita): fluxo
+      // de criação normal.
+      const pessoaJaCadastrada = mesmoCpfLocal.length > 0 || visitasMesmoCpfDb.length > 0;
       const novoVisitante = {
         id: `VIS-${Math.floor(1000 + Math.random() * 9000)}`,
         nome,
@@ -1227,7 +1344,9 @@ document.addEventListener('DOMContentLoaded', () => {
       visForm.reset();
       visForm.classList.add('hidden');
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('sucesso', 'Visitante Registrado', `Entrada do visitante ${nome} (Status: ${status}) registrada com sucesso.`);
+        window.mostrarFeedback('sucesso', 'Visitante Registrado', pessoaJaCadastrada
+          ? `Entrada do visitante ${nome} (Status: ${status}) registrada com sucesso — pessoa já cadastrada (mesmo CPF e mesmo nome): nova visita aberta.`
+          : `Entrada do visitante ${nome} (Status: ${status}) registrada com sucesso.`);
       }
     });
   }

@@ -96,6 +96,10 @@ const PAGINAS = [
       'Inspeção ativa única por carga: as anteriores permanecem como histórico.',
       'Leitura do QR Code da carga direto na tela para abrir a inspeção correspondente.'
     ],
+
+=======
+    // Espelha PAGE_PERMISSIONS (auth-guard): o Conferente de Carga também inspeciona.
+
     cargos: ['CONFERENTE_CARGA', 'INSPETOR', ...GESTAO]
   },
   {
@@ -110,6 +114,10 @@ const PAGINAS = [
       'Fallback de digitação manual para ambientes sem câmera.',
       'Cada leitura é registrada em leituras_qr_code para rastreabilidade.'
     ],
+
+=======
+    // Espelha PAGE_PERMISSIONS (auth-guard): Técnico em Portos não usa o scanner.
+
     cargos: TODOS_OPERACIONAIS.filter(c => !['ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS'].includes(c))
   },
   {
@@ -180,6 +188,10 @@ const PAGINAS = [
       'Relatório PDF A4 gerado no servidor (Edge Function relatorio-pdf) com cache por hash do conteúdo.',
       'Exportação de histórico com registro de auditoria da operação.'
     ],
+
+=======
+    // Espelha PAGE_PERMISSIONS (auth-guard): Técnico em Portos não acessa relatórios.
+
     cargos: TODOS_OPERACIONAIS.filter(c => !['ESTIVADOR', 'ARRUMADOR_CONSERTADOR', 'PLANEJADOR_PATIO_NAVIOS', 'TECNICO_PORTOS'].includes(c))
   },
   {
