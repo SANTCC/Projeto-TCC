@@ -648,6 +648,36 @@
       if (args.imo !== undefined && !(await navioPorImo(args.imo))) {
         return { codigo: 'NAVIO_NAO_ENCONTRADO', mensagem: `Navio com IMO ${imoNormalizado(args.imo)} não encontrado.` };
       }
+      // Tarefa 10 (Correções): mesmas travas da tela de Embarcações & GPS —
+      //  A) contêiner vinculado a navio FORA_DO_PORTO não pode ser re-vinculado;
+      //  B) contêiner com navio E cargas ativas tem o vínculo travado (falhas de
+      //     destino final); status terminais são histórico e não travam.
+      if (args.identificacao === undefined) return null;
+      const chave = (v) => String(v || '').trim().toLowerCase();
+      const alvo = args.identificacao.toUpperCase();
+      const cont = D.containers().find((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(alvo));
+      if (!cont) return null;
+      // Rótulos de exibição ('Não Vinculado', 'Vinculado') não são vínculo real.
+      const ROTULOS_NAVIO_EXIBICAO = /^(n[ãa]o\s+vinculado|vinculado|sem\s+navio|nenhum|—|-+)$/i;
+      const refsNavio = [cont.navio_id, cont.navioId, cont.navio_nome].filter(Boolean).map(chave);
+      const nomeCont = String(cont.navio || '').trim();
+      if (nomeCont && !ROTULOS_NAVIO_EXIBICAO.test(nomeCont)) refsNavio.push(chave(nomeCont));
+      const refsNavioUnicos = Array.from(new Set(refsNavio));
+      if (refsNavioUnicos.length === 0) return null;
+      const navioAtual = (await D.navios()).find((n) => [n.id, n.nome, n.imo].filter(Boolean).some((k) => refsNavioUnicos.includes(chave(k)))) || null;
+      const nomeAtual = (navioAtual && navioAtual.nome) || cont.navio_nome
+        || (nomeCont && !ROTULOS_NAVIO_EXIBICAO.test(nomeCont) ? nomeCont : '')
+        || 'navio vinculado';
+      if (navioAtual && (navioAtual.localizacao || 'DENTRO_DO_PORTO') !== 'DENTRO_DO_PORTO') {
+        return { codigo: 'CONTAINER_NAVIO_FORA_DO_PORTO', mensagem: `O contêiner ${alvo} está vinculado ao navio ${nomeAtual}, que está fora do porto. Não é possível re-vincular enquanto o navio não retornar ao Porto de Santos.` };
+      }
+      const refsCont = [cont.identificacao, cont.id, cont.rawDbId].filter(Boolean).map(chave);
+      const cargasAtivas = (await D.cargas()).filter((c) => c
+        && !['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)
+        && [c.container, c.container_id, c.containerId].filter(Boolean).some((r) => refsCont.includes(chave(r))));
+      if (cargasAtivas.length > 0) {
+        return { codigo: 'CONTAINER_VINCULO_TRAVADO', mensagem: `O contêiner ${alvo} já está vinculado ao navio ${nomeAtual} e possui ${cargasAtivas.length} carga(s) ativa(s). O vínculo não pode ser trocado para evitar falhas de destino final; libere as cargas antes de trocar de navio.` };
+      }
       return null;
     },
     resumo: async (args) => {
@@ -658,7 +688,9 @@
       const id = args.identificacao.toUpperCase();
       const imo = imoNormalizado(args.imo);
       const navio = await navioPorImo(imo);
-      await window.vincularContainerANavio(id, { confirmado: true, navioImo: imo });
+      // Tarefa 10 (Correções): repassa o IMO no formato do cadastro do navio
+      // (o normalizado pode não bater com o exibido no cache da tela).
+      await window.vincularContainerANavio(id, { confirmado: true, navioImo: (navio && navio.imo) || imo });
       const ok = await D.esperar(() => D.containers().some((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(id) && navio && c.navio === navio.nome), 4000);
       if (!ok) return falhaNaoConcluida('A vinculação não foi concluída (capacidade ou dados do navio). Veja a mensagem exibida ao operador.');
       return { mensagem: `Contêiner ${id} vinculado ao navio ${navio.nome}.`, dados: { identificacao: id, navio: navio.nome } };

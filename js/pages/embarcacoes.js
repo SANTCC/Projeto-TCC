@@ -2250,6 +2250,68 @@ document.addEventListener('DOMContentLoaded', () => {
     renderContainersTable();
   }
 
+  // Tarefa 10 (Correções): travas de vinculação contêiner → navio.
+  //  A) O contêiner NÃO pode trocar de navio enquanto o navio atual dele estiver
+  //     fora do porto (o embarque já aconteceu; re-vincular causaria divergência).
+  //  B) Contêiner que JÁ tem navio E cargas ativas não pode desfazer o vínculo e
+  //     se vincular a outro navio — evita falhas de destino final. Cargas em
+  //     status terminal (ENTREGUE/CANCELADA/RECUSADA) são histórico e não
+  //     ocupam mais o contêiner (mesma regra das Tarefas 3/7).
+  const chaveVinculo = (valor) => String(valor || '').trim().toLowerCase();
+  // Tarefa 10 (Correções): comparação tolerante de IMO (caixa, hífen, prefixo e
+  // espaços), necessária porque a automação/WebMCP informa o IMO normalizado
+  // enquanto o cadastro/cache guarda o IMO exibido.
+  const normalizarRefImo = (valor) => String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // O cache de contêineres guarda RÓTULOS de exibição quando o vínculo é
+  // resolvido pelo id ('Não Vinculado', 'Vinculado', 'Sem navio'). Eles não são
+  // nomes de navio e não podem ser tratados como vínculo real — a fonte da
+  // verdade é navio_id/navio_nome (e o texto só quando é nome de fato).
+  const ROTULOS_NAVIO_EXIBICAO = /^(n[ãa]o\s+vinculado|vinculado|sem\s+navio|nenhum|—|-+)$/i;
+  function refsNavioDoContainer(cont) {
+    if (!cont) return [];
+    const refs = [cont.navio_id, cont.navioId, cont.navio_nome].filter(Boolean).map(chaveVinculo);
+    const nome = String(cont.navio || '').trim();
+    if (nome && !ROTULOS_NAVIO_EXIBICAO.test(nome)) refs.push(chaveVinculo(nome));
+    return Array.from(new Set(refs));
+  }
+  function navioAtualDoContainer(cont) {
+    const refs = refsNavioDoContainer(cont);
+    if (refs.length === 0) return null;
+    return naviosList.find(n => [n.id, n.rawDbId, n.nome, n.imo].filter(Boolean)
+      .some(k => refs.includes(chaveVinculo(k)))) || null;
+  }
+  function cargasAtivasDoContainer(cont) {
+    if (!cont) return [];
+    const refs = new Set([cont.identificacao, cont.id, cont.rawDbId].filter(Boolean).map(chaveVinculo));
+    return JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]').filter(c => c
+      && !['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)
+      && [c.container, c.container_id, c.containerId].filter(Boolean).some(ref => refs.has(chaveVinculo(ref))));
+  }
+  // Devolve { titulo, mensagem } quando o vínculo está travado; caso contrário, null.
+  function motivoBloqueioVinculoContainer(cont) {
+    if (!cont || refsNavioDoContainer(cont).length === 0) return null;
+    const navioAtual = navioAtualDoContainer(cont);
+    const localizacaoAtual = navioAtual ? (navioAtual.localizacao || 'DENTRO_DO_PORTO') : null;
+    const nomeCadastro = String(cont.navio || '').trim();
+    const nomeNavio = (navioAtual && navioAtual.nome) || cont.navio_nome
+      || (nomeCadastro && !ROTULOS_NAVIO_EXIBICAO.test(nomeCadastro) ? nomeCadastro : '')
+      || 'navio vinculado';
+    if (localizacaoAtual && localizacaoAtual !== 'DENTRO_DO_PORTO') {
+      return {
+        titulo: 'Vínculo Bloqueado',
+        mensagem: `O contêiner ${cont.identificacao} está vinculado ao navio ${nomeNavio}, que está fora do porto (${localizacaoInfo(localizacaoAtual).txt}). Não é possível re-vincular enquanto o navio não retornar ao Porto de Santos.`
+      };
+    }
+    const cargasAtivas = cargasAtivasDoContainer(cont);
+    if (cargasAtivas.length > 0) {
+      return {
+        titulo: 'Vínculo Travado',
+        mensagem: `O contêiner ${cont.identificacao} já está vinculado ao navio ${nomeNavio} e possui ${cargasAtivas.length} carga(s) ativa(s) (${cargasAtivas.map(c => c.id).slice(0, 5).join(', ')}${cargasAtivas.length > 5 ? ', ...' : ''}). Desfazer o vínculo atual causaria falhas de destino final; libere as cargas antes de trocar de navio.`
+      };
+    }
+    return null;
+  }
+
   function renderContainersTable() {
     if (!containersTableBody) return;
 
@@ -2279,9 +2341,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const manutDisplay = c.dataManut || 'Sem Manutenção';
 
+      // Tarefa 10 (Correções): o botão de vincular fica DESATIVADO (com o
+      // motivo no title/aria-label) quando o vínculo está travado pela regra A
+      // (navio atual fora do porto) ou B (contêiner com navio e cargas ativas).
+      const bloqueioVinculo = motivoBloqueioVinculoContainer(c);
+      const botaoVincularHtml = bloqueioVinculo
+        ? `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="true" disabled aria-disabled="true" title="${esc(bloqueioVinculo.mensagem)}" aria-label="${esc(bloqueioVinculo.mensagem)}" class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold flex items-center gap-1 cursor-not-allowed opacity-70"><span class="material-symbols-outlined text-[13px]">link_off</span><span>Vincular</span></button>`
+        : `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="false" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>`;
+
       let contAcoesHtml = `
         <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
-          <button type="button" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>
+          ${botaoVincularHtml}
           <button type="button" onclick="window.excluirContainer(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
         </div>
       `;
@@ -2400,6 +2470,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
     if (!cont) return;
 
+    // Tarefa 10 (Correções): travas de vínculo (regra A: navio atual fora do
+    // porto; regra B: contêiner com navio e cargas ativas). O botão da tabela
+    // já fica desativado nesses casos; esta guarda cobre chamadas diretas
+    // (automação/WebMCP) e estados de DOM defasados.
+    const bloqueioVinculo = motivoBloqueioVinculoContainer(cont);
+    if (bloqueioVinculo) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', bloqueioVinculo.titulo, bloqueioVinculo.mensagem);
+      }
+      return;
+    }
+
     if (naviosList.length === 0) {
       if (window.mostrarFeedback) {
         window.mostrarFeedback('alerta', 'Navios Indisponíveis', 'Nenhum navio cadastrado no sistema para vinculação de contêiner.');
@@ -2421,9 +2503,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let navioAlvo = null;
     if (opcoes && opcoes.navioImo !== undefined) {
       // Uso de agente ou automação: escolhe pelo IMO diretamente
-      navioAlvo = naviosElegiveis.find((n) => n.imo === opcoes.navioImo) || null;
+      navioAlvo = naviosElegiveis.find((n) => normalizarRefImo(n.imo) === normalizarRefImo(opcoes.navioImo)) || null;
       if (!navioAlvo && window.mostrarFeedback) {
-        const navioPedido = naviosList.find((n) => n.imo === opcoes.navioImo);
+        const navioPedido = naviosList.find((n) => normalizarRefImo(n.imo) === normalizarRefImo(opcoes.navioImo));
         const nomePedido = navioPedido ? `${navioPedido.nome} (${navioPedido.imo})` : `IMO ${opcoes.navioImo}`;
         window.mostrarFeedback('alerta', 'Navio Fora do Porto', `A embarcação ${nomePedido} não está atracada no Porto de Santos (situação: ${navioPedido ? localizacaoInfo(navioPedido.localizacao).txt : 'não encontrada'}) e não pode receber contêineres.`);
       }
@@ -2465,7 +2547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (!navioImoSelecionado) return;
-        navioAlvo = naviosElegiveis.find(n => n.imo === navioImoSelecionado) || null;
+        navioAlvo = naviosElegiveis.find(n => normalizarRefImo(n.imo) === normalizarRefImo(navioImoSelecionado)) || null;
       } else {
         // Fallback em código legado sem modal na árvore DOM
         const optionsText = naviosElegiveis.map((n, idx) => `${idx + 1} - ${n.nome} (${n.imo})`).join('\n');
