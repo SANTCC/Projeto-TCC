@@ -651,7 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const entregasEmConfirmacao = new Set();
   const entregasJaSincronizadas = new Set();
-=======
+
   /**
    * Indica se uma carga do cache local pertence a um navio: pelo UUID do navio
    * (navio_id/navioId) ou pelo nome (campo legado `navio`). Compartilhada pela
