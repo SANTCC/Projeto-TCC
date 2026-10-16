@@ -554,6 +554,9 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('nexus_navios_list', novoNaviosJson);
           }
           renderGpsTable();
+          if (typeof renderContainersTable === 'function') {
+            renderContainersTable();
+          }
           liberarBercosOrfaos(naviosList).catch(e => console.warn('[NexusPort] Verificação de berços órfãos falhou:', e));
           return;
         }
@@ -871,12 +874,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let bercosInfoHtml = '<span class="text-slate-600 italic text-[11px]">Sem carga vinculada</span>';
       if (cargasDoNavio.length > 0) {
-        bercosInfoHtml = cargasDoNavio.map(c => `
+        bercosInfoHtml = cargasDoNavio.map(c => {
+          const refCont = String(c.container || c.container_id || '').trim();
+          const contMatch = refCont && Array.isArray(containersList)
+            ? containersList.find(ct => ct && (String(ct.id) === refCont || String(ct.rawDbId) === refCont || String(ct.identificacao).toLowerCase() === refCont.toLowerCase()))
+            : null;
+          const nomeContExibicao = contMatch && contMatch.identificacao ? contMatch.identificacao : (refCont || 'Não vinculado');
+          return `
           <div class="text-[11px] leading-tight">
             <strong class="text-nexus-500">${esc(c.id)}</strong>: <span class="font-bold text-slate-700 dark:text-slate-200">${esc(c.portoDescarga || 'Berço não atrelado')}</span>
-            <span class="block text-[10px] text-slate-600">Contêiner: ${esc(c.container || 'Não vinculado')}</span>
+            <span class="block text-[10px] text-slate-600">Contêiner: ${esc(nomeContExibicao)}</span>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
 
       // RN 3: Liberação de saída de navios é competência do Supervisor de Operações e Direção
@@ -2096,19 +2106,24 @@ document.addEventListener('DOMContentLoaded', () => {
           .select('*');
 
         if (!error && Array.isArray(data) && data.length > 0) {
-          const supConts = data.map(c => ({
-            id: c.id || `CONT-${c.numero_identificacao}`,
-            rawDbId: c.id,
-            identificacao: c.numero_identificacao,
-            tipo: c.material_carregado || '',
-            tipo_carga_id: c.tipo_carga_id || null,
-            dataFabr: c.data_fabricacao || '',
-            dataManut: c.data_ultima_manutencao || 'Sem Manutenção',
-            refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
-            navio_id: c.navio_id || null,
-            navio: c.navio_id ? 'Vinculado' : 'Não Vinculado',
-            estado: c.estado || 'OPERANTE'
-          }));
+          const supConts = data.map(c => {
+            const navioVinculado = c.navio_id
+              ? naviosList.find(n => n && n.id && String(n.id) === String(c.navio_id))
+              : null;
+            return {
+              id: c.id || `CONT-${c.numero_identificacao}`,
+              rawDbId: c.id,
+              identificacao: c.numero_identificacao,
+              tipo: c.material_carregado || '',
+              tipo_carga_id: c.tipo_carga_id || null,
+              dataFabr: c.data_fabricacao || '',
+              dataManut: c.data_ultima_manutencao || 'Sem Manutenção',
+              refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
+              navio_id: c.navio_id || null,
+              navio: (navioVinculado && navioVinculado.nome) ? navioVinculado.nome : (c.navio_id ? 'Vinculado' : 'Não Vinculado'),
+              estado: c.estado || 'OPERANTE'
+            };
+          });
 
           // Mescla contêineres locais com o banco Supabase para preservar cadastros
           const supIdSet = new Set(supConts.map(x => (x.identificacao || '').toUpperCase()));
@@ -2159,6 +2174,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const manutDisplay = c.dataManut || 'Sem Manutenção';
+      const navioMatch = c.navio_id
+        ? naviosList.find(n => n && n.id && String(n.id) === String(c.navio_id))
+        : null;
+      if (navioMatch && navioMatch.nome) {
+        c.navio = navioMatch.nome;
+      }
+      const nomeNavioExibicao = (navioMatch && navioMatch.nome)
+        ? navioMatch.nome
+        : (c.navio && c.navio !== 'Vinculado' ? c.navio : (c.navio_id ? 'Vinculado' : 'Não Vinculado'));
 
       let contAcoesHtml = `
         <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
@@ -2174,7 +2198,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 font-mono text-xs">${cargasVinculadasHtml}</td>
           <td class="p-3 font-mono text-xs">Fab: ${esc(c.dataFabr)}<br>Manut: ${esc(manutDisplay)}</td>
           <td class="p-3 font-mono text-xs"><span class="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-bold">${esc(c.refTempo)}</span></td>
-          <td class="p-3 font-bold text-xs">${esc(c.navio || 'Não Vinculado')}</td>
+          <td class="p-3 font-bold text-xs">${esc(nomeNavioExibicao)}</td>
           <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-xs font-bold">${esc(c.estado)}</span></td>
           <td class="p-3 text-right whitespace-nowrap">${contAcoesHtml}</td>
         </tr>

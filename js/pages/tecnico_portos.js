@@ -404,6 +404,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const limpar = !opcoes || opcoes.limpar !== false;
     funcionarioEmEdicao = null;
     camposIdentidadeFuncionario().forEach(campo => { campo.disabled = false; });
+    const cpfCampo = document.getElementById('funcCpf');
+    if (cpfCampo) {
+      cpfCampo.readOnly = false;
+      cpfCampo.disabled = false;
+      cpfCampo.title = '';
+      cpfCampo.classList.remove('bg-slate-100', 'dark:bg-slate-800/80', 'cursor-not-allowed', 'opacity-75');
+    }
     const label = document.getElementById('funcFormSubmitLabel');
     if (label) label.textContent = 'Salvar Funcionário';
     const cancelar = document.getElementById('cancelarEdicaoFuncionarioBtn');
@@ -430,10 +437,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function iniciarEdicaoFuncionario(funcionario) {
     if (!funcionario || !funcForm) return;
+    const cpfExistenteDigits = fatiarCpfSomenteDigitos(funcionario.cpf);
+    const cpfJaDefinido = cpfExistenteDigits.length === 11;
     funcionarioEmEdicao = {
       matricula: funcionario.matricula,
       id: funcionario.id || null,
-      nome: funcionario.nome || ''
+      nome: funcionario.nome || '',
+      cpfOriginalDigits: cpfJaDefinido ? cpfExistenteDigits : null
     };
     const setValor = (id, valor) => {
       const campo = document.getElementById(id);
@@ -444,7 +454,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setValor('funcCargo', cargoEnumDoFuncionario(funcionario));
     setValor('funcDoc', '');
     const cpfCampo = document.getElementById('funcCpf');
-    if (cpfCampo) cpfCampo.value = funcionario.cpf ? formatarCpfExibicao(funcionario.cpf) : '';
+    if (cpfCampo) {
+      cpfCampo.value = funcionario.cpf ? formatarCpfExibicao(funcionario.cpf) : '';
+      cpfCampo.readOnly = cpfJaDefinido;
+      cpfCampo.title = cpfJaDefinido ? 'CPF já cadastrado para este funcionário (bloqueado para alteração)' : '';
+      cpfCampo.classList.toggle('bg-slate-100', cpfJaDefinido);
+      cpfCampo.classList.toggle('dark:bg-slate-800/80', cpfJaDefinido);
+      cpfCampo.classList.toggle('cursor-not-allowed', cpfJaDefinido);
+      cpfCampo.classList.toggle('opacity-75', cpfJaDefinido);
+    }
     setValor('funcDataNasc', String(funcionario.data_nascimento || '').slice(0, 10));
 
     camposIdentidadeFuncionario().forEach(campo => { campo.disabled = true; });
@@ -457,9 +475,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     funcForm.classList.remove('hidden');
     if (window.mostrarFeedback) {
-      window.mostrarFeedback('info', 'Editar Funcionário', `Atualize o CPF e a data de nascimento de ${funcionario.nome || 'funcionário'}. Matrícula, nome e cargo não são alterados nesta edição.`);
+      const msg = cpfJaDefinido
+        ? `Atualize a data de nascimento de ${funcionario.nome || 'funcionário'}. Matrícula, nome, cargo e CPF já cadastrado permanecem bloqueados.`
+        : `Cadastre o CPF pendente e atualize a data de nascimento de ${funcionario.nome || 'funcionário'}. Matrícula, nome e cargo não são alterados nesta edição.`;
+      window.mostrarFeedback('info', 'Editar Funcionário', msg);
     }
-    if (cpfCampo) cpfCampo.focus();
+    const dataNascCampo = document.getElementById('funcDataNasc');
+    if (cpfJaDefinido && dataNascCampo) dataNascCampo.focus();
+    else if (cpfCampo) cpfCampo.focus();
   }
 
   // O DOM recebe só um índice de apresentação, nunca matrícula em onclick/data-*.
@@ -492,11 +515,20 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function salvarEdicaoFuncionario(alvo, cpfDigits, dataNasc) {
-    // Unicidade do CPF no cache local, ignorando o próprio funcionário.
+    if (alvo && alvo.cpfOriginalDigits) {
+      cpfDigits = alvo.cpfOriginalDigits;
+    }
+    // Unicidade do CPF no cache local (funcionários e visitantes), ignorando o próprio funcionário.
     const duplicadoLocal = (mergedFuncList || []).find(f =>
       f.matricula !== alvo.matricula && fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === cpfDigits);
     if (duplicadoLocal) {
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para "${duplicadoLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`);
+      return;
+    }
+    const dupVisLocal = (typeof visList !== 'undefined' && Array.isArray(visList) ? visList : []).find(v =>
+      fatiarCpfSomenteDigitos(v.documento || '') === cpfDigits);
+    if (dupVisLocal) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para o visitante "${dupVisLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`);
       return;
     }
 
@@ -712,10 +744,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Bloqueio de CPF duplicado no cache local
+      // Bloqueio de CPF duplicado no cache local (funcionários e visitantes)
       const cpfDuplicadoLocal = mergedFuncList.find(f => fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === cpfDigits);
       if (cpfDuplicadoLocal) {
         const msg = `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para "${cpfDuplicadoLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', msg);
+        return;
+      }
+      const cpfVisDuplicadoLocal = (typeof visList !== 'undefined' && Array.isArray(visList) ? visList : []).find(v =>
+        fatiarCpfSomenteDigitos(v.documento || '') === cpfDigits);
+      if (cpfVisDuplicadoLocal) {
+        const msg = `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para o visitante "${cpfVisDuplicadoLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', msg);
         return;
       }
@@ -1085,19 +1124,29 @@ document.addEventListener('DOMContentLoaded', () => {
       // Tarefa 13: Status inicial automático em "EM_VISITA"
       const status = 'EM_VISITA';
 
-      // Validação do documento do visitante no padrão do CPF (11 dígitos, permite CPFs fictícios - Tarefa 5)
+      // Validação do documento do visitante no padrão do CPF (11 dígitos não todos iguais, permite CPFs fictícios - Tarefa 5 / V-06)
       const docClean = documento.replace(/\D/g, '');
-      if (docClean.length !== 11 || !validarCPF(docClean)) {
-        const msg = 'DOCUMENTO DO VISITANTE INVÁLIDO: O documento deve seguir o padrão do CPF (XXX.XXX.XXX-XX) com 11 dígitos numéricos (são permitidos CPFs fictícios)!';
+      if (docClean.length !== 11 || !validarCpf(docClean) || !validarCPF(docClean)) {
+        const msg = 'DOCUMENTO DO VISITANTE INVÁLIDO: O documento deve seguir o padrão do CPF (XXX.XXX.XXX-XX) com 11 dígitos numéricos não todos iguais (são permitidos CPFs fictícios)!';
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Inválido', msg);
         return;
       }
 
-      // C14: Impedir cadastro de visitantes com documento duplicado
+      // C14 / V-06: Impedir cadastro de visitantes com documento/CPF duplicado (entre visitantes e funcionários)
       const docNormalizado = documento.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const visitanteExistente = visList.find(v => v.documento.toUpperCase().replace(/[^A-Z0-9]/g, '') === docNormalizado);
+      const visitanteExistente = visList.find(v =>
+        (v.documento || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === docNormalizado
+        || fatiarCpfSomenteDigitos(v.documento || '') === docClean
+      );
       if (visitanteExistente) {
         const msg = `BLOQUEIO DE SEGURANÇA (C14): O documento "${documento}" já está cadastrado para o visitante "${visitanteExistente.nome}". Cada visitante deve possuir documento único!`;
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
+        return;
+      }
+
+      const funcComMesmoCpf = (mergedFuncList || []).find(f => fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === docClean);
+      if (funcComMesmoCpf) {
+        const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${funcComMesmoCpf.nome}". Cada pessoa deve possuir CPF único no sistema!`;
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
         return;
       }
@@ -1107,11 +1156,23 @@ document.addEventListener('DOMContentLoaded', () => {
           const { data: dupVis } = await window.nexusSupabase
             .from('visitantes')
             .select('nome, documento')
-            .eq('documento', documento)
+            .or(`documento.eq.${documento},documento.eq.${docClean},documento.eq.${formatarCpfExibicao(docClean)}`)
             .maybeSingle();
 
           if (dupVis) {
             const msg = `BLOQUEIO DE SEGURANÇA (C14): Documento "${documento}" já registrado no banco de dados para "${dupVis.nome}". Duplicação bloqueada.`;
+            if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
+            return;
+          }
+
+          const { data: dupFuncCpf, error: dupFuncErr } = await window.nexusSupabase
+            .from('funcionarios')
+            .select('nome, cpf')
+            .eq('cpf', docClean)
+            .maybeSingle();
+
+          if (!dupFuncErr && dupFuncCpf) {
+            const msg = `BLOQUEIO DE SEGURANÇA (C14): O CPF "${formatarCpfExibicao(docClean)}" já pertence ao funcionário "${dupFuncCpf.nome}" no banco de dados. Duplicação bloqueada.`;
             if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Documento Duplicado', msg);
             return;
           }

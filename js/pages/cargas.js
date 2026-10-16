@@ -327,15 +327,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const naviosPorNome = new Map();
+    const naviosPorId = new Map();
     naviosLocais.forEach((navio) => {
-      const nome = String(navio && navio.nome || '').trim().toLowerCase();
+      if (!navio) return;
+      const nome = String(navio.nome || '').trim().toLowerCase();
       if (nome) naviosPorNome.set(nome, navio);
+      const id = String(navio.id || '').trim().toLowerCase();
+      if (id) naviosPorId.set(id, navio);
     });
+
+    const mapaConts = typeof contemineresPorIdentificacao === 'function' ? contemineresPorIdentificacao() : new Map();
 
     const transicoes = [];
     (Array.isArray(cargas) ? cargas : []).forEach((carga) => {
-      if (!carga || !carga.navio || ['CANCELADA', 'RECUSADA'].includes(carga.status)) return;
-      const navio = naviosPorNome.get(String(carga.navio).trim().toLowerCase());
+      if (!carga || ['CANCELADA', 'RECUSADA'].includes(carga.status)) return;
+      const idNavio = String(carga.navioId || carga.navio_id || '').trim().toLowerCase();
+      const nomeNavio = String(carga.navio || '').trim().toLowerCase();
+      let navio = (idNavio && naviosPorId.get(idNavio)) || (nomeNavio && naviosPorNome.get(nomeNavio)) || null;
+      if (!navio) {
+        const refCont = String(carga.container || carga.container_id || '').trim().toLowerCase();
+        const cont = refCont ? mapaConts.get(refCont) : null;
+        if (cont) {
+          const contNavioId = String(cont.navio_id || cont.navioId || '').trim().toLowerCase();
+          const contNavioNome = String(cont.navio || '').trim().toLowerCase();
+          navio = (contNavioId && naviosPorId.get(contNavioId))
+            || (contNavioNome && contNavioNome !== 'vinculado' && contNavioNome !== 'não vinculado' && naviosPorNome.get(contNavioNome))
+            || null;
+        }
+      }
       if (!navio) return;
 
       const localizacao = navio.localizacao || navio.estado;
@@ -496,6 +515,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (requestRevision !== cargasLoadRevision) return;
+    // Se houver cargas ativas com navio vinculado e o cache local de navios ainda estiver vazio,
+    // carrega os navios do repositório para avaliar as transições NO_PORTO_DE_DESTINO -> ENTREGUE (V-08).
+    if (window.NexusRepository && typeof window.NexusRepository.getNavios === 'function') {
+      const naviosEmCache = lerListaLocalCargas('nexus_navios_list');
+      const temCargaComNavio = cargasFluxoList.some(c =>
+        c && !['ENTREGUE', 'CANCELADA', 'RECUSADA'].includes(c.status)
+        && (c.navio || c.navioId || c.navio_id || c.container || c.container_id)
+      );
+      if (naviosEmCache.length === 0 && temCargaComNavio) {
+        try {
+          await window.NexusRepository.getNavios();
+        } catch (err) { /* segue com o cache disponível */ }
+        if (requestRevision !== cargasLoadRevision) return;
+      }
+    }
     // Resolve primeiro os navios herdados do contêiner, para as mesmas transições
     // automáticas continuarem válidas também para cargas vinculadas indiretamente.
     sincronizarNaviosHerdados();
@@ -695,8 +729,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapa = new Map();
     try {
       (JSON.parse(localStorage.getItem('nexus_containers_list') || '[]') || []).forEach(cont => {
-        const chave = String(cont.identificacao || cont.id || '').trim().toLowerCase();
-        if (chave) mapa.set(chave, cont);
+        if (!cont) return;
+        [cont.identificacao, cont.numero_identificacao, cont.id, cont.rawDbId].forEach(val => {
+          const chave = String(val || '').trim().toLowerCase();
+          if (chave) mapa.set(chave, cont);
+        });
       });
     } catch (e) { /* cache indisponível */ }
     return mapa;

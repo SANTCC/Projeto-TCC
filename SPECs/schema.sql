@@ -481,7 +481,7 @@ begin
         navio_id = null,
         container_id = null,
         updated_at = now()
-    where c.status_fluxo = 'EM_TRANSITO'
+    where c.status_fluxo not in ('ENTREGUE', 'CANCELADA', 'RECUSADA')
       and (
         c.navio_id = NEW.id
         or c.container_id in (select id from containers where navio_id = NEW.id)
@@ -490,8 +490,11 @@ begin
     -- Atualiza status das cargas para EM_TRANSITO
     update cargas
     set status_fluxo = 'EM_TRANSITO', updated_at = now()
-    where container_id in (select id from containers where navio_id = NEW.id)
-      and status_fluxo = 'PRONTA_PARA_ENTREGA';
+    where status_fluxo not in ('EM_TRANSITO', 'ENTREGUE', 'CANCELADA', 'RECUSADA')
+      and (
+        navio_id = NEW.id
+        or container_id in (select id from containers where navio_id = NEW.id)
+      );
   end if;
   return NEW;
 end;
