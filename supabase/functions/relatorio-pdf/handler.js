@@ -22,6 +22,8 @@ const LIMITE_CORPO_BYTES = 4096;
 const SELECAO_CARGA = [
   'id, natureza, material, quantidade, peso, volume, valor_declarado, destino, porto_descarga,',
   'status_fluxo, resultado_inspecao, motivo_recusa, data_entrada, data_saida,',
+  'navio_nome_historico, container_identificacao_historico,',
+  'navios:navio_id(nome, numero_imo, porto_origem, porto_destino),',
   'containers:container_id(numero_identificacao, material_carregado, estado, data_fabricacao,',
   'tempo_uso_referencia, navios:navio_id(nome, numero_imo, porto_origem, porto_destino))'
 ].join(' ');

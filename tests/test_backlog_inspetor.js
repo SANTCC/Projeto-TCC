@@ -1,7 +1,9 @@
 /** Tarefa 5: mesma validação de Pronta na interface, ação e pré-condição WebMCP. */
 const assert = require('node:assert/strict');
 const H = require('./webmcp-harness');
-const base = {id:'CRG-TESTE-5', status:'ARMAZENAGEM', container:'CONT-1', navio:'Navio Teste', resultadoInspecao:'APROVADA'};
+// Backlog Parte 2 — Tarefa 9: "pronta" também exige a movimentação física
+// concluída até o contêiner (portoDescarga = "Contêiner CONT-1").
+const base = {id:'CRG-TESTE-5', status:'ARMAZENAGEM', container:'CONT-1', portoDescarga:'Contêiner CONT-1', navio:'Navio Teste', resultadoInspecao:'APROVADA'};
 
 async function abrir(carga, extras = {}, cargo = 'INSPETOR') {
   const j = H.criarJanela({
@@ -41,7 +43,7 @@ async function abrir(carga, extras = {}, cargo = 'INSPETOR') {
     {nome:'inspeção pendente', mudanca:{resultadoInspecao:'PENDENTE'}},
     {nome:'inspeção recusada no formato do banco', mudanca:{resultadoInspecao:undefined, resultado_inspecao:'RECUSADA'}},
     {nome:'etapas concluídas', permitido:true},
-    {nome:'vínculos por IDs', mudanca:{container:'', navio:'', container_id:'cont-id', navio_id:'nav-id'}, permitido:true},
+    {nome:'vínculos por IDs', mudanca:{container:'', navio:'', container_id:'cont-id', navio_id:'nav-id', portoDescarga:'Contêiner cont-id'}, permitido:true},
     {nome:'navioId no modelo do repositório', mudanca:{navio:'', navioId:'nav-id'}, permitido:true},
     {nome:'ARMAZENAGEM legada sem campo de resultado', mudanca:{resultadoInspecao:undefined}, permitido:true},
     {nome:'tarefa de outra carga não bloqueia', extras:{nexus_guindaste_tarefas:[{id:'TRF-OUTRA', cargaId:'CRG-OUTRA'}]}, permitido:true}

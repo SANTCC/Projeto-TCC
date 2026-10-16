@@ -157,10 +157,14 @@
               <label class="block font-bold text-slate-600 mb-1">Documentação Interna</label>
               <input type="text" id="funcDoc" placeholder="Ex: Livro Registro #102" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
-            <div class="sm:col-span-2 md:col-span-4 flex justify-end gap-2 mt-1">
-              <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
+            <div class="sm:col-span-2 md:col-span-4 flex items-center justify-end gap-2 mt-1">
+              <span id="funcEdicaoAviso" class="hidden mr-auto text-[11px] font-semibold text-nexus-700 dark:text-nexus-300">Editando CPF e data de nascimento — matrícula, nome e cargo ficam travados.</span>
+              <button id="cancelarEdicaoFuncionarioBtn" type="button" class="hidden px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold text-xs">
+                Cancelar Edição
+              </button>
+              <button id="funcFormSubmitBtn" type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
                 <span class="material-symbols-outlined text-[16px]">save</span>
-                <span>Salvar Funcionário</span>
+                <span id="funcFormSubmitLabel">Salvar Funcionário</span>
               </button>
             </div>
           </form>

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Teste especifico para Tarefa 1:
- * Carga desvincula do navio apos a entrega no porto de destino.
+ * Carga desvincula do navio apos a entrega no porto de destino, preservando
+ * o nome do navio como snapshot histórico (Backlog Parte 2 — Tarefa 5).
  */
 const H = require('./webmcp-harness');
 const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, htmlDaPagina } = H;
@@ -74,10 +75,16 @@ async function main() {
     check('Carga CRG-2026-901 virou ENTREGUE', carga && carga.status === 'ENTREGUE', carga ? carga.status : 'não encontrada');
     check('Carga CRG-2026-901 desvinculou do navio localmente (navio = \'\')', carga && carga.navio === '', carga ? carga.navio : 'N/A');
     check('Carga CRG-2026-901 desvinculou do navio localmente (navioId = null)', carga && (carga.navioId === null || carga.navio_id === null), carga ? carga.navioId : 'N/A');
+    check('Histórico local preserva o navio da entrega', carga && carga.navioNomeHistorico === 'Jaguar' && carga.navio_nome_historico === 'Jaguar',
+      carga ? JSON.stringify({ navioNomeHistorico: carga.navioNomeHistorico, navio_nome_historico: carga.navio_nome_historico }) : 'N/A');
+    check('Vínculo local com contêiner foi liberado na entrega', carga && carga.container === '' && carga.container_id === null,
+      carga ? JSON.stringify({ container: carga.container, container_id: carga.container_id }) : 'N/A');
 
     const dbCarga = banco.tabelas.cargas.find((c) => c.id === UUID(1));
     check('Banco: status_fluxo atualizado para ENTREGUE', dbCarga && dbCarga.status_fluxo === 'ENTREGUE', dbCarga ? dbCarga.status_fluxo : 'N/A');
     check('Banco: navio_id desvinculado (navio_id = null)', dbCarga && dbCarga.navio_id === null, dbCarga ? dbCarga.navio_id : 'N/A');
+    check('Banco: container_id desvinculado (container_id = null)', dbCarga && dbCarga.container_id === null, dbCarga ? dbCarga.container_id : 'N/A');
+    check('Banco: snapshot histórico do navio preservado', dbCarga && dbCarga.navio_nome_historico === 'Jaguar', dbCarga ? dbCarga.navio_nome_historico : 'N/A');
 
     w.close();
   }

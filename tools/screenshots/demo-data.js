@@ -351,29 +351,35 @@ const CARGAS = [
 ];
 
 function cargas() {
-  return CARGAS.map(([chave, tipo, material, peso, volume, valor, natureza, status, container, imo, resultado, destino, porto, entrada, saida]) => ({
-    id: uuid(`carga-${chave}`),
-    tipo_carga_id: uuid(tipo),
-    quantidade: 1,
-    material,
-    peso,
-    volume,
-    valor_declarado: valor,
-    natureza,
-    data_entrada: entrada === null ? null : horas(entrada),
-    data_saida: saida === null ? null : horas(saida),
-    destino,
-    porto_descarga: porto,
-    status_fluxo: status,
-    container_id: container ? CONTAINER_ID[container] : null,
-    checklist_modelo_id: uuid(`checklist-${tipo}`),
-    resultado_inspecao: resultado,
-    motivo_recusa: status === 'RECUSADA' ? 'Embalagem avariada na inspeção de recebimento' : null,
-    qr_code_url: `QR-DEMO-CRG-${String(chave).padStart(3, '0')}`,
-    navio_id: imo ? NAVIO_ID[imo] : null,
-    created_at: horas(entrada === null ? 12 : entrada + 2),
-    updated_at: horas(2)
-  }));
+  return CARGAS.map(([chave, tipo, material, peso, volume, valor, natureza, status, container, imo, resultado, destino, porto, entrada, saida]) => {
+    const entregue = status === 'ENTREGUE';
+    const navioHistorico = entregue ? (NAVIOS.find(([, , navioImo]) => navioImo === imo) || [])[1] || null : null;
+    return {
+      id: uuid(`carga-${chave}`),
+      tipo_carga_id: uuid(tipo),
+      quantidade: 1,
+      material,
+      peso,
+      volume,
+      valor_declarado: valor,
+      natureza,
+      data_entrada: entrada === null ? null : horas(entrada),
+      data_saida: saida === null ? null : horas(saida),
+      destino,
+      porto_descarga: porto,
+      status_fluxo: status,
+      container_id: !entregue && container ? CONTAINER_ID[container] : null,
+      checklist_modelo_id: uuid(`checklist-${tipo}`),
+      resultado_inspecao: resultado,
+      motivo_recusa: status === 'RECUSADA' ? 'Embalagem avariada na inspeção de recebimento' : null,
+      qr_code_url: `QR-DEMO-CRG-${String(chave).padStart(3, '0')}`,
+      navio_id: !entregue && imo ? NAVIO_ID[imo] : null,
+      navio_nome_historico: navioHistorico,
+      container_identificacao_historico: entregue ? container : null,
+      created_at: horas(entrada === null ? 12 : entrada + 2),
+      updated_at: horas(2)
+    };
+  });
 }
 
 const CARGA_ID = {};

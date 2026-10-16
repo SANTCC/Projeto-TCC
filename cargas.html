@@ -266,6 +266,10 @@
               </tbody>
             </table>
           </div>
+          <div class="flex items-center justify-between gap-2">
+            <span id="cargasEntreguesContador" aria-live="polite" class="text-[11px] font-mono text-emerald-700 dark:text-emerald-400"></span>
+            <button id="mostrarMaisEntreguesBtn" type="button" aria-controls="cargasEntreguesTableBody" aria-expanded="false" class="hidden min-h-[44px] px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors">Mostrar mais</button>
+          </div>
         </div>
 
         <!-- Tabela de Cargas Canceladas (cinza) — a tabela principal exibe apenas cargas pendentes -->
@@ -295,6 +299,10 @@
                 <!-- Renderizado via JS -->
               </tbody>
             </table>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <span id="cargasCanceladasContador" aria-live="polite" class="text-[11px] font-mono text-slate-600 dark:text-slate-400"></span>
+            <button id="mostrarMaisCanceladasBtn" type="button" aria-controls="cargasCanceladasTableBody" aria-expanded="false" class="hidden min-h-[44px] px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-700 text-white font-bold text-xs transition-colors">Mostrar mais</button>
           </div>
         </div>
 
@@ -326,6 +334,10 @@
                 <!-- Renderizado via JS -->
               </tbody>
             </table>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <span id="cargasRecusadasContador" aria-live="polite" class="text-[11px] font-mono text-red-700 dark:text-red-400"></span>
+            <button id="mostrarMaisRecusadasBtn" type="button" aria-controls="cargasRecusadasTableBody" aria-expanded="false" class="hidden min-h-[44px] px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-colors">Mostrar mais</button>
           </div>
         </div>
 
@@ -552,5 +564,7 @@
       window.nexusCarregarVLibras = carregar;
     })();
   </script>
+</body>
+</html>
 </body>
 </html>

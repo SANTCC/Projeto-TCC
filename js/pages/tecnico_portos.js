@@ -372,9 +372,12 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 text-slate-600 font-semibold">${esc(f.cargo)}</td>
         <td class="p-3 font-mono text-slate-600 dark:text-slate-300">${esc(formatarCpfExibicao(f.cpf))}</td>
         <td class="p-3 font-mono text-slate-600">${esc(formatarDataNascExibicao(f.data_nascimento))}</td>
-        <td class="p-3 text-slate-600 font-mono text-xs flex items-center justify-between">
+        <td class="p-3 text-slate-600 font-mono text-xs flex items-center justify-between gap-2">
           <span class="${f.ativo ? 'text-emerald-700 font-bold' : 'text-slate-600'}">${esc(f.doc || 'Cadastrado')}</span>
-          <button type="button" onclick="window.excluirFuncionarioPorIndice(${jsArg(indice)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
+          <span class="flex items-center gap-1.5 shrink-0">
+            <button type="button" onclick="window.editarFuncionarioPorIndice(${jsArg(indice)})" class="px-2 py-1 bg-nexus-500 hover:bg-nexus-900 text-white rounded font-bold text-xs">Editar</button>
+            <button type="button" onclick="window.excluirFuncionarioPorIndice(${jsArg(indice)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
+          </span>
         </td>
       </tr>
     `).join('');
@@ -385,6 +388,165 @@ document.addEventListener('DOMContentLoaded', () => {
     const funcionario = mergedFuncList[Number(indice)];
     if (funcionario) return window.excluirFuncionarioReal(funcionario.matricula);
   };
+
+  // ------------------------------------------------------------------------
+  // Tarefa 2 (Backlog Parte 2): edição de CPF e data de nascimento.
+  // O mesmo formulário do cadastro entra em "modo edição": matrícula, nome,
+  // cargo e documentação ficam travados (são a identidade do cadastro) e só
+  // CPF e data de nascimento são atualizados — no Supabase e no cache local.
+  // ------------------------------------------------------------------------
+  let funcionarioEmEdicao = null; // { matricula, id, nome } ou null (cadastro)
+
+  const camposIdentidadeFuncionario = () => ['funcMatricula', 'funcNome', 'funcCargo', 'funcDoc']
+    .map(id => document.getElementById(id)).filter(Boolean);
+
+  function sairModoEdicaoFuncionario(opcoes) {
+    const limpar = !opcoes || opcoes.limpar !== false;
+    funcionarioEmEdicao = null;
+    camposIdentidadeFuncionario().forEach(campo => { campo.disabled = false; });
+    const label = document.getElementById('funcFormSubmitLabel');
+    if (label) label.textContent = 'Salvar Funcionário';
+    const cancelar = document.getElementById('cancelarEdicaoFuncionarioBtn');
+    if (cancelar) cancelar.classList.add('hidden');
+    const avisoEdicao = document.getElementById('funcEdicaoAviso');
+    if (avisoEdicao) avisoEdicao.classList.add('hidden');
+    if (limpar && funcForm) funcForm.reset();
+    if (opcoes && opcoes.fechar && funcForm) funcForm.classList.add('hidden');
+  }
+
+  function cargoEnumDoFuncionario(f) {
+    const select = document.getElementById('funcCargo');
+    const candidatos = [f.cargo_enum, f.cargo].filter(Boolean).map(String);
+    if (select) {
+      for (const candidato of candidatos) {
+        const porValor = Array.from(select.options).find(o => o.value === candidato);
+        if (porValor) return porValor.value;
+        const porTexto = Array.from(select.options).find(o => o.text === candidato);
+        if (porTexto) return porTexto.value;
+      }
+    }
+    return candidatos[0] || 'ESTIVADOR';
+  }
+
+  function iniciarEdicaoFuncionario(funcionario) {
+    if (!funcionario || !funcForm) return;
+    funcionarioEmEdicao = {
+      matricula: funcionario.matricula,
+      id: funcionario.id || null,
+      nome: funcionario.nome || ''
+    };
+    const setValor = (id, valor) => {
+      const campo = document.getElementById(id);
+      if (campo) campo.value = valor == null ? '' : String(valor);
+    };
+    setValor('funcMatricula', funcionario.matricula || '');
+    setValor('funcNome', funcionario.nome || '');
+    setValor('funcCargo', cargoEnumDoFuncionario(funcionario));
+    setValor('funcDoc', '');
+    const cpfCampo = document.getElementById('funcCpf');
+    if (cpfCampo) cpfCampo.value = funcionario.cpf ? formatarCpfExibicao(funcionario.cpf) : '';
+    setValor('funcDataNasc', String(funcionario.data_nascimento || '').slice(0, 10));
+
+    camposIdentidadeFuncionario().forEach(campo => { campo.disabled = true; });
+    const label = document.getElementById('funcFormSubmitLabel');
+    if (label) label.textContent = 'Salvar Alterações';
+    const cancelar = document.getElementById('cancelarEdicaoFuncionarioBtn');
+    if (cancelar) cancelar.classList.remove('hidden');
+    const avisoEdicao = document.getElementById('funcEdicaoAviso');
+    if (avisoEdicao) avisoEdicao.classList.remove('hidden');
+
+    funcForm.classList.remove('hidden');
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('info', 'Editar Funcionário', `Atualize o CPF e a data de nascimento de ${funcionario.nome || 'funcionário'}. Matrícula, nome e cargo não são alterados nesta edição.`);
+    }
+    if (cpfCampo) cpfCampo.focus();
+  }
+
+  // O DOM recebe só um índice de apresentação, nunca matrícula em onclick/data-*.
+  window.editarFuncionarioPorIndice = function(indice) {
+    const funcionario = mergedFuncList[Number(indice)];
+    if (funcionario) iniciarEdicaoFuncionario(funcionario);
+  };
+  // Uso programático (testes/WebMCP): mesma entrada da interface, por matrícula.
+  window.editarFuncionarioReal = function(matricula) {
+    const funcionario = mergedFuncList.find(f => f.matricula === matricula);
+    if (funcionario) iniciarEdicaoFuncionario(funcionario);
+    return funcionario || null;
+  };
+
+  function atualizarFuncionarioLocal(alvo, cpfDigits, dataNasc) {
+    const aplicar = (f) => {
+      if (f && (f.matricula === alvo.matricula || (alvo.id && f.id === alvo.id))) {
+        f.cpf = cpfDigits;
+        f.data_nascimento = dataNasc;
+        return true;
+      }
+      return false;
+    };
+    (mergedFuncList || []).forEach(aplicar);
+    try {
+      const localList = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+      localList.forEach(aplicar);
+      localStorage.setItem('nexus_func_list', JSON.stringify(localList));
+    } catch (e) { /* cache indisponível: a lista em memória já foi atualizada */ }
+  }
+
+  async function salvarEdicaoFuncionario(alvo, cpfDigits, dataNasc) {
+    // Unicidade do CPF no cache local, ignorando o próprio funcionário.
+    const duplicadoLocal = (mergedFuncList || []).find(f =>
+      f.matricula !== alvo.matricula && fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === cpfDigits);
+    if (duplicadoLocal) {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para "${duplicadoLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`);
+      return;
+    }
+
+    let avisoMigracao = '';
+    if (window.nexusSupabase) {
+      try {
+        // Unicidade do CPF no banco, ignorando o próprio funcionário.
+        const { data: dupCpf, error: dupErr } = await window.nexusSupabase
+          .from('funcionarios').select('nome, matricula').eq('cpf', cpfDigits).maybeSingle();
+        if (!dupErr && dupCpf && dupCpf.matricula !== alvo.matricula) {
+          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE (Supabase): o CPF ${formatarCpfExibicao(cpfDigits)} já pertence ao funcionário "${dupCpf.nome}". Não é permitido cadastrar duplicidades!`);
+          return;
+        }
+
+        let updateQuery = window.nexusSupabase
+          .from('funcionarios')
+          .update({ cpf: cpfDigits, data_nascimento: dataNasc });
+        updateQuery = alvo.id ? updateQuery.eq('id', alvo.id) : updateQuery.eq('matricula', alvo.matricula);
+        const { error: updErr } = await updateQuery;
+        if (updErr) {
+          const msgErro = `${updErr.message || ''} ${updErr.code || ''}`;
+          if (/column|PGRST204|42703/i.test(msgErro)) {
+            // Banco sem a migração de cpf/data_nascimento: mantém no cache e avisa.
+            avisoMigracao = ' Aviso: as colunas cpf/data_nascimento ainda não existem no Supabase — aplique a migração supabase/migrations/20261010000000_funcionarios_cpf_nascimento.sql para sincronizá-las.';
+          } else {
+            if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Edição Não Realizada', `Não foi possível atualizar ${alvo.nome || 'o funcionário'} no banco de dados (${updErr.message || 'erro'}). Nada foi alterado.`);
+            return;
+          }
+        }
+      } catch (err) {
+        if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Edição Não Realizada', `Não foi possível atualizar ${alvo.nome || 'o funcionário'}: falha de comunicação com o banco de dados. Nada foi alterado.`);
+        return;
+      }
+    }
+
+    atualizarFuncionarioLocal(alvo, cpfDigits, dataNasc);
+    if (window.registrarLogAlteracao) {
+      // Auditoria sem dados sensíveis: registra QUAIS campos, nunca o CPF.
+      await window.registrarLogAlteracao('EDICAO', 'funcionarios', alvo.id || null, { matricula: alvo.matricula, campos_atualizados: ['cpf', 'data_nascimento'] });
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('funcionarios');
+    }
+    const nome = alvo.nome || 'Funcionário';
+    sairModoEdicaoFuncionario({ fechar: true });
+    renderFuncTable();
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('sucesso', 'Funcionário Atualizado', `CPF e data de nascimento de ${nome} atualizados com sucesso!${avisoMigracao}`);
+    }
+  }
 
   window.excluirFuncionarioReal = async function(matricula, opcoes) {
     const funcionario = mergedFuncList.find(f => f.matricula === matricula);
@@ -426,7 +588,17 @@ document.addEventListener('DOMContentLoaded', () => {
   carregarFuncionariosCompleto();
 
   if (toggleFuncBtn && funcForm) {
-    toggleFuncBtn.addEventListener('click', () => funcForm.classList.toggle('hidden'));
+    toggleFuncBtn.addEventListener('click', () => {
+      // Abrir pelo botão "+ Cadastrar Funcionário" é sempre um cadastro novo:
+      // nunca herda uma edição que tenha ficado aberta.
+      if (funcForm.classList.contains('hidden')) sairModoEdicaoFuncionario();
+      funcForm.classList.toggle('hidden');
+    });
+  }
+
+  const cancelarEdicaoBtn = document.getElementById('cancelarEdicaoFuncionarioBtn');
+  if (cancelarEdicaoBtn) {
+    cancelarEdicaoBtn.addEventListener('click', () => sairModoEdicaoFuncionario({ fechar: true }));
   }
 
   // Máscara automática de CPF (000.000.000-00) durante a digitação.
@@ -511,6 +683,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!fezAniversario) idade--;
       if (idade < 18) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Menor de Idade', `Funcionários do terminal precisam ter 18 anos ou mais. A data informada corresponde a ${idade} ano(s).`);
+        return;
+      }
+
+      // Modo edição (Tarefa 2): CPF e nascimento já validados acima; a
+      // identidade (matrícula) é a do funcionário em edição, não um cadastro
+      // novo — por isso NÃO passa pelas travas de duplicidade de matrícula.
+      if (funcionarioEmEdicao) {
+        await salvarEdicaoFuncionario({ ...funcionarioEmEdicao }, cpfDigits, dataNasc);
         return;
       }
 

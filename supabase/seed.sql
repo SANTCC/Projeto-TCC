@@ -129,6 +129,15 @@ insert into cargas (id, tipo_carga_id, quantidade, material, peso, volume, valor
     'Carga geral', null, null, 'Xangai', 'Xangai (CNSHA)', 'AGENDAMENTO', null, 'PENDENTE', null, 'QR-DEMO-CRG-012')
 on conflict do nothing;
 
+-- Carga entregue de demonstração: sem vínculo ativo, com snapshot histórico.
+update cargas
+   set container_id = null,
+       navio_id = null,
+       navio_nome_historico = 'Navio Costa Leste',
+       container_identificacao_historico = 'DEMO0000005'
+ where id = md5('demo-carga-08')::uuid
+   and status_fluxo = 'ENTREGUE';
+
 -- ---------------------------------------------------------------------
 -- D) Histórico de alterações (logs_alteracoes). Cada linha usa um usuário mock existente;
 -- o join com funcionarios garante a chave estrangeira e o cargo do autor.

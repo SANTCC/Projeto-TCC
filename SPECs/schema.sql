@@ -261,6 +261,10 @@ create table cargas (
   status_fluxo status_carga_enum not null default 'AGENDAMENTO',
   container_id uuid references containers(id) on delete set null,
   navio_id uuid references navios(id) on delete set null,
+  -- Snapshots da entrega: ao virar ENTREGUE, os vínculos ativos acima são
+  -- liberados e nome/identificação ficam preservados para histórico.
+  navio_nome_historico text,
+  container_identificacao_historico text,
   checklist_modelo_id uuid references checklist_modelos(id) on delete restrict,
   resultado_inspecao resultado_inspecao_enum not null default 'PENDENTE',
   motivo_recusa text,
@@ -465,11 +469,23 @@ returns trigger as $$
 begin
   -- Se a localização do navio mudar para NO_PORTO_DE_DESTINO
   if NEW.localizacao = 'NO_PORTO_DE_DESTINO' then
-    -- Atualiza status das cargas vinculadas via contêiner para ENTREGUE
-    update cargas
-    set status_fluxo = 'ENTREGUE', updated_at = now()
-    where container_id in (select id from containers where navio_id = NEW.id)
-      and status_fluxo = 'EM_TRANSITO';
+    -- Entrega as cargas vinculadas (diretamente ou via contêiner), preserva
+    -- navio/contêiner como snapshot histórico e libera os vínculos ativos.
+    update cargas c
+    set status_fluxo = 'ENTREGUE',
+        navio_nome_historico = coalesce(nullif(btrim(c.navio_nome_historico), ''), NEW.nome),
+        container_identificacao_historico = coalesce(
+          nullif(btrim(c.container_identificacao_historico), ''),
+          (select k.numero_identificacao from containers k where k.id = c.container_id)
+        ),
+        navio_id = null,
+        container_id = null,
+        updated_at = now()
+    where c.status_fluxo = 'EM_TRANSITO'
+      and (
+        c.navio_id = NEW.id
+        or c.container_id in (select id from containers where navio_id = NEW.id)
+      );
   elsif NEW.localizacao = 'FORA_DO_PORTO' then
     -- Atualiza status das cargas para EM_TRANSITO
     update cargas

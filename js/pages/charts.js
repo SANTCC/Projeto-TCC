@@ -78,13 +78,18 @@
     texto: '#475569',
     textoDark: '#CBD5E1',
     paleta: ['#445987', '#6366F1', '#0D9488', '#D97706', '#C62828', '#7E57C2', '#2E7D32', '#64748B'],
+    // Cores por status do fluxo — fonte ÚNICA para todos os perfis/cargos
+    // (Backlog Parte 2 — Tarefa 8): ENTREGUE é sempre o verde "success"
+    // #2E7D32 (Specs/design/design.md §3.2/§4.1), nunca cinza. Para os dois
+    // status "verdes" não se confundirem no mesmo gráfico, PRONTA_PARA_ENTREGA
+    // usa o tom emerald já adotado para ela nas tabelas (#059669).
     status: {
       AGENDAMENTO: '#D97706',
       RECEBIMENTO_INSPECAO: '#6366F1',
       ARMAZENAGEM: '#445987',
-      PRONTA_PARA_ENTREGA: '#2E7D32',
+      PRONTA_PARA_ENTREGA: '#059669',
       EM_TRANSITO: '#0D9488',
-      ENTREGUE: '#64748B',
+      ENTREGUE: '#2E7D32',
       RECUSADA: '#C62828',
       CANCELADA: '#7E57C2'
     }
@@ -597,17 +602,24 @@
   // ---------------------------------------------------------------------
 
   function normalizarCarga(c) {
+    const status = String(c.status || c.status_fluxo || 'AGENDAMENTO').toUpperCase();
+    const navioNomeHistorico = c.navioNomeHistorico || c.navio_nome_historico || c.navioHistorico || c.navio_historico || null;
+    const containerIdentificacaoHistorico = c.containerIdentificacaoHistorico || c.container_identificacao_historico || c.containerHistorico || c.container_historico || null;
     return {
       id: c.id || c.rawDbId || c.qr_code_url || '',
-      status: String(c.status || c.status_fluxo || 'AGENDAMENTO').toUpperCase(),
+      status,
       tipo: c.tipo || c.natureza || 'Carga Geral',
       natureza: c.natureza || c.tipo || 'Carga Geral',
       peso: paraNumero(c.peso),
       volume: paraNumero(c.volume),
       valor: paraNumero(c.valor_declarado !== undefined ? c.valor_declarado : c.valor),
       navioId: c.navioId || c.navio_id || null,
-      navioNome: c.navio || c.navioNome || null,
-      containerId: c.container || c.container_id || c.containerId || null,
+      // Para ENTREGUE, navio/container ativos já foram liberados: os gráficos
+      // usam o snapshot histórico sem recriar vínculo operacional.
+      navioNome: c.navio || c.navioNome || navioNomeHistorico,
+      navioNomeHistorico,
+      containerId: c.container || c.container_id || c.containerId || containerIdentificacaoHistorico,
+      containerIdentificacaoHistorico,
       // Data de cadastro real (quando a carga foi registrada). Base do Período de Referência.
       dataCadastro: c.data_cadastro || c.created_at || c.dataCadastro || null,
       dataEntrada: c.data_entrada || c.dataChegada || c.created_at || c.data_cadastro || c.dataEntrada || null,
@@ -805,11 +817,12 @@
     const cargas = (origem.cargas || []).filter(c => {
       if (usarStatus && String(c.status || '').toUpperCase() !== statusFiltro) return false;
       if (usarNavio) {
-        const candidatos = [c.navioNome, c.navioId].map(textoFiltro);
+        const candidatos = [c.navioNome, c.navioId, c.navioNomeHistorico].map(textoFiltro);
         if (candidatos.indexOf(navioFiltro) === -1) return false;
       }
       if (usarContainer) {
-        if (textoFiltro(c.containerId) !== contFiltro) return false;
+        const candidatos = [c.containerId, c.containerIdentificacaoHistorico].map(textoFiltro);
+        if (candidatos.indexOf(contFiltro) === -1) return false;
       }
       // O Período de Referência filtra pela data de CADASTRO da carga. Carga sem
       // data de cadastro não pode ser julgada pelo período e sai do recorte.
