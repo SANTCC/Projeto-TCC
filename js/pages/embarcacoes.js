@@ -1380,7 +1380,8 @@ document.addEventListener('DOMContentLoaded', () => {
         await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id, `Navio ${navio.nome} (${navio.imo}) liberado para saída com destino a ${navio.destino} por ${session.nome || session.cargo}. Horário: ${new Date(navio.dataSaida).toLocaleString('pt-BR')}`);
       }
       if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id, { localizacao: 'FORA_DO_PORTO', data_saida: navio.dataSaida });
+        // Tarefa 9 (Correções): frase explícita do que foi feito no log geral.
+        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id, { localizacao: 'FORA_DO_PORTO', data_saida: navio.dataSaida, descricao: `Liberou a saída do navio ${navio.nome || navio.imo || 'sem nome'} com destino a ${navio.destino || navio.origem || '—'} (agora Fora do Porto)` });
       }
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('navios');
@@ -1458,7 +1459,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { porto_origem: navio.origem, porto_destino: navio.destino, localizacao: 'FORA_DO_PORTO' });
+        // Tarefa 9 (Correções): frase explícita do que foi feito no log geral.
+        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { porto_origem: navio.origem, porto_destino: navio.destino, localizacao: 'FORA_DO_PORTO', descricao: `Liberou o navio ${navio.nome || navio.imo || 'sem nome'} para retorno ao porto ${navio.destino || navio.origem || '—'} (agora Fora do Porto)` });
       }
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
