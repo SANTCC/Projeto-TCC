@@ -738,22 +738,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapa = new Map();
     try {
       (JSON.parse(localStorage.getItem('nexus_containers_list') || '[]') || []).forEach(cont => {
-
-        if (!cont) return;
-        [cont.identificacao, cont.numero_identificacao, cont.id, cont.rawDbId].forEach(val => {
-          const chave = String(val || '').trim().toLowerCase();
-          if (chave) mapa.set(chave, cont);
-
         // Tarefa 4 (Correções): o repositório de dados mapeia o `container` da
         // carga com o UUID (container_id), enquanto a vinculação na tela grava a
         // identificação textual. Indexa o contêiner pelas duas formas
         // (identificação, id e rawDbId) para a herança casar em qualquer uma.
         if (!cont) return;
-        [cont.identificacao, cont.id, cont.rawDbId].forEach(valor => {
+        [cont.identificacao, cont.numero_identificacao, cont.id, cont.rawDbId].forEach(valor => {
           if (valor === undefined || valor === null) return;
           const chave = String(valor).trim().toLowerCase();
           if (chave && !mapa.has(chave)) mapa.set(chave, cont);
-
         });
       });
     } catch (e) { /* cache indisponível */ }

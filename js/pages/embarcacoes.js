@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const containersTableBody = document.getElementById('containersTableBody');
 
   let naviosList = [];
+  let containersList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
   const ordemNomeNavio = new Intl.Collator('pt-BR', { sensitivity: 'base' });
   // Backlog 3 (rotas): única fonte de origem/destino/distância = rotas_maritimas do Supabase.
   let rotasMaritimasList = [];
@@ -2277,7 +2278,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // CRUD de Contêineres (T2.6 / RN 7)
-  let containersList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+  containersList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
 
   async function carregarContainersSupabase() {
     let localConts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
