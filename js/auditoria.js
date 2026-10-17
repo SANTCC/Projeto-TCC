@@ -360,14 +360,18 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', re
       const registroInserido = resposta && Array.isArray(resposta.data) ? resposta.data[0] : (resposta && resposta.data);
       if (!resposta.error && registroInserido && registroInserido.id) {
         insertedDbId = registroInserido.id;
-      } else if (estruturado) {
+      } else {
         console.warn('[NexusPort] Trail não gravado no Supabase:', resposta.error);
+        // Nenhuma decisão crítica pode ser dada como registrada sem a linha no
+        // banco: sem confirmação, a trilha imutável estaria só no navegador.
         return { ok: false, mensagem: msgFalhaBanco };
       }
     } catch (err) {
       console.warn('[NexusPort] Erro ao invocar trail Supabase:', err);
-      if (estruturado) return { ok: false, mensagem: msgFalhaBanco };
+      return { ok: false, mensagem: msgFalhaBanco };
     }
+  } else if (estruturado) {
+    return { ok: false, mensagem: 'Sem conexão com o banco de dados. A decisão não foi registrada.' };
   }
 
   const trail = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');

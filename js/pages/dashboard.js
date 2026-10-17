@@ -38,16 +38,9 @@ window.calcularTempoForaPorto = function(dataSaidaStr) {
   return `${dias}d ${horas}h fora do porto`;
 };
 
-window.gerarRelatorioPdfA4 = function(idCarga) {
-  if (window.mostrarFeedback) {
-    window.mostrarFeedback('sucesso', 'Relatório PDF A4', `Relatório PDF A4 emitido com sucesso para a carga ${idCarga}`);
-  }
-};
-
-function initQrCodeEtiquetas() {}
-function initDashboardsPesquisaRelatorios() {}
-function initLogsTrailDelegacao() {}
-function initLocalizacaoETempos() {}
+// A geração real do PDF A4 vive em js/pages/relatorios.js (Edge Function
+// relatorio-pdf). Não existe atalho local no Painel Geral: simular "PDF emitido
+// com sucesso" sem gerar arquivo era um falso positivo de operação.
 
 document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
@@ -184,31 +177,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const naviosNoPorto = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
     const osAtivas = manutencoes.filter(m => m.status === 'SOLICITADA' || m.status === 'APROVADA' || m.status === 'EM_MANUTENCAO').length;
 
-    function calcularStatus(atingimento) {
-      if (atingimento >= 85) return 'IDEAL';
-      if (atingimento >= 50) return 'ATENÇÃO';
-      return 'CRÍTICO';
-    }
-
+    // Metas mensais e tempos médios NÃO existem no banco nem na especificação.
+    // Antes eram números fixos (20/30/5/5 e 1,5/2,1/18,4/4,8 h) apresentados como
+    // se fossem indicadores medidos. Agora os volumes são reais e as colunas sem
+    // fonte de dados ficam explicitamente "não configuradas".
     const rawIndicadores = [
-      { categoria: 'Contêineres Cadastrados e Alocados', volume: totalConts, meta: 20, tempo: 1.5 },
-      { categoria: 'Cargas Gerais no Fluxo Operacional', volume: totalCargas, meta: 30, tempo: 2.1 },
-      { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto, meta: 5, tempo: 18.4 },
-      { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas, meta: 5, tempo: 4.8 }
+      { categoria: 'Contêineres Cadastrados e Alocados', volume: totalConts },
+      { categoria: 'Cargas Gerais no Fluxo Operacional', volume: totalCargas },
+      { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto },
+      { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas }
     ];
 
-    const indicadores = rawIndicadores.map(item => {
-      const atingimento = item.meta > 0 ? Math.round((item.volume / item.meta) * 100) : 0;
-      const status = calcularStatus(atingimento);
-      return {
-        categoria: item.categoria,
-        volume: item.volume,
-        meta: item.meta,
-        atingimento,
-        tempo: item.tempo,
-        status
-      };
-    });
+    const indicadores = rawIndicadores.map(item => ({
+      categoria: item.categoria,
+      volume: item.volume,
+      meta: null,
+      atingimento: null,
+      tempo: null,
+      status: 'SEM META'
+    }));
 
     // Backlog 3 (7f): mantém a cópia em memória para a exportação CSV
     window.__nexusIndicadoresExecutivos = indicadores;
@@ -217,14 +204,15 @@ document.addEventListener('DOMContentLoaded', () => {
       <tr class="${idx % 2 === 0 ? 'bg-slate-50/60 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'} hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
         <td class="p-3 text-left font-bold text-nexus-900 dark:text-white">${esc(i.categoria)}</td>
         <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">${esc(i.volume.toLocaleString('pt-BR'))}</td>
-        <td class="p-3 text-right font-mono text-slate-600">${esc(i.meta.toLocaleString('pt-BR'))}</td>
-        <td class="p-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">${esc(i.atingimento)}%</td>
-        <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${esc(i.tempo)} h</td>
+        <td class="p-3 text-right font-mono text-slate-600">${i.meta == null ? '—' : esc(i.meta.toLocaleString('pt-BR'))}</td>
+        <td class="p-3 text-right font-mono font-bold text-slate-600 dark:text-slate-300">${esc(i.atingimento == null ? '—' : i.atingimento + '%')}</td>
+        <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${esc(i.tempo == null ? '—' : i.tempo + ' h')}</td>
         <td class="p-3 text-center">
           <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
             i.status === 'IDEAL' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
             i.status === 'ATENÇÃO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
-            'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+            i.status === 'CRÍTICO' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' :
+            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
           }">${esc(i.status)}</span>
         </td>
       </tr>
@@ -385,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
       icone = 'pie_chart';
       const patioCargas = (indic.ocupacaoPatio.lista || []).map(c => `• Carga ${c.qr_code_url ? c.qr_code_url.replace('QR-', '') : (c.id || c.codigo)}: ${c.natureza || c.tipo || 'Geral'} [${c.porto_descarga || c.portoDescarga || 'Setor Pátio'}] (${c.status_fluxo || c.status || 'PÁTIO'})`);
       const detalheLista = patioCargas.length > 0 ? `\n\nCargas Ocupando o Pátio:\n${patioCargas.join('\n')}` : '\n\nNenhuma carga ocupando o pátio no momento.';
-      detalhe = `Capacidade Máxima Regulamentar: ${indic.ocupacaoPatio.capacidade} posições (100 Hectares / 1.000.000 m²)\nCargas Ocupando o Pátio: ${indic.ocupacaoPatio.ocupados}\nTaxa de Ocupação Atual: ${indic.ocupacaoPatio.taxa}%${detalheLista}`;
+      detalhe = `Limite operacional configurado: ${indic.ocupacaoPatio.capacidade} cargas ativas\nCargas Ocupando o Pátio: ${indic.ocupacaoPatio.ocupados}\nTaxa de Ocupação Atual: ${indic.ocupacaoPatio.taxa}%${detalheLista}`;
     } else if (tipo === 'PREVENTIVA_SUGERIDA') {
       // Item 1.8: Usa O MESMO RETORNO de buscarEquipamentosPreventivaSugerida()
       titulo = 'Manutenções Preventivas Sugeridas (> 3 Anos de Uso)';
@@ -697,7 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const csvEscape = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
       const linhas = [
         ['Categoria / Operação', 'Volume Processado', 'Meta Mensal', 'Atingimento (%)', 'Tempo Médio (Horas)', 'Status Operacional'].map(csvEscape).join(';'),
-        ...dados.map(i => [i.categoria, i.volume, i.meta, `${i.atingimento}%`, String(i.tempo).replace('.', ','), i.status].map(csvEscape).join(';')),
+        ...dados.map(i => [i.categoria, i.volume, i.meta == null ? '—' : i.meta, i.atingimento == null ? '—' : `${i.atingimento}%`, i.tempo == null ? '—' : String(i.tempo).replace('.', ','), i.status].map(csvEscape).join(';')),
       ];
       const blob = new Blob(['\uFEFF' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);

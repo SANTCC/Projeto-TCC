@@ -38,6 +38,11 @@ function provedorDeTeste(w) {
  * upsert, order...); as demais tabelas respondem com erro "indisponível", o que aciona o
  * fallback local já existente. `opcoes.falharInsert` simula falha de gravação.
  */
+const TIPO_DRY_ID = '99999999-9999-4999-8999-999999999991';
+const TIPO_REEFER_ID = '99999999-9999-4999-8999-999999999992';
+const MODELO_DRY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+const MODELO_REEFER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
+
 function supabaseRotasFalso(rotas, opcoes) {
   const o = opcoes || {};
   function resolver(tabela, estado) {
@@ -51,7 +56,31 @@ function supabaseRotasFalso(rotas, opcoes) {
       return Promise.resolve({ data: [], error: null });
     }
     if (tabela === 'tipos_carga') {
-      return Promise.resolve({ data: null, error: null });
+      // Catálogo real (id + nome). O agendamento resolve o UUID do tipo no
+      // banco antes de gravar; sem isso, a carga ficaria sem tipo/checklist.
+      const catalogo = o.tiposCarga || [
+        { id: TIPO_DRY_ID, nome: "Contêiner 20' Dry" },
+        { id: TIPO_REEFER_ID, nome: 'Reefer (Contêiner Refrigerado)' }
+      ];
+      const linhas = catalogo.filter(t => Object.entries(estado.filtros).every(([campo, valor]) => String(t[campo]) === String(valor)));
+      return Promise.resolve({ data: estado.single ? (linhas[0] || null) : linhas, error: null });
+    }
+    if (tabela === 'checklist_modelos') {
+      const modelos = [
+        { id: MODELO_DRY_ID, tipo_carga_id: TIPO_DRY_ID, nome: "Checklist Contêiner 20' Dry" },
+        { id: MODELO_REEFER_ID, tipo_carga_id: TIPO_REEFER_ID, nome: 'Checklist Reefer' }
+      ];
+      const linhas = modelos.filter(m => Object.entries(estado.filtros).every(([campo, valor]) => String(m[campo]) === String(valor)));
+      return Promise.resolve({ data: estado.single ? (linhas[0] || null) : linhas, error: null });
+    }
+    if (tabela === 'checklist_itens') {
+      const itens = [MODELO_DRY_ID, MODELO_REEFER_ID].flatMap((modeloId, indice) => [
+        { id: `cccccccc-cccc-4ccc-8ccc-00000000000${indice}1`, checklist_modelo_id: modeloId, descricao: 'Documentação conferida', critico: true, ordem: 1 },
+        { id: `cccccccc-cccc-4ccc-8ccc-00000000000${indice}2`, checklist_modelo_id: modeloId, descricao: 'Lacre e identificação verificados', critico: true, ordem: 2 }
+      ]);
+      const linhas = itens.filter(i => Object.entries(estado.filtros).every(([campo, valor]) => String(i[campo]) === String(valor)));
+      linhas.sort((a, b) => a.ordem - b.ordem);
+      return Promise.resolve({ data: estado.single ? (linhas[0] || null) : linhas, error: null });
     }
     if (tabela === 'cargas' && estado.insert) {
       return Promise.resolve({
@@ -64,6 +93,18 @@ function supabaseRotasFalso(rotas, opcoes) {
     }
     if (tabela === 'agendamentos' || tabela === 'estivador_cargas' || tabela === 'logs_alteracoes') {
       return Promise.resolve({ data: estado.insert || null, error: null });
+    }
+    // Cadastro de navio: persiste a linha como o PostgREST faria (id devolvido
+    // pelo `.select('id').single()`). A lista é criada sob demanda para não
+    // alterar as consultas dos cenários que não passam `navios` nas opções.
+    if (tabela === 'navios' && estado.insert) {
+      const linhas = Array.isArray(o.navios) ? o.navios : (o.navios = []);
+      const linha = Object.assign({
+        id: '33333333-3333-4333-8333-333333333333',
+        created_at: new Date().toISOString()
+      }, estado.insert);
+      linhas.push(linha);
+      return Promise.resolve({ data: estado.single ? Object.assign({}, linha) : [Object.assign({}, linha)], error: null });
     }
     // Consultas de localização usadas na vinculação precisam de navios persistidos.
     if (tabela === 'navios' && o.navios && !estado.insert) {
@@ -263,7 +304,10 @@ async function testesCargas() {
   w.close();
 
   // Conferente: recebimento só a partir de AGENDAMENTO
-  w = await pronta(pagina('cargas.html', { session: sessao('CONFERENTE_CARGA'), storage, adaptadores: PAGINA_CARGAS }));
+  // `listar_tipos_carga` só expõe o catálogo lido do banco (nunca o estático):
+  // o cenário do conferente precisa de um cliente Supabase com tipos_carga.
+  w = await pronta(pagina('cargas.html', { session: sessao('CONFERENTE_CARGA'), storage, adaptadores: PAGINA_CARGAS,
+    scriptsPagina: ['js/supabase-client.js', (win) => { win.nexusSupabase = supabaseRotasFalso([]); }] }));
   r = await w.NexusWebMCP.executar('receber_carga', { id: 'CRG-R' });
   check('receber: só a partir de AGENDAMENTO (carga já em inspeção é recusada)', r.codigo === 'ESTADO_INVALIDO', JSON.stringify(r));
   r = await w.NexusWebMCP.executar('receber_carga', { id: 'CRG-B' });

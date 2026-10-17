@@ -199,6 +199,11 @@
   ];
 
   window.NEXUS_TIPOS_CARGA = TIPOS_CARGA;
+  // Origem do catálogo em memória: 'estatico' (referência de código, ainda não
+  // confirmada pelo banco), 'db' (lido de tipos_carga), 'vazio' (banco sem
+  // tipos) ou 'indisponivel' (falha de leitura com cliente configurado).
+  // Consumidores externos (WebMCP) só aceitam 'db'/'vazio'.
+  window.NEXUS_TIPOS_CARGA_ORIGEM = 'estatico';
 
   window.carregarTiposCargaSupabase = async function() {
     if (!window.nexusSupabase) return window.NEXUS_TIPOS_CARGA;
@@ -209,46 +214,24 @@
         .from('tipos_carga')
         .select('*');
 
-      if (errTipos) {
-        console.warn("[NexusPort] Erro ao carregar tipos_carga do Supabase:", errTipos);
+      if (errTipos || !Array.isArray(dbTipos)) {
+        // Resposta inválida do banco com cliente configurado: NÃO exibir o
+        // catálogo estático como se fosse cadastro. A UI fica vazia e os
+        // validadores (WebMCP) falham fechado com 'indisponivel'.
+        console.warn("[NexusPort] Erro ao carregar tipos_carga do Supabase:", errTipos || 'resposta sem linhas');
+        window.NEXUS_TIPOS_CARGA = [];
+        window.NEXUS_TIPOS_CARGA_ORIGEM = 'indisponivel';
+        window.dispatchEvent(new CustomEvent('nexus_tipos_carga_changed'));
         return window.NEXUS_TIPOS_CARGA;
       }
 
-      // Se a tabela tipos_carga estiver vazia, popula os tipos padrão e checklists no Supabase
-      if (!dbTipos || dbTipos.length === 0) {
-        console.log("[NexusPort] Sincronizando tipos de carga iniciais para o Supabase...");
-        for (const tc of TIPOS_CARGA) {
-          const { data: insertedTipo } = await window.nexusSupabase
-            .from('tipos_carga')
-            .insert({
-              nome: tc.nome,
-              requisitos_especiais: tc.descricao
-            })
-            .select()
-            .single();
-
-          if (insertedTipo) {
-            const { data: insertedModelo } = await window.nexusSupabase
-              .from('checklist_modelos')
-              .insert({
-                tipo_carga_id: insertedTipo.id,
-                nome: `Checklist ${tc.nome}`,
-                descricao: tc.descricao
-              })
-              .select()
-              .single();
-
-            if (insertedModelo && tc.checklist) {
-              const itensToInsert = tc.checklist.map((item, index) => ({
-                checklist_modelo_id: insertedModelo.id,
-                descricao: item.desc,
-                critico: item.critico,
-                ordem: index + 1
-              }));
-              await window.nexusSupabase.from('checklist_itens').insert(itensToInsert);
-            }
-          }
-        }
+      // Catálogo vazio = estado vazio real. O frontend NÃO semeia tipos de carga
+      // nem checklists no banco de produção: o catálogo é dado de negócio e deve
+      // ser cadastrado/migrado pelo responsável do projeto.
+      if (dbTipos.length === 0) {
+        window.NEXUS_TIPOS_CARGA = [];
+        window.NEXUS_TIPOS_CARGA_ORIGEM = 'vazio';
+        window.dispatchEvent(new CustomEvent('nexus_tipos_carga_changed'));
         return window.NEXUS_TIPOS_CARGA;
       }
 
@@ -264,17 +247,23 @@
           id: t.id,
           nome: t.nome,
           descricao: t.requisitos_especiais || t.nome,
+          // Vínculo explícito com o modelo de checklist: a inspeção grava
+          // `inspecoes.checklist_modelo_id` e resolve os itens por este id.
+          modeloId: modelo ? modelo.id : null,
           checklist: itens.map(i => ({
             id: i.id,
             desc: i.descricao,
             critico: i.critico,
-            categoria: i.critico ? 'Crítico' : 'Geral'
+            categoria: i.critico ? 'Crítico' : 'Geral',
+            ordem: i.ordem,
+            checklist_modelo_id: i.checklist_modelo_id
           }))
         };
       });
 
       if (loadedTipos.length > 0) {
         window.NEXUS_TIPOS_CARGA = loadedTipos;
+        window.NEXUS_TIPOS_CARGA_ORIGEM = 'db';
         window.dispatchEvent(new CustomEvent('nexus_tipos_carga_changed'));
       }
     } catch (e) {
@@ -287,7 +276,9 @@
   window.getNexusTipoCarga = function(nomeOuId) {
     if (!nomeOuId) return null;
     const busca = String(nomeOuId).toLowerCase().trim();
-    const list = (window.NEXUS_TIPOS_CARGA && window.NEXUS_TIPOS_CARGA.length > 0) ? window.NEXUS_TIPOS_CARGA : TIPOS_CARGA;
+    // Somente o catálogo efetivamente carregado do banco. O catálogo estático é
+    // referência de código, nunca fonte de exibição em produção.
+    const list = window.NEXUS_TIPOS_CARGA || [];
     return list.find(t =>
       (t.id && String(t.id).toLowerCase() === busca) ||
       (t.nome && String(t.nome).toLowerCase() === busca)

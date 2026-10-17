@@ -29,7 +29,15 @@ function registrar(janela) {
 async function testarEmbarcacoes() {
   log('\n1. Embarcações & GPS: contêiner não lista carga entregue/cancelada');
   const banco = criarBancoFalso({
-    navios: [], cargas: [], bercos: [], containers: [], guindastes: [], manutencoes: [], historico_manutencoes: []
+    navios: [], cargas: [], bercos: [],
+    // O contêiner precisa existir no banco: a página só exibe o que está
+    // persistido (o cache local deixou de ser fonte de registros).
+    containers: [{
+      id: CONT_ID, numero_identificacao: 'CONT-VOL-1', tipo_carga_id: null,
+      material_carregado: 'Carga Geral', estado: 'OPERANTE', navio_id: null,
+      qr_code_url: 'QR-CONT-VOL-1'
+    }],
+    guindastes: [], manutencoes: [], historico_manutencoes: []
   });
   const janela = registrar(criarJanela({
     url: 'https://nexusport.test/embarcacoes.html',

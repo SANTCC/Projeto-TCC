@@ -59,6 +59,16 @@
     return D.guindastesEfetivos();
   }
 
+  // Adaptadores de teste podem não expor todo o D; sem catálogo do banco a
+  // validação é fechada (nenhum tipo aceito), nunca aberta.
+  async function garantirCatalogo() {
+    if (typeof D.assegurarTiposCarga === 'function') return D.assegurarTiposCarga();
+    return true;
+  }
+  function catalogoTipos() {
+    return typeof D.tiposCarga === 'function' ? D.tiposCarga() : [];
+  }
+
   // ------------------------------------------------------------------
   // Definições
   // ------------------------------------------------------------------
@@ -168,8 +178,12 @@
     anotacoes: { readOnlyHint: true, untrustedContentHint: true },
     cargos: CARGOS_CARGAS,
     esquema: { type: 'object', properties: {}, additionalProperties: false },
-    executar: () => {
-      const itens = D.tiposCarga().map((t) => ({
+    executar: async () => {
+      const catalogoOk = await garantirCatalogo();
+      if (!catalogoOk) {
+        return { ok: false, codigo: 'CATALOGO_INDISPONIVEL', mensagem: 'Não foi possível ler o catálogo de tipos de carga no banco de dados. Nenhum tipo é listado para não sugerir cadastros inexistentes.' };
+      }
+      const itens = catalogoTipos().map((t) => ({
         nome: t.nome || null,
         descricao: t.descricao ? String(t.descricao).slice(0, 160) : null,
         itens_checklist: Array.isArray(t.checklist) ? t.checklist.length : 0,
@@ -200,9 +214,13 @@
       required: ['tipo', 'peso', 'volume', 'valor', 'natureza', 'porto_descarga', 'destino'],
       additionalProperties: false
     },
-    precondicao: (args) => {
+    precondicao: async (args) => {
       if (args.tipo !== undefined) {
-        const tipo = D.tiposCarga().find((t) => t.nome === args.tipo);
+        const catalogoOk = await garantirCatalogo();
+        if (!catalogoOk) {
+          return { codigo: 'CATALOGO_INDISPONIVEL', mensagem: 'Não foi possível ler os tipos de carga no banco de dados; o agendamento não pode ser validado.' };
+        }
+        const tipo = catalogoTipos().find((t) => t.nome === args.tipo);
         if (!tipo || !Array.isArray(tipo.checklist) || tipo.checklist.length === 0) {
           return { codigo: 'TIPO_NAO_CADASTRADO', mensagem: 'O tipo de carga precisa estar cadastrado com checklist antes do agendamento (RN 13).' };
         }

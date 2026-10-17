@@ -1613,12 +1613,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Regra 2.9 (Área do pátio / Capacidade máxima): Limite regulamentar de 100 ha (1.000.000 m² / 100 posições ativas)
+      // Regra 2.9 (Capacidade máxima): 100 é o limite operacional configurado
+      // de cargas em fluxo ativo. A área do pátio (100 ha) NÃO é convertida em
+      // número de cargas: não há parâmetro de ocupação por carga no schema.
       const CAPACIDADE_MAXIMA_PATIO_HA = 100;
       const cargasAtivasPatio = cargasFluxoList.filter(c => ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'].includes(c.status));
       if (cargasAtivasPatio.length >= CAPACIDADE_MAXIMA_PATIO_HA) {
         if (window.mostrarFeedback) {
-          window.mostrarFeedback('alerta', 'Capacidade Máxima do Pátio Excedida', `BLOQUEIO DE CAPACIDADE REGULAMENTAR: O pátio atingiu o limite operacional máximo de 100 hectares (1.000.000 m² / ${CAPACIDADE_MAXIMA_PATIO_HA} cargas em fluxo ativo)! Não é permitido agendar novas cargas até a liberação de espaço.`);
+          window.mostrarFeedback('alerta', 'Capacidade Máxima do Pátio Excedida', `BLOQUEIO DE CAPACIDADE: O pátio atingiu o limite operacional configurado de ${CAPACIDADE_MAXIMA_PATIO_HA} cargas em fluxo ativo! Não é permitido agendar novas cargas até a liberação de espaço.`);
         }
         return;
       }
@@ -1664,7 +1666,16 @@ document.addEventListener('DOMContentLoaded', () => {
           status_fluxo: 'AGENDAMENTO',
           qr_code_url: newQrCode
         };
-        if (tipoCargaUuid) insertPayload.tipo_carga_id = tipoCargaUuid;
+        // Sem o UUID do tipo no banco a carga ficaria órfã (sem tipo e sem
+        // checklist): o agendamento é recusado em vez de gravar dado incompleto.
+        if (!tipoCargaUuid) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Tipo de Carga Não Confirmado',
+              `O tipo "${tipo}" não foi localizado no banco de dados. Nenhuma carga foi registrada; atualize a página e tente novamente.`);
+          }
+          return;
+        }
+        insertPayload.tipo_carga_id = tipoCargaUuid;
 
         // O Supabase é a fonte de verdade: nada entra na lista ou no cache antes
         // de o banco confirmar e devolver o registro persistido.
@@ -2249,15 +2260,15 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   function guindastesDisponiveis() {
-    let guindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
-    if (!Array.isArray(guindastes) || guindastes.length === 0) {
-      guindastes = [
-        { id: 'GND-01-STS', identificacao: 'GND-01-STS', estado: 'OPERANTE' },
-        { id: 'GND-02-STS', identificacao: 'GND-02-STS', estado: 'OPERANTE' }
-      ];
-      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastes));
+    // Cache local espelhado de `guindastes`. Não existe frota padrão: um
+    // equipamento só aparece se estiver cadastrado no banco. Lista vazia é
+    // estado vazio real.
+    try {
+      const guindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+      return Array.isArray(guindastes) ? guindastes : [];
+    } catch (e) {
+      return [];
     }
-    return guindastes;
   }
 
   window.nexusObterGuindastesAtuais = function () { return obterGuindastesAtuais(); };
@@ -2269,8 +2280,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /**
    * Lê o estado REAL dos guindastes na tabela `guindastes` do Supabase (fonte de verdade)
-   * e espelha o resultado no cache local. Guindastes existentes só no cache (sem registro
-   * no banco) são mantidos com o estado local. Sem Supabase configurado, usa o cache.
+   * e espelha o resultado no cache local. Quando a leitura do banco funciona, a lista
+   * exibida é EXATAMENTE a do banco: equipamento só no cache (apagado ou nunca gravado)
+   * não é apresentado nem aceito em tarefas. Sem Supabase configurado, usa o cache.
    * Retorna { ok, lista, origem, erro }; ok=false significa que não foi possível confirmar.
    */
   async function obterGuindastesAtuais() {
@@ -2287,9 +2299,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const antigo = cache.find(c => String(c.identificacao || '').toUpperCase() === String(id).toUpperCase()) || {};
         return Object.assign({}, antigo, { id, identificacao: id, estado: g.estado || 'OPERANTE', dataManut: g.data_ultima_manutencao || antigo.dataManut || '' });
       });
-      const idsBanco = new Set(doBanco.map(g => String(g.identificacao).toUpperCase()));
-      const somenteLocais = cache.filter(g => !idsBanco.has(String(g.identificacao || '').toUpperCase()));
-      const lista = doBanco.concat(somenteLocais);
+      const lista = doBanco;
       localStorage.setItem('nexus_guindastes_list', JSON.stringify(lista));
       return { ok: true, lista, origem: 'banco' };
     } catch (e) {

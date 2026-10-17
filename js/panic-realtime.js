@@ -877,6 +877,11 @@
           (tabelaPendente ? `; tabela emergencias ausente no Supabase: aplique ${migracaoDaTabela('emergencias')}` : '') +
           ')'
         : '';
+      // Fallback sem linha em `emergencias` é alerta local/broadcast, não um
+      // evento persistido: o operador precisa saber que o banco não registrou.
+      const persistenciaNote = (via === 'client_fallback' && ativando && !emergenciaId)
+        ? ' ⚠️ A emergência NÃO foi registrada no banco de dados: apenas o alerta local e o broadcast foram disparados.'
+        : '';
       // O alarme, o broadcast e o estado global já estão válidos; o que falhou
       // foi só o registro de auditoria — a nota diz o que fazer, sem alarmar
       // de novo sobre a emergência em si.
@@ -890,7 +895,7 @@
         feedback(
           'erro',
           'EMERGÊNCIA CRÍTICA DECLARADA',
-          `Alarme global enviado a todos os clientes conectados via WebSocket. Operações do pátio ${TERMINAL} bloqueadas temporariamente.${fallbackNote}${auditoriaNote}`
+          `Alarme global enviado a todos os clientes conectados via WebSocket. Operações do pátio ${TERMINAL} bloqueadas temporariamente.${fallbackNote}${persistenciaNote}${auditoriaNote}`
         );
       } else {
         feedback(
@@ -900,7 +905,7 @@
         );
       }
 
-      return { ok: true, via, emergencia_id: emergenciaId, auditoria };
+      return { ok: true, via, emergencia_id: emergenciaId, persistida: Boolean(emergenciaId), auditoria };
     } finally {
       inFlight = false;
     }

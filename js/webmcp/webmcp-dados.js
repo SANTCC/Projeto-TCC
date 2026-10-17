@@ -293,8 +293,24 @@
     return null;
   }
 
+  /**
+   * Catálogo de tipos de carga efetivamente lido do banco. O catálogo estático
+   * de referência (NEXUS_TIPOS_CARGA inicial) NÃO é exposto a agentes: ele pode
+   * conter tipos que não existem em `tipos_carga` e induzir cadastros inválidos.
+   */
   function tiposCarga() {
+    const origem = window.NEXUS_TIPOS_CARGA_ORIGEM;
+    if (origem !== 'db' && origem !== 'vazio') return [];
     return Array.isArray(window.NEXUS_TIPOS_CARGA) ? window.NEXUS_TIPOS_CARGA : [];
+  }
+
+  /** Garante que o catálogo do banco foi consultado antes de validar um tipo. */
+  async function assegurarTiposCarga() {
+    if (window.NEXUS_TIPOS_CARGA_ORIGEM === 'db' || window.NEXUS_TIPOS_CARGA_ORIGEM === 'vazio') return true;
+    if (typeof window.carregarTiposCargaSupabase === 'function') {
+      try { await window.carregarTiposCargaSupabase(); } catch (e) { return false; }
+    }
+    return window.NEXUS_TIPOS_CARGA_ORIGEM === 'db' || window.NEXUS_TIPOS_CARGA_ORIGEM === 'vazio';
   }
 
   function tipoCarga(nomeOuId) {
@@ -310,10 +326,6 @@
   const STATUS_CARGA = ['AGENDAMENTO', 'RECEBIMENTO_INSPECAO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA', 'EM_TRANSITO', 'ENTREGUE', 'RECUSADA', 'CANCELADA'];
   const SETORES_PATIO = ['Pátio Principal (Setor A)', 'Pátio STS-01 (Setor B)', 'Pátio STS-01 (Setor C)', 'Pátio STS-01 (Setor Refrigeração)'];
   const CAPACIDADE_CONTAINER_M3 = 75;
-  const GUINDASTES_PADRAO = [
-    { id: 'GND-01-STS', identificacao: 'GND-01-STS', estado: 'OPERANTE', padrao: true },
-    { id: 'GND-02-STS', identificacao: 'GND-02-STS', estado: 'OPERANTE', padrao: true }
-  ];
 
   /** Espera até o predicado virar verdadeiro (polling curto). Retorna boolean. */
   function esperar(predicado, ms) {
@@ -368,10 +380,9 @@
     return Math.max(0, CAPACIDADE_CONTAINER_M3 - usado);
   }
 
-  /** Guindastes como a tela os apresenta (lista salva ou padrões da primeira movimentação). */
+  /** Guindastes como a tela os apresenta: somente o que foi carregado do banco. */
   function guindastesEfetivos() {
-    const lista = guindastes();
-    return lista.length ? lista : GUINDASTES_PADRAO.map((g) => Object.assign({}, g));
+    return guindastes();
   }
 
   // Grupos de cargos (espelham as listas de auth-guard.js e das páginas; mínimo privilégio).
@@ -462,6 +473,7 @@
     privacidadeAuditoria,
     indicadores,
     tiposCarga,
+    assegurarTiposCarga,
     tipoCarga
   });
 })(window);

@@ -43,13 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (limpo && !UUID_CANONICO.test(limpo.replace(/^CRG-/i, ''))) {
       return limpo.startsWith('CRG-') ? limpo : `CRG-${limpo}`;
     }
-    const semente = String(c.id || c.rawDbId || limpo || '').trim();
-    if (!semente) return 'CRG-2026-001';
-    let acc = 0;
-    for (let i = 0; i < semente.length; i += 1) {
-      acc = ((acc * 31) + semente.charCodeAt(i)) >>> 0;
-    }
-    return `CRG-2026-${String((acc % 900) + 100).padStart(3, '0')}`;
+    // Sem código de carga real no banco, o relatório declara a ausência. O
+    // código sintético anterior (hash de 3 dígitos) podia colidir e fazia um
+    // registro sem QR parecer uma carga oficial.
+    return 'Não informado';
   }
 
   function inicioDoPeriodo(periodo) {
@@ -603,9 +600,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let targetFuncs = funcionariosList;
     if (!isDiretor && !isInspetor) {
       targetFuncs = funcionariosList.filter(f => f.matricula === session.matricula || f.codigo_individual === session.codigo_individual);
-      if (targetFuncs.length === 0) {
-        targetFuncs = [{ matricula: session.matricula, nome: session.nome || 'Operador', cargo: session.cargo_nome || session.cargo, codigo_individual: session.codigo_individual }];
-      }
+      // Sem cadastro do usuário na tabela `funcionarios`, a tabela de
+      // produtividade fica vazia (estado real). Antes era criada uma linha
+      // fictícia com o nome do operador e zero operações.
+      if (targetFuncs.length === 0) targetFuncs = [];
     }
 
     // Com o banco disponível, a contagem vem SOMENTE dele: cada alteração também fica no cache
