@@ -184,8 +184,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (userAvatar) userAvatar.textContent = initials;
   if (userName) userName.textContent = employee.nome || 'Funcionário Porto';
-  if (userMatricula) userMatricula.textContent = `Matrícula: ${employee.matricula || 'N/A'}`;
-  if (userCodigo) userCodigo.textContent = `Código: ${employee.codigo || employee.codigo_individual || 'N/A'}`;
+  if (userMatricula) {
+    userMatricula.textContent = 'Matrícula: ••••••••';
+    userMatricula.setAttribute('aria-label', 'Matrícula protegida');
+  }
+  if (userCodigo) {
+    userCodigo.textContent = 'Código: ••••••••';
+    userCodigo.classList.add('hidden');
+  }
 
   if (roleBadgeIcon) roleBadgeIcon.textContent = metadata.sigla;
   if (roleTitle) roleTitle.textContent = metadata.nome;

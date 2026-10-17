@@ -233,6 +233,68 @@ async function main() {
     } finally { w.close(); }
   }
 
+  // ---------------------------------------------------------------------
+  log('\n6. Tarefa 9 — chegada ao destino desvincula apenas a carga; contêiner permanece vinculado e com botão "Vincular" desabilitado fora do porto');
+  {
+    const NAV_DEST = '44444444-4444-4444-8444-444444444444';
+    const CONT_VIAGEM = 'PALM1234567';
+    const IMO_DEST = 'IMO1000004';
+    const banco = criarBancoFalso({
+      navios: [
+        { id: NAV_DEST, nome: 'Jaguar', numero_imo: IMO_DEST, localizacao: 'NO_PORTO_DE_DESTINO', porto_origem: 'Porto de Santos', porto_destino: 'Porto Rio de Janeiro' },
+        { id: NAV_DENTRO, nome: 'Navio Docked', numero_imo: IMO_DENTRO, localizacao: 'DENTRO_DO_PORTO', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' }
+      ],
+      containers: [
+        { id: CONT_VIAGEM, numero_identificacao: CONT_VIAGEM, estado: 'OPERANTE', navio_id: null }
+      ],
+      cargas: [
+        { id: 'aaaa1111-1111-4111-8111-111111111111', qr_code_url: 'QR-CRG-DEST', status_fluxo: 'EM_TRANSITO', container_id: CONT_VIAGEM, navio_id: NAV_DEST, destino: 'Porto Rio de Janeiro' }
+      ],
+      bercos: [], guindastes: [], manutencoes: [], historico_manutencoes: []
+    });
+    const janela = criarJanela({
+      url: 'https://nexusport.test/embarcacoes.html',
+      html: htmlDaPagina('embarcacoes.html'),
+      session: sessao('SUPERVISOR_GERENTE_OPERACOES'),
+      storage: {
+        nexus_navios_list: [
+          { id: NAV_DEST, nome: 'Jaguar', imo: IMO_DEST, localizacao: 'NO_PORTO_DE_DESTINO', origem: 'Porto de Santos', destino: 'Porto Rio de Janeiro' },
+          { id: NAV_DENTRO, nome: 'Navio Docked', imo: IMO_DENTRO, localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã' }
+        ],
+        nexus_containers_list: [
+          { id: CONT_VIAGEM, rawDbId: CONT_VIAGEM, identificacao: CONT_VIAGEM, tipo: 'Granel Sólido', estado: 'OPERANTE', navio: 'Não Vinculado', navio_id: null }
+        ],
+        nexus_cargas_fluxo: [
+          { id: 'CRG-DEST', rawDbId: 'aaaa1111-1111-4111-8111-111111111111', status: 'EM_TRANSITO', container: CONT_VIAGEM, container_id: CONT_VIAGEM, navio: 'Jaguar', navio_id: NAV_DEST, destino: 'Porto Rio de Janeiro' }
+        ]
+      },
+      scripts: [
+        'js/security.js', 'js/session-cookies.js', 'js/supabase-client.js', 'js/auth-guard.js',
+        SETUP(banco), 'js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js',
+        'js/pages/embarcacoes.js'
+      ]
+    });
+    const { w, erros } = janela;
+    try {
+      await prontoDom(w);
+      await aguardar(350);
+      const crg = JSON.parse(w.localStorage.getItem('nexus_cargas_fluxo') || '[]')[0] || {};
+      check('6a: carga se desvinculou de navio e contêiner ao chegar no destino',
+        crg.status === 'ENTREGUE' && !crg.navio && !crg.container && !crg.navio_id && !crg.container_id,
+        JSON.stringify(crg));
+      check('6b: contêiner permanece vinculado ao navio Jaguar (cache + banco)',
+        containerCache(w, CONT_VIAGEM).navio === 'Jaguar' &&
+        containerCache(w, CONT_VIAGEM).navio_id === NAV_DEST &&
+        containerBanco(banco, CONT_VIAGEM).navio_id === NAV_DEST,
+        JSON.stringify({ cache: containerCache(w, CONT_VIAGEM), banco: containerBanco(banco, CONT_VIAGEM) }));
+      const btn = botaoVincular(w, CONT_VIAGEM);
+      check('6c: botão "Vincular" do contêiner fica DESATIVADO enquanto o navio está no porto de destino',
+        Boolean(btn) && btn.disabled === true && btn.getAttribute('data-vinculo-bloqueado') === 'true',
+        btn ? `disabled=${btn.disabled} data=${btn.getAttribute('data-vinculo-bloqueado')}` : 'botão ausente');
+      check('6d: sem erros de runtime', erros.length === 0, JSON.stringify(erros).slice(0, 200));
+    } finally { w.close(); }
+  }
+
   const r = resumo();
   log(`\nResultado: ${r.total - r.falhas}/${r.total} verificações aprovadas.`);
   if (r.falhas > 0) {

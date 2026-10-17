@@ -166,6 +166,13 @@
         animation: nexusPanicSlideUp 0.35s ease-out, nexusPanicVibrate 1.8s linear 0.35s infinite !important;
       }
       html.nexus-panic-active body { padding-bottom: 58px; }
+      html.nexus-panic-active #appSidebar {
+        bottom: var(--nexus-panic-footer-h, 58px) !important;
+        height: calc(100vh - var(--nexus-panic-footer-h, 58px)) !important;
+        height: calc(100dvh - var(--nexus-panic-footer-h, 58px)) !important;
+        max-height: calc(100vh - var(--nexus-panic-footer-h, 58px)) !important;
+        max-height: calc(100dvh - var(--nexus-panic-footer-h, 58px)) !important;
+      }
       @media (min-width: 640px) {
         html.nexus-sidebar-open #nexusPanicFooter {
           left: min(20rem, 90vw) !important;
@@ -223,7 +230,7 @@
 
     banner = document.createElement('div');
     banner.id = 'nexusPanicFooter';
-    banner.className = 'hidden fixed bottom-0 left-0 right-0 z-[45] bg-red-600 text-white shadow-[0_-4px_20px_rgba(0,0,0,0.35)] border-t-2 border-red-800';
+    banner.className = 'hidden fixed bottom-0 left-0 right-0 z-[60] bg-red-600 text-white shadow-[0_-4px_20px_rgba(0,0,0,0.35)] border-t-2 border-red-800';
     banner.setAttribute('role', 'alert');
     banner.innerHTML = `
       <div class="nexus-panic-footer-inner flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2.5">
@@ -257,13 +264,20 @@
         if (h > 0) document.documentElement.style.setProperty('--nexus-panic-footer-h', `${h}px`);
       }
     };
-    syncSidebarState();
-    const sbElem = document.getElementById('appSidebar');
-    if (sbElem && typeof window.MutationObserver === 'function') {
-      try {
-        const obsSb = new window.MutationObserver(syncSidebarState);
-        obsSb.observe(sbElem, { attributes: true, attributeFilter: ['class'] });
-      } catch (e) { /* noop */ }
+    const bindSidebarObserver = () => {
+      syncSidebarState();
+      const sbElem = document.getElementById('appSidebar');
+      if (sbElem && !sbElem.dataset.panicObserverBound && typeof window.MutationObserver === 'function') {
+        sbElem.dataset.panicObserverBound = '1';
+        try {
+          const obsSb = new window.MutationObserver(syncSidebarState);
+          obsSb.observe(sbElem, { attributes: true, attributeFilter: ['class'] });
+        } catch (e) { /* noop */ }
+      }
+    };
+    bindSidebarObserver();
+    if (document.readyState !== 'complete') {
+      document.addEventListener('DOMContentLoaded', bindSidebarObserver);
     }
     window.addEventListener('resize', syncSidebarState);
 
@@ -476,7 +490,8 @@
         ? `${state.acionado_por.nome || 'Operador'}${state.acionado_por.cargo ? ` (${state.acionado_por.cargo})` : ''}`
         : 'fonte não identificada';
       const hora = state.data_hora ? ` às ${formatHora(state.data_hora)}` : '';
-      const motivo = state.motivo ? `Motivo: ${state.motivo}. ` : '';
+      const motivoTexto = state.motivo ? String(state.motivo).trim().replace(/\.+$/, '') : '';
+      const motivo = motivoTexto ? `Motivo: ${motivoTexto}. ` : '';
       if (detail) {
         detail.textContent = `${motivo}Acionado por ${quem}${hora}. Siga os protocolos de evacuação e segurança do terminal.`;
       }
@@ -487,6 +502,16 @@
       if (sb) {
         const aberta = !sb.classList.contains('-translate-x-full') && !sb.classList.contains('nexus-sidebar-collapsed');
         document.documentElement.classList.toggle('nexus-sidebar-open', aberta);
+        if (!sb.dataset.panicObserverBound && typeof window.MutationObserver === 'function') {
+          sb.dataset.panicObserverBound = '1';
+          try {
+            const obsSb = new window.MutationObserver(() => {
+              const isOpen = !sb.classList.contains('-translate-x-full') && !sb.classList.contains('nexus-sidebar-collapsed');
+              document.documentElement.classList.toggle('nexus-sidebar-open', isOpen);
+            });
+            obsSb.observe(sb, { attributes: true, attributeFilter: ['class'] });
+          } catch (e) { /* noop */ }
+        }
       }
       const h = el.offsetHeight;
       if (h > 0) document.documentElement.style.setProperty('--nexus-panic-footer-h', `${h}px`);
@@ -683,7 +708,7 @@
     if (!sb) return null;
     const session = getSession() || {};
     try {
-      const { data, error } = await sb.from('emergencias').insert({
+      const rowPayload = {
         estado: 'ATIVA',
         motivo: motivo || `Emergência crítica declarada no Terminal ${TERMINAL}.`,
         funcionario_id: isUuid(session.id) ? session.id : null,
@@ -692,7 +717,13 @@
         acionado_por_codigo: identity.codigo_individual,
         data_hora: dataHora,
         origem: 'CLIENT_FALLBACK'
-      }).select().maybeSingle();
+      };
+      let { data, error } = await sb.from('emergencias').insert(rowPayload).select().maybeSingle();
+      if (error && String(error.code || '') === '23503' && rowPayload.funcionario_id) {
+        const retry = await sb.from('emergencias').insert(Object.assign({}, rowPayload, { funcionario_id: null })).select().maybeSingle();
+        data = retry.data;
+        error = retry.error;
+      }
       if (error) {
         tratarErroTabela('emergencias', error);
         return null;
@@ -796,6 +827,10 @@
       // O supabase-js devolve o erro do PostgREST no objeto de resposta (não
       // lança): sem ler `error`, uma recusa do banco passaria invisível.
       const { error } = await sb.from('logs_alteracoes').insert(payload);
+      if (error && String(error.code || '') === '23503' && payload.funcionario_id) {
+        const retry = await sb.from('logs_alteracoes').insert(Object.assign({}, payload, { funcionario_id: null }));
+        if (!retry.error) return { ok: true };
+      }
       if (error) return tratarErroAuditoria(error);
       return { ok: true };
     } catch (e) {
@@ -853,17 +888,24 @@
             // O servidor processou a ação, mas o broadcast Realtime falhou?
             // Complementa com broadcast direto para não deixar clientes sem o alerta.
             if (data && data.broadcast && data.broadcast.ok === false) {
-              console.warn('[NexusPanic] Broadcast do servidor falhou — complementando com broadcast direto:', data.broadcast);
+              if (data.broadcast.status !== 'local_relay') {
+                console.warn('[NexusPanic] Broadcast do servidor falhou — complementando com broadcast direto:', data.broadcast);
+              }
               try {
                 const ch = ensureChannel();
                 if (ch) {
-                  await ch.send({
-                    type: 'broadcast',
-                    event: BROADCAST_EVENT,
-                    payload: ativando
-                      ? { estado: 'ATIVA', emergencia_id: emergenciaId, motivo: motivo, terminal: TERMINAL, acionado_por: identity, data_hora: dataHora, origem: 'edge_function_relay' }
-                      : { estado: 'RESOLVIDA', emergencia_id: emergenciaId, motivo: null, terminal: TERMINAL, resolvido_por: identity, data_hora: dataHora, origem: 'edge_function_relay' }
-                  });
+                  const relayPayload = ativando
+                    ? { estado: 'ATIVA', emergencia_id: emergenciaId, motivo: motivo, terminal: TERMINAL, acionado_por: identity, data_hora: dataHora, origem: 'edge_function_relay' }
+                    : { estado: 'RESOLVIDA', emergencia_id: emergenciaId, motivo: null, terminal: TERMINAL, resolvido_por: identity, data_hora: dataHora, origem: 'edge_function_relay' };
+                  if (typeof ch.httpSend === 'function' && ch.state && ch.state !== 'joined') {
+                    await ch.httpSend(BROADCAST_EVENT, relayPayload);
+                  } else {
+                    await ch.send({
+                      type: 'broadcast',
+                      event: BROADCAST_EVENT,
+                      payload: relayPayload
+                    });
+                  }
                 }
               } catch (e) {
                 console.warn('[NexusPanic] Falha no broadcast complementar:', e);
@@ -883,7 +925,9 @@
       let broadcastPayload;
       if (usouFallback) {
         via = 'client_fallback';
-        console.warn(`[NexusPanic] Edge Function "${FUNCTION_SLUG}" indisponível (${functionError || 'motivo desconhecido'}) — usando broadcast direto via Realtime.`);
+        if (window.NEXUS_DEBUG_PANIC === true) {
+          console.warn(`[NexusPanic] Edge Function "${FUNCTION_SLUG}" indisponível (${functionError || 'motivo desconhecido'}) — usando broadcast direto via Realtime.`);
+        }
 
         if (ativando) {
           emergenciaId = await persistEmergencyLocal(identity, motivo, dataHora);
@@ -1224,6 +1268,13 @@
     loadStateFromDb();
     bindDatabaseDiagnosticsUI();
     bindDeviceAlertUI();
+    if (document.readyState !== 'complete') {
+      document.addEventListener('DOMContentLoaded', () => {
+        bindDatabaseDiagnosticsUI();
+        bindDeviceAlertUI();
+        renderBanner();
+      });
+    }
 
     // Retoma/paralisa a vibração ao alternar de aba, sem deixar pulsos presos.
     document.addEventListener('visibilitychange', syncDeviceVibration);

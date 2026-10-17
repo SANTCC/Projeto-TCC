@@ -278,7 +278,7 @@ async function main() {
     await sleep(10);
     const doc = confirmacao.w.document;
     check('confirmação exibe o nome da pendência (lida do cookie)', doc.getElementById('userName').textContent === 'Igor Teste', doc.getElementById('userName').textContent);
-    check('confirmação exibe a matrícula da pendência', /MAT-8821/.test(doc.getElementById('userMatricula').textContent), doc.getElementById('userMatricula').textContent);
+    check('confirmação oculta a matrícula da pendência por privacidade', !/MAT-8821/.test(doc.getElementById('userMatricula').textContent) && !/NX-8821/.test(doc.getElementById('userCodigo').textContent) && /••••/.test(doc.getElementById('userMatricula').textContent), doc.getElementById('userMatricula').textContent);
     doc.getElementById('confirmRoleBtn').click();
     await sleep(10);
     const sessaoConfirmada = confirmacao.w.NexusSessionCookies.lerSessao();

@@ -293,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
           console.error('[NexusPort Login] js/session-cookies.js não carregado: a confirmação de cargo não terá a identificação.');
         }
 
-        showAuthNotice('success', 'Credencial Reconhecida', `Código vinculado à matrícula ${employeeFound.matricula}. Redirecionando para confirmação...`);
+        showAuthNotice('success', 'Credencial Reconhecida', `Credencial validada para ${employeeFound.nome || 'o operador'}. Redirecionando para confirmação...`);
 
         if (codeStatusIcon) {
           codeStatusIcon.className = 'material-symbols-outlined fa-solid fa-circle-check text-emerald-500 text-[22px]';

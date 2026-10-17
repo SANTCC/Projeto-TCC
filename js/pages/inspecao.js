@@ -248,19 +248,19 @@ document.addEventListener('DOMContentLoaded', () => {
     checklistItemsList.innerHTML = items.map((item, index) => {
       itemsEstado[item.id] = { conforme: null, critico: item.critico };
       return `
-        <div class="p-4 rounded-xl border border-nexus-border dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div class="flex items-start gap-2.5">
+        <div class="p-4 rounded-xl border border-nexus-border dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex flex-col sm:flex-row sm:flex-nowrap items-start sm:items-center justify-between gap-3">
+          <div class="flex items-start gap-2.5 flex-1 min-w-0">
             <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">${index + 1}</span>
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-xs text-nexus-900 dark:text-white block">${esc(item.desc)}</span>
-                ${item.categoria ? `<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[9px] font-semibold">${esc(item.categoria)}</span>` : ''}
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-bold text-xs text-nexus-900 dark:text-white block break-words">${esc(item.desc)}</span>
+                ${item.categoria ? `<span class="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[9px] font-semibold shrink-0">${esc(item.categoria)}</span>` : ''}
               </div>
               ${item.critico ? '<span class="px-2 py-0.5 rounded bg-red-100 dark:bg-red-950/80 text-red-800 dark:text-red-300 font-mono text-[10px] font-bold uppercase mt-1 inline-block">Item Crítico (100% Requerido)</span>' : '<span class="text-[10px] text-slate-600 font-mono mt-0.5 inline-block">Item Operacional Secundário</span>'}
             </div>
           </div>
 
-          <div class="flex items-center gap-3 shrink-0 self-end sm:self-center">
+          <div class="flex items-center gap-3 shrink-0 self-end sm:self-center whitespace-nowrap">
             <label class="flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 cursor-pointer bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
               <input type="radio" name="chk_${esc(item.id)}" value="CONFORME" onchange="window.atualizarChecklistItem(${jsArg(item.id)}, true)" class="accent-emerald-600 w-4 h-4" />
               <span>Conforme</span>

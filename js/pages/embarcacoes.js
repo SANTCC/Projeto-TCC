@@ -497,6 +497,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const chegadasEmConfirmacao = new Set();
+  const chaveVinculo = (valor) => String(valor || '').trim().toLowerCase();
+  const normalizarRefImo = (valor) => String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const ROTULOS_NAVIO_EXIBICAO = /^(n[ãa]o\s+vinculado|vinculado|sem\s+navio|nenhum|—|-+)$/i;
 
   // Confirma a chegada no banco antes de alterar memória/cache. O render pode
   // rodar a cada segundo, por isso a Set impede requisições duplicadas.
@@ -549,6 +552,8 @@ document.addEventListener('DOMContentLoaded', () => {
             localizacao: n.localizacao || 'DENTRO_DO_PORTO',
             origem: n.porto_origem || 'Porto de Santos',
             destino: n.porto_destino || '',
+            data_ultima_manutencao: n.data_ultima_manutencao || null,
+            dataManut: n.data_ultima_manutencao || 'Sem Manutenção',
             // A distância não é gravada no navio: vem da rota marítima cadastrada (distanciaDoNavio)
             distancia: null,
             // Nunca inventa horário de saída: sem data persistida, o ETA fica indisponível.
@@ -557,6 +562,9 @@ document.addEventListener('DOMContentLoaded', () => {
           const novoNaviosJson = JSON.stringify(naviosList);
           if (localStorage.getItem('nexus_navios_list') !== novoNaviosJson) {
             localStorage.setItem('nexus_navios_list', novoNaviosJson);
+          }
+          if (typeof sincronizarVinculosContainersComNavios === 'function') {
+            await sincronizarVinculosContainersComNavios();
           }
           renderGpsTable();
           if (typeof renderContainersTable === 'function') {
@@ -571,6 +579,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const savedNaviosRaw = localStorage.getItem('nexus_navios_list');
     naviosList = savedNaviosRaw ? JSON.parse(savedNaviosRaw) : [];
+    if (typeof sincronizarVinculosContainersComNavios === 'function') {
+      sincronizarVinculosContainersComNavios();
+    }
     renderGpsTable();
   }
 
@@ -656,6 +667,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const entregasEmConfirmacao = new Set();
   const entregasJaSincronizadas = new Set();
+  const containersVinculoSincronizado = new Set();
+
+  /**
+   * Tarefa 9: garante que o contêiner embarcado em um navio mantenha o vínculo
+   * com esse navio (local e no banco) quando a carga se desvincula de ambos ao
+   * chegar no destino ou quando o navio sai do Porto de Santos.
+   */
+  function preservarVinculoContainerComNavio(carga, navio, historico) {
+    if (!navio) return false;
+    const nomeNavio = textoHistoricoEntrega(navio.nome) || textoHistoricoEntrega(historico && historico.navio_nome_historico);
+    const idNavio = navio.id || null;
+    if (!nomeNavio && !idNavio) return false;
+    const refs = [
+      carga && carga.container,
+      carga && carga.container_id,
+      carga && carga.containerId,
+      historico && historico.container_identificacao_historico
+    ].map(textoHistoricoEntrega).filter(Boolean);
+    if (refs.length === 0 || !Array.isArray(containersList)) return false;
+
+    let alterou = false;
+    const ehSomenteLeitura = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly());
+    containersList.forEach((ct) => {
+      if (!ct) return;
+      const bate = [ct.identificacao, ct.numero_identificacao, ct.id, ct.rawDbId]
+        .some((v) => v && refs.some((r) => String(v).trim().toLowerCase() === r.toLowerCase()));
+      if (!bate) return;
+      const semNavioId = !ct.navio_id;
+      const semNavioNome = !ct.navio || /^(n[ãa]o\s+vinculado|vinculado|sem\s+navio|nenhum|—|-+)$/i.test(String(ct.navio).trim());
+      if (semNavioId && idNavio) {
+        ct.navio_id = idNavio;
+        ct.navioId = idNavio;
+        alterou = true;
+      }
+      if ((semNavioNome || (idNavio && String(ct.navio_id) === String(idNavio))) && nomeNavio && ct.navio !== nomeNavio) {
+        ct.navio = nomeNavio;
+        ct.navio_nome = nomeNavio;
+        alterou = true;
+      }
+      if (!ehSomenteLeitura && window.nexusSupabase && idNavio && semNavioId) {
+        const chaveSync = `${ct.rawDbId || ct.id || ct.identificacao}:${idNavio}`;
+        if (!containersVinculoSincronizado.has(chaveSync)) {
+          containersVinculoSincronizado.add(chaveSync);
+          const tbl = window.nexusSupabase.from('containers');
+          if (tbl && typeof tbl.update === 'function') {
+            const q = UUID_NAVIO_RE.test(String(ct.rawDbId || ct.id || ''))
+              ? tbl.update({ navio_id: idNavio }).eq('id', ct.rawDbId || ct.id)
+              : tbl.update({ navio_id: idNavio }).eq('numero_identificacao', ct.identificacao);
+            Promise.resolve(q).catch(() => {});
+          }
+        }
+      }
+    });
+    if (alterou) {
+      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+    }
+    return alterou;
+  }
 
   /**
    * Indica se uma carga do cache local pertence a um navio: pelo UUID do navio
@@ -699,6 +768,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const atualizacoesRemotasEntregues = [];
     const atualizacoesRemotasDesvinculadas = [];
     let cargasAtualizadas = false;
+    let containersAtualizadosNaEntrega = false;
 
     cargasFluxo.forEach((c) => {
       if (!c) return;
@@ -706,7 +776,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Entrega legada ainda com vínculo ativo: registra o histórico antes
         // de liberar navio e contêiner (local e, abaixo, no banco).
         if (c.status === 'ENTREGUE' && (c.navio || c.navioId || c.navio_id || c.container || c.container_id || c.containerId)) {
-          const historico = finalizarEntregaLocal(c);
+          const navioLegado = naviosList.find((n) => cargaPertenceAoNavio(c, n)) || null;
+          const historico = snapshotHistoricoEntrega(c, navioLegado);
+          if (navioLegado && preservarVinculoContainerComNavio(c, navioLegado, historico)) {
+            containersAtualizadosNaEntrega = true;
+          }
+          finalizarEntregaLocal(c, historico);
           cargasAtualizadas = true;
           const idBanco = String(c.rawDbId || '');
           if (UUID_CARGA_RE.test(idBanco)) {
@@ -718,6 +793,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const navio = naviosList.find((n) => n.localizacao === 'NO_PORTO_DE_DESTINO' && cargaPertenceAoNavio(c, n));
       if (!navio) return;
       const historico = snapshotHistoricoEntrega(c, navio);
+      if (preservarVinculoContainerComNavio(c, navio, historico)) {
+        containersAtualizadosNaEntrega = true;
+      }
       c.status = 'ENTREGUE';
       finalizarEntregaLocal(c, historico);
       cargasAtualizadas = true;
@@ -726,6 +804,10 @@ document.addEventListener('DOMContentLoaded', () => {
         atualizacoesRemotasEntregues.push({ id: idBanco, historico });
       }
     });
+
+    if (containersAtualizadosNaEntrega && typeof renderContainersTable === 'function') {
+      renderContainersTable();
+    }
 
     if (cargasAtualizadas) {
       const novoCargasFluxoRaw = JSON.stringify(cargasFluxo);
@@ -956,12 +1038,14 @@ document.addEventListener('DOMContentLoaded', () => {
       acoesHtml += '</div>';
 
       const localizacaoHtml = localizacaoBadgeHtml(n.localizacao);
+      const navioManutLabel = n.data_ultima_manutencao || (n.dataManut && n.dataManut !== 'Sem Manutenção' ? n.dataManut : 'Sem Manutenção');
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
           <td class="p-3 font-bold text-nexus-900 dark:text-white">
             ${esc(n.nome)}
             <span class="block font-mono text-[10px] text-nexus-500">${esc(n.imo)}</span>
+            <small class="block font-mono text-[10px] text-slate-500 font-normal">Manut: ${esc(navioManutLabel)}</small>
           </td>
           <td class="p-3 font-mono text-xs">${bercosInfoHtml}</td>
           <td class="p-3">${localizacaoHtml}</td>
@@ -1545,6 +1629,7 @@ document.addEventListener('DOMContentLoaded', () => {
       contsDoNavioSaida.forEach(ct => {
         [ct.identificacao, ct.id, ct.rawDbId].filter(Boolean).forEach(v => chavesContsSaida.add(String(v).trim().toLowerCase()));
       });
+      let containersSaidaAtualizados = false;
       cargasFluxo.forEach(c => {
         if (!c) return;
         // Tarefa 2 (Correções): no cache, EM_TRANSITO só vem de PRONTA_PARA_ENTREGA
@@ -1557,9 +1642,15 @@ document.addEventListener('DOMContentLoaded', () => {
           .some(ref => chavesContsSaida.has(String(ref).trim().toLowerCase()));
         if (porNavio || porCont) {
           c.status = 'EM_TRANSITO';
+          if (preservarVinculoContainerComNavio(c, navio, null)) {
+            containersSaidaAtualizados = true;
+          }
         }
       });
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
+      if (containersSaidaAtualizados && typeof renderContainersTable === 'function') {
+        renderContainersTable();
+      }
 
       const identNavioLiberado = navio.nome || navio.imo || navio.id || null;
       const fraseLiberacao = `Liberou a saída do navio ${navio.nome || navio.imo || 'sem nome'} (${navio.imo}) com destino a ${navio.destino || navio.origem || '—'} por ${session.nome || session.cargo}. Horário: ${new Date(navio.dataSaida).toLocaleString('pt-BR')} (agora Fora do Porto)`;
@@ -2228,6 +2319,26 @@ document.addEventListener('DOMContentLoaded', () => {
     ajustarBercoObrigatorio();
   }
 
+  const navioSemManutCheckbox = document.getElementById('navioSemManutencaoCheckbox');
+  const navioDataManutInput = document.getElementById('navioDataManutencao');
+  if (navioDataManutInput) {
+    const dHoje = new Date();
+    navioDataManutInput.setAttribute(
+      'max',
+      `${dHoje.getFullYear()}-${String(dHoje.getMonth() + 1).padStart(2, '0')}-${String(dHoje.getDate()).padStart(2, '0')}`
+    );
+  }
+  if (navioSemManutCheckbox && navioDataManutInput) {
+    navioSemManutCheckbox.addEventListener('change', () => {
+      if (navioSemManutCheckbox.checked) {
+        navioDataManutInput.value = '';
+        navioDataManutInput.disabled = true;
+      } else {
+        navioDataManutInput.disabled = false;
+      }
+    });
+  }
+
   if (navioForm) {
     navioForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -2242,6 +2353,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const imo = imoValidacao.valor;
       const rotaSel = document.getElementById('navioRotaSelect');
       const localizacao = document.getElementById('navioLocalizacao').value;
+      let dataManutNavio = navioDataManutInput ? navioDataManutInput.value.trim() : '';
+      if (navioSemManutCheckbox && navioSemManutCheckbox.checked) {
+        dataManutNavio = '';
+      }
+      const dHojeNavio = new Date();
+      const hojeIsoNavio = `${dHojeNavio.getFullYear()}-${String(dHojeNavio.getMonth() + 1).padStart(2, '0')}-${String(dHojeNavio.getDate()).padStart(2, '0')}`;
+      if (dataManutNavio && dataManutNavio > hojeIsoNavio) {
+        const msg = 'DATA FUTURA INVÁLIDA: A data da última manutenção do navio não pode ser uma data futura (posterior a hoje)!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Futura Inválida', msg);
+        return;
+      }
 
       // Backlog3 (formulários): origem, destino e distância vêm SOMENTE de
       // uma rota marítima registrada no Supabase (rotas_maritimas), selecionada
@@ -2321,21 +2443,38 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const novoNavio = {
-        nome, imo, localizacao, origem, destino, distancia, dataSaida: localizacao === 'FORA_DO_PORTO' ? new Date().toISOString() : null
+        nome,
+        imo,
+        localizacao,
+        origem,
+        destino,
+        distancia,
+        data_ultima_manutencao: dataManutNavio || null,
+        dataManut: dataManutNavio || 'Sem Manutenção',
+        dataSaida: localizacao === 'FORA_DO_PORTO' ? new Date().toISOString() : null
       };
 
       let insertedId = null;
       if (window.nexusSupabase) {
         try {
-          const { data, error } = await window.nexusSupabase.from('navios').insert({
+          const payloadNavio = {
             nome,
             numero_imo: imo,
             porto_origem: origem,
             porto_destino: destino,
             localizacao,
             estado_operacional: 'OPERANTE',
+            ...(dataManutNavio ? { data_ultima_manutencao: dataManutNavio } : {}),
             qr_code_url: `QR-${imo}`
-          }).select('id').single();
+          };
+          let { data, error } = await window.nexusSupabase.from('navios').insert(payloadNavio).select('id').single();
+          if (error && dataManutNavio && /data_ultima_manutencao/i.test(String(error.message || error.details || ''))) {
+            const payloadFallback = Object.assign({}, payloadNavio);
+            delete payloadFallback.data_ultima_manutencao;
+            const retryRes = await window.nexusSupabase.from('navios').insert(payloadFallback).select('id').single();
+            data = retryRes.data;
+            error = retryRes.error;
+          }
 
           if (data && data.id) {
             insertedId = data.id;
@@ -2393,8 +2532,142 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // CRUD de Contêineres (T2.6 / RN 7)
   containersList = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+  let containersJaSincronizadosDoBanco = false;
+  let verificouHistoricoContainersBanco = false;
 
-  async function carregarContainersSupabase() {
+  /**
+   * Tarefa 9: sincroniza o nome/ID do navio nos contêineres e restaura vínculos
+   * de contêineres que viajaram em embarcações atualmente fora do Porto de Santos
+   * (FORA_DO_PORTO ou NO_PORTO_DE_DESTINO), garantindo que apenas a carga se
+   * desvincule ao chegar no destino, enquanto o contêiner permanece vinculado ao
+   * navio com o botão "Vincular" desabilitado até o retorno ao Porto de Santos.
+   */
+  async function sincronizarVinculosContainersComNavios() {
+    if (!Array.isArray(containersList) || containersList.length === 0) return false;
+    let alterou = false;
+    const ehSomenteLeitura = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly());
+
+    // 1. Resolve o nome do navio para contêineres que já possuem navio_id/navio
+    containersList.forEach((ct) => {
+      if (!ct) return;
+      const navioRef = navioAtualDoContainer(ct);
+      if (navioRef) {
+        if (navioRef.nome && ct.navio !== navioRef.nome) {
+          ct.navio = navioRef.nome;
+          ct.navio_nome = navioRef.nome;
+          alterou = true;
+        }
+        if (navioRef.id && !ct.navio_id) {
+          ct.navio_id = navioRef.id;
+          ct.navioId = navioRef.id;
+          alterou = true;
+        }
+      }
+    });
+
+    // 2. Para navios fora do Porto de Santos, restaura o vínculo de contêineres
+    // cujo vínculo não havia sido gravado na tabela containers antes da entrega.
+    const naviosFora = (Array.isArray(naviosList) ? naviosList : [])
+      .filter((n) => n && n.localizacao && n.localizacao !== 'DENTRO_DO_PORTO');
+    const contsSemNavio = containersList.filter((ct) => ct && refsNavioDoContainer(ct).length === 0);
+
+    if (naviosFora.length > 0 && contsSemNavio.length > 0) {
+      let cargasParaInspecao = [];
+      try {
+        const locais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+        if (Array.isArray(locais)) cargasParaInspecao = locais.slice();
+      } catch (e) { /* cache indisponível */ }
+
+      if (!verificouHistoricoContainersBanco && window.nexusSupabase) {
+        verificouHistoricoContainersBanco = true;
+        try {
+          const tblCargas = window.nexusSupabase.from('cargas');
+          if (tblCargas && typeof tblCargas.select === 'function') {
+            const { data: cargasDb, error: errCargasDb } = await tblCargas.select('*');
+            if (!errCargasDb && Array.isArray(cargasDb)) {
+              cargasDb.forEach((row) => {
+                if (!row) return;
+                cargasParaInspecao.push({
+                  status: row.status_fluxo || row.status || '',
+                  navio_id: row.navio_id || null,
+                  container_id: row.container_id || null,
+                  navio_nome_historico: row.navio_nome_historico || '',
+                  container_identificacao_historico: row.container_identificacao_historico || ''
+                });
+              });
+            }
+          }
+        } catch (e) { /* segue com cache local */ }
+      }
+
+      contsSemNavio.forEach((ct) => {
+        if (refsNavioDoContainer(ct).length > 0) return;
+        if (cargasAtivasDoContainer(ct).some((cg) => {
+          const navAtiva = naviosList.find((n) => cargaPertenceAoNavio(cg, n));
+          return navAtiva && navAtiva.localizacao === 'DENTRO_DO_PORTO';
+        })) {
+          return;
+        }
+        const chavesCt = [ct.identificacao, ct.numero_identificacao, ct.id, ct.rawDbId]
+          .filter(Boolean)
+          .map((v) => String(v).trim().toLowerCase());
+
+        let navioEncontrado = null;
+        for (const cg of cargasParaInspecao) {
+          if (!cg) continue;
+          const refsContCarga = [
+            cg.container,
+            cg.container_id,
+            cg.containerId,
+            cg.containerIdentificacaoHistorico,
+            cg.container_identificacao_historico
+          ].filter(Boolean).map((v) => String(v).trim().toLowerCase());
+          if (!refsContCarga.some((r) => chavesCt.includes(r))) continue;
+
+          const navioCandidato = naviosFora.find((n) => {
+            if (cargaPertenceAoNavio(cg, n)) return true;
+            const histNavio = String(cg.navioNomeHistorico || cg.navio_nome_historico || '').trim().toLowerCase();
+            return !!histNavio && String(n.nome || '').trim().toLowerCase() === histNavio;
+          });
+          if (navioCandidato) {
+            navioEncontrado = navioCandidato;
+            break;
+          }
+        }
+
+        if (navioEncontrado) {
+          ct.navio = navioEncontrado.nome;
+          ct.navio_nome = navioEncontrado.nome;
+          if (navioEncontrado.id) {
+            ct.navio_id = navioEncontrado.id;
+            ct.navioId = navioEncontrado.id;
+          }
+          alterou = true;
+
+          if (!ehSomenteLeitura && window.nexusSupabase && navioEncontrado.id) {
+            const chaveSync = `${ct.rawDbId || ct.id || ct.identificacao}:${navioEncontrado.id}`;
+            if (!containersVinculoSincronizado.has(chaveSync)) {
+              containersVinculoSincronizado.add(chaveSync);
+              const tbl = window.nexusSupabase.from('containers');
+              if (tbl && typeof tbl.update === 'function') {
+                const q = UUID_NAVIO_RE.test(String(ct.rawDbId || ct.id || ''))
+                  ? tbl.update({ navio_id: navioEncontrado.id }).eq('id', ct.rawDbId || ct.id)
+                  : tbl.update({ navio_id: navioEncontrado.id }).eq('numero_identificacao', ct.identificacao);
+                Promise.resolve(q).catch(() => {});
+              }
+            }
+          }
+        }
+      });
+    }
+
+    if (alterou) {
+      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+    }
+    return alterou;
+  }
+
+  async function carregarContainersSupabase(forcarSincronizacaoBanco = false) {
     let localConts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
     if (window.nexusSupabase) {
       try {
@@ -2402,44 +2675,55 @@ document.addEventListener('DOMContentLoaded', () => {
           .from('containers')
           .select('*');
 
-        if (!error && Array.isArray(data) && data.length > 0) {
-          const supConts = data.map(c => {
-            const navioVinculado = c.navio_id
-              ? naviosList.find(n => n && n.id && String(n.id) === String(c.navio_id))
-              : null;
-            return {
-              id: c.id || `CONT-${c.numero_identificacao}`,
-              rawDbId: c.id,
-              identificacao: c.numero_identificacao,
-              tipo: c.material_carregado || '',
-              tipo_carga_id: c.tipo_carga_id || null,
-              dataFabr: c.data_fabricacao || '',
-              dataManut: c.data_ultima_manutencao || 'Sem Manutenção',
-              refTempo: c.tempo_uso_referencia || 'DATA_FABRICACAO',
-              navio_id: c.navio_id || null,
-              navio: (navioVinculado && navioVinculado.nome) ? navioVinculado.nome : (c.navio_id ? 'Vinculado' : 'Não Vinculado'),
-              estado: c.estado || 'OPERANTE'
-            };
-          });
+        if (!error && Array.isArray(data)) {
+          const ehAmbienteTesteIsolado = Boolean(
+            window.location && window.location.hostname === 'nexusport.test'
+          );
+          if (data.length > 0 || containersJaSincronizadosDoBanco || forcarSincronizacaoBanco || !ehAmbienteTesteIsolado) {
+            containersJaSincronizadosDoBanco = true;
+            const supConts = data.map(c => {
+              const navioVinculado = c.navio_id
+                ? naviosList.find(n => n && n.id && String(n.id) === String(c.navio_id))
+                : null;
+              const localRef = localConts.find(lc => lc && (
+                (c.id && (String(lc.id) === String(c.id) || String(lc.rawDbId) === String(c.id))) ||
+                (c.numero_identificacao && String(lc.identificacao) === String(c.numero_identificacao))
+              ));
+              const nomeLocalValido = localRef && localRef.navio && !ROTULOS_NAVIO_EXIBICAO.test(String(localRef.navio).trim())
+                ? String(localRef.navio).trim()
+                : '';
+              const nomeResolvido = (navioVinculado && navioVinculado.nome)
+                ? navioVinculado.nome
+                : (c.navio_id ? (nomeLocalValido || 'Vinculado') : 'Não Vinculado');
+              return {
+                id: c.id || `CONT-${c.numero_identificacao}`,
+                rawDbId: c.id,
+                identificacao: c.numero_identificacao,
+                tipo: c.material_carregado || (localRef && localRef.tipo) || '',
+                tipo_carga_id: c.tipo_carga_id || (localRef && localRef.tipo_carga_id) || null,
+                dataFabr: c.data_fabricacao || (localRef && localRef.dataFabr) || '',
+                dataManut: c.data_ultima_manutencao || (localRef && localRef.dataManut) || 'Sem Manutenção',
+                refTempo: c.tempo_uso_referencia || (localRef && localRef.refTempo) || 'DATA_FABRICACAO',
+                navio_id: c.navio_id || null,
+                navioId: c.navio_id || null,
+                navio: nomeResolvido,
+                estado: c.estado || 'OPERANTE'
+              };
+            });
 
-          // Mescla contêineres locais com o banco Supabase para preservar cadastros
-          const supIdSet = new Set(supConts.map(x => (x.identificacao || '').toUpperCase()));
-          localConts.forEach(lc => {
-            if (lc.identificacao && !supIdSet.has(lc.identificacao.toUpperCase())) {
-              supConts.push(lc);
-            }
-          });
-
-          containersList = supConts;
-          localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
-          renderContainersTable();
-          return;
+            containersList = supConts;
+            await sincronizarVinculosContainersComNavios();
+            localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+            renderContainersTable();
+            return;
+          }
         }
       } catch (err) {
         console.warn('[NexusPort] Erro ao carregar contêineres do Supabase:', err);
       }
     }
     containersList = localConts;
+    await sincronizarVinculosContainersComNavios();
     renderContainersTable();
   }
 
@@ -2450,16 +2734,6 @@ document.addEventListener('DOMContentLoaded', () => {
   //     se vincular a outro navio — evita falhas de destino final. Cargas em
   //     status terminal (ENTREGUE/CANCELADA/RECUSADA) são histórico e não
   //     ocupam mais o contêiner (mesma regra das Tarefas 3/7).
-  const chaveVinculo = (valor) => String(valor || '').trim().toLowerCase();
-  // Tarefa 10 (Correções): comparação tolerante de IMO (caixa, hífen, prefixo e
-  // espaços), necessária porque a automação/WebMCP informa o IMO normalizado
-  // enquanto o cadastro/cache guarda o IMO exibido.
-  const normalizarRefImo = (valor) => String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  // O cache de contêineres guarda RÓTULOS de exibição quando o vínculo é
-  // resolvido pelo id ('Não Vinculado', 'Vinculado', 'Sem navio'). Eles não são
-  // nomes de navio e não podem ser tratados como vínculo real — a fonte da
-  // verdade é navio_id/navio_nome (e o texto só quando é nome de fato).
-  const ROTULOS_NAVIO_EXIBICAO = /^(n[ãa]o\s+vinculado|vinculado|sem\s+navio|nenhum|—|-+)$/i;
   function refsNavioDoContainer(cont) {
     if (!cont) return [];
     const refs = [cont.navio_id, cont.navioId, cont.navio_nome].filter(Boolean).map(chaveVinculo);
@@ -2482,7 +2756,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   // Devolve { titulo, mensagem } quando o vínculo está travado; caso contrário, null.
   function motivoBloqueioVinculoContainer(cont) {
-    if (!cont || refsNavioDoContainer(cont).length === 0) return null;
+    if (!cont) return null;
+    const estadoCont = String(cont.estado || 'OPERANTE').trim().toUpperCase();
+    if (estadoCont === 'EM_TRANSITO') {
+      return {
+        titulo: 'Vínculo Bloqueado',
+        mensagem: `O contêiner ${cont.identificacao} está fora do porto (em trânsito) e só pode ser vinculado quando retornar ao Porto de Santos.`
+      };
+    }
+    if (refsNavioDoContainer(cont).length === 0) return null;
     const navioAtual = navioAtualDoContainer(cont);
     const localizacaoAtual = navioAtual ? (navioAtual.localizacao || 'DENTRO_DO_PORTO') : null;
     const nomeCadastro = String(cont.navio || '').trim();
@@ -2533,15 +2815,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const manutDisplay = c.dataManut || 'Sem Manutenção';
-      const navioMatch = c.navio_id
-        ? naviosList.find(n => n && n.id && String(n.id) === String(c.navio_id))
-        : null;
+      const navioMatch = navioAtualDoContainer(c);
       if (navioMatch && navioMatch.nome) {
         c.navio = navioMatch.nome;
+        if (!c.navio_id && navioMatch.id) c.navio_id = navioMatch.id;
       }
       const nomeNavioExibicao = (navioMatch && navioMatch.nome)
         ? navioMatch.nome
-        : (c.navio && c.navio !== 'Vinculado' ? c.navio : (c.navio_id ? 'Vinculado' : 'Não Vinculado'));
+        : (c.navio && !ROTULOS_NAVIO_EXIBICAO.test(String(c.navio).trim()) ? c.navio : (c.navio_id ? 'Vinculado' : 'Não Vinculado'));
 
       // Tarefa 10 (Correções): o botão de vincular fica DESATIVADO (com o
       // motivo no title/aria-label) quando o vínculo está travado pela regra A
@@ -2936,6 +3217,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const semManutCheckbox = document.getElementById('contSemManutencaoCheckbox');
   const contManutInput = document.getElementById('contManutencao');
+  const contFabrInput = document.getElementById('contFabricacao');
+  const gndDataManutInput = document.getElementById('gndDataManut');
+
+  function obterDataLocalHojeIso() {
+    const agora = new Date();
+    const ano = agora.getFullYear();
+    const mes = String(agora.getMonth() + 1).padStart(2, '0');
+    const dia = String(agora.getDate()).padStart(2, '0');
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  function atualizarLimitesDatasEquipamentos() {
+    const hojeIso = obterDataLocalHojeIso();
+    if (contFabrInput) contFabrInput.setAttribute('max', hojeIso);
+    if (contManutInput) {
+      contManutInput.setAttribute('max', hojeIso);
+      if (contFabrInput && contFabrInput.value) {
+        contManutInput.setAttribute('min', contFabrInput.value);
+      } else {
+        contManutInput.removeAttribute('min');
+      }
+    }
+    if (gndDataManutInput) gndDataManutInput.setAttribute('max', hojeIso);
+  }
+  atualizarLimitesDatasEquipamentos();
+
+  if (contFabrInput) {
+    contFabrInput.addEventListener('change', atualizarLimitesDatasEquipamentos);
+  }
 
   if (semManutCheckbox && contManutInput) {
     semManutCheckbox.addEventListener('change', () => {
@@ -2944,6 +3254,7 @@ document.addEventListener('DOMContentLoaded', () => {
         contManutInput.disabled = true;
       } else {
         contManutInput.disabled = false;
+        atualizarLimitesDatasEquipamentos();
       }
     });
   }
@@ -2988,8 +3299,21 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      const hojeIso = obterDataLocalHojeIso();
+      if (dataFabr && dataFabr > hojeIso) {
+        const msg = 'DATA FUTURA INVÁLIDA: A data de fabricação do contêiner não pode ser posterior à data atual!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Futura Inválida', msg);
+        return;
+      }
+
+      if (dataManut && dataManut !== 'Sem Manutenção' && dataManut > hojeIso) {
+        const msg = 'DATA FUTURA INVÁLIDA: A data da última manutenção do contêiner não pode ser uma data futura (posterior a hoje)!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Futura Inválida', msg);
+        return;
+      }
+
       // Item 14: Validação de coerência entre data de fabricação e manutenção
-      if (dataFabr && dataManut && new Date(dataManut) < new Date(dataFabr)) {
+      if (dataFabr && dataManut && dataManut !== 'Sem Manutenção' && new Date(dataManut) < new Date(dataFabr)) {
         const msg = 'DATA INCONSISTENTE: A data da última manutenção não pode ser anterior à data de fabricação do contêiner!';
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Inconsistente', msg);
         return;
@@ -3354,6 +3678,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      const hojeIsoGnd = obterDataLocalHojeIso();
+      if (dataManut && dataManut > hojeIsoGnd) {
+        const msg = 'DATA FUTURA INVÁLIDA: A data da última manutenção do guindaste não pode ser uma data futura (posterior a hoje)!';
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Futura Inválida', msg);
+        return;
+      }
+
       const novoGnd = { id: identificacao, identificacao, estado, dataManut };
       guindastesList.push(novoGnd);
       localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
@@ -3408,13 +3739,21 @@ document.addEventListener('DOMContentLoaded', () => {
       carregarNaviosSupabase();
     }
     if (geral || entity === 'containers' || entity === 'nexus_containers_list' || entity === 'cargas' || entity === 'nexus_cargas_fluxo' || entity === 'navios' || entity === 'nexus_navios_list') {
-      carregarContainersSupabase();
+      carregarContainersSupabase(true);
     }
     if (geral || entity === 'guindastes' || entity === 'nexus_guindastes_list') {
       carregarGuindastesSupabase();
     }
     if (geral || entity === 'rotas_maritimas' || entity === 'navios' || entity === 'nexus_navios_list') {
       carregarRotasMaritimas();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      carregarContainersSupabase(true);
+      carregarNaviosSupabase();
+      carregarGuindastesSupabase();
     }
   });
 });

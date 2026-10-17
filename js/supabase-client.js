@@ -172,6 +172,83 @@
         });
       }
       supabaseClient = supabase.createClient(url, key, clientOptions);
+      if (supabaseClient && supabaseClient.functions && typeof supabaseClient.functions.invoke === 'function') {
+        const invokeOriginal = supabaseClient.functions.invoke.bind(supabaseClient.functions);
+        supabaseClient.functions.invoke = async function (slug, options) {
+          if (slug === 'panic-alert' && !(config && config.ENABLE_PANIC_EDGE_FUNCTION === true)) {
+            const body = (options && options.body) || {};
+            const action = String(body.action || '').toLowerCase();
+            const identity = body.acionado_por || {};
+            const nowIso = new Date().toISOString();
+            let emergencia = null;
+            const sbEmerg = window.NexusSupabaseUtils && typeof window.NexusSupabaseUtils.clientePara === 'function'
+              ? window.NexusSupabaseUtils.clientePara('emergencias')
+              : supabaseClient;
+            if (sbEmerg) {
+              try {
+                if (action === 'activate') {
+                  const session = window.currentUserSession || (window.NexusAuth ? window.NexusAuth.getSession() : null) || {};
+                  const funcId = typeof session.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session.id)
+                    ? session.id
+                    : null;
+                  const rowPayload = {
+                    estado: 'ATIVA',
+                    motivo: body.motivo || 'Emergência crítica declarada manualmente no Terminal STS-01.',
+                    funcionario_id: funcId,
+                    acionado_por_nome: identity.nome || null,
+                    acionado_por_cargo: identity.cargo || null,
+                    acionado_por_codigo: identity.codigo_individual || null,
+                    data_hora: nowIso,
+                    origem: 'CLIENT_FALLBACK'
+                  };
+                  let { data, error } = await sbEmerg.from('emergencias').insert(rowPayload).select().maybeSingle();
+                  if (error && String(error.code || '') === '23503' && rowPayload.funcionario_id) {
+                    const retry = await sbEmerg.from('emergencias').insert(Object.assign({}, rowPayload, { funcionario_id: null })).select().maybeSingle();
+                    data = retry.data;
+                    error = retry.error;
+                  }
+                  if (error && window.NexusSupabaseUtils && typeof window.NexusSupabaseUtils.registrarErroTabela === 'function') {
+                    window.NexusSupabaseUtils.registrarErroTabela('emergencias', error);
+                  } else if (data) {
+                    emergencia = Array.isArray(data) ? data[0] : data;
+                  }
+                } else if (action === 'deactivate') {
+                  const { data: ativa, error } = await sbEmerg
+                    .from('emergencias')
+                    .select('*')
+                    .eq('estado', 'ATIVA')
+                    .order('data_hora', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  const rowAtiva = Array.isArray(ativa) ? ativa[0] : ativa;
+                  if (error && window.NexusSupabaseUtils && typeof window.NexusSupabaseUtils.registrarErroTabela === 'function') {
+                    window.NexusSupabaseUtils.registrarErroTabela('emergencias', error);
+                  } else if (rowAtiva && rowAtiva.id) {
+                    await sbEmerg.from('emergencias').update({
+                      estado: 'RESOLVIDA',
+                      resolvido_por_nome: identity.nome || null,
+                      resolvido_por_cargo: identity.cargo || null,
+                      data_resolucao: nowIso
+                    }).eq('id', rowAtiva.id);
+                    emergencia = Object.assign({}, rowAtiva, { estado: 'RESOLVIDA' });
+                  }
+                }
+              } catch (e) { /* segue com relay local */ }
+            }
+            return {
+              data: {
+                ok: true,
+                action: action,
+                emergencia: emergencia,
+                persistencia: { ok: Boolean(emergencia) },
+                broadcast: { ok: false, status: 'local_relay' }
+              },
+              error: null
+            };
+          }
+          return invokeOriginal(slug, options);
+        };
+      }
       console.log("[NexusPort] Cliente Supabase inicializado com sucesso.");
       if (netDebug) netDebug.clientCreated({ url: url, key: key, urlSource: origemUrl() });
     } catch (err) {

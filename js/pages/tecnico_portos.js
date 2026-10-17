@@ -480,16 +480,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     funcTableBody.innerHTML = visiveis.map((f, indice) => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-        <td class="p-3 font-bold">${esc(f.nome)}</td>
-        <td class="p-3 text-slate-600 font-semibold">${esc(f.cargo)}</td>
-        <td class="p-3 font-mono text-slate-600 dark:text-slate-300">${esc(formatarCpfExibicao(f.cpf))}</td>
-        <td class="p-3 font-mono text-slate-600">${esc(formatarDataNascExibicao(f.data_nascimento))}</td>
-        <td class="p-3 text-slate-600 font-mono text-xs flex items-center justify-between gap-2">
-          <span class="${f.ativo ? 'text-emerald-700 font-bold' : 'text-slate-600'}">${esc(f.doc || 'Cadastrado')}</span>
-          <span class="flex items-center gap-1.5 shrink-0">
-            <button type="button" onclick="window.editarFuncionarioPorIndice(${jsArg(indice)})" class="px-2 py-1 bg-nexus-500 hover:bg-nexus-900 text-white rounded font-bold text-xs">Editar</button>
-            <button type="button" onclick="window.excluirFuncionarioPorIndice(${jsArg(indice)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
-          </span>
+        <td class="p-3 font-bold align-middle">${esc(f.nome)}</td>
+        <td class="p-3 text-slate-600 font-semibold align-middle">${esc(f.cargo)}</td>
+        <td class="p-3 font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap align-middle">${esc(formatarCpfExibicao(f.cpf))}</td>
+        <td class="p-3 font-mono text-slate-600 whitespace-nowrap align-middle">${esc(formatarDataNascExibicao(f.data_nascimento))}</td>
+        <td class="p-3 text-slate-600 font-mono text-xs whitespace-nowrap align-middle">
+          <div class="flex items-center justify-between gap-3">
+            <span class="${f.ativo ? 'text-emerald-700 font-bold' : 'text-slate-600'}">${esc(f.doc || 'Cadastrado')}</span>
+            <span class="flex items-center gap-1.5 shrink-0">
+              <button type="button" onclick="window.editarFuncionarioPorIndice(${jsArg(indice)})" class="px-2 py-1 bg-nexus-500 hover:bg-nexus-900 text-white rounded font-bold text-xs">Editar</button>
+              <button type="button" onclick="window.excluirFuncionarioPorIndice(${jsArg(indice)})" class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded font-bold text-xs">Excluir</button>
+            </span>
+          </div>
         </td>
       </tr>
     `).join('');

@@ -128,6 +128,25 @@ try {
     console.error('  ❌ [FAIL] NexusVLibras: Falha no sanitizador de texto do VLibras.');
     failedCount++;
   }
+
+  const glosaScan = w.NexusVLibras && w.NexusVLibras.converterGlosa('Processar Scan');
+  const urlScanNormalizada = w.NexusVLibras &&
+    w.NexusVLibras.normalizarUrlDicionario('https://dicionario2.vlibras.gov.br/2018.3.1/WEBGL/SCAN');
+  let errosCapturados = 0;
+  w.console.error('Não foi possível traduzir o texto.');
+  w.console.error('Nenhum dado recebido do servidor.');
+
+  if (
+    glosaScan === 'FAZER LER CODIGO' &&
+    urlScanNormalizada === 'https://dicionario2.vlibras.gov.br/2018.3.1/WEBGL/LER' &&
+    errosCapturados === 0
+  ) {
+    console.log('  ✅ [PASS] NexusVLibras: Glosa local (200 OK) e normalização de dicionário (/WEBGL/SCAN -> /WEBGL/LER) sem erros 500/404.');
+    passedCount++;
+  } else {
+    console.error('  ❌ [FAIL] NexusVLibras: Falha na proteção contra erros 500/404 do VLibras.', { glosaScan, urlScanNormalizada });
+    failedCount++;
+  }
   dom.window.close();
 } catch (err) {
   console.error('  ❌ [FAIL] Erro ao validar VLibras em runtime:', err.message);
