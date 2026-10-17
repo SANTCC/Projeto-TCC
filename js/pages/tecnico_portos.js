@@ -310,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
               .or(`matricula.eq.${rawMat},matricula.eq.${formattedMat},matricula.eq.${unformattedMat}`);
 
             if (window.registrarLogAlteracao) {
-              await window.registrarLogAlteracao('EDICAO', 'funcionarios', null, { matricula: selectedEmp.matricula, novo_codigo: newCode, motivo: 'Reemissão de código pelo Técnico em Portos' });
+              await window.registrarLogAlteracao('EDICAO', 'funcionarios', null, { matricula: selectedEmp.matricula, nome: selectedEmp.nome, novo_codigo: newCode, motivo: 'Reemissão de código pelo Técnico em Portos' });
             }
           } catch (err) {
             console.warn('[NexusPort] Erro ao atualizar código no Supabase:', err);
@@ -585,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const podeDoc = podeEditarDocumentacaoFuncionario(session);
       docCampo.disabled = !podeDoc;
       docCampo.readOnly = !podeDoc;
-      docCampo.title = podeDoc ? '' : 'Alteração de documentação interna restrita ao Diretor e ao Técnico em Portos';
+      docCampo.title = podeDoc ? '' : 'Alteração de documentação interna indisponível';
       docCampo.classList.toggle('bg-slate-100', !podeDoc);
       docCampo.classList.toggle('dark:bg-slate-800/80', !podeDoc);
       docCampo.classList.toggle('cursor-not-allowed', !podeDoc);
@@ -662,7 +662,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (docCampo) {
       docCampo.disabled = false;
       docCampo.readOnly = false;
-      docCampo.title = 'Documentação interna do funcionário (editável pelo Diretor e pelo Técnico em Portos)';
+      docCampo.title = 'Documentação interna do funcionário';
       docCampo.classList.remove('bg-slate-100', 'dark:bg-slate-800/80', 'cursor-not-allowed', 'opacity-75');
     }
     const cpfCampo = document.getElementById('funcCpf');
@@ -829,6 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Auditoria sem dados sensíveis: registra QUAIS campos, nunca o CPF.
       await window.registrarLogAlteracao('EDICAO', 'funcionarios', alvo.id || null, {
         matricula: alvo.matricula,
+        nome: alvo.nome,
         campos_atualizados: camposAtualizados.length ? camposAtualizados : ['cpf', 'data_nascimento']
       });
     }
@@ -866,7 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (window.registrarLogAlteracao) {
-      await window.registrarLogAlteracao('EXCLUSAO', 'funcionarios', null, { matricula, motivo: 'Exclusão pelo Técnico em Portos' });
+      await window.registrarLogAlteracao('EXCLUSAO', 'funcionarios', null, { matricula, nome: funcionario ? funcionario.nome : undefined, motivo: 'Exclusão pelo Técnico em Portos' });
     }
     if (window.NexusRepository && window.NexusRepository.notifyChange) {
       window.NexusRepository.notifyChange('funcionarios');
@@ -1268,12 +1269,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="flex items-center justify-end gap-2">
                   ${isAguardando ? `
                     <button type="button" onclick="window.alterarStatusVisitante(${jsArg(vKey)}, 'EM_VISITA')" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-colors">
-                      <span class="material-symbols-outlined text-[16px]">how_to_reg</span>
+                      <span class="material-symbols-outlined fa-solid fa-user-check text-[16px]" data-icon="how_to_reg" aria-hidden="true"></span>
                       <span>Autorizar (Entrar em Visita)</span>
                     </button>
                   ` : ''}
                   <button type="button" onclick="window.registrarSaidaVisitante(${jsArg(vKey)})" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-colors">
-                    <span class="material-symbols-outlined text-[16px]">logout</span>
+                    <span class="material-symbols-outlined fa-solid fa-right-from-bracket text-[16px]" data-icon="logout" aria-hidden="true"></span>
                     <span>Registrar Saída & Vistoria</span>
                   </button>
                 </div>
@@ -1673,7 +1674,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const podeDoc = podeEditarDocumentacaoFuncionario(session);
       docCampo.disabled = !podeDoc;
       docCampo.readOnly = !podeDoc;
-      docCampo.title = podeDoc ? '' : 'Alteração de documentação interna restrita ao Diretor e ao Técnico em Portos';
+      docCampo.title = podeDoc ? '' : 'Alteração de documentação interna indisponível';
       docCampo.classList.toggle('bg-slate-100', !podeDoc);
       docCampo.classList.toggle('dark:bg-slate-800/80', !podeDoc);
       docCampo.classList.toggle('cursor-not-allowed', !podeDoc);

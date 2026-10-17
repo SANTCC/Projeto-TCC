@@ -30,7 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const printEtiquetaBtn = document.getElementById('printEtiquetaBtn');
 
   if (roleNoticeTag) {
-    roleNoticeTag.textContent = `Ações Ativas para: ${session.cargo_nome || session.cargo}`;
+    roleNoticeTag.textContent = '';
+    roleNoticeTag.classList.add('hidden');
   }
 
   const isSomenteLeitura = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(session));
@@ -748,7 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-emerald-200 text-emerald-900 dark:bg-emerald-800 dark:text-emerald-100">ENTREGUE</span>
         </td>
         <td class="p-3 text-right">
-          <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[36px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">qr_code</span><span class="hidden sm:inline">QR Code</span></button>
+          <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[36px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined fa-solid fa-qrcode text-[18px]" aria-hidden="true" data-icon="qr_code"></span><span class="hidden sm:inline">QR Code</span></button>
         </td>
       </tr>
     `).join('');
@@ -783,7 +784,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-200">CANCELADA</span>
         </td>
         <td class="p-3 text-right">
-          <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[36px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">qr_code</span><span class="hidden sm:inline">QR Code</span></button>
+          <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[36px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined fa-solid fa-qrcode text-[18px]" aria-hidden="true" data-icon="qr_code"></span><span class="hidden sm:inline">QR Code</span></button>
         </td>
       </tr>
     `).join('');
@@ -820,8 +821,8 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td class="p-3">
           <div class="flex flex-wrap items-center gap-1.5">
-            <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[40px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">qr_code</span><span class="hidden sm:inline">QR Code</span></button>
-            ${podeAbrirChecklist && c.id ? `<a href="${safeUrl('inspecao.html?carga=' + encodeURIComponent(c.id))}" aria-label="Abrir checklist da carga ${esc(c.id)}" title="Revisar checklist para nova tentativa de aceite" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[40px] rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nexus-500"><span class="material-symbols-outlined text-[18px]" aria-hidden="true">fact_check</span><span>Checklist</span></a>` : ''}
+            <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code da carga ${esc(c.id)}" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode || c.id)}, natureza: ${jsArg(c.natureza)}})" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[40px] rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition-colors"><span class="material-symbols-outlined fa-solid fa-qrcode text-[18px]" aria-hidden="true" data-icon="qr_code"></span><span class="hidden sm:inline">QR Code</span></button>
+            ${podeAbrirChecklist && c.id ? `<a href="${safeUrl('inspecao.html?carga=' + encodeURIComponent(c.id))}" aria-label="Abrir checklist da carga ${esc(c.id)}" title="Revisar checklist para nova tentativa de aceite" class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-w-[44px] min-h-[40px] rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nexus-500"><span class="material-symbols-outlined fa-solid fa-clipboard-check text-[18px]" aria-hidden="true" data-icon="fact_check"></span><span>Checklist</span></a>` : ''}
           </div>
         </td>
       </tr>
@@ -1270,7 +1271,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (userItems.length === 0) {
       cargasTableBody.innerHTML = `
         <tr>
-          <td colspan="7" class="p-4 text-center text-slate-600 italic">Nenhuma carga encontrada para os filtros aplicados.</td>
+          <td colspan="8" class="p-4 text-center text-slate-600 italic">Nenhuma carga encontrada para os filtros aplicados.</td>
         </tr>
       `;
       agendarMonitoramentoEtaCargas(naviosLocais);
@@ -1292,33 +1293,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (isEstivador) {
         if (c.status === 'AGENDAMENTO') {
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Aguardando recebimento físico no Porto de Santos: a carga ainda não pode ser movimentada" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Aguardando recebimento físico no Porto de Santos: a carga ainda não pode ser movimentada" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined fa-solid fa-truck-ramp-box text-[18px]" data-icon="forklift" aria-hidden="true"></span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else if (c.status === 'PRONTA_PARA_ENTREGA') {
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga pronta para entrega e alocada no contêiner: a movimentação para o pátio não é permitida" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga pronta para entrega e alocada no contêiner: a movimentação para o pátio não é permitida" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined fa-solid fa-truck-ramp-box text-[18px]" data-icon="forklift" aria-hidden="true"></span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else if (cargaEmTransito) {
           // Carga em trânsito não pode ser movimentada pelo sistema
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined fa-solid fa-truck-ramp-box text-[18px]" data-icon="forklift" aria-hidden="true"></span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else if (emergenciaAtiva) {
-          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Emergência ativa: operações do pátio bloqueadas temporariamente" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined fa-solid fa-truck-ramp-box text-[18px]" data-icon="forklift" aria-hidden="true"></span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else {
-          actionButtonsHtml += `<button type="button" title="Movimentar carga no pátio" aria-label="Movimentar carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+          actionButtonsHtml += `<button type="button" title="Movimentar carga no pátio" aria-label="Movimentar carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'MOVIMENTAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-truck-ramp-box text-[18px]" data-icon="forklift" aria-hidden="true"></span><span class="hidden sm:inline">Movimentar</span></button>`;
         }
       }
 
       if (c.status === 'AGENDAMENTO' && isConferente) {
-        actionButtonsHtml += `<button type="button" title="Confirmar recebimento no porto" aria-label="Receber carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'RECEBER')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">download</span><span class="hidden sm:inline">Receber</span></button>`;
+        actionButtonsHtml += `<button type="button" title="Confirmar recebimento no porto" aria-label="Receber carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'RECEBER')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-download text-[18px]" data-icon="download" aria-hidden="true"></span><span class="hidden sm:inline">Receber</span></button>`;
       }
 
       if (c.status === 'RECEBIMENTO_INSPECAO' && (isInspetor || isConferente)) {
-        actionButtonsHtml += `<button type="button" title="Abrir inspeção e checklist formal da carga" aria-label="Inspecionar carga" onclick="window.location.href=${jsArg('inspecao.html?carga=' + encodeURIComponent(c.id || ''))}" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">fact_check</span><span class="hidden sm:inline">Checklist</span></button>`;
+        actionButtonsHtml += `<button type="button" title="Abrir inspeção e checklist formal da carga" aria-label="Inspecionar carga" onclick="window.location.href=${jsArg('inspecao.html?carga=' + encodeURIComponent(c.id || ''))}" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-clipboard-check text-[18px]" data-icon="fact_check" aria-hidden="true"></span><span class="hidden sm:inline">Checklist</span></button>`;
       }
 
       if (c.status === 'ARMAZENAGEM') {
         if (isArrumador && (!exigeEtapasPronta || requisitosProntaConcluidos(c))) {
-          actionButtonsHtml += `<button type="button" title="Marcar carga como pronta para entrega" aria-label="Marcar como pronta" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'PRONTA')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">verified</span><span class="hidden sm:inline">Pronta</span></button>`;
+          actionButtonsHtml += `<button type="button" title="Marcar carga como pronta para entrega" aria-label="Marcar como pronta" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'PRONTA')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-certificate text-[18px]" data-icon="verified" aria-hidden="true"></span><span class="hidden sm:inline">Pronta</span></button>`;
         }
         if (isSupervisor) {
-          actionButtonsHtml += `<button type="button" title="Vincular carga a um contêiner" aria-label="Vincular a contêiner" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'VINCULAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">link</span><span class="hidden sm:inline">Vincular</span></button>`;
+          actionButtonsHtml += `<button type="button" title="Vincular carga a um contêiner" aria-label="Vincular a contêiner" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'VINCULAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-link text-[18px]" data-icon="link" aria-hidden="true"></span><span class="hidden sm:inline">Vincular</span></button>`;
         }
       }
 
@@ -1328,13 +1329,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const navioInfoHtml = c.navio
           ? `aguardando liberação do navio ${esc(c.navio)}`
           : 'sem navio vinculado — use "Vincular"';
-        actionButtonsHtml += `<span title="A saída ocorre automaticamente quando o navio vinculado for liberado (${navioInfoHtml})" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-[11px] flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span><span class="hidden sm:inline">Aguarda navio</span></span>`;
+        actionButtonsHtml += `<span title="A saída ocorre automaticamente quando o navio vinculado for liberado (${navioInfoHtml})" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-[11px] flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-clock text-[16px]" data-icon="schedule" aria-hidden="true"></span><span class="hidden sm:inline">Aguarda navio</span></span>`;
       }
 
       // C10: Botão manual de "Entregar" REMOVIDO — a entrega ocorre automaticamente quando o navio chega ao destino
 
       if (['AGENDAMENTO', 'ARMAZENAGEM', 'PRONTA_PARA_ENTREGA'].includes(c.status) && isSupervisor) {
-        actionButtonsHtml += `<button type="button" title="Cancelar carga (Supervisor)" aria-label="Cancelar carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'CANCELAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">block</span><span class="hidden sm:inline">Cancelar</span></button>`;
+        actionButtonsHtml += `<button type="button" title="Cancelar carga" aria-label="Cancelar carga" onclick="window.executarAcaoCarga(${jsArg(c.id)}, 'CANCELAR')" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm transition-all flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-ban text-[18px]" data-icon="block" aria-hidden="true"></span><span class="hidden sm:inline">Cancelar</span></button>`;
       }
 
       if (!actionButtonsHtml) {
@@ -1344,6 +1345,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const etaLinha = etaCargaTexto(c, naviosLocais);
       const containerLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '', mapaConts);
       const setorLegivel = formatarSetorPatioLegivel(c.portoDescarga, mapaConts);
+      const destinoFinalLegivel = String(c.destino || '').trim() || 'Destino não informado';
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
           <td class="p-3 font-mono font-bold text-nexus-500 whitespace-nowrap">
@@ -1353,6 +1355,12 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 whitespace-nowrap">${esc(c.tipo)} <span class="block text-[10px] text-slate-600">${esc(c.natureza || '')}</span></td>
           <td class="p-3 font-mono whitespace-nowrap">${esc(c.peso)} / ${esc(c.volume)}</td>
           <td class="p-3 font-bold whitespace-nowrap">${esc(setorLegivel)}</td>
+          <td class="p-3 whitespace-nowrap">
+            <span class="inline-flex items-center gap-1 font-semibold ${c.destino ? 'text-nexus-900 dark:text-slate-100' : 'text-slate-500 italic'}">
+              <span class="material-symbols-outlined fa-solid fa-anchor text-[12px] text-nexus-500" data-icon="anchor" aria-hidden="true"></span>
+              <span>${esc(destinoFinalLegivel)}</span>
+            </span>
+          </td>
           <td class="p-3 text-xs whitespace-nowrap">
             <span class="block font-mono ${containerLegivel ? '' : 'text-slate-600 italic'}">${containerLegivel ? esc(containerLegivel) : 'Contêiner: não vinculado'}</span>
             <span class="block text-[10px] ${c.navio ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
@@ -1371,7 +1379,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td class="p-3 text-right">
             <div class="flex items-center justify-end gap-1.5 flex-wrap min-w-[200px]">
-              <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode)}, natureza: ${jsArg(c.natureza)}})" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center gap-1 transition-colors"><span class="material-symbols-outlined text-[18px]">qr_code</span><span class="hidden sm:inline">QR Code</span></button>
+              <button type="button" title="Exibir etiqueta QR Code da carga" aria-label="Exibir QR Code" onclick="window.exibirEtiquetaQr({id: ${jsArg(c.id)}, tipo: ${jsArg(c.tipo)}, qrCode: ${jsArg(c.qrCode)}, natureza: ${jsArg(c.natureza)}})" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center gap-1 transition-colors"><span class="material-symbols-outlined fa-solid fa-qrcode text-[18px]" data-icon="qr_code" aria-hidden="true"></span><span class="hidden sm:inline">QR Code</span></button>
               ${actionButtonsHtml}
             </div>
           </td>
@@ -1827,8 +1835,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const vincularContainerSelect = document.getElementById('vincularContainerSelect');
   const vincularNavioSelect = document.getElementById('vincularNavioSelect');
   const vincularNavioAviso = document.getElementById('vincularNavioAviso');
+  const vincularDestinoAviso = document.getElementById('vincularDestinoAviso');
+  const vincularDestinoAvisoTexto = document.getElementById('vincularDestinoAvisoTexto');
   const vincularCargaIdLabel = document.getElementById('vincularCargaIdLabel');
   const vincularCargaVolumeLabel = document.getElementById('vincularCargaVolumeLabel');
+  const vincularCargaDestinoLabel = document.getElementById('vincularCargaDestinoLabel');
 
   let targetCargaParaVinculacao = null;
   // Estado do modal aberto: todos os navios, os navios aptos (listados no seletor) e os contêineres.
@@ -1971,8 +1982,50 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function atualizarAvisoDestinoModalVinculo() {
+    if (!vincularDestinoAviso || !targetCargaParaVinculacao) return;
+    const destinoCarga = String(targetCargaParaVinculacao.destino || '').trim() || 'Destino não informado';
+    const navioEscolhido = obterNavioEscolhidoVinculo();
+    let contEscolhido = null;
+    if (vincularContainerSelect && vincularContainerSelect.value) {
+      contEscolhido = containersModal.find(c => uuidContainerVinculo(c) === vincularContainerSelect.value) || null;
+    }
+    const navioHerdado = (!navioEscolhido && contEscolhido) ? navioDoContainerVinculo(contEscolhido, naviosModal) : null;
+    const navioAtivo = navioEscolhido || navioHerdado;
+
+    if (navioAtivo) {
+      const msgDiv = motivoDestinoIncompativel(targetCargaParaVinculacao, navioAtivo);
+      if (msgDiv) {
+        if (vincularDestinoAvisoTexto) vincularDestinoAvisoTexto.textContent = msgDiv;
+        else vincularDestinoAviso.textContent = msgDiv;
+        vincularDestinoAviso.classList.remove('hidden');
+        return;
+      }
+    }
+
+    const naviosDivergentes = naviosAptosModal.filter(n => Boolean(motivoDestinoIncompativel(targetCargaParaVinculacao, n)));
+    if (naviosDivergentes.length > 0) {
+      const lista = naviosDivergentes
+        .map(n => `${n.nome || 'Sem nome'} (Destino: ${String(n.destino || n.porto_destino || '').trim() || 'não informado'})`)
+        .join(', ');
+      const msg = `Aviso de destino: A seleção de ${lista} está bloqueada porque o destino do navio difere do destino final da carga (${destinoCarga}).`;
+      if (vincularDestinoAvisoTexto) vincularDestinoAvisoTexto.textContent = msg;
+      else vincularDestinoAviso.textContent = msg;
+      vincularDestinoAviso.classList.remove('hidden');
+    } else {
+      if (vincularDestinoAvisoTexto) vincularDestinoAvisoTexto.textContent = '';
+      vincularDestinoAviso.classList.add('hidden');
+    }
+  }
+
   if (vincularNavioSelect) {
-    vincularNavioSelect.addEventListener('change', renderOpcoesContainerVinculo);
+    vincularNavioSelect.addEventListener('change', () => {
+      renderOpcoesContainerVinculo();
+      atualizarAvisoDestinoModalVinculo();
+    });
+  }
+  if (vincularContainerSelect) {
+    vincularContainerSelect.addEventListener('change', atualizarAvisoDestinoModalVinculo);
   }
 
   window.abrirModalVinculacao = async function(idCarga) {
@@ -1988,13 +2041,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (vincularCargaIdLabel) vincularCargaIdLabel.textContent = targetCargaParaVinculacao.id;
     if (vincularCargaVolumeLabel) vincularCargaVolumeLabel.textContent = targetCargaParaVinculacao.volume;
+    if (vincularCargaDestinoLabel) vincularCargaDestinoLabel.textContent = String(targetCargaParaVinculacao.destino || '').trim() || 'Destino não informado';
 
-    // Backlog 3 (L): o seletor lista somente navios atracados no Porto de Santos e operantes
+    // Backlog 3 (L) + Tarefa 11: o seletor lista somente navios atracados no Porto de Santos e operantes,
+    // exibindo o destino de cada navio e bloqueando a seleção daqueles cujo destino difere da carga.
     naviosModal = await carregarNaviosParaVinculo();
     naviosAptosModal = naviosModal.filter(n => !motivoNavioInaptoVinculo(n));
     if (vincularNavioSelect) {
       vincularNavioSelect.innerHTML = '<option value="">Herdar o navio do contêiner</option>' +
-        naviosAptosModal.map((n, idx) => `<option value="${idx}">${esc(n.nome || 'Sem nome')} (IMO ${esc(n.imo || n.numero_imo || '—')})</option>`).join('');
+        naviosAptosModal.map((n, idx) => {
+          const destinoNavio = String(n.destino || n.porto_destino || '').trim() || 'Sem destino informado';
+          const destinoDiferente = Boolean(motivoDestinoIncompativel(targetCargaParaVinculacao, n));
+          const sufixoBloqueio = destinoDiferente ? ' [BLOQUEADO: Destino difere da carga]' : '';
+          return `<option value="${idx}" data-destino="${esc(destinoNavio)}" data-destino-incompativel="${destinoDiferente ? 'true' : 'false'}" ${destinoDiferente ? 'disabled' : ''}>${esc(n.nome || 'Sem nome')} (IMO ${esc(n.imo || n.numero_imo || '—')}) — Destino: ${esc(destinoNavio)}${esc(sufixoBloqueio)}</option>`;
+        }).join('');
     }
     if (vincularNavioAviso) {
       vincularNavioAviso.textContent = 'Nenhum navio atracado no Porto de Santos e operante está disponível. Cargas só podem ser vinculadas a navios nessa condição.';
@@ -2027,6 +2087,7 @@ document.addEventListener('DOMContentLoaded', () => {
       navio_nome: cont.navio_nome || cont.navio || null
     }));
     renderOpcoesContainerVinculo();
+    atualizarAvisoDestinoModalVinculo();
 
     vincularModal.classList.remove('hidden');
   };

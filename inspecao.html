@@ -54,14 +54,11 @@
         <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm">
           <div>
             <div class="flex items-center gap-2 text-nexus-500 font-mono text-xs font-bold uppercase tracking-wider">
-              <span class="material-symbols-outlined text-sm">fact_check</span>
+              <span class="material-symbols-outlined fa-solid fa-clipboard-check text-sm" data-icon="fact_check" aria-hidden="true"></span>
               <span>Inspeção Técnica Formal</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Inspeção</h1>
             <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Validação de conformidade técnica e checklist formal para liberação e armazenagem.</p>
-          </div>
-          <div class="p-3 rounded-xl bg-nexus-50 dark:bg-slate-800 text-nexus-500 font-mono font-bold text-xs">
-            Exclusivo Inspetor
           </div>
         </div>
 
@@ -70,13 +67,13 @@
           <div class="flex flex-wrap items-start justify-between gap-3 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="min-w-0">
               <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">qr_code_scanner</span>
+                <span class="material-symbols-outlined fa-solid fa-qrcode text-nexus-500" data-icon="qr_code_scanner" aria-hidden="true"></span>
                 Leitura de QR Code no Pátio
               </h2>
               <p class="text-xs text-slate-600 dark:text-slate-400">Escaneie a etiqueta diretamente na área de checklist para carregar a carga instantaneamente.</p>
             </div>
             <button id="scanChecklistBtn" type="button" aria-controls="checklistQrViewport" aria-expanded="false" class="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1 shrink-0">
-              <span class="material-symbols-outlined text-[16px]">photo_camera</span>
+              <span class="material-symbols-outlined fa-solid fa-camera text-[16px]" data-icon="photo_camera" aria-hidden="true"></span>
               <span>Escanear QR Code</span>
             </button>
           </div>
@@ -113,7 +110,7 @@
 
           <!-- Notice de Regra de Negócio -->
           <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
-            <span class="material-symbols-outlined text-[20px] text-amber-700 shrink-0 mt-0.5">warning</span>
+            <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-[20px] text-amber-700 shrink-0 mt-0.5" data-icon="warning" aria-hidden="true"></span>
             <span>
               <strong>Trava de Segurança:</strong> A aprovação da carga só é liberada se <strong>100% dos itens críticos</strong> do checklist forem avaliados como "Conforme". Caso contrário, a carga será recusada.
             </span>
@@ -131,13 +128,13 @@
           </div>
 
           <!-- Botoes de Decisão -->
-          <div class="flex items-center justify-end gap-3 pt-4 border-t border-nexus-border dark:border-nexus-dark-border">
-            <button id="recusarCargaBtn" type="button" class="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors">
-              <span class="material-symbols-outlined text-[18px]">cancel</span>
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-4 border-t border-nexus-border dark:border-nexus-dark-border">
+            <button id="recusarCargaBtn" type="button" class="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors">
+              <span class="material-symbols-outlined fa-solid fa-circle-xmark text-[18px]" data-icon="cancel" aria-hidden="true"></span>
               <span>Recusar Carga</span>
             </button>
-            <button id="aprovarCargaBtn" type="button" disabled class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              <span class="material-symbols-outlined text-[18px]">check_circle</span>
+            <button id="aprovarCargaBtn" type="button" disabled class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <span class="material-symbols-outlined fa-solid fa-circle-check text-[18px]" data-icon="check_circle" aria-hidden="true"></span>
               <span>Aprovar Carga (100% Críticos OK)</span>
             </button>
           </div>

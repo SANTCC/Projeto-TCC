@@ -15,6 +15,113 @@
    para o lado quando o conteúdo cresce e passa a rolar (deslocamento de layout). */
 html {
   scrollbar-gutter: stable;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+main {
+  min-width: 0;
+  transition: padding-left 0.3s cubic-bezier(0.22, 1, 0.36, 1), margin-left 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Tarefa 8: Responsividade completa para celulares (< 640px), tablets (640px–1023px),
+   notebooks (1024px–1439px) e monitores grandes (>= 1440px). */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* Cabeçalhos de cartões/seções e barras de ações quebram linha suavemente em telas estreitas */
+main .flex.items-center.justify-between,
+main .flex.items-start.justify-between {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Modais adaptáveis em altura e largura para celulares em retrato/paisagem e tablets */
+[role="dialog"] > div,
+[role="alertdialog"] > div,
+.fixed.inset-0.z-50 > div {
+  max-height: min(92vh, 92dvh);
+  overflow-y: auto;
+}
+
+@media (max-width: 639px) {
+  main.p-6 {
+    padding: 0.75rem !important;
+  }
+  main > div.flex-col.gap-6 {
+    gap: 0.875rem !important;
+  }
+  main .rounded-2xl.p-6 {
+    padding: 1rem !important;
+    border-radius: 0.875rem;
+  }
+  main h1.text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.65rem !important;
+  }
+  .overflow-x-auto > table {
+    min-width: 580px;
+  }
+  #bercosGrid {
+    grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)) !important;
+  }
+  [role="dialog"],
+  [role="alertdialog"],
+  .fixed.inset-0.z-50 {
+    padding: 0.75rem !important;
+  }
+  [role="dialog"] > div.p-6,
+  [role="alertdialog"] > div.p-6,
+  .fixed.inset-0.z-50 > div.p-6 {
+    padding: 1rem !important;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  main.p-6 {
+    padding: 1.25rem !important;
+  }
+  .overflow-x-auto > table {
+    min-width: 620px;
+  }
+}
+
+@media (min-width: 1280px) {
+  /* Em notebooks largos e monitores grandes, abrir a sidebar desloca o conteúdo principal
+     lado a lado sem escurecer a tela com overlay */
+  html.nexus-sidebar-open #sidebarMobileOverlay {
+    display: none !important;
+  }
+  html.nexus-sidebar-open main {
+    margin-left: 20rem;
+  }
+  main > div.max-w-5xl,
+  main > div.max-w-6xl {
+    max-width: min(96%, 1480px);
+  }
+}
+
+@media (min-width: 1536px) {
+  main.p-6 {
+    padding: 2rem 2.5rem !important;
+  }
+  main > div.max-w-5xl,
+  main > div.max-w-6xl {
+    max-width: min(95%, 1680px);
+  }
+  main > div.max-w-4xl {
+    max-width: min(92%, 1280px);
+  }
+  main > div.max-w-3xl {
+    max-width: min(90%, 1080px);
+  }
 }
 
 /* Foco sempre visível no teclado (o app usa muitos botões com ícone). */
@@ -138,6 +245,30 @@ html.dark :focus-visible {
   gap: 0.5rem;
 }
 
+/* Tarefa 4: Banner de emergência flexível conforme abertura da sidebar no desktop e compacto no celular */
+#nexusPanicFooter {
+  transition: left 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (min-width: 640px) {
+  html.nexus-sidebar-open #nexusPanicFooter {
+    left: min(20rem, 90vw) !important;
+    right: 0 !important;
+    width: auto !important;
+  }
+}
+@media (max-width: 639px) {
+  #nexusPanicFooter {
+    z-index: 55 !important;
+  }
+  html.nexus-panic-active #appSidebar {
+    bottom: var(--nexus-panic-footer-h, 48px) !important;
+    height: calc(100vh - var(--nexus-panic-footer-h, 48px)) !important;
+    height: calc(100dvh - var(--nexus-panic-footer-h, 48px)) !important;
+    max-height: calc(100vh - var(--nexus-panic-footer-h, 48px)) !important;
+    max-height: calc(100dvh - var(--nexus-panic-footer-h, 48px)) !important;
+  }
+}
+
 @media (max-width: 639px) {
   #appTopbar {
     padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
@@ -220,6 +351,17 @@ html.dark select:hover:not(:disabled) {
 html.dark select:focus-visible {
   border-color: #818cf8;
   box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+}
+
+/* Tarefa 10: Proteção VLibras — ícones nunca capturam clique/seleção isolada e o widget fica sempre acessível */
+.fa-solid, .fas, .fa-regular, .far, .fa, .material-symbols-outlined, [data-icon] {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  speak: never;
+}
+div[vw] {
+  z-index: 99999 !important;
 }
 html.dark select option {
   background-color: #0f172a;

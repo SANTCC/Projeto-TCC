@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     confirmRoleBtn.addEventListener('click', () => {
       confirmRoleBtn.disabled = true;
       confirmRoleBtn.innerHTML = `
-        <span class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
+        <span class="material-symbols-outlined fa-solid fa-spinner text-[20px] animate-spin" data-icon="progress_activity" aria-hidden="true"></span>
         <span>Iniciando Sessão Operacional...</span>
       `;
 

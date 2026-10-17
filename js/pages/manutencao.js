@@ -622,7 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
       osTableBody.innerHTML = `
         <tr>
           <td colspan="7" class="p-8 text-center">
-            <span class="material-symbols-outlined text-[32px] block mb-1 text-slate-300 dark:text-slate-600">build_circle</span>
+            <span class="material-symbols-outlined fa-solid fa-screwdriver-wrench text-[32px] block mb-1 text-slate-300 dark:text-slate-600" data-icon="build_circle" aria-hidden="true"></span>
             <span class="block font-bold text-slate-600 text-xs">Nenhuma OS cadastrada ainda.</span>
             <span class="block text-[11px] text-slate-600 mt-1">Use "+ Nova Ordem de Serviço" para registrar a primeira ordem, ou solicite uma manutenção de embarcação no painel acima.</span>
           </td>
@@ -654,7 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
       osTableBody.innerHTML = `
         <tr>
           <td colspan="7" class="p-8 text-center">
-            <span class="material-symbols-outlined text-[32px] block mb-1 text-slate-300 dark:text-slate-600">search_off</span>
+            <span class="material-symbols-outlined fa-solid fa-magnifying-glass-minus text-[32px] block mb-1 text-slate-300 dark:text-slate-600" data-icon="search_off" aria-hidden="true"></span>
             <span class="block font-bold text-slate-600 text-xs">Nenhuma OS corresponde à busca/filtro${esc(statusTxt)}.</span>
             <span class="block text-[11px] text-slate-600 mt-1">Ajuste o texto pesquisado ou limpe o filtro de status ativo para listar novamente.</span>
           </td>
@@ -681,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'APROVAR')" class="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold">Aprovar</button>
             <button type="button" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'REPROVAR')" class="px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold">Reprovar</button>
           ` : os.status === 'EM_MANUTENCAO' ? `
-            <button type="button" title="Concluir manutenção" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'CONCLUIR')" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">task_alt</span><span>Concluir</span></button>
+            <button type="button" title="Concluir manutenção" onclick="window.executarAcaoOS(${jsArg(os.id)}, 'CONCLUIR')" class="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-circle-check text-[14px]" data-icon="task_alt" aria-hidden="true"></span><span>Concluir</span></button>
           ` : `<span class="text-slate-600 font-sans italic">Finalizada</span>`}
           </div>
         </td>
@@ -1126,7 +1126,11 @@ document.addEventListener('DOMContentLoaded', () => {
         aplicarEstadoEmergencia(true);
 
         if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('emergencia', 'EDICAO', { estado: 'EMERGENCIA_CRITICA_ATIVADA', acionado_por: session.nome || session.cargo });
+          await window.registrarLogAlteracao('emergencia', 'EDICAO', {
+            estado: 'EMERGENCIA_CRITICA_ATIVADA',
+            acionado_por: session.nome || session.cargo,
+            descricao: 'Botão de emergência ativado no terminal'
+          });
         }
 
         if (window.mostrarFeedback) {
@@ -1154,7 +1158,11 @@ document.addEventListener('DOMContentLoaded', () => {
         aplicarEstadoEmergencia(false);
 
         if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('emergencia', 'EDICAO', { estado: 'EMERGENCIA_DESATIVADA', desativado_por: session.nome || session.cargo });
+          await window.registrarLogAlteracao('emergencia', 'EDICAO', {
+            estado: 'EMERGENCIA_DESATIVADA',
+            desativado_por: session.nome || session.cargo,
+            descricao: 'Botão de emergência desativado — Operações normalizadas'
+          });
         }
 
         if (window.mostrarFeedback) {

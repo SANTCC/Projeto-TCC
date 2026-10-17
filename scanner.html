@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NexusPort — QR Code</title>
-  <meta name="description" content="QR Code do NexusPort: leitura por câmera ou simulação para cargas, contêineres e inspeções." />
+  <meta name="description" content="QR Code do NexusPort: leitura por câmera ou simulação para cargas e inspeções." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
@@ -60,7 +60,7 @@
         <div class="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm">
           <div>
             <div class="flex items-center gap-2 text-nexus-500 font-mono text-xs font-bold uppercase tracking-wider">
-              <span class="material-symbols-outlined text-sm">qr_code_scanner</span>
+              <span class="material-symbols-outlined fa-solid fa-qrcode text-sm" data-icon="qr_code_scanner" aria-hidden="true"></span>
               <span>Leitor no Pátio de Cargas</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">QR Code</h1>
@@ -68,11 +68,11 @@
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button id="iniciarCameraBtn" type="button" class="px-4 py-2.5 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-2 transition-all shadow-md">
-              <span class="material-symbols-outlined text-[18px]">photo_camera</span>
+              <span class="material-symbols-outlined fa-solid fa-camera text-[18px]" data-icon="photo_camera" aria-hidden="true"></span>
               <span>Ativar Câmera</span>
             </button>
             <button id="stopScannerBtn" type="button" class="hidden px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs flex items-center gap-2 transition-all shadow-md">
-              <span class="material-symbols-outlined text-[18px]">cancel</span>
+              <span class="material-symbols-outlined fa-solid fa-circle-xmark text-[18px]" data-icon="cancel" aria-hidden="true"></span>
               <span>Parar Leitura</span>
             </button>
           </div>
@@ -82,7 +82,7 @@
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col items-center gap-4">
           <div id="qrReader" class="w-full max-w-md aspect-square h-auto bg-slate-900 rounded-xl overflow-hidden border border-slate-700 flex items-center justify-center text-white text-xs">
             <div class="p-6 text-center text-slate-300 flex flex-col items-center gap-2">
-              <span class="material-symbols-outlined text-4xl text-slate-400">camera_alt</span>
+              <span class="material-symbols-outlined fa-solid fa-camera text-4xl text-slate-400" data-icon="camera_alt" aria-hidden="true"></span>
               <span>Clique no botão acima para iniciar a câmera do dispositivo móvel.</span>
             </div>
           </div>
@@ -90,7 +90,7 @@
           <!-- Input para simulação manual -->
           <div class="w-full max-w-md p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col gap-2">
             <span class="text-xs font-bold text-slate-600 dark:text-slate-300">Simulação Manual (Teste sem Câmera):</span>
-            <div class="flex gap-2">
+            <div class="flex flex-col sm:flex-row gap-2">
               <input type="text" id="simulatedQrInput" placeholder="Ex: QR-CRG-2026-001 ou QR-CRG-2026-002" class="flex-1 px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 text-xs font-mono" />
               <button id="simulateScanBtn" type="button" class="px-4 py-2 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs transition-colors">
                 Processar Scan
@@ -104,10 +104,10 @@
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="flex items-center gap-3">
               <div class="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400">
-                <span class="material-symbols-outlined text-2xl">verified</span>
+                <span class="material-symbols-outlined fa-solid fa-certificate text-2xl" data-icon="verified" aria-hidden="true"></span>
               </div>
               <div>
-                <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white">Carga / Contêiner Identificado</h2>
+                <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white">Carga Identificada</h2>
                 <span class="text-xs text-slate-600 font-mono" id="resultCodeTag">--</span>
               </div>
             </div>
@@ -116,7 +116,7 @@
             </span>
           </div>
 
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs font-mono bg-slate-50 dark:bg-slate-800/80 p-4 rounded-xl">
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs font-mono bg-slate-50 dark:bg-slate-800/80 p-4 rounded-xl">
             <div><span class="text-slate-600 block">Identificação:</span> <strong id="resEntityId" class="text-nexus-900 dark:text-white text-sm">--</strong></div>
             <div><span class="text-slate-600 block">Tipo:</span> <strong id="resTipo" class="text-nexus-900 dark:text-white">--</strong></div>
             <div><span class="text-slate-600 block">Natureza:</span> <strong id="resNatureza" class="text-nexus-900 dark:text-white">--</strong></div>
@@ -126,12 +126,12 @@
             <div><span class="text-slate-600 block">Destino Final:</span> <strong id="resDestino" class="text-nexus-900 dark:text-white">--</strong></div>
             <div><span class="text-slate-600 block">Contêiner:</span> <strong id="resContainer" class="text-nexus-900 dark:text-white">--</strong></div>
             <div><span class="text-slate-600 block">Navio Vinculado:</span> <strong id="resNavio" class="text-nexus-900 dark:text-white">--</strong></div>
-            <div class="col-span-2 md:col-span-3"><span class="text-slate-600 block">Status no Fluxo:</span> <strong id="resStatus" class="text-indigo-600 dark:text-indigo-400 text-sm font-bold">--</strong></div>
+            <div class="sm:col-span-2 md:col-span-3"><span class="text-slate-600 block">Status no Fluxo:</span> <strong id="resStatus" class="text-indigo-600 dark:text-indigo-400 text-sm font-bold">--</strong></div>
           </div>
 
           <!-- Banner da Ação Direcionada por Cargo (T5.7) -->
           <div class="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-900 text-indigo-900 dark:text-indigo-200 text-xs flex items-start gap-3">
-            <span class="material-symbols-outlined text-2xl text-nexus-500 shrink-0">task_alt</span>
+            <span class="material-symbols-outlined fa-solid fa-circle-check text-2xl text-nexus-500 shrink-0" data-icon="task_alt" aria-hidden="true"></span>
             <div class="flex flex-col gap-1">
               <span class="font-bold uppercase tracking-wider text-[11px]" id="resRoleTitle">Direcionamento de Ação do Cargo:</span>
               <p id="resRoleMsg" class="leading-relaxed">--</p>
@@ -140,11 +140,11 @@
 
           <div class="flex flex-wrap justify-end gap-2 pt-2">
             <button id="imprimirEtiquetaScanBtn" type="button" class="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm" title="Imprime a etiqueta da carga identificada">
-              <span class="material-symbols-outlined text-[18px]">print</span>
+              <span class="material-symbols-outlined fa-solid fa-print text-[18px]" data-icon="print" aria-hidden="true"></span>
               <span>Imprimir Etiqueta</span>
             </button>
             <button id="irChecklistBtn" type="button" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm">
-              <span class="material-symbols-outlined text-[18px]">fact_check</span>
+              <span class="material-symbols-outlined fa-solid fa-clipboard-check text-[18px]" data-icon="fact_check" aria-hidden="true"></span>
               <span>Ir para Checklist da Carga</span>
             </button>
             <button id="executarAcaoScanBtn" type="button" class="px-5 py-2.5 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors">

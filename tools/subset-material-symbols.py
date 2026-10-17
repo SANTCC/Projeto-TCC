@@ -43,8 +43,9 @@ RAIZ = Path(__file__).resolve().parent.parent
 FONTE_COMPLETA = RAIZ / 'node_modules' / 'material-symbols' / 'material-symbols-outlined.woff2'
 FONTE_SUBCONJUNTO = RAIZ / 'fonts' / 'material-symbols-outlined-v3.woff2'
 
-# <span class="material-symbols-outlined ...">nome_do_icone</span>
+# <span class="material-symbols-outlined ...">nome_do_icone</span> ou data-icon="nome_do_icone"
 PADRAO_MARCAÇÃO = re.compile(r'material-symbols-outlined[^>]*>\s*([a-z0-9_]+)', re.IGNORECASE)
+PADRAO_DATA_ICON = re.compile(r'\bdata-icon=["\']([a-z0-9_]+)["\']', re.IGNORECASE)
 # Ícones declarados/selecionados em JS: propriedades e variáveis (icone: 'x', icon = 'x').
 PADRAO_JS = re.compile(r"\bicon[e]?\s*[:=]\s*['\"]([a-z0-9_]+)['\"]")
 # Ícones trocados em tempo de execução: icon.textContent = isDark ? 'light_mode' : 'dark_mode'.
@@ -71,6 +72,7 @@ def arquivos_fonte() -> list[Path]:
 def icones_no_conteudo(texto: str) -> set[str]:
     """Extrai ícones de marcação e de atribuições/declarações JavaScript."""
     nomes = set(PADRAO_MARCAÇÃO.findall(texto))
+    nomes.update(PADRAO_DATA_ICON.findall(texto))
     nomes.update(PADRAO_JS.findall(texto))
 
     for expressao in PADRAO_JS_TEXTO.findall(texto):

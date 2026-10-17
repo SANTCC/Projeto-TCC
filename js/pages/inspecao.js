@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('') + `
       <div class="mt-4 p-4 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
         <div class="flex items-center gap-2 font-mono">
-          <span class="material-symbols-outlined text-nexus-500">draw</span>
+          <span class="material-symbols-outlined fa-solid fa-pen-nib text-nexus-500" data-icon="draw" aria-hidden="true"></span>
           <span><strong>Inspetor Responsável:</strong> ${esc(session.nome || 'Inspetor')} (${esc(session.codigo_individual || session.codigo || 'INS-6090')})</span>
         </div>
         <div class="font-mono text-slate-600">

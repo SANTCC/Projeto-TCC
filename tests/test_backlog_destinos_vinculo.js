@@ -28,12 +28,26 @@ async function abrir({pagina='cargas', destinoCarga='Porto de Roterdã', destino
     },`js/pages/${pagina}.js`]});
   await H.prontoDom(j.w); await H.aguardar(80);
   assert.deepEqual(j.erros,[]);
+  if (pagina === 'cargas' && destinoCarga && destinoCarga.trim()) {
+    const txtTabela = (j.w.document.getElementById('cargasTableBody') || {}).textContent || '';
+    assert.ok(txtTabela.includes(destinoCarga.trim()), 'Tabela de Cargas & Pátio deve exibir a coluna de Destino Final da carga');
+  }
   banco.log.length=0;
   return {w:j.w,j,banco,avisos,logs:() => logs};
 }
 async function selecionar(w,herdado) {
   await w.abrirModalVinculacao('CRG-TESTE-8');
   const navio=w.document.getElementById('vincularNavioSelect');
+  const opcoes=Array.from(navio.options).slice(1);
+  assert.ok(opcoes.every(o => o.textContent.includes('Destino:')), 'Seletor de navio deve exibir o destino de cada navio');
+  const opOutro=opcoes.find(o => o.textContent.includes('Outro Navio'));
+  if (opOutro) {
+    assert.equal(opOutro.disabled, true, 'Navio com destino divergente deve ficar bloqueado (disabled) no seletor');
+  }
+  const avisoDestino=w.document.getElementById('vincularDestinoAviso');
+  if (avisoDestino && opOutro) {
+    assert.equal(avisoDestino.classList.contains('hidden'), false, 'Aviso de destino divergente deve estar visível ao usuário');
+  }
   navio.value=herdado ? '' : '0'; navio.dispatchEvent(new w.Event('change'));
   w.document.getElementById('vincularContainerSelect').value=ID_CONT;
 }

@@ -60,8 +60,8 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2 self-stretch sm:self-auto bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-            <span class="material-symbols-outlined text-nexus-500 dark:text-indigo-400 text-[24px]">verified</span>
+          <div class="hidden items-center gap-2 self-stretch sm:self-auto bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700" aria-hidden="true">
+            <span class="material-symbols-outlined fa-solid fa-certificate text-nexus-500 dark:text-indigo-400 text-[24px]" data-icon="verified" aria-hidden="true"></span>
             <div class="flex flex-col">
               <span class="font-mono text-[10px] text-slate-600 dark:text-slate-400 uppercase font-bold">Código Individual</span>
               <span id="welcomeCode" class="font-mono text-xs font-bold text-nexus-900 dark:text-white">--</span>
@@ -74,7 +74,7 @@
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-5 flex flex-col gap-2">
             <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span class="text-xs font-bold uppercase tracking-wider">Cargo Registrado</span>
-              <span class="material-symbols-outlined text-[20px] text-nexus-500">badge</span>
+              <span class="material-symbols-outlined fa-solid fa-id-card-clip text-[20px] text-nexus-500" data-icon="badge" aria-hidden="true"></span>
             </div>
             <span id="cardRoleName" class="font-display font-bold text-base text-nexus-900 dark:text-white mt-1">--</span>
             <span id="cardRoleLevel" class="text-xs text-slate-600 dark:text-slate-400">--</span>
@@ -82,8 +82,8 @@
 
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-5 flex flex-col gap-2">
             <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
-              <span class="text-xs font-bold uppercase tracking-wider">Camada de Visão (RLS)</span>
-              <span class="material-symbols-outlined text-[20px] text-nexus-500">visibility</span>
+              <span class="text-xs font-bold uppercase tracking-wider">Camada de Visão</span>
+              <span class="material-symbols-outlined fa-solid fa-eye text-[20px] text-nexus-500" data-icon="visibility" aria-hidden="true"></span>
             </div>
             <span id="cardVisionLayer" class="font-display font-bold text-base text-nexus-900 dark:text-white mt-1">--</span>
             <span id="cardVisionStatus" class="text-xs text-emerald-700 dark:text-emerald-400 font-semibold">Filtro Automático Ativo</span>
@@ -92,7 +92,7 @@
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-5 flex flex-col gap-2">
             <div class="flex items-center justify-between text-slate-600 dark:text-slate-400">
               <span class="text-xs font-bold uppercase tracking-wider">Estado da Sessão</span>
-              <span class="material-symbols-outlined text-[20px] text-success">lock</span>
+              <span class="material-symbols-outlined fa-solid fa-lock text-[20px] text-success" data-icon="lock" aria-hidden="true"></span>
             </div>
             <span class="font-display font-bold text-base text-nexus-900 dark:text-white mt-1">Sessão Autenticada</span>
             <span class="text-xs text-slate-600 dark:text-slate-400">Guarda de Sessão em Execução</span>
@@ -103,7 +103,7 @@
         <div id="cardsOperacionaisPanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">grid_view</span>
+              <span class="material-symbols-outlined fa-solid fa-table-cells-large text-nexus-500" data-icon="grid_view" aria-hidden="true"></span>
               Indicadores operacionais no terminal
             </h2>
             <span id="cardsLastUpdate" class="text-[11px] font-mono text-slate-600" title="Horário da última atualização dos indicadores">Atualizando...</span>
@@ -113,7 +113,7 @@
             <!-- Card 1: Máquinas em manutenção -->
             <button type="button" onclick="window.detalharCardOperacional('NAVIOS_MANUTENCAO')" title="Ver detalhes: máquinas e embarcações em manutenção" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">
-                <span class="material-symbols-outlined text-xl">build</span>
+                <span class="material-symbols-outlined fa-solid fa-wrench text-xl" data-icon="build" aria-hidden="true"></span>
               </div>
               <div>
                 <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Máquinas em manutenção</span>
@@ -124,7 +124,7 @@
             <!-- Card 2: Navios Fora do Porto -->
             <button type="button" onclick="window.detalharCardOperacional('NAVIOS_FORA')" title="Ver detalhes: navios fora do Porto de Santos" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400">
-                <span class="material-symbols-outlined text-xl">sailing</span>
+                <span class="material-symbols-outlined fa-solid fa-sailboat text-xl" data-icon="sailing" aria-hidden="true"></span>
               </div>
               <div>
                 <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Navios Fora do Porto</span>
@@ -135,7 +135,7 @@
             <!-- Card 3: Cargas em Armazenagem -->
             <button type="button" onclick="window.detalharCardOperacional('CARGAS_ARMAZENAGEM')" title="Ver detalhes: cargas em armazenagem no pátio" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400">
-                <span class="material-symbols-outlined text-xl">inventory_2</span>
+                <span class="material-symbols-outlined fa-solid fa-boxes-stacked text-xl" data-icon="inventory_2" aria-hidden="true"></span>
               </div>
               <div>
                 <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Cargas em Armazenagem</span>
@@ -146,7 +146,7 @@
             <!-- Card 4: Prontas Aguardando Liberação -->
             <button type="button" onclick="window.detalharCardOperacional('CARGAS_PRONTAS')" title="Ver detalhes: cargas prontas aguardando liberação" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-                <span class="material-symbols-outlined text-xl">verified</span>
+                <span class="material-symbols-outlined fa-solid fa-certificate text-xl" data-icon="verified" aria-hidden="true"></span>
               </div>
               <div>
                 <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Prontas p/ Liberação</span>
@@ -157,7 +157,7 @@
             <!-- Card 5: Cargas Recusadas -->
             <button type="button" onclick="window.detalharCardOperacional('CARGAS_RECUSADAS')" title="Ver detalhes: cargas recusadas e canceladas" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400">
-                <span class="material-symbols-outlined text-xl">cancel</span>
+                <span class="material-symbols-outlined fa-solid fa-circle-xmark text-xl" data-icon="cancel" aria-hidden="true"></span>
               </div>
               <div>
                 <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Cargas Recusadas</span>
@@ -168,7 +168,7 @@
             <!-- Card 6: Ocupação do Pátio -->
             <button type="button" onclick="window.detalharCardOperacional('OCUPACAO_PATIO')" title="Ver detalhes: taxa de ocupação do pátio" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400">
-                <span class="material-symbols-outlined text-xl">pie_chart</span>
+                <span class="material-symbols-outlined fa-solid fa-chart-pie text-xl" data-icon="pie_chart" aria-hidden="true"></span>
               </div>
               <div>
                 <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Ocupação do Pátio</span>
@@ -179,7 +179,7 @@
             <!-- Card 7: Preventiva Sugerida (> 3 Anos de Uso) -->
             <button type="button" onclick="window.detalharCardOperacional('PREVENTIVA_SUGERIDA')" title="Ver detalhes: preventiva sugerida (>3 anos de uso)" class="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-nexus-border dark:border-nexus-dark-border cursor-pointer hover:border-nexus-500 transition-all sm:col-span-2 flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500 w-full">
               <div class="p-2.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">
-                <span class="material-symbols-outlined text-xl">warning</span>
+                <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-xl" data-icon="warning" aria-hidden="true"></span>
               </div>
               <div>
                 <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Preventiva Sugerida (>3 Anos de Uso)</span>
@@ -193,7 +193,7 @@
         <div id="auditLogPanel" class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">history</span>
+              <span class="material-symbols-outlined fa-solid fa-clock-rotate-left text-nexus-500" data-icon="history" aria-hidden="true"></span>
               Tabela de Log Geral de Alterações do Sistema
             </h2>
             <span class="text-[11px] font-mono text-slate-600">Auditoria Automática</span>
@@ -202,7 +202,7 @@
           <!-- Busca local no log de auditoria + contador (Backlog 3 - 7b) -->
           <div class="flex flex-col sm:flex-row sm:items-center gap-2">
             <div class="relative flex-1">
-              <span class="material-symbols-outlined text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <span class="material-symbols-outlined fa-solid fa-magnifying-glass text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2" data-icon="search" aria-hidden="true"></span>
               <input type="search" id="buscarAuditLogInput" placeholder="Buscar no log por funcionário, cargo ou entidade..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
             </div>
             <span id="auditLogCounter" class="text-[11px] font-mono text-slate-600 whitespace-nowrap">Exibindo 0 de 0 registros</span>
@@ -231,7 +231,7 @@
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div>
               <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">gavel</span>
+                <span class="material-symbols-outlined fa-solid fa-gavel text-nexus-500" data-icon="gavel" aria-hidden="true"></span>
                 Trail de Decisões Críticas Imutável
               </h2>
               <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Histórico hierárquico de decisões operacionais estratégicas e retificações anexadas.</p>
@@ -240,7 +240,7 @@
               <button id="toggleRegistrarTrailBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
                 <span>+ Registrar Decisão / Trail</span>
               </button>
-              <span class="text-[11px] font-mono text-slate-600 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Auditoria RLS Ativa</span>
+              <span class="text-[11px] font-mono text-slate-600 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">Auditoria Ativa</span>
             </div>
           </div>
 
@@ -261,35 +261,38 @@
           <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
             <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
               <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">table_chart</span>
+                <span class="material-symbols-outlined fa-solid fa-table text-nexus-500" data-icon="table_chart" aria-hidden="true"></span>
                 Planilha Consolidada de Desempenho Operacional por Categoria
               </h2>
               <div class="flex items-center gap-2">
-                <span class="text-[11px] font-mono text-slate-600 hidden sm:inline">Valores Atualizados em Tempo Real</span>
-                <!-- Backlog 3 (7f): exportação CSV da planilha de desempenho -->
-                <button type="button" id="exportIndicadoresCsvBtn" title="Exportar planilha de desempenho em CSV"
-                        class="px-3 py-1.5 min-h-[32px] rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-nexus-500 hover:text-white text-nexus-900 dark:text-slate-200 font-bold text-[11px] flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">
-                  <span class="material-symbols-outlined text-[16px]">download</span>
-                  <span>Exportar CSV</span>
+                <span class="text-[11px] font-mono text-slate-600 dark:text-slate-400 hidden sm:inline">Valores Atualizados em Tempo Real</span>
+                <!-- Tarefa 14: exportação formatada e estilizada da planilha de desempenho -->
+                <button type="button" id="exportIndicadoresCsvBtn" title="Exportar Planilha Consolidada de Desempenho Operacional formatada (.xls)"
+                        class="px-3.5 py-2 min-h-[36px] rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-500">
+                  <span class="material-symbols-outlined fa-solid fa-download text-[15px]" data-icon="download" aria-hidden="true"></span>
+                  <span>Exportar Planilha</span>
                 </button>
               </div>
             </div>
 
-            <div class="overflow-x-auto">
-              <table class="w-full text-left border-collapse text-xs min-w-[700px]">
-                <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono font-bold uppercase border-b border-nexus-border dark:border-slate-700">
+            <div class="overflow-x-auto rounded-xl border border-nexus-border dark:border-slate-700">
+              <table id="indicadoresExecutivosTable" class="w-full text-left border-collapse text-xs min-w-[700px]">
+                <thead class="bg-nexus-900 text-white font-mono font-bold uppercase border-b border-slate-800">
                   <tr>
-                    <th class="p-3 text-left">Categoria / Operação</th>
-                    <th class="p-3 text-right">Volume Processado</th>
-                    <th class="p-3 text-right">Meta Mensal</th>
-                    <th class="p-3 text-right">Atingimento (%)</th>
-                    <th class="p-3 text-right">Tempo Médio (Horas)</th>
-                    <th class="p-3 text-center">Status Operacional</th>
+                    <th class="p-3.5 text-left">Categoria / Operação</th>
+                    <th class="p-3.5 text-right">Volume Processado</th>
+                    <th class="p-3.5 text-right">Meta Mensal</th>
+                    <th class="p-3.5 text-right">Atingimento (%)</th>
+                    <th class="p-3.5 text-right">Tempo Médio (Horas)</th>
+                    <th class="p-3.5 text-center">Status Operacional</th>
                   </tr>
                 </thead>
                 <tbody id="indicadoresExecutivosTableBody" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">
                   <!-- Renderizado via JS com zebra striping e totais -->
                 </tbody>
+                <tfoot id="indicadoresExecutivosTableFoot" class="bg-slate-100 dark:bg-slate-800/90 border-t-2 border-nexus-500 font-mono text-xs font-bold text-nexus-900 dark:text-white">
+                  <!-- Consolidado geral renderizado via JS -->
+                </tfoot>
               </table>
             </div>
           </div>
@@ -318,11 +321,11 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
         <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-nexus-500">gavel</span>
+          <span class="material-symbols-outlined fa-solid fa-gavel text-nexus-500" data-icon="gavel" aria-hidden="true"></span>
           Registrar Decisão Crítica / Trail
         </h2>
         <button type="button" id="closeRegistrarTrailModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-xl" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
 
@@ -368,7 +371,7 @@
             Cancelar
           </button>
           <button type="submit" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors">
-            <span class="material-symbols-outlined text-sm">gavel</span>
+            <span class="material-symbols-outlined fa-solid fa-gavel text-sm" data-icon="gavel" aria-hidden="true"></span>
             Registrar Decisão
           </button>
         </div>
@@ -384,7 +387,7 @@
       <div class="flex items-start justify-between pb-3 border-b border-nexus-border dark:border-slate-800">
         <div class="flex items-center gap-3">
           <div id="modalCardIconBox" class="p-2.5 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-nexus-500 dark:text-indigo-400">
-            <span id="modalCardIcon" class="material-symbols-outlined text-[24px]">info</span>
+            <span id="modalCardIcon" class="material-symbols-outlined fa-solid fa-circle-info text-[24px]" data-icon="info" aria-hidden="true"></span>
           </div>
           <div>
             <h2 id="modalCardTitle" class="font-display text-base font-bold text-nexus-900 dark:text-white">Detalhamento Indicador</h2>
@@ -392,7 +395,7 @@
           </div>
         </div>
         <button type="button" id="closeCardDetailModalBtn" class="text-slate-600 hover:text-nexus-900 dark:hover:text-white p-1 rounded-lg transition-colors">
-          <span class="material-symbols-outlined text-[20px]">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-[20px]" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
 

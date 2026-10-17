@@ -681,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
       gpsTableBody.innerHTML = `
         <tr>
           <td colspan="7" class="p-8 text-center">
-            <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">sailing</span>
+            <span class="material-symbols-outlined fa-solid fa-sailboat text-[32px] text-slate-300 dark:text-slate-600 block mb-1" data-icon="sailing" aria-hidden="true"></span>
             <span class="block font-bold text-slate-600 text-xs">Nenhuma embarcação cadastrada ainda.</span>
             <span class="block text-[11px] text-slate-600 mt-1">Navios são cadastrados pelo Inspetor em "Gerenciar Embarcações". Assim que o primeiro cadastro for salvo, o GPS, o ETA e as ações aparecem aqui automaticamente.</span>
           </td>
@@ -807,7 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
       gpsTableBody.innerHTML = `
         <tr>
           <td colspan="7" class="p-8 text-center">
-            <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600 block mb-1">search_off</span>
+            <span class="material-symbols-outlined fa-solid fa-magnifying-glass-minus text-[32px] text-slate-300 dark:text-slate-600 block mb-1" data-icon="search_off" aria-hidden="true"></span>
             <span class="block font-bold text-slate-600 text-xs">Nenhuma embarcação corresponde à busca.</span>
             <span class="block text-[11px] text-slate-600 mt-1">Ajuste o termo pesquisado (nome, IMO ou destino) para listar novamente.</span>
           </td>
@@ -914,15 +914,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Botão Vincular a Berço (Tarefa 6)
       if (n.localizacao === 'DENTRO_DO_PORTO') {
-        acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+        acoesHtml += `<button type="button" onclick="window.vincularNavioABerco(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-anchor-circle-check text-[13px]" data-icon="dock" aria-hidden="true"></span><span>Vincular</span></button>`;
       } else {
-        acoesHtml += `<button type="button" disabled aria-disabled="true" title="Vinculação indisponível: o navio precisa estar no Porto de Santos" class="px-2 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 font-bold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[13px]">dock</span><span>Vincular</span></button>`;
+        acoesHtml += `<button type="button" disabled aria-disabled="true" title="Vinculação indisponível: o navio precisa estar no Porto de Santos" class="px-2 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 font-bold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined fa-solid fa-anchor-circle-check text-[13px]" data-icon="dock" aria-hidden="true"></span><span>Vincular</span></button>`;
       }
 
       if (podeLiberarNavio) {
         if (n.localizacao === 'DENTRO_DO_PORTO') {
           // Botão Selecionar Rota Marítima (Tarefas 2 e 3)
-          acoesHtml += `<button type="button" onclick="window.selecionarRotaNavio(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white font-bold flex items-center gap-1" title="Selecionar nova rota marítima/destino"><span class="material-symbols-outlined text-[13px]">alt_route</span><span>Rota</span></button>`;
+          acoesHtml += `<button type="button" onclick="window.selecionarRotaNavio(${jsArg(n.imo)})" class="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white font-bold flex items-center gap-1" title="Selecionar nova rota marítima/destino"><span class="material-symbols-outlined fa-solid fa-route text-[13px]" data-icon="alt_route" aria-hidden="true"></span><span>Rota</span></button>`;
 
           if (emergenciaAtiva) {
             acoesHtml += `<button type="button" disabled aria-disabled="true" class="px-2.5 py-1 rounded bg-slate-300 dark:bg-slate-700 text-slate-600 font-bold cursor-not-allowed opacity-70" title="Emergência ativa: operações do pátio bloqueadas temporariamente">Liberar Saída</button>`;
@@ -950,7 +950,7 @@ document.addEventListener('DOMContentLoaded', () => {
           aria-label="Excluir navio ${esc(n.nome)}"
           onclick="window.excluirNavio(${jsArg(n.imo)})"
           class="p-1.5 rounded bg-red-50 hover:bg-red-600 text-red-600 hover:text-white focus-visible:ring-2 focus-visible:ring-nexus-500 focus-visible:outline-none transition-colors">
-          <span class="material-symbols-outlined text-[16px]">delete</span>
+          <span class="material-symbols-outlined fa-solid fa-trash-can text-[16px]" data-icon="delete" aria-hidden="true"></span>
         </button>`;
 
       acoesHtml += '</div>';
@@ -2573,12 +2573,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const bloqueioVinculo = motivoBloqueioVinculoContainer(c);
       const botaoVincularHtml = bloqueioVinculo
         ? `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="true" disabled aria-disabled="true" title="${esc(bloqueioVinculo.mensagem)}" aria-label="${esc(bloqueioVinculo.mensagem)}" class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold flex items-center gap-1 cursor-not-allowed opacity-70"><span>Vincular</span></button>`
-        : `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="false" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>`;
+        : `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="false" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-link text-[13px]" data-icon="link" aria-hidden="true"></span><span>Vincular</span></button>`;
 
       let contAcoesHtml = `
         <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
           ${botaoVincularHtml}
-          <button type="button" onclick="window.excluirContainer(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+          <button type="button" onclick="window.excluirContainer(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-trash-can text-[13px]" data-icon="delete" aria-hidden="true"></span><span>Excluir</span></button>
         </div>
       `;
 
@@ -2744,7 +2744,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (modal && select) {
         if (label) label.textContent = `${cont.identificacao} (${cont.tipo || 'Padrão'})`;
         select.innerHTML = '<option value="">-- Selecione o Navio Alvo --</option>' +
-          naviosElegiveis.map(n => `<option value="${esc(n.imo)}">${esc(n.nome)} (${esc(n.imo)})</option>`).join('');
+          naviosElegiveis.map(n => {
+            const dest = String(n.destino || n.porto_destino || '').trim() || 'Sem destino informado';
+            return `<option value="${esc(n.imo)}">${esc(n.nome)} (${esc(n.imo)}) — Destino: ${esc(dest)}</option>`;
+          }).join('');
 
         modal.classList.remove('hidden');
 
@@ -3155,10 +3158,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 text-right">
             <div class="flex items-center justify-end gap-1.5 font-mono text-[11px]">
               <button type="button" onclick="window.exibirTarefasGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold inline-flex items-center gap-1 transition-all ${temTarefas ? 'animate-pulse ring-2 ring-amber-400' : 'opacity-80'}">
-                <span class="material-symbols-outlined text-[13px]">task</span>
+                <span class="material-symbols-outlined fa-solid fa-file-circle-check text-[13px]" data-icon="task" aria-hidden="true"></span>
                 <span>Tarefas (${tarefasAtivas.length})</span>
               </button>
-              <button ${isEstivador ? 'hidden disabled' : ''} type="button" onclick="window.excluirGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">delete</span><span>Excluir</span></button>
+              <button ${isEstivador ? 'hidden disabled' : ''} type="button" onclick="window.excluirGuindaste(${jsArg(g.identificacao)})" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined fa-solid fa-trash-can text-[13px]" data-icon="delete" aria-hidden="true"></span><span>Excluir</span></button>
             </div>
           </td>
         </tr>
@@ -3258,7 +3261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pendentes.length === 0) {
       tarefasListEl.innerHTML = `
         <div class="p-6 text-center text-slate-600 italic">
-          <span class="material-symbols-outlined text-[32px] block mb-1 text-slate-300 dark:text-slate-600">task_alt</span>
+          <span class="material-symbols-outlined fa-solid fa-circle-check text-[32px] block mb-1 text-slate-300 dark:text-slate-600" data-icon="task_alt" aria-hidden="true"></span>
           Nenhuma tarefa pendente para este guindaste.
         </div>`;
       return;
@@ -3281,7 +3284,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
           <div class="flex justify-end pt-1">
             <button type="button" onclick="window.concluirTarefaGuindaste(${jsArg(t.id)})" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm">
-              <span class="material-symbols-outlined text-[16px]">check_circle</span>
+              <span class="material-symbols-outlined fa-solid fa-circle-check text-[16px]" data-icon="check_circle" aria-hidden="true"></span>
               <span>Concluída</span>
             </button>
           </div>

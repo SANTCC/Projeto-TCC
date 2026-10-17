@@ -28,19 +28,19 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col justify-between transition-colors duration-200">
 
   <!-- Header Superior com Logo e Dark Mode Toggle -->
-  <header class="w-full px-6 py-4 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900/80 backdrop-blur-md">
-    <div class="flex items-center gap-3">
-      <picture class="w-10 h-10 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img width="40" height="40" src="design/logo_porto.png" alt="NexusPort Logo" class="w-10 h-10 object-contain rounded-lg" /></picture>
-      <div class="flex flex-col">
-        <span class="font-display font-bold text-lg text-nexus-900 dark:text-white leading-tight">NexusPort</span>
-        <span class="font-mono text-xs text-slate-600 dark:text-slate-400">Terminal STS-01 • Automação Portuária</span>
+  <header class="w-full px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900/80 backdrop-blur-md">
+    <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+      <picture class="w-9 h-9 sm:w-10 sm:h-10 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img width="40" height="40" src="design/logo_porto.png" alt="NexusPort Logo" class="w-9 h-9 sm:w-10 sm:h-10 object-contain rounded-lg" /></picture>
+      <div class="flex flex-col min-w-0">
+        <span class="font-display font-bold text-base sm:text-lg text-nexus-900 dark:text-white leading-tight truncate">NexusPort</span>
+        <span class="font-mono text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 truncate">Terminal STS-01 • Automação Portuária</span>
       </div>
     </div>
 
     <div class="flex items-center gap-3">
       <!-- Dark Mode Switch Button -->
       <button id="themeToggle" type="button" aria-label="Alternar tema escuro" class="p-2.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center">
-        <span class="material-symbols-outlined text-[20px]" id="themeToggleIcon">dark_mode</span>
+        <span class="material-symbols-outlined fa-solid fa-moon text-[20px]" id="themeToggleIcon" data-icon="dark_mode" aria-hidden="true"></span>
       </button>
 
       <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-mono text-xs font-semibold">
@@ -63,14 +63,14 @@
       <div class="flex items-start justify-between pb-4 mb-6 border-b border-nexus-border dark:border-nexus-dark-border">
         <div>
           <div class="flex items-center gap-1.5 text-nexus-500 dark:text-indigo-400 mb-1">
-            <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">shield</span>
+            <span class="material-symbols-outlined fa-solid fa-shield text-[20px]" style="font-variation-settings: 'FILL' 1;" data-icon="shield" aria-hidden="true"></span>
             <span class="font-mono text-xs uppercase font-bold tracking-wider">Acesso Físico-Lógico</span>
           </div>
           <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white">Autenticação de Funcionário</h1>
           <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Informe seu código individual para validação no sistema.</p>
         </div>
         <div class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-nexus-500 dark:text-indigo-400 flex-shrink-0">
-          <span class="material-symbols-outlined text-[24px]">badge</span>
+          <span class="material-symbols-outlined fa-solid fa-id-card-clip text-[24px]" data-icon="badge" aria-hidden="true"></span>
         </div>
       </div>
 
@@ -91,36 +91,46 @@
               <span class="text-danger">*</span>
             </label>
             <span class="font-mono text-[10px] text-slate-600 dark:text-slate-400 flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-              <span class="material-symbols-outlined text-[12px]">lock</span>
+              <span class="material-symbols-outlined fa-solid fa-lock text-[12px]" data-icon="lock" aria-hidden="true"></span>
               Intransferível
             </span>
           </div>
 
           <div class="relative flex items-center">
-            <span class="material-symbols-outlined absolute left-3.5 text-slate-600 text-[20px] pointer-events-none">id_card</span>
+            <span class="material-symbols-outlined fa-solid fa-id-card absolute left-3.5 text-slate-600 text-[20px] pointer-events-none" data-icon="id_card" aria-hidden="true"></span>
             <input
-              type="text"
+              type="password"
               id="operatorCode"
               name="operatorCode"
               maxlength="14"
               placeholder="Ex: EST-1040, CONF-2050, INSP-6090, SUP-2001, TEC-1001"
               autocomplete="off"
               spellcheck="false"
-              class="w-full h-12 pl-11 pr-12 rounded-lg border border-nexus-border dark:border-slate-700 bg-nexus-bg dark:bg-slate-800 text-nexus-900 dark:text-white font-mono text-base font-semibold tracking-wider placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-nexus-500 transition-all uppercase"
+              class="w-full h-12 pl-11 pr-20 rounded-lg border border-nexus-border dark:border-slate-700 bg-nexus-bg dark:bg-slate-800 text-nexus-900 dark:text-white font-mono text-base font-semibold tracking-wider placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-nexus-500 transition-all uppercase"
             />
-            <div class="absolute right-3 flex items-center pointer-events-none">
-              <span id="codeStatusIcon" class="material-symbols-outlined text-slate-300 dark:text-slate-600 text-[22px]">fingerprint</span>
+            <div class="absolute right-3 flex items-center gap-1.5">
+              <button
+                type="button"
+                id="toggleOperatorCodeBtn"
+                aria-label="Mostrar código digitado"
+                aria-pressed="false"
+                title="Mostrar ou ocultar código digitado"
+                class="p-1.5 rounded-lg text-slate-500 hover:text-nexus-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-700/70 transition-colors flex items-center justify-center"
+              >
+                <i id="toggleOperatorCodeIcon" class="fa-solid fa-eye text-[18px]" aria-hidden="true"></i>
+              </button>
+              <span id="codeStatusIcon" class="material-symbols-outlined fa-solid fa-fingerprint text-slate-300 dark:text-slate-600 text-[20px] pointer-events-none" data-icon="fingerprint" aria-hidden="true"></span>
             </div>
           </div>
           <p class="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-1 mt-0.5 leading-snug">
-            <span class="material-symbols-outlined text-[14px] text-nexus-500 flex-shrink-0 mt-0.5">info</span>
+            <span class="material-symbols-outlined fa-solid fa-circle-info text-[14px] text-nexus-500 flex-shrink-0 mt-0.5" data-icon="info" aria-hidden="true"></span>
             <span>Código individual vinculado à matrícula funcional do colaborador.</span>
           </p>
         </div>
 
         <!-- Banner de Feedback Inline para mensagens de erro/aviso -->
         <div id="authNotice" class="hidden p-3 rounded-lg border flex items-start gap-2.5 transition-all">
-          <span id="authNoticeIcon" class="material-symbols-outlined text-[20px] flex-shrink-0 mt-0.5">info</span>
+          <span id="authNoticeIcon" class="material-symbols-outlined fa-solid fa-circle-info text-[20px] flex-shrink-0 mt-0.5" data-icon="info" aria-hidden="true"></span>
           <div class="flex flex-col text-left">
             <span id="authNoticeTitle" class="text-xs font-bold"></span>
             <span id="authNoticeMessage" class="text-xs mt-0.5 leading-relaxed"></span>
@@ -133,7 +143,7 @@
           id="loginSubmitBtn"
           class="w-full h-12 rounded-lg bg-nexus-500 hover:bg-nexus-900 active:scale-[0.99] text-white font-semibold text-base flex items-center justify-center gap-2 transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-nexus-500"
         >
-          <span class="material-symbols-outlined text-[20px]">login</span>
+          <span class="material-symbols-outlined fa-solid fa-right-to-bracket text-[20px]" data-icon="login" aria-hidden="true"></span>
           <span>Acessar Sistema Portuário</span>
         </button>
 
@@ -141,7 +151,7 @@
         <div class="pt-2 text-center border-t border-nexus-border dark:border-nexus-dark-border">
           <div class="bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3 flex items-center justify-between gap-2 text-left">
             <div class="flex items-center gap-2 min-w-0">
-              <span class="material-symbols-outlined text-warning text-[20px] flex-shrink-0">help</span>
+              <span class="material-symbols-outlined fa-solid fa-circle-question text-warning text-[20px] flex-shrink-0" data-icon="help" aria-hidden="true"></span>
               <span class="text-xs text-slate-600 dark:text-slate-300 leading-tight">
                 Esqueceu ou perdeu o código?
               </span>
@@ -162,7 +172,7 @@
       <div class="flex items-start justify-between">
         <div class="flex items-center gap-3">
           <div class="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-warning">
-            <span class="material-symbols-outlined text-[24px]">contact_support</span>
+            <span class="material-symbols-outlined fa-solid fa-headset text-[24px]" data-icon="contact_support" aria-hidden="true"></span>
           </div>
           <div>
             <h2 class="font-display text-lg font-bold text-nexus-900 dark:text-white">Reemissão de Credencial</h2>
@@ -170,7 +180,7 @@
           </div>
         </div>
         <button type="button" id="closeRecoveryModal" class="text-slate-600 hover:text-nexus-900 dark:hover:text-white p-1 rounded-lg">
-          <span class="material-symbols-outlined text-[20px]">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-[20px]" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
 

@@ -76,25 +76,46 @@ const AUDIT_ROTULOS_ENTIDADE = {
 function descricaoDoLog(registro) {
   if (!registro) return '';
   const det = registro.detalhes;
+  const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
+  const limparUuidEmTexto = (s) => String(s || '')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  const tipoEntUpper = String(registro.entidade_tipo || '').toUpperCase();
   const textoDet = typeof det === 'string' ? det.trim() : String((det && det.descricao) || '').trim();
-  if (textoDet) return textoDet;
+  if (textoDet) return limparUuidEmTexto(textoDet);
+  if (tipoEntUpper === 'EMERGENCIA') {
+    const estado = String((det && (det.estado || det.status)) || registro.entidade_id || '').toUpperCase();
+    if (estado.includes('DESATIV') || estado.includes('RESOLV')) {
+      return 'Botão de emergência desativado — Operações normalizadas';
+    }
+    const motivo = det && det.motivo ? limparUuidEmTexto(det.motivo) : '';
+    return motivo
+      ? `Botão de emergência ativado — Motivo: ${motivo}`
+      : 'Botão de emergência ativado no terminal';
+  }
   const tipo = String(registro.tipo_alteracao || '').toUpperCase();
   const verbo = AUDIT_VERBOS[tipo] || 'Alterou';
-  const tipoEntUpper = String(registro.entidade_tipo || '').toUpperCase();
   const rotulo = AUDIT_ROTULOS_ENTIDADE[tipoEntUpper] || 'o registro';
-  const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
   let codigo = String(registro.entidade_id || '').trim();
   if (!codigo || codigo.toUpperCase() === 'N/A' || ehUuid(codigo)) {
     // UUID cru não comunica nada ao operador: prefere um código legível dos
-    // detalhes (para navio, prioriza o nome da embarcação) e, não havendo, omite o complemento.
-    const candidatos = tipoEntUpper === 'NAVIO'
-      ? [det && det.nome, det && det.navio, det && det.codigo, det && !ehUuid(det.id) ? det.id : '', det && det.numero_imo]
-      : [det && det.codigo, det && !ehUuid(det.id) ? det.id : '', det && det.matricula, det && det.nome];
+    // detalhes (para navio e funcionário, prioriza o nome; para contêiner e guindaste, numero_identificacao).
+    let candidatos;
+    if (tipoEntUpper === 'NAVIO') {
+      candidatos = [det && det.nome, det && det.navio, det && det.codigo, det && !ehUuid(det.id) ? det.id : '', det && det.numero_imo];
+    } else if (tipoEntUpper === 'FUNCIONARIO') {
+      candidatos = [det && det.nome, det && det.funcionario, det && det.substituto, det && det.codigo, det && !ehUuid(det.id) ? det.id : '', det && det.matricula];
+    } else if (tipoEntUpper === 'CONTAINER' || tipoEntUpper === 'GUINDASTE') {
+      candidatos = [det && det.numero_identificacao, det && det.identificacao, det && det.codigo, det && !ehUuid(det.id) ? det.id : '', det && det.nome];
+    } else {
+      candidatos = [det && det.codigo, det && !ehUuid(det.id) ? det.id : '', det && det.qr_code_url ? String(det.qr_code_url).replace(/^QR-/i, '') : '', det && det.numero_identificacao, det && det.identificacao, det && det.matricula, det && det.nome];
+    }
     codigo = (det && typeof det === 'object')
       ? String(candidatos.find((v) => v && !ehUuid(v)) || '').trim()
       : '';
   }
-  return codigo ? `${verbo} ${rotulo} ${codigo}` : `${verbo} ${rotulo}`;
+  return limparUuidEmTexto(codigo ? `${verbo} ${rotulo} ${codigo}` : `${verbo} ${rotulo}`);
 }
 
 // Funções utilitárias globais exigidas para integração (T7.1, T7.3, T8.3 - T8.6, T6.8)

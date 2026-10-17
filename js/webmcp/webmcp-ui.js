@@ -301,7 +301,7 @@ html.dark #nxmBotao{background:#1e1b4b;color:#c7d2fe;border-color:#3730a3}
       type: 'button', id: 'nxmBotao', 'aria-expanded': 'false', 'aria-controls': 'nxmPainel',
       'aria-label': 'Agentes IA 0 — abrir painel', hidden: 'hidden'
     }, [
-      criar('span', { class: 'material-symbols-outlined', 'aria-hidden': 'true', text: 'smart_toy', style: 'font-size:16px' }),
+      criar('span', { class: 'material-symbols-outlined fa-solid fa-robot', 'data-icon': 'smart_toy', 'aria-hidden': 'true', style: 'font-size:16px' }),
       // O espaço no fim do rótulo é intencional: o texto visível lido pelas ferramentas de auditoria
       // vira "Agentes IA 14" (mesmos termos do aria-label) em vez de "Agentes IA14".
       criar('span', { text: 'Agentes IA ' }),

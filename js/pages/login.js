@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const themeToggle = document.getElementById('themeToggle');
   const themeToggleIcon = document.getElementById('themeToggleIcon');
   const operatorCodeInput = document.getElementById('operatorCode');
+  const toggleOperatorCodeBtn = document.getElementById('toggleOperatorCodeBtn');
+  const toggleOperatorCodeIcon = document.getElementById('toggleOperatorCodeIcon');
   const codeStatusIcon = document.getElementById('codeStatusIcon');
   const loginForm = document.getElementById('loginForm');
   const loginSubmitBtn = document.getElementById('loginSubmitBtn');
@@ -94,6 +96,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (authNotice) authNotice.classList.add('hidden');
   }
 
+  // Tarefa 5: Alternar visibilidade do código/matrícula digitado no login
+  if (toggleOperatorCodeBtn && operatorCodeInput) {
+    toggleOperatorCodeBtn.addEventListener('click', () => {
+      const estavaOculto = operatorCodeInput.type === 'password';
+      operatorCodeInput.type = estavaOculto ? 'text' : 'password';
+      toggleOperatorCodeBtn.setAttribute('aria-pressed', String(estavaOculto));
+      toggleOperatorCodeBtn.setAttribute('aria-label', estavaOculto ? 'Ocultar código digitado' : 'Mostrar código digitado');
+      if (toggleOperatorCodeIcon) {
+        toggleOperatorCodeIcon.classList.toggle('fa-eye', !estavaOculto);
+        toggleOperatorCodeIcon.classList.toggle('fa-eye-slash', estavaOculto);
+      }
+      operatorCodeInput.focus();
+    });
+  }
+
   // 3. Formatação e Indicador Visual do Campo Código Individual
   if (operatorCodeInput) {
     operatorCodeInput.addEventListener('input', (e) => {
@@ -121,19 +138,19 @@ document.addEventListener('DOMContentLoaded', () => {
       hideAuthNotice();
 
       if (val.length >= 4) {
+        codeStatusIcon.className = 'material-symbols-outlined fa-solid fa-hourglass-half text-amber-500 text-[22px] animate-spin';
         codeStatusIcon.textContent = 'hourglass_empty';
-        codeStatusIcon.className = 'material-symbols-outlined text-amber-500 text-[22px] animate-spin';
       } else {
+        codeStatusIcon.className = 'material-symbols-outlined fa-solid fa-fingerprint text-slate-300 dark:text-slate-600 text-[22px]';
         codeStatusIcon.textContent = 'fingerprint';
-        codeStatusIcon.className = 'material-symbols-outlined text-slate-300 dark:text-slate-600 text-[22px]';
       }
     });
 
     operatorCodeInput.addEventListener('blur', () => {
       const val = operatorCodeInput.value.trim();
       if (val.length >= 4) {
+        codeStatusIcon.className = 'material-symbols-outlined fa-solid fa-certificate text-nexus-500 dark:text-indigo-400 text-[22px]';
         codeStatusIcon.textContent = 'verified';
-        codeStatusIcon.className = 'material-symbols-outlined text-nexus-500 dark:text-indigo-400 text-[22px]';
       }
     });
   }
@@ -159,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (loginSubmitBtn) {
         loginSubmitBtn.disabled = true;
         loginSubmitBtn.innerHTML = `
-          <span class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
+          <span class="material-symbols-outlined fa-solid fa-spinner text-[20px] animate-spin" data-icon="progress_activity" aria-hidden="true"></span>
           <span>Validando Credencial...</span>
         `;
       }
@@ -188,13 +205,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (bloqueado) {
         showAuthNotice('error', 'Acesso Temporariamente Bloqueado', 'Muitas tentativas inválidas. Aguarde 15 minutos e tente novamente.');
         if (codeStatusIcon) {
+          codeStatusIcon.className = 'material-symbols-outlined fa-solid fa-lock text-red-500 text-[22px]';
           codeStatusIcon.textContent = 'lock';
-          codeStatusIcon.className = 'material-symbols-outlined text-red-500 text-[22px]';
         }
         if (loginSubmitBtn) {
           loginSubmitBtn.disabled = false;
           loginSubmitBtn.innerHTML = `
-            <span class="material-symbols-outlined text-[20px]">login</span>
+            <span class="material-symbols-outlined fa-solid fa-right-to-bracket text-[20px]" data-icon="login" aria-hidden="true"></span>
             <span>Acessar Sistema Portuário</span>
           `;
         }
@@ -209,13 +226,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isInvalidatedCode) {
         showAuthNotice('error', 'Código Invalidado', 'Este código de acesso foi invalidado pelo Técnico em Portos. Por favor, utilize o novo código reemitido.');
         if (codeStatusIcon) {
+          codeStatusIcon.className = 'material-symbols-outlined fa-solid fa-circle-xmark text-red-500 text-[22px]';
           codeStatusIcon.textContent = 'cancel';
-          codeStatusIcon.className = 'material-symbols-outlined text-red-500 text-[22px]';
         }
         if (loginSubmitBtn) {
           loginSubmitBtn.disabled = false;
           loginSubmitBtn.innerHTML = `
-            <span class="material-symbols-outlined text-[20px]">login</span>
+            <span class="material-symbols-outlined fa-solid fa-right-to-bracket text-[20px]" data-icon="login" aria-hidden="true"></span>
             <span>Acessar Sistema Portuário</span>
           `;
         }
@@ -262,8 +279,8 @@ document.addEventListener('DOMContentLoaded', () => {
         showAuthNotice('success', 'Credencial Reconhecida', `Código vinculado à matrícula ${employeeFound.matricula}. Redirecionando para confirmação...`);
 
         if (codeStatusIcon) {
+          codeStatusIcon.className = 'material-symbols-outlined fa-solid fa-circle-check text-emerald-500 text-[22px]';
           codeStatusIcon.textContent = 'check_circle';
-          codeStatusIcon.className = 'material-symbols-outlined text-emerald-500 text-[22px]';
         }
 
         setTimeout(() => {
@@ -273,13 +290,13 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         showAuthNotice('error', 'Credencial Inválida ou Inativa', 'O código individual fornecido não foi localizado no cadastro ativo do terminal STS-01.');
         if (codeStatusIcon) {
+          codeStatusIcon.className = 'material-symbols-outlined fa-solid fa-circle-xmark text-red-500 text-[22px]';
           codeStatusIcon.textContent = 'cancel';
-          codeStatusIcon.className = 'material-symbols-outlined text-red-500 text-[22px]';
         }
         if (loginSubmitBtn) {
           loginSubmitBtn.disabled = false;
           loginSubmitBtn.innerHTML = `
-            <span class="material-symbols-outlined text-[20px]">login</span>
+            <span class="material-symbols-outlined fa-solid fa-right-to-bracket text-[20px]" data-icon="login" aria-hidden="true"></span>
             <span>Acessar Sistema Portuário</span>
           `;
         }

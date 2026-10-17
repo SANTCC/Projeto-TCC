@@ -107,8 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   if (welcomeRoleBadge) welcomeRoleBadge.textContent = session.cargo_nome || session.cargo;
-  if (welcomeContext) welcomeContext.textContent = `Matrícula ${session.matricula} • Terminal STS-01 Santos`;
-  if (welcomeCode) welcomeCode.textContent = session.codigo_individual || session.codigo || '--';
+  if (welcomeContext) welcomeContext.textContent = 'Terminal STS-01 • Porto de Santos';
+  if (welcomeCode) welcomeCode.textContent = '••••••';
 
   let indicadoresLeituraRevision = 0;
   let cardsLeituraRevision = 0;
@@ -197,26 +197,85 @@ document.addEventListener('DOMContentLoaded', () => {
       status: 'SEM META'
     }));
 
-    // Backlog 3 (7f): mantém a cópia em memória para a exportação CSV
+    // Backlog 3 (7f) / Tarefa 14: mantém a cópia em memória para a exportação da planilha
     window.__nexusIndicadoresExecutivos = indicadores;
 
-    execTableBody.innerHTML = indicadores.map((i, idx) => `
-      <tr class="${idx % 2 === 0 ? 'bg-slate-50/60 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'} hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-        <td class="p-3 text-left font-bold text-nexus-900 dark:text-white">${esc(i.categoria)}</td>
-        <td class="p-3 text-right font-mono font-bold text-slate-700 dark:text-slate-200">${esc(i.volume.toLocaleString('pt-BR'))}</td>
-        <td class="p-3 text-right font-mono text-slate-600">${i.meta == null ? '—' : esc(i.meta.toLocaleString('pt-BR'))}</td>
-        <td class="p-3 text-right font-mono font-bold text-slate-600 dark:text-slate-300">${esc(i.atingimento == null ? '—' : i.atingimento + '%')}</td>
-        <td class="p-3 text-right font-mono text-slate-600 dark:text-slate-300">${esc(i.tempo == null ? '—' : i.tempo + ' h')}</td>
-        <td class="p-3 text-center">
-          <span class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
-            i.status === 'IDEAL' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
-            i.status === 'ATENÇÃO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
-            i.status === 'CRÍTICO' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' :
-            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+    execTableBody.innerHTML = indicadores.map((i, idx) => {
+      const temMeta = i.meta != null && Number.isFinite(Number(i.meta));
+      const temAtingimento = i.atingimento != null && Number.isFinite(Number(i.atingimento));
+      const temTempo = i.tempo != null && Number.isFinite(Number(i.tempo));
+      const pctBarra = temAtingimento ? Math.max(0, Math.min(100, Number(i.atingimento))) : 0;
+      const corBarra = i.status === 'IDEAL'
+        ? 'bg-emerald-500'
+        : i.status === 'ATENÇÃO'
+          ? 'bg-amber-500'
+          : i.status === 'CRÍTICO'
+            ? 'bg-rose-500'
+            : 'bg-slate-400';
+      const corTextoPct = i.status === 'IDEAL'
+        ? 'text-emerald-700 dark:text-emerald-400'
+        : i.status === 'ATENÇÃO'
+          ? 'text-amber-700 dark:text-amber-400'
+          : i.status === 'CRÍTICO'
+            ? 'text-rose-700 dark:text-rose-400'
+            : 'text-slate-600 dark:text-slate-300';
+      return `
+      <tr class="${idx % 2 === 0 ? 'bg-slate-50/70 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'} hover:bg-indigo-50/50 dark:hover:bg-slate-800 transition-colors">
+        <td class="p-3.5 text-left font-bold text-nexus-900 dark:text-white">${esc(i.categoria)}</td>
+        <td class="p-3.5 text-right font-mono font-bold text-slate-800 dark:text-slate-100">${esc(i.volume.toLocaleString('pt-BR'))}</td>
+        <td class="p-3.5 text-right font-mono text-slate-600 dark:text-slate-400">${temMeta ? esc(i.meta.toLocaleString('pt-BR')) : '—'}</td>
+        <td class="p-3.5 text-right font-mono font-bold ${esc(corTextoPct)}">
+          ${temAtingimento ? `<div class="inline-flex items-center justify-end gap-2">
+            <div class="w-16 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden hidden sm:block">
+              <div class="h-full ${esc(corBarra)} rounded-full" style="width: ${esc(pctBarra)}%"></div>
+            </div>
+            <span>${esc(i.atingimento)}%</span>
+          </div>` : '—'}
+        </td>
+        <td class="p-3.5 text-right font-mono text-slate-700 dark:text-slate-300">${esc(temTempo ? String(i.tempo).replace('.', ',') + ' h' : '—')}</td>
+        <td class="p-3.5 text-center">
+          <span class="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wide ${
+            i.status === 'IDEAL' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60' :
+            i.status === 'ATENÇÃO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60' :
+            i.status === 'CRÍTICO' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60' :
+            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
           }">${esc(i.status)}</span>
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
+
+    const execTableFoot = document.getElementById('indicadoresExecutivosTableFoot');
+    if (execTableFoot) {
+      const temMeta = indicadores.some((item) => item.meta != null && Number.isFinite(Number(item.meta)));
+      const temTempo = indicadores.some((item) => item.tempo != null && Number.isFinite(Number(item.tempo)));
+      const somaVolume = indicadores.reduce((acc, item) => acc + (Number(item.volume) || 0), 0);
+      const somaMeta = indicadores.reduce((acc, item) => acc + (Number(item.meta) || 0), 0);
+      const atingimentoGeral = temMeta && somaMeta > 0 ? Math.round((somaVolume / somaMeta) * 100) : null;
+      const mediaTempo = temTempo
+        ? (indicadores.reduce((acc, item) => acc + (Number(item.tempo) || 0), 0) / indicadores.length).toFixed(1)
+        : null;
+      const statusGeral = atingimentoGeral == null
+        ? 'SEM META'
+        : (atingimentoGeral >= 85 ? 'IDEAL' : (atingimentoGeral >= 50 ? 'ATENÇÃO' : 'CRÍTICO'));
+      execTableFoot.innerHTML = `
+        <tr>
+          <td class="p-3.5 text-left font-display font-bold uppercase tracking-wider text-nexus-900 dark:text-white">Consolidado Geral do Terminal</td>
+          <td class="p-3.5 text-right font-mono font-bold">${esc(somaVolume.toLocaleString('pt-BR'))}</td>
+          <td class="p-3.5 text-right font-mono">${temMeta ? esc(somaMeta.toLocaleString('pt-BR')) : '—'}</td>
+          <td class="p-3.5 text-right font-mono font-bold text-nexus-500 dark:text-indigo-400">${esc(atingimentoGeral == null ? '—' : atingimentoGeral + '%')}</td>
+          <td class="p-3.5 text-right font-mono">${esc(mediaTempo == null ? '—' : String(mediaTempo).replace('.', ',') + ' h (média)')}</td>
+          <td class="p-3.5 text-center">
+            <span class="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wide ${
+              statusGeral === 'IDEAL' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
+              statusGeral === 'ATENÇÃO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
+              statusGeral === 'CRÍTICO' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' :
+              'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+            }">${esc(statusGeral)}</span>
+          </td>
+        </tr>
+      `;
+    }
   }
 
   // 1. Renderiza os 7 Cards Indicadores Operacionais (RF 7 / A1 / A9) com dados unificados do Supabase (Item 1.1)
@@ -429,6 +488,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let logs = [];
     const localLogsRaw = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
     const localNavios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    const localCargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const localContainers = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+    const localGuindastes = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+    const localFuncsEnt = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
     const mapaNavios = {};
     localNavios.forEach(n => {
       if (!n || !n.nome) return;
@@ -436,12 +499,51 @@ document.addEventListener('DOMContentLoaded', () => {
       if (n.imo) mapaNavios[String(n.imo).trim().toLowerCase()] = n.nome;
       if (n.numero_imo) mapaNavios[String(n.numero_imo).trim().toLowerCase()] = n.nome;
     });
+    const mapaCargas = {};
+    localCargas.forEach(c => {
+      if (!c) return;
+      const cod = String(c.codigo || (c.qr_code_url ? String(c.qr_code_url).replace(/^QR-/i, '') : '') || c.id || '').trim();
+      if (!cod) return;
+      if (c.id) mapaCargas[String(c.id).trim().toLowerCase()] = cod;
+      if (c.rawDbId) mapaCargas[String(c.rawDbId).trim().toLowerCase()] = cod;
+    });
+    const mapaContainers = {};
+    localContainers.forEach(ct => {
+      if (!ct) return;
+      const ident = String(ct.identificacao || ct.numero_identificacao || '').trim();
+      if (!ident) return;
+      if (ct.id) mapaContainers[String(ct.id).trim().toLowerCase()] = ident;
+      if (ct.rawDbId) mapaContainers[String(ct.rawDbId).trim().toLowerCase()] = ident;
+    });
+    const mapaGuindastes = {};
+    localGuindastes.forEach(g => {
+      if (!g) return;
+      const ident = String(g.identificacao || g.numero_identificacao || '').trim();
+      if (!ident) return;
+      if (g.id) mapaGuindastes[String(g.id).trim().toLowerCase()] = ident;
+      if (g.rawDbId) mapaGuindastes[String(g.rawDbId).trim().toLowerCase()] = ident;
+    });
+    const mapaFuncionariosEntidade = {};
+    localFuncsEnt.forEach(f => {
+      if (!f || !f.nome) return;
+      if (f.id) mapaFuncionariosEntidade[String(f.id).trim().toLowerCase()] = f.nome;
+      if (f.matricula) mapaFuncionariosEntidade[String(f.matricula).trim().toLowerCase()] = f.nome;
+      if (f.codigo_individual) mapaFuncionariosEntidade[String(f.codigo_individual).trim().toLowerCase()] = f.nome;
+    });
     const ehUuidLog = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '').trim());
+    const limparUuidEmTextoLog = (s) => String(s || '')
+      .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
     const extrairNomeNavioTexto = (txt) => {
       const s = String(txt || '').trim();
       if (!s) return '';
       const m = s.match(/(?:navio|embarca[çc][ãa]o)\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\s._-]{1,50}?)(?=\s*\(|\s+liberado|\s+com\s+destino|\s+para\s+retorno|\s+alterada|\s+vinculado|\s+exclu[íi]do|\s+por\s+|\s+no\s+cadastro|$)/i);
       return m && m[1] && !ehUuidLog(m[1]) ? m[1].trim() : '';
+    };
+    const extrairCodigoPorPadrao = (txt, regex) => {
+      const m = String(txt || '').match(regex);
+      return m && m[1] ? m[1].trim().toUpperCase() : '';
     };
     const normalizarTipoAlteracaoExibicao = (tipo) => {
       const t = String(tipo || 'EDICAO').trim().toUpperCase();
@@ -460,23 +562,69 @@ document.addEventListener('DOMContentLoaded', () => {
           tipoEnt = tipoEnt || (idEnt.toUpperCase().startsWith('CONT') ? 'CONTAINER' : 'CARGA');
         }
       }
-      if (tipoEnt === 'NAVIO' && (!idEnt || idEnt.toUpperCase() === 'N/A' || idEnt === 'null' || ehUuidLog(idEnt))) {
-        const det = item && item.detalhes && typeof item.detalhes === 'object' ? item.detalhes : null;
-        const refId = det && det.referencia_id ? String(det.referencia_id).trim().toLowerCase() : '';
+      const det = item && item.detalhes && typeof item.detalhes === 'object' ? item.detalhes : null;
+      const refId = det && det.referencia_id ? String(det.referencia_id).trim().toLowerCase() : '';
+      const textoLivre = (det && det.descricao) || (item && item.descricao) || (typeof (item && item.detalhes) === 'string' ? item.detalhes : '') || '';
+      const idInvalidoOuUuid = !idEnt || idEnt.toUpperCase() === 'N/A' || idEnt === 'null' || ehUuidLog(idEnt);
+
+      if (tipoEnt === 'NAVIO') {
         const imoDet = det && (det.numero_imo || det.imo) ? String(det.numero_imo || det.imo).trim().toLowerCase() : '';
         const nomeResolvido = (det && (det.nome || det.navio))
           || (idEnt && mapaNavios[idEnt.toLowerCase()])
           || (refId && mapaNavios[refId])
           || (imoDet && mapaNavios[imoDet])
-          || extrairNomeNavioTexto((det && det.descricao) || item.descricao || (typeof (item && item.detalhes) === 'string' ? item.detalhes : ''))
-          || (det && (det.numero_imo || det.imo))
+          || extrairNomeNavioTexto(textoLivre)
+          || (idInvalidoOuUuid ? (det && (det.numero_imo || det.imo)) : '')
           || '';
         if (nomeResolvido && !ehUuidLog(nomeResolvido)) {
           idEnt = String(nomeResolvido).trim();
+        } else if (ehUuidLog(idEnt)) {
+          idEnt = 'Embarcação';
         }
+      } else if (tipoEnt === 'CARGA' && idInvalidoOuUuid) {
+        const codCarga = (det && det.codigo)
+          || (det && !ehUuidLog(det.id) ? det.id : '')
+          || (det && det.qr_code_url ? String(det.qr_code_url).replace(/^QR-/i, '') : '')
+          || (idEnt && mapaCargas[idEnt.toLowerCase()])
+          || (refId && mapaCargas[refId])
+          || extrairCodigoPorPadrao(textoLivre, /\b(CRG-\d{4}-\d+[A-Z0-9-]*|CRG-[A-Z0-9-]+)\b/i)
+          || '';
+        idEnt = (codCarga && !ehUuidLog(codCarga)) ? String(codCarga).trim() : 'CRG-2026-000';
+      } else if (tipoEnt === 'CONTAINER' && idInvalidoOuUuid) {
+        const codCont = (det && (det.numero_identificacao || det.identificacao || det.container || det.codigo))
+          || (idEnt && mapaContainers[idEnt.toLowerCase()])
+          || (refId && mapaContainers[refId])
+          || extrairCodigoPorPadrao(textoLivre, /\b([A-Z]{4}-\d{7})\b/i)
+          || '';
+        idEnt = (codCont && !ehUuidLog(codCont)) ? String(codCont).trim().toUpperCase() : 'CONT-0000000';
+      } else if (tipoEnt === 'GUINDASTE' && idInvalidoOuUuid) {
+        const codGnd = (det && (det.numero_identificacao || det.identificacao || det.guindaste || det.codigo))
+          || (idEnt && mapaGuindastes[idEnt.toLowerCase()])
+          || (refId && mapaGuindastes[refId])
+          || extrairCodigoPorPadrao(textoLivre, /\b([A-Z]{3}-\d{3}-[A-Z]{3})\b/i)
+          || '';
+        idEnt = (codGnd && !ehUuidLog(codGnd)) ? String(codGnd).trim().toUpperCase() : 'GND-000-STS';
+      } else if (tipoEnt === 'FUNCIONARIO') {
+        const nomeFuncEnt = (det && (det.nome || det.funcionario || det.substituto))
+          || (idEnt && mapaFuncionariosEntidade[idEnt.toLowerCase()])
+          || (refId && mapaFuncionariosEntidade[refId])
+          || (det && det.matricula && mapaFuncionariosEntidade[String(det.matricula).trim().toLowerCase()])
+          || '';
+        if (nomeFuncEnt && !ehUuidLog(nomeFuncEnt)) {
+          idEnt = String(nomeFuncEnt).trim();
+        } else if (ehUuidLog(idEnt)) {
+          idEnt = '';
+        }
+      } else if (tipoEnt === 'EMERGENCIA') {
+        if (idInvalidoOuUuid || ['PANICO_GLOBAL', 'EMERGENCIA'].includes(idEnt.toUpperCase())) {
+          idEnt = 'BOTAO_EMERGENCIA';
+        }
+      } else if (ehUuidLog(idEnt)) {
+        idEnt = (det && (det.codigo || det.nome || det.numero_identificacao)) || '';
       }
+
       const entStr = `${tipoEnt || ''} ${idEnt || ''}`.trim() || String((item && item.entidade) || 'Sistema').trim();
-      return { tipoEnt, idEnt, entStr };
+      return { tipoEnt, idEnt, entStr: limparUuidEmTextoLog(entStr) || tipoEnt || 'Sistema' };
     };
     const chaveEventoLog = (x) => {
       const tempo = x && x.data_hora ? new Date(x.data_hora).getTime() : NaN;
@@ -554,14 +702,85 @@ document.addEventListener('DOMContentLoaded', () => {
               }
             } catch (eNav) { /* fallback silencioso */ }
           }
+          const idsCargasPendentes = [...new Set(dbLogs
+            .filter(l => String(l.entidade_tipo || '').toUpperCase() === 'CARGA')
+            .flatMap(l => [l.entidade_id, l.detalhes && l.detalhes.referencia_id])
+            .filter(id => id && ehUuidLog(id) && !mapaCargas[String(id).trim().toLowerCase()]))];
+          if (idsCargasPendentes.length > 0) {
+            try {
+              const { data: cargasRows } = await window.nexusSupabase
+                .from('cargas')
+                .select('id, qr_code_url')
+                .in('id', idsCargasPendentes);
+              if (Array.isArray(cargasRows)) {
+                cargasRows.forEach(c => {
+                  const cod = c && c.qr_code_url ? String(c.qr_code_url).replace(/^QR-/i, '').trim() : '';
+                  if (c && c.id && cod) mapaCargas[String(c.id).trim().toLowerCase()] = cod;
+                });
+              }
+            } catch (eCrg) { /* fallback silencioso */ }
+          }
+          const idsContainersPendentes = [...new Set(dbLogs
+            .filter(l => String(l.entidade_tipo || '').toUpperCase() === 'CONTAINER')
+            .flatMap(l => [l.entidade_id, l.detalhes && l.detalhes.referencia_id])
+            .filter(id => id && ehUuidLog(id) && !mapaContainers[String(id).trim().toLowerCase()]))];
+          if (idsContainersPendentes.length > 0) {
+            try {
+              const { data: contRows } = await window.nexusSupabase
+                .from('containers')
+                .select('id, numero_identificacao')
+                .in('id', idsContainersPendentes);
+              if (Array.isArray(contRows)) {
+                contRows.forEach(ct => {
+                  if (ct && ct.id && ct.numero_identificacao) {
+                    mapaContainers[String(ct.id).trim().toLowerCase()] = String(ct.numero_identificacao).trim();
+                  }
+                });
+              }
+            } catch (eCont) { /* fallback silencioso */ }
+          }
+          const idsGuindastesPendentes = [...new Set(dbLogs
+            .filter(l => String(l.entidade_tipo || '').toUpperCase() === 'GUINDASTE')
+            .flatMap(l => [l.entidade_id, l.detalhes && l.detalhes.referencia_id])
+            .filter(id => id && ehUuidLog(id) && !mapaGuindastes[String(id).trim().toLowerCase()]))];
+          if (idsGuindastesPendentes.length > 0) {
+            try {
+              const { data: gndRows } = await window.nexusSupabase
+                .from('guindastes')
+                .select('id, numero_identificacao')
+                .in('id', idsGuindastesPendentes);
+              if (Array.isArray(gndRows)) {
+                gndRows.forEach(g => {
+                  if (g && g.id && g.numero_identificacao) {
+                    mapaGuindastes[String(g.id).trim().toLowerCase()] = String(g.numero_identificacao).trim();
+                  }
+                });
+              }
+            } catch (eGnd) { /* fallback silencioso */ }
+          }
           const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
           // Responsável de cada linha: pelo funcionario_id e, se faltar, pelo codigo_individual gravado no log.
-          const idsFunc = [...new Set(dbLogs.map(l => l.funcionario_id).filter(Boolean))];
+          // Também inclui IDs de funcionários referenciados como entidade_id/referencia_id em logs de FUNCIONARIO.
+          const idsFuncEnt = dbLogs
+            .filter(l => String(l.entidade_tipo || '').toUpperCase() === 'FUNCIONARIO')
+            .flatMap(l => [l.entidade_id, l.detalhes && l.detalhes.referencia_id])
+            .filter(id => id && ehUuidLog(id));
+          const idsFunc = [...new Set([...dbLogs.map(l => l.funcionario_id).filter(Boolean), ...idsFuncEnt])];
           const codigosFunc = [...new Set(dbLogs.map(l => l.codigo_individual).filter(c => c && c !== '--'))];
           const [mapaPorId, mapaPorCodigo] = await Promise.all([
             buscarFuncionariosPorChaves('id', idsFunc),
             buscarFuncionariosPorChaves('codigo_individual', codigosFunc)
           ]);
+          Object.values(mapaPorId).forEach(f => {
+            if (!f || !f.nome) return;
+            if (f.id) mapaFuncionariosEntidade[String(f.id).trim().toLowerCase()] = f.nome;
+            if (f.matricula) mapaFuncionariosEntidade[String(f.matricula).trim().toLowerCase()] = f.nome;
+          });
+          Object.values(mapaPorCodigo).forEach(f => {
+            if (!f || !f.nome) return;
+            if (f.id) mapaFuncionariosEntidade[String(f.id).trim().toLowerCase()] = f.nome;
+            if (f.matricula) mapaFuncionariosEntidade[String(f.matricula).trim().toLowerCase()] = f.nome;
+          });
           contextoPrivacidade.push(...Object.values(mapaPorId), ...Object.values(mapaPorCodigo));
           const mappedDbLogs = dbLogs.map(l => {
             const cadastro = (l.funcionario_id && mapaPorId[l.funcionario_id])
@@ -618,12 +837,13 @@ document.addEventListener('DOMContentLoaded', () => {
       tipo_alteracao: privacidade.texto(l.tipo_alteracao || 'EDICAO'),
       // Tarefa 9 (Correções): frase legível do que foi feito — herdada do log
       // (detalhes.descricao) ou sintetizada para registros legados; passa pela
-      // mesma projeção de privacidade das demais células.
-      descricao: privacidade.texto(
-        l.descricao ||
-        ((window.NexusAuditoria && typeof window.NexusAuditoria.descricaoDoLog === 'function')
-          ? window.NexusAuditoria.descricaoDoLog(l) : '')
-      )
+      // mesma projeção de privacidade das demais células e nunca exibe UUID.
+      descricao: limparUuidEmTextoLog(privacidade.texto(
+        (l.descricao && !/^(?:Editou|Alterou) a emerg[êe]ncia/i.test(l.descricao))
+          ? l.descricao
+          : ((window.NexusAuditoria && typeof window.NexusAuditoria.descricaoDoLog === 'function')
+              ? window.NexusAuditoria.descricaoDoLog(l) : (l.descricao || ''))
+      ))
     }));
 
     // Backlog 3 (7b): busca local no log de auditoria + contador "X de Y"
@@ -670,8 +890,140 @@ document.addEventListener('DOMContentLoaded', () => {
     buscarAuditLogInput.addEventListener('input', renderAuditLogTable);
   }
 
-  // Backlog 3 (7f): exportação da planilha consolidada em CSV (separador ';',
-  // BOM UTF-8 para abrir corretamente no Excel pt-BR).
+  // Tarefa 14: Exportação da Planilha Consolidada de Desempenho Operacional por Categoria
+  // formatada em colunas reais e estilizada com a identidade visual corporativa do NexusPort
+  // (#141A29 Navy, #445987 Indigo-Slate, #F8FAFC Zebra, badges semânticos e linha de consolidado).
+  function gerarPlanilhaDesempenhoEstilizada(dados, dataReferencia) {
+    const agora = dataReferencia instanceof Date ? dataReferencia : new Date();
+    const dataHoraFmt = agora.toLocaleString('pt-BR');
+    const operadorNome = (session && session.nome) || 'Operador Portuário';
+    const operadorCargo = (session && (session.cargo_nome || session.cargo)) || 'Gestão Operacional';
+
+    // Metas e tempos não existem no banco/especificação: quando ausentes, a
+    // planilha mostra "—" em vez de transformar null em zero e inventar
+    // atingimento/status.
+    const temMeta = dados.some((i) => i.meta != null && Number.isFinite(Number(i.meta)));
+    const temTempo = dados.some((i) => i.tempo != null && Number.isFinite(Number(i.tempo)));
+    const somaVolume = dados.reduce((acc, i) => acc + (Number(i.volume) || 0), 0);
+    const somaMeta = dados.reduce((acc, i) => acc + (Number(i.meta) || 0), 0);
+    const atingimentoGeral = temMeta && somaMeta > 0 ? Math.round((somaVolume / somaMeta) * 100) : null;
+    const mediaTempo = temTempo
+      ? (dados.reduce((acc, i) => acc + (Number(i.tempo) || 0), 0) / dados.length).toFixed(1)
+      : null;
+    const statusGeral = atingimentoGeral == null
+      ? 'SEM META'
+      : (atingimentoGeral >= 85 ? 'IDEAL' : (atingimentoGeral >= 50 ? 'ATENÇÃO' : 'CRÍTICO'));
+
+    const estiloBadgeStatus = (status) => {
+      if (status === 'IDEAL') {
+        return 'background-color:#D1FAE5;color:#065F46;font-weight:700;text-align:center;border:1px solid #A7F3D0;';
+      }
+      if (status === 'ATENÇÃO') {
+        return 'background-color:#FEF3C7;color:#92400E;font-weight:700;text-align:center;border:1px solid #FDE68A;';
+      }
+      if (status === 'CRÍTICO') {
+        return 'background-color:#FFE4E6;color:#9F1239;font-weight:700;text-align:center;border:1px solid #FECDD3;';
+      }
+      return 'background-color:#E2E8F0;color:#475569;font-weight:700;text-align:center;border:1px solid #CBD5E1;';
+    };
+
+    const corTextoAtingimento = (status) => {
+      if (status === 'IDEAL') return '#047857';
+      if (status === 'ATENÇÃO') return '#B45309';
+      if (status === 'CRÍTICO') return '#BE123C';
+      return '#475569';
+    };
+
+    const linhasHtml = dados.map((i, idx) => {
+      const bgLinha = idx % 2 === 0 ? '#F8FAFC' : '#FFFFFF';
+      const temMetaLinha = i.meta != null && Number.isFinite(Number(i.meta));
+      const temAtingimentoLinha = i.atingimento != null && Number.isFinite(Number(i.atingimento));
+      const temTempoLinha = i.tempo != null && Number.isFinite(Number(i.tempo));
+      return `
+        <tr style="height:30px;">
+          <td style="background-color:${esc(bgLinha)};color:#141A29;font-family:'Segoe UI',Inter,Arial,sans-serif;font-size:10.5pt;font-weight:700;padding:8px 12px;border:1px solid #CBD5E1;text-align:left;">${esc(i.categoria)}</td>
+          <td style="background-color:${esc(bgLinha)};color:#1E293B;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:700;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;mso-number-format:'\\#\\,\\#\\#0';">${esc(Number(i.volume || 0).toLocaleString('pt-BR'))}</td>
+          <td style="background-color:${esc(bgLinha)};color:#475569;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:600;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;mso-number-format:'\\#\\,\\#\\#0';">${temMetaLinha ? esc(Number(i.meta).toLocaleString('pt-BR')) : '—'}</td>
+          <td style="background-color:${esc(bgLinha)};color:${esc(corTextoAtingimento(i.status))};font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:700;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;">${esc(i.atingimento)}%</td>
+          <td style="background-color:${esc(bgLinha)};color:#334155;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:600;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;">${esc(temTempoLinha ? String(i.tempo).replace('.', ',') + ' h' : '—')}</td>
+          <td style="font-family:Consolas,'Courier New',monospace;font-size:10pt;padding:8px 12px;${esc(estiloBadgeStatus(i.status))}">${esc(i.status)}</td>
+        </tr>`;
+    }).join('');
+
+    return `\uFEFF<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta charset="utf-8" />
+  <title>Planilha Consolidada de Desempenho Operacional — NexusPort STS-01</title>
+  <!--[if gte mso 9]>
+  <xml>
+    <x:ExcelWorkbook>
+      <x:ExcelWorksheets>
+        <x:ExcelWorksheet>
+          <x:Name>Desempenho Operacional</x:Name>
+          <x:WorksheetOptions>
+            <x:DisplayGridlines/>
+            <x:FitToPage/>
+          </x:WorksheetOptions>
+        </x:ExcelWorksheet>
+      </x:ExcelWorksheets>
+    </x:ExcelWorkbook>
+  </xml>
+  <![endif]-->
+</head>
+<body style="margin:0;padding:16px;background-color:#F8FAFC;font-family:'Segoe UI',Inter,Arial,sans-serif;">
+  <table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:1060px;border:2px solid #141A29;">
+    <colgroup>
+      <col width="340" style="width:340px;" />
+      <col width="150" style="width:150px;" />
+      <col width="140" style="width:140px;" />
+      <col width="145" style="width:145px;" />
+      <col width="165" style="width:165px;" />
+      <col width="155" style="width:155px;" />
+    </colgroup>
+    <thead>
+      <tr style="height:40px;">
+        <th colspan="6" style="background-color:#141A29;color:#FFFFFF;font-family:'Segoe UI',Montserrat,Arial,sans-serif;font-size:13pt;font-weight:700;padding:12px 16px;text-align:left;border:1px solid #141A29;letter-spacing:0.5px;">
+          NEXUSPORT • TERMINAL PORTUÁRIO STS-01 (PORTO DE SANTOS)
+        </th>
+      </tr>
+      <tr style="height:28px;">
+        <th colspan="6" style="background-color:#445987;color:#F8FAFC;font-family:'Segoe UI',Inter,Arial,sans-serif;font-size:10pt;font-weight:600;padding:6px 16px;text-align:left;border:1px solid #334155;">
+          PLANILHA CONSOLIDADA DE DESEMPENHO OPERACIONAL POR CATEGORIA • Emitida em ${esc(dataHoraFmt)} • Responsável: ${esc(operadorNome)} (${esc(operadorCargo)})
+        </th>
+      </tr>
+      <tr style="height:32px;">
+        <th style="background-color:#1E293B;color:#FFFFFF;font-family:Consolas,'Courier New',monospace;font-size:9.5pt;font-weight:700;text-transform:uppercase;padding:8px 12px;border:1px solid #334155;text-align:left;">Categoria / Operação</th>
+        <th style="background-color:#1E293B;color:#FFFFFF;font-family:Consolas,'Courier New',monospace;font-size:9.5pt;font-weight:700;text-transform:uppercase;padding:8px 12px;border:1px solid #334155;text-align:right;">Volume Processado</th>
+        <th style="background-color:#1E293B;color:#FFFFFF;font-family:Consolas,'Courier New',monospace;font-size:9.5pt;font-weight:700;text-transform:uppercase;padding:8px 12px;border:1px solid #334155;text-align:right;">Meta Mensal</th>
+        <th style="background-color:#1E293B;color:#FFFFFF;font-family:Consolas,'Courier New',monospace;font-size:9.5pt;font-weight:700;text-transform:uppercase;padding:8px 12px;border:1px solid #334155;text-align:right;">Atingimento (%)</th>
+        <th style="background-color:#1E293B;color:#FFFFFF;font-family:Consolas,'Courier New',monospace;font-size:9.5pt;font-weight:700;text-transform:uppercase;padding:8px 12px;border:1px solid #334155;text-align:right;">Tempo Médio (Horas)</th>
+        <th style="background-color:#1E293B;color:#FFFFFF;font-family:Consolas,'Courier New',monospace;font-size:9.5pt;font-weight:700;text-transform:uppercase;padding:8px 12px;border:1px solid #334155;text-align:center;">Status Operacional</th>
+      </tr>
+    </thead>
+    <tbody>${linhasHtml}
+    </tbody>
+    <tfoot>
+      <tr style="height:34px;">
+        <td style="background-color:#E2E8F0;color:#141A29;font-family:'Segoe UI',Montserrat,Arial,sans-serif;font-size:10.5pt;font-weight:700;padding:9px 12px;border-top:2px solid #445987;border-bottom:2px solid #141A29;border-left:1px solid #CBD5E1;border-right:1px solid #CBD5E1;text-align:left;">CONSOLIDADO GERAL DO TERMINAL</td>
+        <td style="background-color:#E2E8F0;color:#141A29;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:700;padding:9px 12px;border-top:2px solid #445987;border-bottom:2px solid #141A29;border-left:1px solid #CBD5E1;border-right:1px solid #CBD5E1;text-align:right;">${esc(somaVolume.toLocaleString('pt-BR'))}</td>
+        <td style="background-color:#E2E8F0;color:#141A29;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:700;padding:9px 12px;border-top:2px solid #445987;border-bottom:2px solid #141A29;border-left:1px solid #CBD5E1;border-right:1px solid #CBD5E1;text-align:right;">${esc(somaMeta.toLocaleString('pt-BR'))}</td>
+        <td style="background-color:#E2E8F0;color:#445987;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:700;padding:9px 12px;border-top:2px solid #445987;border-bottom:2px solid #141A29;border-left:1px solid #CBD5E1;border-right:1px solid #CBD5E1;text-align:right;">${esc(atingimentoGeral)}%</td>
+        <td style="background-color:#E2E8F0;color:#141A29;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:700;padding:9px 12px;border-top:2px solid #445987;border-bottom:2px solid #141A29;border-left:1px solid #CBD5E1;border-right:1px solid #CBD5E1;text-align:right;">${esc(String(mediaTempo).replace('.', ','))} h (média)</td>
+        <td style="font-family:Consolas,'Courier New',monospace;font-size:10pt;padding:9px 12px;border-top:2px solid #445987;border-bottom:2px solid #141A29;${esc(estiloBadgeStatus(statusGeral))}">${esc(statusGeral)}</td>
+      </tr>
+      <tr style="height:26px;">
+        <td colspan="6" style="background-color:#F1F5F9;color:#475569;font-family:'Segoe UI',Inter,Arial,sans-serif;font-size:9pt;padding:6px 16px;text-align:left;border:1px solid #CBD5E1;">
+          Documento oficial gerado pelo Sistema de Gestão Portuária NexusPort STS-01 • Identidade Visual Corporativa (#141A29 / #445987) • Dados em tempo real.
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+</body>
+</html>`;
+  }
+  window.gerarPlanilhaDesempenhoEstilizada = gerarPlanilhaDesempenhoEstilizada;
+
   const exportCsvBtn = document.getElementById('exportIndicadoresCsvBtn');
   if (exportCsvBtn) {
     exportCsvBtn.addEventListener('click', () => {
@@ -682,23 +1034,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
       }
-      const csvEscape = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-      const linhas = [
-        ['Categoria / Operação', 'Volume Processado', 'Meta Mensal', 'Atingimento (%)', 'Tempo Médio (Horas)', 'Status Operacional'].map(csvEscape).join(';'),
-        ...dados.map(i => [i.categoria, i.volume, i.meta == null ? '—' : i.meta, i.atingimento == null ? '—' : `${i.atingimento}%`, i.tempo == null ? '—' : String(i.tempo).replace('.', ','), i.status].map(csvEscape).join(';')),
-      ];
-      const blob = new Blob(['\uFEFF' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const agora = new Date();
+      const conteudoPlanilha = gerarPlanilhaDesempenhoEstilizada(dados, agora);
+      const blob = new Blob([conteudoPlanilha], { type: 'application/vnd.ms-excel;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const agora = new Date();
       a.href = url;
-      a.download = `nexusport_desempenho_${agora.getFullYear()}${String(agora.getMonth() + 1).padStart(2, '0')}${String(agora.getDate()).padStart(2, '0')}_${String(agora.getHours()).padStart(2, '0')}${String(agora.getMinutes()).padStart(2, '0')}.csv`;
+      a.download = `nexusport_desempenho_${agora.getFullYear()}${String(agora.getMonth() + 1).padStart(2, '0')}${String(agora.getDate()).padStart(2, '0')}_${String(agora.getHours()).padStart(2, '0')}${String(agora.getMinutes()).padStart(2, '0')}.xls`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       if (window.registrarLogAlteracao) {
-        window.registrarLogAlteracao('EXPORTACAO_CSV', 'dashboard', null, `Exportação CSV da planilha de desempenho (${dados.length} linhas) em ${agora.toLocaleString('pt-BR')}`);
+        window.registrarLogAlteracao('EXPORTACAO_CSV', 'dashboard', 'PLANILHA_DESEMPENHO', `Exportação da planilha consolidada de desempenho (${dados.length} categorias) em ${agora.toLocaleString('pt-BR')}`);
       }
     });
   }
@@ -994,7 +1342,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-slate-200 dark:border-slate-700/60 text-xs">
           <div class="flex items-start gap-1.5 min-w-0 break-words">
-            <span class="material-symbols-outlined text-[16px] text-amber-500 shrink-0 mt-0.5">edit_note</span>
+            <span class="material-symbols-outlined fa-solid fa-file-pen text-[16px] text-amber-500 shrink-0 mt-0.5" data-icon="edit_note" aria-hidden="true"></span>
             <span class="font-mono text-[11px] italic text-amber-700 dark:text-amber-400 leading-snug break-words">
               ${t.retificacao ? esc(formatarDatasIsoEmTexto(t.retificacao)) : '<span class="text-slate-600 not-italic">Nenhuma retificação vinculada.</span>'}
             </span>
