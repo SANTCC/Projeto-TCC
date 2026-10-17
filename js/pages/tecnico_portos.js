@@ -319,8 +319,64 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleFuncBtn = document.getElementById('toggleFuncFormBtn');
   const funcForm = document.getElementById('funcCrudForm');
   const funcTableBody = document.getElementById('funcCrudTableBody');
+  const mostrarMaisFuncionariosBtn = document.getElementById('mostrarMaisFuncionariosBtn');
+  const funcCrudContador = document.getElementById('funcCrudContador');
+  const FUNCIONARIOS_LIMITE_INICIAL = 5;
+  let funcionariosExpandidos = false;
 
   let mergedFuncList = [];
+
+  const DOCS_PLACEHOLDER_PADRAO = new Set([
+    'Ativo no Supabase',
+    'Inativo no Supabase',
+    'Cadastrado no Sistema',
+    'Cadastrado'
+  ]);
+
+  function ehDocPlaceholderPadrao(valor) {
+    const v = String(valor || '').trim();
+    return !v || DOCS_PLACEHOLDER_PADRAO.has(v);
+  }
+
+  function lerMapaDocsLocais() {
+    try {
+      return JSON.parse(localStorage.getItem('nexus_func_docs') || '{}') || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function salvarDocLocalFuncionario(matricula, id, doc) {
+    const texto = String(doc || '').trim();
+    if (!texto || ehDocPlaceholderPadrao(texto)) return;
+    try {
+      const mapa = lerMapaDocsLocais();
+      if (matricula) mapa[String(matricula).trim().toUpperCase()] = texto;
+      if (id) mapa[String(id).trim()] = texto;
+      localStorage.setItem('nexus_func_docs', JSON.stringify(mapa));
+    } catch (e) {}
+  }
+
+  const CARGOS_EDICAO_DOCUMENTACAO_FUNCIONARIO = new Set([
+    'TECNICO_PORTOS',
+    'DIRETOR_OPERACOES_LOGISTICA',
+    'DIRETOR_PRESIDENTE_SUPERINTENDENTE'
+  ]);
+
+  function ehSessaoSomenteLeitura(sessaoAtual = session) {
+    if (!sessaoAtual) return false;
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(sessaoAtual)) {
+      return true;
+    }
+    return sessaoAtual.somente_leitura === true || sessaoAtual.perfil_espectador === true;
+  }
+
+  function podeEditarDocumentacaoFuncionario(sessaoAtual = session) {
+    if (!sessaoAtual || !sessaoAtual.cargo) return false;
+    if (ehSessaoSomenteLeitura(sessaoAtual)) return false;
+    const cargo = String(sessaoAtual.cargo || '').trim().toUpperCase();
+    return CARGOS_EDICAO_DOCUMENTACAO_FUNCIONARIO.has(cargo);
+  }
 
   async function carregarFuncionariosCompleto() {
     let funcs = [];
@@ -331,17 +387,36 @@ document.addEventListener('DOMContentLoaded', () => {
           .select('*')
           .order('nome', { ascending: true });
         if (!error && Array.isArray(data)) {
-          funcs = data.map(s => ({
-            matricula: s.matricula,
-            nome: s.nome,
-            cargo: s.cargo_nome || s.cargo,
-            codigo: s.codigo_individual || `NX-${String(s.matricula || '').replace('MAT-', '')}-SP`,
-            cpf: s.cpf || '',
-            data_nascimento: s.data_nascimento || '',
-            doc: s.ativo ? 'Ativo no Supabase' : 'Inativo no Supabase',
-            ativo: s.ativo,
-            id: s.id
-          }));
+          const mapaDocs = lerMapaDocsLocais();
+          const prevList = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+          funcs = data.map(s => {
+            const matKey = String(s.matricula || '').trim().toUpperCase();
+            const prev = prevList.find(p =>
+              (s.id && p.id === s.id) ||
+              (matKey && String(p.matricula || '').trim().toUpperCase() === matKey)
+            );
+            const docRemoto = String(s.documentacao_interna || s.documentacao || s.doc || '').trim();
+            const docLocal = String(
+              mapaDocs[matKey] ||
+              (s.id ? mapaDocs[String(s.id)] : '') ||
+              (prev && !ehDocPlaceholderPadrao(prev.doc) ? prev.doc : '') ||
+              ''
+            ).trim();
+            const docPersonalizado = docRemoto || docLocal;
+            if (docPersonalizado) salvarDocLocalFuncionario(s.matricula, s.id, docPersonalizado);
+            return {
+              matricula: s.matricula,
+              nome: s.nome,
+              cargo: s.cargo_nome || s.cargo,
+              codigo: s.codigo_individual || `NX-${String(s.matricula || '').replace('MAT-', '')}-SP`,
+              cpf: s.cpf || '',
+              data_nascimento: s.data_nascimento || '',
+              doc: docPersonalizado || (s.ativo ? 'Ativo no Supabase' : 'Inativo no Supabase'),
+              documentacao_interna: docPersonalizado || '',
+              ativo: s.ativo,
+              id: s.id
+            };
+          });
           mergedFuncList = funcs;
           localStorage.setItem('nexus_func_list', JSON.stringify(mergedFuncList));
           renderFuncTable();
@@ -353,7 +428,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const localList = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
-    mergedFuncList = localList;
+    const mapaDocs = lerMapaDocsLocais();
+    mergedFuncList = localList.map(f => {
+      const matKey = String(f.matricula || '').trim().toUpperCase();
+      const docPersonalizado = String(
+        f.documentacao_interna ||
+        mapaDocs[matKey] ||
+        (f.id ? mapaDocs[String(f.id)] : '') ||
+        (!ehDocPlaceholderPadrao(f.doc) ? f.doc : '') ||
+        ''
+      ).trim();
+      return {
+        ...f,
+        doc: docPersonalizado || f.doc || 'Cadastrado',
+        documentacao_interna: docPersonalizado
+      };
+    });
     renderFuncTable();
   }
 
@@ -366,7 +456,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderFuncTable() {
     if (!funcTableBody) return;
-    funcTableBody.innerHTML = mergedFuncList.map((f, indice) => `
+    const total = Array.isArray(mergedFuncList) ? mergedFuncList.length : 0;
+    const visiveis = (funcionariosExpandidos || total <= FUNCIONARIOS_LIMITE_INICIAL)
+      ? mergedFuncList
+      : mergedFuncList.slice(0, FUNCIONARIOS_LIMITE_INICIAL);
+
+    if (funcCrudContador) {
+      funcCrudContador.textContent = `Exibindo ${visiveis.length} de ${total} funcionários`;
+    }
+    if (mostrarMaisFuncionariosBtn) {
+      if (total > FUNCIONARIOS_LIMITE_INICIAL) {
+        mostrarMaisFuncionariosBtn.classList.remove('hidden');
+        mostrarMaisFuncionariosBtn.disabled = false;
+        mostrarMaisFuncionariosBtn.setAttribute('aria-expanded', String(funcionariosExpandidos));
+        mostrarMaisFuncionariosBtn.textContent = funcionariosExpandidos ? 'Mostrar menos' : 'Mostrar mais';
+      } else {
+        mostrarMaisFuncionariosBtn.classList.add('hidden');
+        mostrarMaisFuncionariosBtn.disabled = true;
+        mostrarMaisFuncionariosBtn.setAttribute('aria-expanded', 'false');
+        mostrarMaisFuncionariosBtn.textContent = 'Mostrar mais';
+      }
+    }
+
+    funcTableBody.innerHTML = visiveis.map((f, indice) => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
         <td class="p-3 font-bold">${esc(f.nome)}</td>
         <td class="p-3 text-slate-600 font-semibold">${esc(f.cargo)}</td>
@@ -383,6 +495,13 @@ document.addEventListener('DOMContentLoaded', () => {
     `).join('');
   }
 
+  if (mostrarMaisFuncionariosBtn) {
+    mostrarMaisFuncionariosBtn.addEventListener('click', () => {
+      funcionariosExpandidos = !funcionariosExpandidos;
+      renderFuncTable();
+    });
+  }
+
   // O DOM recebe só um índice de apresentação, nunca matrícula em onclick/data-*.
   window.excluirFuncionarioPorIndice = function(indice) {
     const funcionario = mergedFuncList[Number(indice)];
@@ -390,14 +509,15 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // ------------------------------------------------------------------------
-  // Tarefa 2 (Backlog Parte 2): edição de CPF e data de nascimento.
-  // O mesmo formulário do cadastro entra em "modo edição": matrícula, nome,
-  // cargo e documentação ficam travados (são a identidade do cadastro) e só
-  // CPF e data de nascimento são atualizados — no Supabase e no cache local.
+  // Tarefa 2 (Backlog Parte 2) & Tarefa 7: edição de CPF, data de nascimento
+  // e documentação interna do funcionário (restrita ao Diretor e ao Técnico em Portos).
+  // O mesmo formulário do cadastro entra em "modo edição": matrícula, nome e
+  // cargo ficam travados (são a identidade do cadastro), enquanto CPF, data de
+  // nascimento e documentação interna (#funcDoc) podem ser atualizados.
   // ------------------------------------------------------------------------
-  let funcionarioEmEdicao = null; // { matricula, id, nome } ou null (cadastro)
+  let funcionarioEmEdicao = null; // { matricula, id, nome, cpfOriginalDigits, dataNascOriginal, docOriginal } ou null (cadastro)
 
-  const camposIdentidadeFuncionario = () => ['funcMatricula', 'funcNome', 'funcCargo', 'funcDoc']
+  const camposIdentidadeFuncionario = () => ['funcMatricula', 'funcNome', 'funcCargo']
     .map(id => document.getElementById(id)).filter(Boolean);
 
   function mascararMatriculaEdicao(matricula) {
@@ -419,8 +539,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cpfCampo) {
       cpfCampo.readOnly = false;
       cpfCampo.disabled = false;
+      cpfCampo.required = true;
       cpfCampo.title = '';
       cpfCampo.classList.remove('bg-slate-100', 'dark:bg-slate-800/80', 'cursor-not-allowed', 'opacity-75');
+    }
+    const dataNascCampo = document.getElementById('funcDataNasc');
+    if (dataNascCampo) {
+      dataNascCampo.required = true;
+    }
+    const docCampo = document.getElementById('funcDoc');
+    if (docCampo) {
+      const podeDoc = podeEditarDocumentacaoFuncionario(session);
+      docCampo.disabled = !podeDoc;
+      docCampo.readOnly = !podeDoc;
+      docCampo.title = podeDoc ? '' : 'Alteração de documentação interna restrita ao Diretor e ao Técnico em Portos';
+      docCampo.classList.toggle('bg-slate-100', !podeDoc);
+      docCampo.classList.toggle('dark:bg-slate-800/80', !podeDoc);
+      docCampo.classList.toggle('cursor-not-allowed', !podeDoc);
+      docCampo.classList.toggle('opacity-75', !podeDoc);
     }
     const label = document.getElementById('funcFormSubmitLabel');
     if (label) label.textContent = 'Salvar Funcionário';
@@ -447,14 +583,33 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function iniciarEdicaoFuncionario(funcionario) {
-    if (!funcionario || !funcForm) return;
+    if (!funcionario || !funcForm) return null;
+    if (ehSessaoSomenteLeitura(session)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('atencao', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador possui acesso exclusivo de visualização e não pode editar informações ou documentação de funcionários.');
+      }
+      return null;
+    }
+    if (!podeEditarDocumentacaoFuncionario(session)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Acesso Restrito', 'A edição das informações e da documentação interna do funcionário é restrita apenas ao Diretor e ao Técnico em Portos.');
+      }
+      return null;
+    }
     const cpfExistenteDigits = fatiarCpfSomenteDigitos(funcionario.cpf);
     const cpfJaDefinido = cpfExistenteDigits.length === 11;
+    const docAtualPersonalizado = !ehDocPlaceholderPadrao(funcionario.doc)
+      ? String(funcionario.doc || '').trim()
+      : String(funcionario.documentacao_interna || '').trim();
+    const dataNascAtual = String(funcionario.data_nascimento || '').slice(0, 10);
     funcionarioEmEdicao = {
       matricula: funcionario.matricula,
       id: funcionario.id || null,
       nome: funcionario.nome || '',
-      cpfOriginalDigits: cpfJaDefinido ? cpfExistenteDigits : null
+      cpfOriginalDigits: cpfJaDefinido ? cpfExistenteDigits : null,
+      dataNascOriginal: dataNascAtual || null,
+      docOriginal: funcionario.doc || 'Cadastrado',
+      docPersonalizadoOriginal: docAtualPersonalizado
     };
     const setValor = (id, valor) => {
       const campo = document.getElementById(id);
@@ -469,18 +624,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     setValor('funcNome', funcionario.nome || '');
     setValor('funcCargo', cargoEnumDoFuncionario(funcionario));
-    setValor('funcDoc', '');
+    setValor('funcDoc', docAtualPersonalizado);
+    const docCampo = document.getElementById('funcDoc');
+    if (docCampo) {
+      docCampo.disabled = false;
+      docCampo.readOnly = false;
+      docCampo.title = 'Documentação interna do funcionário (editável pelo Diretor e pelo Técnico em Portos)';
+      docCampo.classList.remove('bg-slate-100', 'dark:bg-slate-800/80', 'cursor-not-allowed', 'opacity-75');
+    }
     const cpfCampo = document.getElementById('funcCpf');
     if (cpfCampo) {
       cpfCampo.value = funcionario.cpf ? formatarCpfExibicao(funcionario.cpf) : '';
       cpfCampo.readOnly = cpfJaDefinido;
+      cpfCampo.required = false;
       cpfCampo.title = cpfJaDefinido ? 'CPF já cadastrado para este funcionário (bloqueado para alteração)' : '';
       cpfCampo.classList.toggle('bg-slate-100', cpfJaDefinido);
       cpfCampo.classList.toggle('dark:bg-slate-800/80', cpfJaDefinido);
       cpfCampo.classList.toggle('cursor-not-allowed', cpfJaDefinido);
       cpfCampo.classList.toggle('opacity-75', cpfJaDefinido);
     }
-    setValor('funcDataNasc', String(funcionario.data_nascimento || '').slice(0, 10));
+    setValor('funcDataNasc', dataNascAtual);
+    const dataNascCampo = document.getElementById('funcDataNasc');
+    if (dataNascCampo) {
+      dataNascCampo.required = false;
+    }
 
     camposIdentidadeFuncionario().forEach(campo => { campo.disabled = true; });
     const label = document.getElementById('funcFormSubmitLabel');
@@ -493,32 +660,41 @@ document.addEventListener('DOMContentLoaded', () => {
     funcForm.classList.remove('hidden');
     if (window.mostrarFeedback) {
       const msg = cpfJaDefinido
-        ? `Atualize a data de nascimento de ${funcionario.nome || 'funcionário'}. Matrícula, nome, cargo e CPF já cadastrado permanecem bloqueados.`
-        : `Cadastre o CPF pendente e atualize a data de nascimento de ${funcionario.nome || 'funcionário'}. Matrícula, nome e cargo não são alterados nesta edição.`;
+        ? `Atualize a data de nascimento e/ou a documentação interna de ${funcionario.nome || 'funcionário'}. Matrícula, nome, cargo e CPF já cadastrado permanecem bloqueados.`
+        : `Cadastre o CPF pendente e atualize a data de nascimento e/ou a documentação interna de ${funcionario.nome || 'funcionário'}. Matrícula, nome e cargo não são alterados nesta edição.`;
       window.mostrarFeedback('info', 'Editar Funcionário', msg);
     }
-    const dataNascCampo = document.getElementById('funcDataNasc');
     if (cpfJaDefinido && dataNascCampo) dataNascCampo.focus();
     else if (cpfCampo) cpfCampo.focus();
+    return funcionario;
   }
 
   // O DOM recebe só um índice de apresentação, nunca matrícula em onclick/data-*.
   window.editarFuncionarioPorIndice = function(indice) {
     const funcionario = mergedFuncList[Number(indice)];
-    if (funcionario) iniciarEdicaoFuncionario(funcionario);
+    if (funcionario) return iniciarEdicaoFuncionario(funcionario);
+    return null;
   };
   // Uso programático (testes/WebMCP): mesma entrada da interface, por matrícula.
   window.editarFuncionarioReal = function(matricula) {
     const funcionario = mergedFuncList.find(f => f.matricula === matricula);
-    if (funcionario) iniciarEdicaoFuncionario(funcionario);
-    return funcionario || null;
+    if (funcionario) return iniciarEdicaoFuncionario(funcionario);
+    return null;
   };
 
-  function atualizarFuncionarioLocal(alvo, cpfDigits, dataNasc) {
+  function atualizarFuncionarioLocal(alvo, cpfDigits, dataNasc, docNovo) {
+    const docLimpo = String(docNovo || '').trim();
+    if (docLimpo) {
+      salvarDocLocalFuncionario(alvo.matricula, alvo.id, docLimpo);
+    }
     const aplicar = (f) => {
       if (f && (f.matricula === alvo.matricula || (alvo.id && f.id === alvo.id))) {
-        f.cpf = cpfDigits;
-        f.data_nascimento = dataNasc;
+        if (cpfDigits) f.cpf = cpfDigits;
+        if (dataNasc) f.data_nascimento = dataNasc;
+        if (docLimpo) {
+          f.doc = docLimpo;
+          f.documentacao_interna = docLimpo;
+        }
         return true;
       }
       return false;
@@ -531,48 +707,78 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { /* cache indisponível: a lista em memória já foi atualizada */ }
   }
 
-  async function salvarEdicaoFuncionario(alvo, cpfDigits, dataNasc) {
+  async function salvarEdicaoFuncionario(alvo, cpfDigits, dataNasc, docNovo) {
+    if (!podeEditarDocumentacaoFuncionario(session)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('erro', 'Acesso Restrito', 'A edição das informações e da documentação interna do funcionário é restrita apenas ao Diretor e ao Técnico em Portos.');
+      }
+      return;
+    }
     if (alvo && alvo.cpfOriginalDigits) {
       cpfDigits = alvo.cpfOriginalDigits;
     }
-    // Unicidade do CPF no cache local (funcionários e visitantes), ignorando o próprio funcionário.
-    const duplicadoLocal = (mergedFuncList || []).find(f =>
-      f.matricula !== alvo.matricula && fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === cpfDigits);
-    if (duplicadoLocal) {
-      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para "${duplicadoLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`);
-      return;
-    }
-    const dupVisLocal = (typeof visList !== 'undefined' && Array.isArray(visList) ? visList : []).find(v =>
-      fatiarCpfSomenteDigitos(v.documento || '') === cpfDigits);
-    if (dupVisLocal) {
-      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para o visitante "${dupVisLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`);
-      return;
+    const docLimpo = String(docNovo || '').trim();
+    const docAlterado = Boolean(docLimpo && docLimpo !== String(alvo.docPersonalizadoOriginal || '').trim());
+
+    if (cpfDigits) {
+      // Unicidade do CPF no cache local (funcionários e visitantes), ignorando o próprio funcionário.
+      const duplicadoLocal = (mergedFuncList || []).find(f =>
+        f.matricula !== alvo.matricula && fatiarCpfSomenteDigitos(f.cpf || f.documento || '') === cpfDigits);
+      if (duplicadoLocal) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para "${duplicadoLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`);
+        return;
+      }
+      const dupVisLocal = (typeof visList !== 'undefined' && Array.isArray(visList) ? visList : []).find(v =>
+        fatiarCpfSomenteDigitos(v.documento || '') === cpfDigits);
+      if (dupVisLocal) {
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE: o CPF ${formatarCpfExibicao(cpfDigits)} já está cadastrado para o visitante "${dupVisLocal.nome}". Cada pessoa pode ter apenas um cadastro no sistema!`);
+        return;
+      }
     }
 
     let avisoMigracao = '';
     if (window.nexusSupabase) {
       try {
-        // Unicidade do CPF no banco, ignorando o próprio funcionário.
-        const { data: dupCpf, error: dupErr } = await window.nexusSupabase
-          .from('funcionarios').select('nome, matricula').eq('cpf', cpfDigits).maybeSingle();
-        if (!dupErr && dupCpf && dupCpf.matricula !== alvo.matricula) {
-          if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE (Supabase): o CPF ${formatarCpfExibicao(cpfDigits)} já pertence ao funcionário "${dupCpf.nome}". Não é permitido cadastrar duplicidades!`);
-          return;
+        if (cpfDigits) {
+          // Unicidade do CPF no banco, ignorando o próprio funcionário.
+          const { data: dupCpf, error: dupErr } = await window.nexusSupabase
+            .from('funcionarios').select('nome, matricula').eq('cpf', cpfDigits).maybeSingle();
+          if (!dupErr && dupCpf && dupCpf.matricula !== alvo.matricula) {
+            if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Já Cadastrado', `BLOQUEIO DE DUPLICIDADE (Supabase): o CPF ${formatarCpfExibicao(cpfDigits)} já pertence ao funcionário "${dupCpf.nome}". Não é permitido cadastrar duplicidades!`);
+            return;
+          }
         }
 
-        let updateQuery = window.nexusSupabase
-          .from('funcionarios')
-          .update({ cpf: cpfDigits, data_nascimento: dataNasc });
-        updateQuery = alvo.id ? updateQuery.eq('id', alvo.id) : updateQuery.eq('matricula', alvo.matricula);
-        const { error: updErr } = await updateQuery;
-        if (updErr) {
-          const msgErro = `${updErr.message || ''} ${updErr.code || ''}`;
-          if (/column|PGRST204|42703/i.test(msgErro)) {
-            // Banco sem a migração de cpf/data_nascimento: mantém no cache e avisa.
-            avisoMigracao = ' Aviso: as colunas cpf/data_nascimento ainda não existem no Supabase — aplique a migração supabase/migrations/20261010000000_funcionarios_cpf_nascimento.sql para sincronizá-las.';
-          } else {
-            if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Edição Não Realizada', `Não foi possível atualizar ${alvo.nome || 'o funcionário'} no banco de dados (${updErr.message || 'erro'}). Nada foi alterado.`);
-            return;
+        const payloadUpdate = {};
+        if (cpfDigits) payloadUpdate.cpf = cpfDigits;
+        if (dataNasc) payloadUpdate.data_nascimento = dataNasc;
+        if (docLimpo) payloadUpdate.documentacao_interna = docLimpo;
+
+        if (Object.keys(payloadUpdate).length > 0) {
+          let updateQuery = window.nexusSupabase
+            .from('funcionarios')
+            .update(payloadUpdate);
+          updateQuery = alvo.id ? updateQuery.eq('id', alvo.id) : updateQuery.eq('matricula', alvo.matricula);
+          const { error: updErr } = await updateQuery;
+          if (updErr) {
+            const msgErro = `${updErr.message || ''} ${updErr.code || ''}`;
+            if (/column|PGRST204|42703/i.test(msgErro)) {
+              // Se apenas a coluna documentacao_interna não existir ainda no Supabase, tenta gravar cpf e data_nascimento.
+              if (payloadUpdate.documentacao_interna && (payloadUpdate.cpf || payloadUpdate.data_nascimento) && /documentacao_interna/i.test(msgErro)) {
+                const payloadSemDoc = {};
+                if (payloadUpdate.cpf) payloadSemDoc.cpf = payloadUpdate.cpf;
+                if (payloadUpdate.data_nascimento) payloadSemDoc.data_nascimento = payloadUpdate.data_nascimento;
+                let retryQuery = window.nexusSupabase.from('funcionarios').update(payloadSemDoc);
+                retryQuery = alvo.id ? retryQuery.eq('id', alvo.id) : retryQuery.eq('matricula', alvo.matricula);
+                await retryQuery;
+              } else {
+                // Banco sem a migração de cpf/data_nascimento: mantém no cache e avisa.
+                avisoMigracao = ' Aviso: as colunas cpf/data_nascimento ainda não existem no Supabase — aplique a migração supabase/migrations/20261010000000_funcionarios_cpf_nascimento.sql para sincronizá-las.';
+              }
+            } else {
+              if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Edição Não Realizada', `Não foi possível atualizar ${alvo.nome || 'o funcionário'} no banco de dados (${updErr.message || 'erro'}). Nada foi alterado.`);
+              return;
+            }
           }
         }
       } catch (err) {
@@ -581,10 +787,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    atualizarFuncionarioLocal(alvo, cpfDigits, dataNasc);
+    atualizarFuncionarioLocal(alvo, cpfDigits, dataNasc, docLimpo);
     if (window.registrarLogAlteracao) {
+      const camposAtualizados = [];
+      if (cpfDigits) camposAtualizados.push('cpf');
+      if (dataNasc) camposAtualizados.push('data_nascimento');
+      if (docLimpo || docAlterado) camposAtualizados.push('documentacao_interna');
       // Auditoria sem dados sensíveis: registra QUAIS campos, nunca o CPF.
-      await window.registrarLogAlteracao('EDICAO', 'funcionarios', alvo.id || null, { matricula: alvo.matricula, campos_atualizados: ['cpf', 'data_nascimento'] });
+      await window.registrarLogAlteracao('EDICAO', 'funcionarios', alvo.id || null, {
+        matricula: alvo.matricula,
+        campos_atualizados: camposAtualizados.length ? camposAtualizados : ['cpf', 'data_nascimento']
+      });
     }
     if (window.NexusRepository && window.NexusRepository.notifyChange) {
       window.NexusRepository.notifyChange('funcionarios');
@@ -593,7 +806,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sairModoEdicaoFuncionario({ fechar: true });
     renderFuncTable();
     if (window.mostrarFeedback) {
-      window.mostrarFeedback('sucesso', 'Funcionário Atualizado', `CPF e data de nascimento de ${nome} atualizados com sucesso!${avisoMigracao}`);
+      window.mostrarFeedback('sucesso', 'Funcionário Atualizado', `Informações e documentação interna de ${nome} atualizadas com sucesso!${avisoMigracao}`);
     }
   }
 
@@ -709,6 +922,56 @@ document.addEventListener('DOMContentLoaded', () => {
       const cpfDigits = fatiarCpfSomenteDigitos(cpfRaw);
       const dataNasc = document.getElementById('funcDataNasc').value;
 
+      // Modo edição (Tarefa 2 e Tarefa 7): permite atualizar CPF, data de
+      // nascimento e/ou documentação interna (#funcDoc), restrito ao Diretor e
+      // ao Técnico em Portos.
+      if (funcionarioEmEdicao) {
+        if (ehSessaoSomenteLeitura(session)) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('atencao', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador possui acesso exclusivo de visualização e não pode editar informações ou documentação de funcionários.');
+          }
+          return;
+        }
+        if (!podeEditarDocumentacaoFuncionario(session)) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Acesso Restrito', 'A edição das informações e da documentação interna do funcionário é restrita apenas ao Diretor e ao Técnico em Portos.');
+          }
+          return;
+        }
+
+        const apenasDocSemCpfOuData = Boolean(doc) && !cpfRaw && !dataNasc && !funcionarioEmEdicao.cpfOriginalDigits;
+        if (!apenasDocSemCpfOuData) {
+          if (cpfRaw || funcionarioEmEdicao.cpfOriginalDigits || !doc) {
+            if (!validarCpf(cpfRaw)) {
+              if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'CPF Inválido', 'Informe um CPF com 11 dígitos, não todos iguais. O CPF pode ser fictício, mas não pode se repetir: cada CPF pode estar em apenas um cadastro.');
+              return;
+            }
+          }
+          if (dataNasc || !doc) {
+            if (!dataNasc) {
+              if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data de Nascimento Obrigatória', 'Informe a data de nascimento do funcionário.');
+              return;
+            }
+            const nascDateEd = new Date(`${dataNasc}T12:00:00`);
+            const hojeEd = new Date();
+            if (Number.isNaN(nascDateEd.getTime()) || nascDateEd > hojeEd) {
+              if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Data Inválida', 'A data de nascimento não pode ser futura.');
+              return;
+            }
+            let idadeEd = hojeEd.getFullYear() - nascDateEd.getFullYear();
+            const fezAnivEd = (hojeEd.getMonth() > nascDateEd.getMonth()) || (hojeEd.getMonth() === nascDateEd.getMonth() && hojeEd.getDate() >= nascDateEd.getDate());
+            if (!fezAnivEd) idadeEd--;
+            if (idadeEd < 18) {
+              if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Menor de Idade', `Funcionários do terminal precisam ter 18 anos ou mais. A data informada corresponde a ${idadeEd} ano(s).`);
+              return;
+            }
+          }
+        }
+
+        await salvarEdicaoFuncionario({ ...funcionarioEmEdicao }, cpfDigits, dataNasc, doc);
+        return;
+      }
+
       // CPF obrigatório: 11 dígitos, sem todos iguais. CPF fictício é aceito;
       // a unicidade é conferida logo abaixo.
       if (!validarCpf(cpfRaw)) {
@@ -732,14 +995,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!fezAniversario) idade--;
       if (idade < 18) {
         if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Menor de Idade', `Funcionários do terminal precisam ter 18 anos ou mais. A data informada corresponde a ${idade} ano(s).`);
-        return;
-      }
-
-      // Modo edição (Tarefa 2): CPF e nascimento já validados acima; a
-      // identidade (matrícula) é a do funcionário em edição, não um cadastro
-      // novo — por isso NÃO passa pelas travas de duplicidade de matrícula.
-      if (funcionarioEmEdicao) {
-        await salvarEdicaoFuncionario({ ...funcionarioEmEdicao }, cpfDigits, dataNasc);
         return;
       }
 
@@ -823,8 +1078,13 @@ document.addEventListener('DOMContentLoaded', () => {
         cpf: cpfDigits,
         data_nascimento: dataNasc,
         doc: doc || 'Cadastrado no Sistema',
+        documentacao_interna: doc || '',
         ativo: true
       };
+
+      if (doc && podeEditarDocumentacaoFuncionario(session)) {
+        salvarDocLocalFuncionario(formattedMatricula, null, doc);
+      }
 
       const localList = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
       localList.unshift(novoFuncionario);
@@ -842,16 +1102,25 @@ document.addEventListener('DOMContentLoaded', () => {
             ativo: true
           };
           const payloadCompleto = { ...payloadBase, cpf: cpfDigits, data_nascimento: dataNasc };
+          if (doc && podeEditarDocumentacaoFuncionario(session)) {
+            payloadCompleto.documentacao_interna = doc;
+          }
           let insData = null;
           const tentativa1 = await window.nexusSupabase.from('funcionarios').insert(payloadCompleto).select('id').single();
           if (tentativa1.error) {
             const msgErro = `${tentativa1.error.message || ''} ${tentativa1.error.code || ''}`;
             if (/column|PGRST204|42703/i.test(msgErro)) {
-              // Colunas cpf/data_nascimento ainda não existem no banco: salva o
-              // básico e avisa o técnico para aplicar a migração SQL.
-              avisoMigracao = ' Aviso: as colunas cpf/data_nascimento ainda não existem no Supabase — aplique a migração supabase/migrations/20261010000000_funcionarios_cpf_nascimento.sql para sincronizá-las.';
-              const tentativa2 = await window.nexusSupabase.from('funcionarios').insert(payloadBase).select('id').single();
-              insData = tentativa2.data || null;
+              if (payloadCompleto.documentacao_interna && /documentacao_interna/i.test(msgErro)) {
+                const payloadSemDoc = { ...payloadBase, cpf: cpfDigits, data_nascimento: dataNasc };
+                const tentativaSemDoc = await window.nexusSupabase.from('funcionarios').insert(payloadSemDoc).select('id').single();
+                insData = tentativaSemDoc.data || null;
+              } else {
+                // Colunas cpf/data_nascimento ainda não existem no banco: salva o
+                // básico e avisa o técnico para aplicar a migração SQL.
+                avisoMigracao = ' Aviso: as colunas cpf/data_nascimento ainda não existem no Supabase — aplique a migração supabase/migrations/20261010000000_funcionarios_cpf_nascimento.sql para sincronizá-las.';
+                const tentativa2 = await window.nexusSupabase.from('funcionarios').insert(payloadBase).select('id').single();
+                insData = tentativa2.data || null;
+              }
             } else {
               throw tentativa1.error;
             }
@@ -859,7 +1128,12 @@ document.addEventListener('DOMContentLoaded', () => {
             insData = tentativa1.data;
           }
 
-          if (insData) insertedFuncId = insData.id;
+          if (insData) {
+            insertedFuncId = insData.id;
+            if (doc && podeEditarDocumentacaoFuncionario(session)) {
+              salvarDocLocalFuncionario(formattedMatricula, insertedFuncId, doc);
+            }
+          }
 
           if (window.registrarLogAlteracao) {
             await window.registrarLogAlteracao('CRIACAO', 'funcionarios', insertedFuncId, { matricula: formattedMatricula, nome, cargo: cargoValue });
@@ -1347,12 +1621,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function aplicarRestricoesTecnicoPortos() {
-    if (session.cargo === 'TECNICO_PORTOS') {
-      // Tarefa 17: Técnico em Portos só poderá ter acesso à parte de visitantes e histórico (Seções 3 e 4)
-      const secCodigos = document.getElementById('empMatriculaSearch')?.closest('.bg-white');
-      const secFuncionarios = document.getElementById('toggleFuncFormBtn')?.closest('.bg-white');
-      if (secCodigos) secCodigos.style.display = 'none';
-      if (secFuncionarios) secFuncionarios.style.display = 'none';
+    // Tarefa 7: Técnico em Portos e Diretor têm acesso à edição da documentação interna
+    // do funcionário na seção de Funcionários & Documentação Interna.
+    const docCampo = document.getElementById('funcDoc');
+    if (docCampo) {
+      const podeDoc = podeEditarDocumentacaoFuncionario(session);
+      docCampo.disabled = !podeDoc;
+      docCampo.readOnly = !podeDoc;
+      docCampo.title = podeDoc ? '' : 'Alteração de documentação interna restrita ao Diretor e ao Técnico em Portos';
+      docCampo.classList.toggle('bg-slate-100', !podeDoc);
+      docCampo.classList.toggle('dark:bg-slate-800/80', !podeDoc);
+      docCampo.classList.toggle('cursor-not-allowed', !podeDoc);
+      docCampo.classList.toggle('opacity-75', !podeDoc);
     }
   }
   aplicarRestricoesTecnicoPortos();

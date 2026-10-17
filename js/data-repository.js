@@ -333,15 +333,39 @@
         const agendamentos = await client.from('agendamentos').select('id').eq('agendado_por', id);
         if (agendamentos.error) return { ok: false, erro: 'não foi possível verificar os agendamentos do funcionário (' + (agendamentos.error.message || 'erro') + ').' };
 
-        const delegTitular = await client.from('delegacoes_supervisor').select('id').eq('supervisor_titular_id', id);
-        const delegSubst = await client.from('delegacoes_supervisor').select('id').eq('substituto_id', id);
+        const delegTitular = await client.from('delegacoes_supervisor').select('id, ativo, data_revogacao').eq('supervisor_titular_id', id);
+        const delegSubst = await client.from('delegacoes_supervisor').select('id, ativo, data_revogacao').eq('substituto_id', id);
         if (delegTitular.error || delegSubst.error) {
           const e = delegTitular.error || delegSubst.error;
           return { ok: false, erro: 'não foi possível verificar as delegações de supervisão (' + (e.message || 'erro') + ').' };
         }
-        const delegacoes = (delegTitular.data || []).length + (delegSubst.data || []).length;
-        if (delegacoes > 0) {
-          return { ok: false, bloqueio: true, erro: 'o funcionário participa de ' + delegacoes + ' delegação(ões) de supervisão. Encerre as delegações antes de excluí-lo.' };
+        const ehDelegacaoAtiva = (d) => Boolean(d && d.ativo !== false && !d.data_revogacao);
+        const listaTitular = Array.isArray(delegTitular.data) ? delegTitular.data : [];
+        const listaSubst = Array.isArray(delegSubst.data) ? delegSubst.data : [];
+        const delegacoesAtivas = listaTitular.filter(ehDelegacaoAtiva).length + listaSubst.filter(ehDelegacaoAtiva).length;
+        if (delegacoesAtivas > 0) {
+          return { ok: false, bloqueio: true, erro: 'o funcionário participa de ' + delegacoesAtivas + ' delegação(ões) de supervisão. Encerre as delegações antes de excluí-lo.' };
+        }
+
+        if (listaTitular.length > 0) {
+          try {
+            const updTit = await client.from('delegacoes_supervisor').update({ supervisor_titular_id: null }).eq('supervisor_titular_id', id);
+            if (updTit && updTit.error) {
+              await client.from('delegacoes_supervisor').delete().eq('supervisor_titular_id', id);
+            }
+          } catch (e) {
+            try { await client.from('delegacoes_supervisor').delete().eq('supervisor_titular_id', id); } catch (e2) {}
+          }
+        }
+        if (listaSubst.length > 0) {
+          try {
+            const updSub = await client.from('delegacoes_supervisor').update({ substituto_id: null }).eq('substituto_id', id);
+            if (updSub && updSub.error) {
+              await client.from('delegacoes_supervisor').delete().eq('substituto_id', id);
+            }
+          } catch (e) {
+            try { await client.from('delegacoes_supervisor').delete().eq('substituto_id', id); } catch (e2) {}
+          }
         }
 
         if (agendamentos.data && agendamentos.data.length > 0) {

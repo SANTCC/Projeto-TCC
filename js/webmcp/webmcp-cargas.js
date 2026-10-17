@@ -333,6 +333,9 @@
         if (carga.status === 'AGENDAMENTO') {
           return { codigo: 'RECEBIMENTO_OBRIGATORIO', mensagem: 'Registre o recebimento físico da carga no Porto de Santos antes de movimentá-la.' };
         }
+        if (carga.status === 'PRONTA_PARA_ENTREGA') {
+          return { codigo: 'ESTADO_INVALIDO', mensagem: `A carga ${carga.id} já foi movimentada até o contêiner e está PRONTA_PARA_ENTREGA, não podendo mais ser movimentada para o pátio.` };
+        }
         if (carga.status === 'EM_TRANSITO') {
           return { codigo: 'ESTADO_INVALIDO', mensagem: `A carga ${carga.id} está em trânsito e não pode ser movimentada.` };
         }

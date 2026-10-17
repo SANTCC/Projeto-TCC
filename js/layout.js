@@ -108,7 +108,7 @@
         return `
         <a href="${esc(item.href)}" title="${esc(item.label)}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
           <span class="material-symbols-outlined text-[20px] shrink-0">${esc(item.icon)}</span>
-          <span class="sidebar-nav-label truncate">${esc(item.label)}</span>
+          <span class="sidebar-nav-label whitespace-nowrap">${esc(item.label)}</span>
         </a>
       `;
       }).join('');
@@ -178,9 +178,9 @@
     // Injeta Sidebar em modo Gaveta/Drawer unificado (Celular + Notebook)
     const sidebarElem = document.getElementById('appSidebar') || document.querySelector('aside');
     if (sidebarElem) {
-      sidebarElem.className = 'w-72 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0 shadow-2xl';
+      sidebarElem.className = 'w-80 bg-nexus-900 text-white flex-col justify-between fixed md:static inset-y-0 left-0 z-50 transform -translate-x-full transition-transform duration-300 ease-in-out flex border-r border-slate-800 shrink-0 shadow-2xl';
       sidebarElem.innerHTML = `
-        <div id="sidebarScrollArea" class="p-4 flex flex-col gap-6 overflow-y-auto h-full justify-between">
+        <div id="sidebarScrollArea" class="p-4 flex flex-col gap-6 overflow-y-auto overflow-x-hidden h-full justify-between">
           <div class="flex flex-col gap-6">
 
             <!-- Cabeçalho da Gaveta com Fechamento (Mobile e Notebook) -->
@@ -237,7 +237,10 @@
               </button>
               <button id="sidebarEmergencySettingsBtn" type="button" aria-label="Configurações de alerta de emergência (vibração e som)" title="Configurações de vibração e som do alerta"
                 class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-all flex items-center justify-center shrink-0">
-                <span class="material-symbols-outlined text-[20px]">settings</span>
+                <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
               </button>
             </div>
 
@@ -755,13 +758,13 @@
       }, true);
 
       const BOTOES_MUTACAO_IDS = new Set([
-        'toggleAgendamentoFormBtn', 'toggleNavioFormBtn', 'toggleContainerFormBtn',
-        'toggleRotaFormBtn', 'toggleGuindasteFormBtn', 'toggleOsFormBtn',
-        'toggleNavioManutFormBtn', 'toggleFuncFormBtn', 'toggleVisFormBtn',
-        'revogarDelegacaoBtn', 'invalidateCodeBtn', 'aprovarCargaBtn',
-        'recusarCargaBtn', 'sidebarEmergencyBtn', 'panicButton',
-        'resetEmergencyBtn', 'confirmMoveBtn', 'confirmMovimentarModalBtn',
-        'confirmVincularModalBtn', 'confirmCancelCargoBtn'
+        'toggleAgendamentoFormBtn', 'toggleTipoCargaFormBtn', 'toggleNavioFormBtn',
+        'toggleContainerFormBtn', 'toggleRotaFormBtn', 'toggleGuindasteFormBtn',
+        'toggleOsFormBtn', 'toggleNavioManutFormBtn', 'toggleFuncFormBtn',
+        'toggleVisFormBtn', 'revogarDelegacaoBtn', 'invalidateCodeBtn',
+        'aprovarCargaBtn', 'recusarCargaBtn', 'sidebarEmergencyBtn',
+        'panicButton', 'resetEmergencyBtn', 'confirmMoveBtn',
+        'confirmMovimentarModalBtn', 'confirmVincularModalBtn', 'confirmCancelCargoBtn'
       ]);
 
       document.addEventListener('click', (ev) => {
@@ -770,7 +773,7 @@
         if (!btn) return;
         const btnId = btn.id || '';
         const onclickAttr = btn.getAttribute('onclick') || '';
-        const ehMutacaoOnclick = /window\.(executarAcaoCarga|liberarNavioPeloDiretor|autorizarRetornoNavio|excluir|editar|alterar|alocar|desatracar|aprovar|recusar|concluir|registrarSaida|retificar|revogar)/.test(onclickAttr);
+        const ehMutacaoOnclick = /window\.(executarAcaoCarga|abrirModalVinculacao|abrirModalMovimentacao|liberarNavioPeloDiretor|autorizarRetornoNavio|selecionarRotaNavio|vincularNavioABerco|vincularContainerANavio|concluirTarefaGuindaste|solicitarManutencaoGuindaste|concluirManutencaoGuindaste|executarAcaoOS|anexarRetificacaoTrail|nexusRevogarDelegacao|nexusTecnicoReemitir|excluir|editar|alterar|alocar|desatracar|aprovar|recusar|concluir|registrarSaida|retificar|revogar)/.test(onclickAttr);
         if (BOTOES_MUTACAO_IDS.has(btnId) || ehMutacaoOnclick) {
           ev.preventDefault();
           ev.stopImmediatePropagation();

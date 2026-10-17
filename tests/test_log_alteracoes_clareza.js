@@ -223,6 +223,55 @@ async function main() {
   check('S7: S5/S6 sem erros de runtime', painel.j.erros.length === 0, JSON.stringify(painel.j.erros).slice(0, 200));
   painel.j.dom.window.close();
 
+  // ---------- S8: Navio sem UUID, sem duplicata de liberação e GERACAO_PDF ----
+  log('\nS8. Entidade NAVIO exibe nome (não UUID), liberação não duplica e PDF exibe GERACAO_PDF');
+  const uuidNavio = UUID(888);
+  painel = await abrirPainel({
+    dbLogs: [
+      {
+        id: UUID(710),
+        data_hora: '2026-10-16T15:00:00.100Z',
+        codigo_individual: 'NX-7001-DIR',
+        cargo: 'DIRETOR_OPERACOES_LOGISTICA',
+        entidade_tipo: 'NAVIO',
+        entidade_id: uuidNavio,
+        tipo_alteracao: 'EDICAO',
+        detalhes: { descricao: 'Navio MSC Aurora (IMO-9876543) liberado para saída com destino a Rotterdam' }
+      },
+      {
+        id: UUID(711),
+        data_hora: '2026-10-16T15:00:00.400Z',
+        codigo_individual: 'NX-7001-DIR',
+        cargo: 'DIRETOR_OPERACOES_LOGISTICA',
+        entidade_tipo: 'NAVIO',
+        entidade_id: uuidNavio,
+        tipo_alteracao: 'EDICAO',
+        detalhes: { nome: 'MSC Aurora', descricao: 'Liberou a saída do navio MSC Aurora com destino a Rotterdam (agora Fora do Porto)' }
+      },
+      {
+        id: UUID(712),
+        data_hora: '2026-10-16T16:00:00.000Z',
+        codigo_individual: 'NX-7001-DIR',
+        cargo: 'DIRETOR_OPERACOES_LOGISTICA',
+        entidade_tipo: 'CARGA',
+        entidade_id: 'CRG-2026-500',
+        tipo_alteracao: 'EXPORTACAO',
+        detalhes: { tipo_exportacao: 'PDF_A4' }
+      }
+    ],
+    localLogs: []
+  });
+  w = painel.j.w;
+  check('S8: liberação de navio no mesmo horário não aparece duplicada (2 linhas totais: 1 navio + 1 PDF)',
+    linhasDoLog(w).length === 2, `linhas=${linhasDoLog(w).length}`);
+  check('S8: entidade NAVIO exibe o nome do navio ("NAVIO MSC Aurora") e não o UUID',
+    textoDoLog(w).includes('NAVIO MSC Aurora') && !textoDoLog(w).includes(uuidNavio),
+    textoDoLog(w).slice(0, 300));
+  check('S8: geração de PDF exibe GERACAO_PDF em vez de EXPORTACAO',
+    textoDoLog(w).includes('GERACAO_PDF') && !/\bEXPORTACAO\b/.test(textoDoLog(w)),
+    textoDoLog(w).slice(0, 300));
+  painel.j.dom.window.close();
+
   const r = resumo();
   log(`\nResultado: ${r.total - r.falhas}/${r.total} verificações aprovadas.`);
   if (r.falhas > 0) {

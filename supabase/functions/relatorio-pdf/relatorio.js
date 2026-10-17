@@ -7,9 +7,39 @@
  * "Não informado"; nada de valor padrão (peso, volume, valor, destino ou navio fictícios).
  */
 
-export const VERSAO_MODELO = 1;
+export const VERSAO_MODELO = 2;
 export const BUCKET = 'relatorios-pdf';
 export const NAO_INFORMADO = 'Não informado';
+
+/**
+ * Normaliza ou deriva o código legível da carga no padrão CRG-2026-xxx.
+ */
+export function formatarCodigoCarga(linha) {
+  if (!linha) return null;
+  const candidato = typeof linha === 'string'
+    ? linha
+    : (linha.codigo || linha.qr_code_url || '');
+  const semQr = String(candidato || '').trim().replace(/^QR-/i, '');
+  if (/^CRG-\d{4}-\d+$/i.test(semQr)) {
+    return semQr.toUpperCase();
+  }
+  const mDemo = semQr.match(/^(?:DEMO-)?CRG-(\d+)$/i);
+  if (mDemo) {
+    return `CRG-2026-${mDemo[1].padStart(3, '0')}`;
+  }
+  const mAno = semQr.match(/^CRG-(\d{4})-?([A-Z0-9]+)$/i);
+  if (mAno && !UUID.test(semQr.replace(/^CRG-/i, ''))) {
+    return `CRG-${mAno[1]}-${mAno[2].toUpperCase()}`;
+  }
+  const semente = String((typeof linha === 'object' && (linha.id || linha.qr_code_url)) || semQr || '').trim();
+  if (!semente) return null;
+  let acc = 0;
+  for (let i = 0; i < semente.length; i += 1) {
+    acc = ((acc * 31) + semente.charCodeAt(i)) >>> 0;
+  }
+  const seq = String((acc % 900) + 100).padStart(3, '0');
+  return `CRG-2026-${seq}`;
+}
 
 /** Cargos que podem emitir o relatório. Deve coincidir com js/auth-guard.js (relatorios.html). */
 export const CARGOS_PERMITIDOS = [
@@ -116,9 +146,8 @@ export function montarModelo(linha) {
     versao: VERSAO_MODELO,
     carga: {
       id: linha.id,
+      codigo: formatarCodigoCarga(linha),
       natureza: linha.natureza ?? null,
-      material: linha.material ?? null,
-      quantidade: numeroOuNulo(linha.quantidade),
       peso_t: numeroOuNulo(linha.peso),
       volume_m3: numeroOuNulo(linha.volume),
       valor_declarado_brl: numeroOuNulo(linha.valor_declarado),
@@ -203,10 +232,8 @@ export function secoesDoRelatorio(modelo) {
     {
       titulo: '1. Dados da carga',
       campos: [
-        ['Código da carga', textoOu(c.id)],
+        ['Código da carga', textoOu(c.codigo || formatarCodigoCarga(c))],
         ['Natureza', textoOu(c.natureza)],
-        ['Material', textoOu(c.material)],
-        ['Quantidade', c.quantidade === null ? NAO_INFORMADO : FMT_NUMERO.format(c.quantidade)],
         ['Peso declarado', formatarNumero(c.peso_t, 't')],
         ['Volume', formatarNumero(c.volume_m3, 'm³')],
         ['Valor declarado', formatarMoeda(c.valor_declarado_brl)],

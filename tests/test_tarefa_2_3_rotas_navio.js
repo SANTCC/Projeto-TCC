@@ -102,6 +102,10 @@ async function main() {
   const jaguarPos = naviosPos.find(n => n.imo === 'IMO-1000001');
   check('Navio teve saída liberada com sucesso (localizacao = FORA_DO_PORTO)', jaguarPos && jaguarPos.localizacao === 'FORA_DO_PORTO', jaguarPos ? jaguarPos.localizacao : 'N/A');
 
+  const rotasTxt = (w.document.getElementById('rotasTableBody') || {}).textContent || '';
+  check('Tabela de Rotas Marítimas exibe ETA com dias, horas, minutos e segundos (Xd Yh Zm Ws)',
+    /\d+d\s+\d+h\s+\d+m\s+\d+s/.test(rotasTxt), rotasTxt.slice(0, 200));
+
   w.close();
 
   const r = resumo();

@@ -86,7 +86,7 @@ html.dark :focus-visible {
   top: 0;
   bottom: 0;
   left: 0;
-  width: min(18rem, 90vw) !important;
+  width: min(20rem, 90vw) !important;
   height: 100vh;
   height: 100dvh;
   max-height: 100vh;
@@ -97,7 +97,7 @@ html.dark :focus-visible {
 #appSidebar.-translate-x-full,
 #appSidebar.nexus-sidebar-collapsed {
   transform: translateX(-100%) !important;
-  width: min(18rem, 90vw) !important;
+  width: min(20rem, 90vw) !important;
 }
 #appSidebar:not(.-translate-x-full):not(.nexus-sidebar-collapsed) {
   transform: translateX(0) !important;
@@ -105,8 +105,30 @@ html.dark :focus-visible {
 }
 #sidebarScrollArea {
   min-height: 0;
+  overflow-x: hidden;
   padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
   overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #445987 #0F172A;
+}
+#sidebarScrollArea::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+#sidebarScrollArea::-webkit-scrollbar-track {
+  background: #0F172A;
+  border-radius: 9999px;
+}
+#sidebarScrollArea::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #445987 0%, #334155 100%);
+  border-radius: 9999px;
+  border: 1px solid rgba(30, 41, 59, 0.85);
+}
+#sidebarScrollArea::-webkit-scrollbar-thumb:hover {
+  background: #5b73a8;
+}
+#sidebarScrollArea::-webkit-scrollbar-corner {
+  background: transparent;
 }
 #sidebarScrollArea > * {
   flex-shrink: 0;
@@ -156,7 +178,7 @@ html.dark :focus-visible {
     top: 4rem;
     height: calc(100vh - 4rem);
     max-height: calc(100vh - 4rem);
-    width: min(18rem, 90vw) !important;
+    width: min(20rem, 90vw) !important;
   }
 }
 

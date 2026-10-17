@@ -212,6 +212,27 @@ async function main() {
     w.close();
   }
 
+  // ------------------------------------------------------------------
+  log('\n5. ETA zera em segundos com Cargas & Pátio já aberta: atualiza para ENTREGUE automaticamente');
+  {
+    // 1 km @ 33 km/h = ~109,09 s. Saída há 108 s -> restam ~1,09 s ao abrir a página.
+    const saidaQuaseChegando = new Date(Date.now() - 108 * 1000).toISOString();
+    const banco = bancoCenas({
+      dataSaida: saidaQuaseChegando,
+      rotas: [{ id: UUID(5), origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 1 }]
+    });
+    const { w } = await carregarCargas(banco);
+    check('antes de os segundos zerarem, a carga ainda está EM_TRANSITO',
+      cargaDb(banco, C1).status_fluxo === 'EM_TRANSITO', cargaDb(banco, C1).status_fluxo);
+    await aguardar(1600);
+    check('assim que os segundos zeram na própria tela de Cargas, o navio vira NO_PORTO_DE_DESTINO',
+      navioDb(banco, NAVIO_DESTINO).localizacao === 'NO_PORTO_DE_DESTINO', navioDb(banco, NAVIO_DESTINO).localizacao);
+    check('a carga EM_TRANSITO passa automaticamente para ENTREGUE sem abrir Embarcações',
+      cargaDb(banco, C1).status_fluxo === 'ENTREGUE' && tabelaEntregues(w).includes('CRG-C1'),
+      `${cargaDb(banco, C1).status_fluxo} / tabela="${tabelaEntregues(w).slice(0, 80)}"`);
+    w.close();
+  }
+
   const r = resumo();
   log(`\nResultado: ${r.total - r.falhas}/${r.total} verificações aprovadas.`);
   if (r.falhas > 0) {

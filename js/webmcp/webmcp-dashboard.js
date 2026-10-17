@@ -132,7 +132,7 @@
         data_hora: D.dataHora(l.data_hora) || null,
         cargo: privacidade.texto(l.cargo) || null,
         entidade: privacidade.entidade(l.entidade, l.entidade_tipo) || null,
-        tipo: privacidade.texto(l.tipo_alteracao) || null
+        tipo: privacidade.texto(String(l.tipo_alteracao || '').toUpperCase() === 'EXPORTACAO' ? 'GERACAO_PDF' : l.tipo_alteracao) || null
       }));
       if (args.entidade) lista = lista.filter((l) => D.contem(l.entidade, args.entidade));
       return { mensagem: `${lista.length} registro(s) de auditoria.`, dados: { total: lista.length, itens: lista.slice(0, args.limite || 10) } };

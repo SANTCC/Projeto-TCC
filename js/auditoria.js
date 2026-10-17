@@ -57,7 +57,8 @@ const AUDIT_VERBOS = {
   EDICAO: 'Editou',
   EXCLUSAO: 'Excluiu',
   REIMPRESSAO_ETIQUETA: 'Reimprimiu a etiqueta de',
-  EXPORTACAO: 'Exportou'
+  EXPORTACAO: 'Gerou o PDF de',
+  GERACAO_PDF: 'Gerou o PDF de'
 };
 const AUDIT_ROTULOS_ENTIDADE = {
   CARGA: 'a carga',
@@ -79,14 +80,18 @@ function descricaoDoLog(registro) {
   if (textoDet) return textoDet;
   const tipo = String(registro.tipo_alteracao || '').toUpperCase();
   const verbo = AUDIT_VERBOS[tipo] || 'Alterou';
-  const rotulo = AUDIT_ROTULOS_ENTIDADE[String(registro.entidade_tipo || '').toUpperCase()] || 'o registro';
+  const tipoEntUpper = String(registro.entidade_tipo || '').toUpperCase();
+  const rotulo = AUDIT_ROTULOS_ENTIDADE[tipoEntUpper] || 'o registro';
   const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || ''));
   let codigo = String(registro.entidade_id || '').trim();
   if (!codigo || codigo.toUpperCase() === 'N/A' || ehUuid(codigo)) {
     // UUID cru não comunica nada ao operador: prefere um código legível dos
-    // detalhes (id/código/matrícula/nome) e, não havendo, omite o complemento.
+    // detalhes (para navio, prioriza o nome da embarcação) e, não havendo, omite o complemento.
+    const candidatos = tipoEntUpper === 'NAVIO'
+      ? [det && det.nome, det && det.navio, det && det.codigo, det && !ehUuid(det.id) ? det.id : '', det && det.numero_imo]
+      : [det && det.codigo, det && !ehUuid(det.id) ? det.id : '', det && det.matricula, det && det.nome];
     codigo = (det && typeof det === 'object')
-      ? String([det.codigo, !ehUuid(det.id) ? det.id : '', det.matricula, det.nome].find((v) => v && !ehUuid(v)) || '').trim()
+      ? String(candidatos.find((v) => v && !ehUuid(v)) || '').trim()
       : '';
   }
   return codigo ? `${verbo} ${rotulo} ${codigo}` : `${verbo} ${rotulo}`;
@@ -126,11 +131,14 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
   const validTipos = ['CRIACAO', 'EDICAO', 'EXCLUSAO', 'REIMPRESSAO_ETIQUETA', 'EXPORTACAO'];
   let tipoEnum = 'EDICAO';
   const tipoUpper = String(tipoAlteracao || '').toUpperCase();
-  if (validTipos.includes(tipoUpper)) {
+  if (tipoUpper === 'GERACAO_PDF' || tipoUpper === 'EXPORTACAO') {
+    tipoEnum = 'EXPORTACAO';
+  } else if (validTipos.includes(tipoUpper)) {
     tipoEnum = tipoUpper;
   } else if (tipoUpper.includes('CRI')) tipoEnum = 'CRIACAO';
   else if (tipoUpper.includes('EXCLU') || tipoUpper.includes('DELET')) tipoEnum = 'EXCLUSAO';
   else if (tipoUpper.includes('ETIQUETA')) tipoEnum = 'REIMPRESSAO_ETIQUETA';
+  const tipoExibicao = tipoEnum === 'EXPORTACAO' ? 'GERACAO_PDF' : tipoEnum;
 
   const entidadeTipo = alvo.tipo;
   const entidadeId = alvo.codigo;
@@ -148,12 +156,13 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
 
   // Tarefa 9 (Correções): frase única do que foi feito (texto explícito nos
   // detalhes tem precedência; sem ele, verbo + entidade + código legível).
-  const descricaoLog = descricaoDoLog({ tipo_alteracao: tipoEnum, entidade_tipo: entidadeTipo, entidade_id: entidadeId, detalhes });
+  const descricaoLog = descricaoDoLog({ tipo_alteracao: tipoExibicao, entidade_tipo: entidadeTipo, entidade_id: entidadeId, detalhes });
 
   if (window.nexusSupabase) {
     try {
       const detalhesPayload = Object.assign({}, typeof detalhes === 'object' ? detalhes : { descricao: detalhes }, { referencia_id: alvo.id });
       if (!detalhesPayload.descricao) detalhesPayload.descricao = descricaoLog;
+      if (tipoExibicao === 'GERACAO_PDF') detalhesPayload.acao_exibicao = 'GERACAO_PDF';
       const payload = {
         data_hora: nowIso,
         cargo: cargoEnum,
@@ -199,7 +208,7 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
     entidade: `${entidadeTipo} ${entidadeId}`,
     entidade_tipo: entidadeTipo,
     entidade_id: entidadeId,
-    tipo_alteracao: tipoEnum,
+    tipo_alteracao: tipoExibicao,
     descricao: descricaoLog,
     detalhes: detalhes
   };
