@@ -104,7 +104,8 @@ async function confirmar(w) {w.document.getElementById('confirmVincularModalBtn'
       t.w.NexusWebMCPDados.GRUPOS={todos:[],gestaoOperacional:[],supervisao:[],inspecao:[],direcao:[]};
       t.w.eval(H.read('js/webmcp/webmcp-embarcacoes.js'));
       const cadastro=ferramentas.find(f => f.nome === 'cadastrar_container');
-      assert.equal(cadastro.precondicao({tipo:'Tipo inventado'}).codigo,'TIPO_INVALIDO');
+      // A pré-condição é assíncrona: consulta o catálogo do banco antes de validar.
+      assert.equal((await cadastro.precondicao({tipo:'Tipo inventado'})).codigo,'TIPO_INVALIDO');
     } finally {t.w.close();}
   }
   // Recarregar não pode substituir o tipo real pela natureza descritiva.

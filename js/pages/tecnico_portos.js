@@ -13,6 +13,39 @@ document.addEventListener('DOMContentLoaded', () => {
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
   const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
 
+  // ── Autoria (FK → funcionarios.id) ────────────────────────────────
+  // `solicitado_por` e `registrado_por` são uuid com FK para funcionarios(id).
+  // Sessões antigas podem trazer a matrícula em `session.id`; gravar texto ali
+  // fazia o insert falhar (22P02) e a operação não era registrada.
+  const UUID_FUNCIONARIO_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  async function resolverFuncionarioId() {
+    if (UUID_FUNCIONARIO_RE.test(String(session.id || ''))) return session.id;
+    const chave = session.matricula || session.codigo_individual || session.codigo || '';
+    if (!chave) return null;
+    if (window.nexusSupabase) {
+      try {
+        for (const campo of ['matricula', 'codigo_individual']) {
+          const { data } = await window.nexusSupabase
+            .from('funcionarios')
+            .select('id')
+            .eq(campo, chave)
+            .maybeSingle();
+          if (data && UUID_FUNCIONARIO_RE.test(String(data.id || ''))) return data.id;
+        }
+      } catch (e) {
+        console.warn('[NexusPort] Não foi possível resolver o funcionário da sessão:', e);
+      }
+    }
+    try {
+      const locais = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+      const achado = (Array.isArray(locais) ? locais : []).find(f => f
+        && (f.matricula === chave || f.codigo_individual === chave || f.codigo === chave));
+      if (achado && UUID_FUNCIONARIO_RE.test(String(achado.id || ''))) return achado.id;
+    } catch (e) { /* cache local inválido */ }
+    return null;
+  }
+
+
   const searchInput = document.getElementById('empMatriculaSearch');
   const searchBtn = document.getElementById('searchEmpBtn');
   const regenBtn = document.getElementById('regenCodeBtn');
@@ -1181,7 +1214,8 @@ document.addEventListener('DOMContentLoaded', () => {
               nome: s.nome,
               documento: s.documento,
               motivo: s.motivo,
-              status: isConcluido ? 'CONCLUIDO' : (s.status || 'EM_VISITA'),
+              // `visitantes` não possui coluna status: a situação vem da saída.
+              status: isConcluido ? 'CONCLUIDO' : 'EM_VISITA',
               data: s.data_hora_entrada ? new Date(s.data_hora_entrada).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
               data_saida: s.data_hora_saida ? new Date(s.data_hora_saida).toLocaleString('pt-BR') : null,
               vistoria: isConcluido ? 'Vistoria em Ordem - Concluída' : null,
@@ -1287,19 +1321,15 @@ document.addEventListener('DOMContentLoaded', () => {
     visitor.status = novoStatus;
     localStorage.setItem('nexus_vis_list', JSON.stringify(visList));
 
-    if (window.nexusSupabase) {
+    // A tabela `visitantes` não possui coluna de status: a situação exibida é
+    // derivada de `data_hora_saida` (entrada/saída). Gravar `status` causava erro
+    // PGRST204 silencioso; a mudança de situação é mantida apenas na interface e
+    // fica registrada no log de auditoria.
+    if (window.nexusSupabase && window.registrarLogAlteracao) {
       try {
-        if (visitor.id) {
-          await window.nexusSupabase.from('visitantes').update({ status: novoStatus }).eq('id', visitor.id);
-        } else {
-          await window.nexusSupabase.from('visitantes').update({ status: novoStatus }).eq('documento', visitor.documento);
-        }
-
-        if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'visitantes', visitor.id || null, { visitante: visitor.nome, novo_status: novoStatus });
-        }
+        await window.registrarLogAlteracao('EDICAO', 'visitantes', visitor.id || null, { visitante: visitor.nome, novo_status: novoStatus });
       } catch (err) {
-        console.warn('[NexusPort] Erro ao atualizar status do visitante no Supabase:', err);
+        console.warn('[NexusPort] Erro ao auditar status do visitante no Supabase:', err);
       }
     }
 
@@ -1583,14 +1613,18 @@ document.addEventListener('DOMContentLoaded', () => {
       let insertedVisId = null;
       if (window.nexusSupabase) {
         try {
-          const { data: insVis } = await window.nexusSupabase.from('visitantes').insert({
+          const { data: insVis, error: insVisErr } = await window.nexusSupabase.from('visitantes').insert({
             nome: nome,
             documento: documento,
             motivo: motivo,
-            data_hora_entrada: new Date().toISOString()
+            data_hora_entrada: new Date().toISOString(),
+            // Autoria do registro: FK uuid para funcionarios(id) — nunca a matrícula.
+            registrado_por: await resolverFuncionarioId()
           }).select('id').single();
 
-          if (insVis) {
+          if (insVisErr) throw insVisErr;
+
+          if (insVis && insVis.id) {
             insertedVisId = insVis.id;
             novoVisitante.id = insVis.id;
           }
@@ -1600,7 +1634,18 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar visitante com Supabase:', err);
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Visitante Não Registrado',
+              `Não foi possível gravar o visitante ${nome} no banco de dados. Nenhum registro foi criado; tente novamente.`);
+          }
+          return;
         }
+      } else {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Sem Conexão com o Banco',
+            'O registro de visitantes exige conexão com o Supabase. Nenhum registro foi criado.');
+        }
+        return;
       }
 
       visList.push(novoVisitante);

@@ -18,15 +18,7 @@
 (function (window) {
   'use strict';
 
-  // Desativação total de dados mock e dados fictícios (Etapa 3 - Plano de Correção)
-  const ENABLE_MOCKS = false;
-  const mockDatabase = {
-    cargas: [],
-    navios: [],
-    containers: [],
-    visitantes: [],
-    documentacao_funcionarios: []
-  };
+  // A camada de visão opera apenas com dados reais; não há mais base mock.
 
   const NexusVision = {
     /**
@@ -112,97 +104,6 @@
       }
 
       return queryBuilder;
-    },
-
-    /**
-     * Retorna os dados operacionais na camada mock respeitando a camada de visão
-     */
-    getMockVisaoData: function (entityType, session) {
-      if (!session) return [];
-
-      const cargo = session.cargo;
-
-      // Visão Estratégica: acesso total de leitura
-      if (['DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(cargo)) {
-        return mockDatabase[entityType] || [];
-      }
-
-      // Módulos restritos para Inspetor / Supervisor (RF 1)
-      if (['INSPETOR', 'SUPERVISOR_GERENTE_OPERACOES'].includes(cargo)) {
-        if (entityType === 'visitantes' || entityType === 'documentacao_funcionarios') {
-          return [];
-        }
-        return mockDatabase[entityType] || [];
-      }
-
-      // Visão Própria (Cargos Operacionais):
-      return this.getMockVisaoPropria(entityType, session);
-    },
-
-    /**
-     * Retorna os dados filtrados pela Visão Própria na camada mock
-     */
-    getMockVisaoPropria: function (entityType, session) {
-      if (!session) return [];
-
-      const userMatricula = session.matricula || 'MAT-1040';
-
-      if (entityType === 'cargas') {
-        const allCargas = mockDatabase.cargas;
-
-        if (session.cargo === 'ESTIVADOR') {
-          return allCargas.filter(c => c.estivador_id === userMatricula);
-        } else if (session.cargo === 'CONFERENTE_CARGA') {
-          return allCargas.filter(c => c.conferente_id === userMatricula);
-        } else if (session.cargo === 'ARRUMADOR_CONSERTADOR') {
-          return allCargas.filter(c => c.arrumador_id === userMatricula);
-        }
-
-        return allCargas;
-      }
-
-      return mockDatabase[entityType] || [];
-    },
-
-    /**
-     * Retorna indicadores executivos consolidados para a Visão Estratégica (T1.6 / RF 1)
-     */
-    getEstrategicoMetrics: function () {
-      const cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-      const navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
-      const logs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
-
-      const total = cargas.length;
-      const recusadas = cargas.filter(c => c.status === 'RECUSADA').length;
-      const aprovadas = cargas.filter(c => c.status !== 'RECUSADA' && c.status !== 'CANCELADA').length;
-
-      const taxaAprovacao = total > 0 ? Number(((aprovadas / total) * 100).toFixed(1)) : 0;
-      const taxaRecusa = total > 0 ? Number(((recusadas / total) * 100).toFixed(1)) : 0;
-
-      const naviosMaisUtilizados = navios.map(n => ({
-        nome: n.nome,
-        operacoes: n.operacoes || 0
-      })).sort((a, b) => b.operacoes - a.operacoes).slice(0, 5);
-
-      const cargoCounts = {};
-      logs.forEach(l => {
-        const c = l.cargo || 'Operador';
-        cargoCounts[c] = (cargoCounts[c] || 0) + 1;
-      });
-
-      const produtividadePorCargo = Object.keys(cargoCounts).map(cargo => ({
-        cargo: cargo,
-        operacoes: cargoCounts[cargo]
-      }));
-
-      return {
-        taxaAprovacao,
-        taxaRecusa,
-        tempoMedioPermanenciaDias: 0,
-        totalCargasAno: total,
-        naviosMaisUtilizados,
-        produtividadePorCargo
-      };
     },
 
     /**

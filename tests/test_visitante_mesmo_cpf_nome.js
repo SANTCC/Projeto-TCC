@@ -56,7 +56,7 @@ function scriptsDaPagina(banco) {
   ];
 }
 
-async function abrirPagina({ vis = [], banco = null } = {}) {
+async function abrirPagina({ vis = [], banco = null, bancoAposCarga = null } = {}) {
   const j = criarJanela({
     url: 'https://nexusport.test/tecnico_portos.html',
     html: htmlDaPagina('tecnico_portos.html'),
@@ -71,6 +71,10 @@ async function abrirPagina({ vis = [], banco = null } = {}) {
   });
   await prontoDom(j.w);
   await aguardar(120);
+  // Cenários S1–S5 preparam o espelho local antes da carga. O banco é ligado
+  // depois para que o cadastro seja de fato persistido (o fluxo não grava mais
+  // apenas no localStorage quando não há conexão).
+  if (bancoAposCarga) j.w.nexusSupabase = bancoAposCarga;
   const feedbacks = [];
   j.w.mostrarFeedback = (tipo, titulo, msg) => feedbacks.push({ tipo, titulo, msg });
   j.feedback = feedbacks;
@@ -103,7 +107,8 @@ async function main() {
 
   // ---------- S1: CPF novo → cadastro normal --------------------------------
   log('S1. CPF nunca cadastrado segue o fluxo normal');
-  let j = await abrirPagina();
+  const bancoS1 = criarBancoFalso({ visitantes: [] });
+  let j = await abrirPagina({ bancoAposCarga: bancoS1 });
   await submeterVisita(j, { nome: 'Maria Silva', documento: CPF_MARIA, motivo: 'Reunião técnica' });
   let vis = j.lerVis();
   check('S1: visitante novo é criado (1 registro, EM_VISITA)',
@@ -115,12 +120,15 @@ async function main() {
   check('S1: formulário é limpo e fechado após o cadastro',
     j.w.document.getElementById('visNome').value === '' &&
     j.w.document.getElementById('visCrudForm').classList.contains('hidden'));
+  check('S1: registro persistido no banco (não apenas no cache local)',
+    bancoS1.tabelas.visitantes.length === 1 && bancoS1.tabelas.visitantes[0].nome === 'Maria Silva',
+    JSON.stringify(bancoS1.tabelas.visitantes));
   check('S8: S1 sem erros de runtime', j.erros.length === 0, JSON.stringify(j.erros).slice(0, 200));
   j.dom.window.close();
 
   // ---------- S2: mesmo CPF + mesmo nome (visita ativa) → aceito -------------
   log('\nS2. Mesmo CPF + mesmo nome com visita em andamento: aceito sem duplicar');
-  j = await abrirPagina({ vis: [visitaMaria()] });
+  j = await abrirPagina({ vis: [visitaMaria()], bancoAposCarga: criarBancoFalso({ visitantes: [] }) });
   await submeterVisita(j, { nome: 'Maria Silva', documento: CPF_MARIA, motivo: 'Nova reunião' });
   vis = j.lerVis();
   check('S2: cadastro aceito (feedback de sucesso, sem erro de duplicidade)',
@@ -134,7 +142,7 @@ async function main() {
 
   // ---------- S3: mesmo CPF + nome com caixa/espaços diferentes --------------
   log('\nS3. Variações apenas de caixa e espaços extras no nome = mesma pessoa');
-  j = await abrirPagina({ vis: [visitaMaria()] });
+  j = await abrirPagina({ vis: [visitaMaria()], bancoAposCarga: criarBancoFalso({ visitantes: [] }) });
   await submeterVisita(j, { nome: '   maria    SILVA ', documento: CPF_MARIA, motivo: 'Retorno' });
   vis = j.lerVis();
   check('S3: aceito como mesma pessoa (1 registro, sucesso)',
@@ -145,7 +153,7 @@ async function main() {
 
   // ---------- S4: mesmo CPF + nome diferente → recusado ----------------------
   log('\nS4. Mesmo CPF com nome diferente: recusado com mensagem clara');
-  j = await abrirPagina({ vis: [visitaMaria()] });
+  j = await abrirPagina({ vis: [visitaMaria()], bancoAposCarga: criarBancoFalso({ visitantes: [] }) });
   await submeterVisita(j, { nome: 'Maria Santos', documento: CPF_MARIA, motivo: 'Outra pessoa?' });
   vis = j.lerVis();
   check('S4: recusado com feedback de atenção (bloqueio de segurança)',
@@ -162,7 +170,8 @@ async function main() {
   // ---------- S5: mesma pessoa, visita concluída → nova visita ---------------
   log('\nS5. Mesma pessoa com visita CONCLUÍDA: nova visita aceita (histórico preservado)');
   j = await abrirPagina({
-    vis: [visitaMaria({ status: 'CONCLUIDO', data_saida: '01/10/2026 18:00:00', vistoria: 'Vistoria em Ordem - Sem Anormalidades' })]
+    vis: [visitaMaria({ status: 'CONCLUIDO', data_saida: '01/10/2026 18:00:00', vistoria: 'Vistoria em Ordem - Sem Anormalidades' })],
+    bancoAposCarga: criarBancoFalso({ visitantes: [] })
   });
   await submeterVisita(j, { nome: 'Maria Silva', documento: CPF_MARIA, motivo: 'Segunda visita' });
   vis = j.lerVis();

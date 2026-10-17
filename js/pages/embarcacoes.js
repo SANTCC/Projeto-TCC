@@ -2333,9 +2333,14 @@ document.addEventListener('DOMContentLoaded', () => {
             porto_origem: origem,
             porto_destino: destino,
             localizacao,
+            // Persiste a saída informada no cadastro: sem ela o ETA/tempo fora do
+            // porto desaparecia após recarregar a página (ficava só no cache local).
+            data_saida: novoNavio.dataSaida,
             estado_operacional: 'OPERANTE',
             qr_code_url: `QR-${imo}`
           }).select('id').single();
+
+          if (error) throw error;
 
           if (data && data.id) {
             insertedId = data.id;
@@ -2343,7 +2348,18 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar navio com Supabase:', err);
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Navio Não Cadastrado',
+              `Não foi possível gravar o navio ${nome} (${imo}) no banco de dados. Nenhum registro foi criado; tente novamente.`);
+          }
+          return;
         }
+      } else {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Sem Conexão com o Banco',
+            'O cadastro de navios exige conexão com o Supabase. Nenhum registro foi criado.');
+        }
+        return;
       }
 
       // Vinculação imediata ao berço (obrigatória para DENTRO_DO_PORTO). Se a reserva falhar,
@@ -2402,7 +2418,7 @@ document.addEventListener('DOMContentLoaded', () => {
           .from('containers')
           .select('*');
 
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           const supConts = data.map(c => {
             const navioVinculado = c.navio_id
               ? naviosList.find(n => n && n.id && String(n.id) === String(c.navio_id))
@@ -2422,21 +2438,29 @@ document.addEventListener('DOMContentLoaded', () => {
             };
           });
 
-          // Mescla contêineres locais com o banco Supabase para preservar cadastros
-          const supIdSet = new Set(supConts.map(x => (x.identificacao || '').toUpperCase()));
-          localConts.forEach(lc => {
-            if (lc.identificacao && !supIdSet.has(lc.identificacao.toUpperCase())) {
-              supConts.push(lc);
-            }
-          });
-
+          // A tabela do Supabase é a única fonte da lista: registros que existem
+          // apenas no cache local (cadastro não confirmado) não podem aparecer
+          // como se estivessem persistidos.
           containersList = supConts;
           localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
           renderContainersTable();
           return;
         }
+        if (error) {
+          console.warn('[NexusPort] Erro ao carregar contêineres do Supabase:', error);
+          containersList = [];
+          renderContainersTable();
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Contêineres Indisponíveis',
+              'Não foi possível ler os contêineres no banco de dados. A lista foi esvaziada para não exibir registros desatualizados.');
+          }
+          return;
+        }
       } catch (err) {
         console.warn('[NexusPort] Erro ao carregar contêineres do Supabase:', err);
+        containersList = [];
+        renderContainersTable();
+        return;
       }
     }
     containersList = localConts;
@@ -3010,10 +3034,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const { data: tipoBanco } = await window.nexusSupabase.from('tipos_carga').select('id').eq('nome', tipo).maybeSingle();
             if (tipoBanco && uuidTipo.test(String(tipoBanco.id))) tipoCargaId = tipoBanco.id;
           }
+          // Sem o UUID do tipo a FK ficaria nula e o contêiner perderia o
+          // vínculo com o checklist: recusa em vez de gravar dado incompleto.
+          if (!tipoCargaId) {
+            if (window.mostrarFeedback) {
+              window.mostrarFeedback('erro', 'Tipo de Carga Não Confirmado',
+                `O tipo "${tipo}" não foi localizado no banco de dados. Nenhum contêiner foi cadastrado; atualize a página e tente novamente.`);
+            }
+            return;
+          }
           const { data, error } = await window.nexusSupabase.from('containers').insert({
             numero_identificacao: identificacao,
             material_carregado: tipo,
-            ...(tipoCargaId ? { tipo_carga_id: tipoCargaId } : {}),
+            tipo_carga_id: tipoCargaId,
             data_fabricacao: dataFabr || null,
             data_ultima_manutencao: dbDataManut,
             tempo_uso_referencia: refTempo,
@@ -3021,7 +3054,9 @@ document.addEventListener('DOMContentLoaded', () => {
             qr_code_url: `QR-${identificacao}`
           }).select('id').single();
 
-          if (!error && data && data.id) {
+          if (error) throw error;
+
+          if (data && data.id) {
             insertedContId = data.id;
             newCont.id = data.id;
             newCont.rawDbId = data.id;
@@ -3035,7 +3070,18 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar contêiner com Supabase:', err);
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Contêiner Não Cadastrado',
+              `Não foi possível gravar o contêiner ${identificacao} no banco de dados. Nenhum registro foi criado; tente novamente.`);
+          }
+          return;
         }
+      } else {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Sem Conexão com o Banco',
+            'O cadastro de contêineres exige conexão com o Supabase. Nenhum registro foi criado.');
+        }
+        return;
       }
 
       newCont.tipo_carga_id = tipoCargaId;
@@ -3355,16 +3401,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const novoGnd = { id: identificacao, identificacao, estado, dataManut };
-      guindastesList.push(novoGnd);
-      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
 
       if (window.nexusSupabase) {
         try {
-          const { data: insGnd } = await window.nexusSupabase.from('guindastes').insert({
+          const { data: insGnd, error } = await window.nexusSupabase.from('guindastes').insert({
             numero_identificacao: identificacao,
             estado,
             data_ultima_manutencao: dataManut || null
           }).select('id').single();
+
+          if (error) throw error;
 
           if (window.registrarLogAlteracao) {
             await window.registrarLogAlteracao('CRIACAO', 'guindastes', insGnd ? insGnd.id : null, { numero_identificacao: identificacao, estado });
@@ -3374,8 +3420,22 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar guindaste com Supabase:', err);
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('erro', 'Guindaste Não Cadastrado',
+              `Não foi possível gravar o guindaste ${identificacao} no banco de dados. Nenhum registro foi criado; tente novamente.`);
+          }
+          return;
         }
+      } else {
+        if (window.mostrarFeedback) {
+          window.mostrarFeedback('erro', 'Sem Conexão com o Banco',
+            'O cadastro de guindastes exige conexão com o Supabase. Nenhum registro foi criado.');
+        }
+        return;
       }
+
+      guindastesList.push(novoGnd);
+      localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
 
       renderGuindastesTable();
       guindasteForm.reset();

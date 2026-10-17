@@ -25,14 +25,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const motivoBox = document.getElementById('motivoRecusaBox');
   const motivoInput = document.getElementById('motivoRecusaInput');
 
-  // Obtém modelo de checklist técnico ampliado via módulo compartilhado ou fallback
-  function getChecklistTemplate(tipoNome) {
+  // Modelo de checklist efetivamente usado na inspeção em curso. É gravado em
+  // `inspecoes.checklist_modelo_id` e limita a busca de itens ao modelo certo.
+  let checklistModeloIdAtual = null;
+
+  // Obtém modelo de checklist técnico ampliado via módulo compartilhado ou fallback.
+  // O vínculo por `tipo_carga_id` tem precedência sobre o nome (que pode variar).
+  function getChecklistTemplate(tipoNome, tipoCargaId) {
+    checklistModeloIdAtual = null;
     if (window.getNexusTipoCarga) {
-      const tipoObj = window.getNexusTipoCarga(tipoNome);
+      const tipoObj = (tipoCargaId && window.getNexusTipoCarga(tipoCargaId))
+        || window.getNexusTipoCarga(tipoNome);
       if (tipoObj && tipoObj.checklist && tipoObj.checklist.length > 0) {
+        checklistModeloIdAtual = tipoObj.modeloId || null;
         return tipoObj.checklist;
       }
     }
+    // Sem modelo cadastrado: checklist genérico de contingência. Nesse caso não
+    // há como mapear itens para o banco, então `inspecao_itens` não é gravado.
     return [
       { id: 'i1', desc: 'Conferência de Documentação Fiscal, Manifesto e BL', critico: true, categoria: 'Documentação' },
       { id: 'i2', desc: 'Conferência de Lacre de Segurança e Placas de Identificação', critico: true, categoria: 'Identificação' },
@@ -200,7 +210,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function carregarChecklistParaCarga(idCarga) {
-    cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    // Usa a lista já carregada do Supabase por popularSeletor(). Só recorre ao
+    // cache local quando ele está vazio (ex.: abertura direta por QR antes da
+    // primeira leitura) — nunca sobrescreve dados frescos do banco.
+    if (!Array.isArray(cargas) || cargas.length === 0) {
+      cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    }
     const cargasCanceladas = JSON.parse(localStorage.getItem('nexus_cargas_canceladas') || '[]');
     cargaAtual = cargas.find(c => c.id === idCarga || c.qrCode === idCarga)
       || cargasCanceladas.find(c => c.id === idCarga || c.qrCode === idCarga);
@@ -242,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (cargaTag) cargaTag.textContent = `${cargaAtual.id} • ${cargaAtual.tipo} • Porto: ${cargaAtual.portoDescarga}`;
 
-    const items = getChecklistTemplate(cargaAtual.tipo);
+    const items = getChecklistTemplate(cargaAtual.tipo, cargaAtual.tipo_carga_id);
 
     itemsEstado = {};
     checklistItemsList.innerHTML = items.map((item, index) => {
@@ -456,6 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
               observacoes: '100% dos itens críticos do checklist verificados em CONFORME'
             };
             if (inspetorId) payloadInspecao.inspetor_id = inspetorId;
+            if (checklistModeloIdAtual) payloadInspecao.checklist_modelo_id = checklistModeloIdAtual;
 
             // Histórico: a inspeção ativa anterior desta carga (se houver) deixa de ser ativa.
             const { error: desativarErr } = await window.nexusSupabase.from('inspecoes')
@@ -473,30 +489,53 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (inspDb) {
-              const { data: dbChecklistItens } = await window.nexusSupabase.from('checklist_itens').select('id, ordem');
               const itemRows = [];
               const keys = Object.keys(itemsEstado);
-              for (let idx = 0; idx < keys.length; idx++) {
-                const k = keys[idx];
-                let realItemUuid = isUUID(k) ? k : null;
-                if (!realItemUuid && dbChecklistItens && dbChecklistItens.length > 0) {
-                  const match = dbChecklistItens.find(ci => ci.ordem === idx + 1) || dbChecklistItens[idx];
-                  if (match) realItemUuid = match.id;
-                }
-                if (realItemUuid) {
-                  itemRows.push({
-                    inspecao_id: inspDb.id,
-                    checklist_item_id: realItemUuid,
-                    conforme: itemsEstado[k].conforme,
-                    observacao: itemsEstado[k].conforme ? 'Conforme' : 'Não Conforme'
-                  });
-                }
+              // Itens sempre limitados ao modelo da inspeção. Quando o modelo não
+              // foi resolvido pelo tipo, só grava se houver um único modelo na
+              // resposta ou se a lista tiver exatamente os itens do checklist —
+              // nunca mistura itens de modelos diferentes.
+              let consultaItens = window.nexusSupabase
+                .from('checklist_itens')
+                .select('id, ordem, checklist_modelo_id');
+              if (checklistModeloIdAtual) {
+                consultaItens = consultaItens.eq('checklist_modelo_id', checklistModeloIdAtual).order('ordem');
               }
-              if (itemRows.length > 0) {
-                const { error: itensErr } = await window.nexusSupabase.from('inspecao_itens').insert(itemRows);
-                if (itensErr) {
-                  pendencias.push(`Os itens do checklist não foram gravados (${itensErr.message || 'erro desconhecido'}).`);
-                  console.warn('[NexusPort] Itens do checklist não gravados:', itensErr);
+              const { data: dbChecklistItens } = await consultaItens;
+              const itensBanco = Array.isArray(dbChecklistItens) ? dbChecklistItens : [];
+              let modeloResolvido = checklistModeloIdAtual;
+              if (!modeloResolvido) {
+                const modelos = [...new Set(itensBanco.map(ci => ci.checklist_modelo_id).filter(Boolean))];
+                if (modelos.length === 1) modeloResolvido = modelos[0];
+              }
+              const listaItens = modeloResolvido
+                ? itensBanco.filter(ci => ci.checklist_modelo_id === modeloResolvido)
+                : itensBanco;
+              if (!modeloResolvido && listaItens.length !== keys.length) {
+                pendencias.push('Os itens do checklist não foram gravados: a carga não possui modelo de checklist vinculado no banco.');
+              } else {
+                for (let idx = 0; idx < keys.length; idx++) {
+                  const k = keys[idx];
+                  let realItemUuid = isUUID(k) ? k : null;
+                  if (!realItemUuid && listaItens.length > 0) {
+                    const match = listaItens.find(ci => ci.ordem === idx + 1) || listaItens[idx];
+                    if (match) realItemUuid = match.id;
+                  }
+                  if (realItemUuid) {
+                    itemRows.push({
+                      inspecao_id: inspDb.id,
+                      checklist_item_id: realItemUuid,
+                      conforme: itemsEstado[k].conforme,
+                      observacao: itemsEstado[k].conforme ? 'Conforme' : 'Não Conforme'
+                    });
+                  }
+                }
+                if (itemRows.length > 0) {
+                  const { error: itensErr } = await window.nexusSupabase.from('inspecao_itens').insert(itemRows);
+                  if (itensErr) {
+                    pendencias.push(`Os itens do checklist não foram gravados (${itensErr.message || 'erro desconhecido'}).`);
+                    console.warn('[NexusPort] Itens do checklist não gravados:', itensErr);
+                  }
                 }
               }
             }
@@ -631,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
               observacoes: motivo
             };
             if (inspetorId) payloadInspecao.inspetor_id = inspetorId;
+            if (checklistModeloIdAtual) payloadInspecao.checklist_modelo_id = checklistModeloIdAtual;
 
             // Histórico: a inspeção ativa anterior desta carga (se houver) deixa de ser ativa.
             const { error: desativarErr } = await window.nexusSupabase.from('inspecoes')
@@ -648,30 +688,53 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (inspDb) {
-              const { data: dbChecklistItens } = await window.nexusSupabase.from('checklist_itens').select('id, ordem');
               const itemRows = [];
               const keys = Object.keys(itemsEstado);
-              for (let idx = 0; idx < keys.length; idx++) {
-                const k = keys[idx];
-                let realItemUuid = isUUID(k) ? k : null;
-                if (!realItemUuid && dbChecklistItens && dbChecklistItens.length > 0) {
-                  const match = dbChecklistItens.find(ci => ci.ordem === idx + 1) || dbChecklistItens[idx];
-                  if (match) realItemUuid = match.id;
-                }
-                if (realItemUuid) {
-                  itemRows.push({
-                    inspecao_id: inspDb.id,
-                    checklist_item_id: realItemUuid,
-                    conforme: itemsEstado[k].conforme,
-                    observacao: itemsEstado[k].conforme ? 'Conforme' : 'Não Conforme'
-                  });
-                }
+              // Itens sempre limitados ao modelo da inspeção. Quando o modelo não
+              // foi resolvido pelo tipo, só grava se houver um único modelo na
+              // resposta ou se a lista tiver exatamente os itens do checklist —
+              // nunca mistura itens de modelos diferentes.
+              let consultaItens = window.nexusSupabase
+                .from('checklist_itens')
+                .select('id, ordem, checklist_modelo_id');
+              if (checklistModeloIdAtual) {
+                consultaItens = consultaItens.eq('checklist_modelo_id', checklistModeloIdAtual).order('ordem');
               }
-              if (itemRows.length > 0) {
-                const { error: itensErr } = await window.nexusSupabase.from('inspecao_itens').insert(itemRows);
-                if (itensErr) {
-                  pendencias.push(`Os itens do checklist não foram gravados (${itensErr.message || 'erro desconhecido'}).`);
-                  console.warn('[NexusPort] Itens do checklist não gravados:', itensErr);
+              const { data: dbChecklistItens } = await consultaItens;
+              const itensBanco = Array.isArray(dbChecklistItens) ? dbChecklistItens : [];
+              let modeloResolvido = checklistModeloIdAtual;
+              if (!modeloResolvido) {
+                const modelos = [...new Set(itensBanco.map(ci => ci.checklist_modelo_id).filter(Boolean))];
+                if (modelos.length === 1) modeloResolvido = modelos[0];
+              }
+              const listaItens = modeloResolvido
+                ? itensBanco.filter(ci => ci.checklist_modelo_id === modeloResolvido)
+                : itensBanco;
+              if (!modeloResolvido && listaItens.length !== keys.length) {
+                pendencias.push('Os itens do checklist não foram gravados: a carga não possui modelo de checklist vinculado no banco.');
+              } else {
+                for (let idx = 0; idx < keys.length; idx++) {
+                  const k = keys[idx];
+                  let realItemUuid = isUUID(k) ? k : null;
+                  if (!realItemUuid && listaItens.length > 0) {
+                    const match = listaItens.find(ci => ci.ordem === idx + 1) || listaItens[idx];
+                    if (match) realItemUuid = match.id;
+                  }
+                  if (realItemUuid) {
+                    itemRows.push({
+                      inspecao_id: inspDb.id,
+                      checklist_item_id: realItemUuid,
+                      conforme: itemsEstado[k].conforme,
+                      observacao: itemsEstado[k].conforme ? 'Conforme' : 'Não Conforme'
+                    });
+                  }
+                }
+                if (itemRows.length > 0) {
+                  const { error: itensErr } = await window.nexusSupabase.from('inspecao_itens').insert(itemRows);
+                  if (itensErr) {
+                    pendencias.push(`Os itens do checklist não foram gravados (${itensErr.message || 'erro desconhecido'}).`);
+                    console.warn('[NexusPort] Itens do checklist não gravados:', itensErr);
+                  }
                 }
               }
             }

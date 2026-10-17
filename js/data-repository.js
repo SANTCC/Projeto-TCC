@@ -1000,6 +1000,7 @@
       let navios = [];
       let osList = [];
 
+      let falhaLeitura = false;
       if (client) {
         // Leitura paginada: o PostgREST corta cada resposta em 1000 linhas.
         const lerTabela = (tabela) => this.lerTodasAsLinhas(() => client.from(tabela).select('*').order('id'));
@@ -1009,17 +1010,22 @@
           navios = n;
           osList = m;
         } catch (e) {
+          falhaLeitura = true;
           console.warn('[NexusRepository] Erro ao buscar indicadores operacionais:', e);
         }
+      } else {
+        falhaLeitura = true;
       }
 
-      if (cargas.length === 0) {
+      // Cache local só cobre FALHA de leitura. Banco vazio é um resultado válido:
+      // os cartões devem mostrar zero, nunca dados antigos de outro momento.
+      if (falhaLeitura && cargas.length === 0) {
         cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       }
-      if (navios.length === 0) {
+      if (falhaLeitura && navios.length === 0) {
         navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
       }
-      if (osList.length === 0) {
+      if (falhaLeitura && osList.length === 0) {
         osList = JSON.parse(localStorage.getItem('nexus_os_list') || '[]');
       }
 

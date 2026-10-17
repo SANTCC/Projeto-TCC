@@ -38,16 +38,9 @@ window.calcularTempoForaPorto = function(dataSaidaStr) {
   return `${dias}d ${horas}h fora do porto`;
 };
 
-window.gerarRelatorioPdfA4 = function(idCarga) {
-  if (window.mostrarFeedback) {
-    window.mostrarFeedback('sucesso', 'Relatório PDF A4', `Relatório PDF A4 emitido com sucesso para a carga ${idCarga}`);
-  }
-};
-
-function initQrCodeEtiquetas() {}
-function initDashboardsPesquisaRelatorios() {}
-function initLogsTrailDelegacao() {}
-function initLocalizacaoETempos() {}
+// A geração real do PDF A4 vive em js/pages/relatorios.js (Edge Function
+// relatorio-pdf). Não existe atalho local no Painel Geral: simular "PDF emitido
+// com sucesso" sem gerar arquivo era um falso positivo de operação.
 
 document.addEventListener('DOMContentLoaded', () => {
   const session = window.currentUserSession || NexusAuth.getSession();
@@ -184,66 +177,68 @@ document.addEventListener('DOMContentLoaded', () => {
     const naviosNoPorto = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
     const osAtivas = manutencoes.filter(m => m.status === 'SOLICITADA' || m.status === 'APROVADA' || m.status === 'EM_MANUTENCAO').length;
 
-    function calcularStatus(atingimento) {
-      if (atingimento >= 85) return 'IDEAL';
-      if (atingimento >= 50) return 'ATENÇÃO';
-      return 'CRÍTICO';
-    }
-
+    // Metas mensais e tempos médios NÃO existem no banco nem na especificação.
+    // Antes eram números fixos (20/30/5/5 e 1,5/2,1/18,4/4,8 h) apresentados como
+    // se fossem indicadores medidos. Agora os volumes são reais e as colunas sem
+    // fonte de dados ficam explicitamente "não configuradas".
     const rawIndicadores = [
-      { categoria: 'Contêineres Cadastrados e Alocados', volume: totalConts, meta: 20, tempo: 1.5 },
-      { categoria: 'Cargas Gerais no Fluxo Operacional', volume: totalCargas, meta: 30, tempo: 2.1 },
-      { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto, meta: 5, tempo: 18.4 },
-      { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas, meta: 5, tempo: 4.8 }
+      { categoria: 'Contêineres Cadastrados e Alocados', volume: totalConts },
+      { categoria: 'Cargas Gerais no Fluxo Operacional', volume: totalCargas },
+      { categoria: 'Embarcações em Operação no Terminal', volume: naviosNoPorto },
+      { categoria: 'Ordens de Serviço de Manutenção Ativas', volume: osAtivas }
     ];
 
-    const indicadores = rawIndicadores.map(item => {
-      const atingimento = item.meta > 0 ? Math.round((item.volume / item.meta) * 100) : 0;
-      const status = calcularStatus(atingimento);
-      return {
-        categoria: item.categoria,
-        volume: item.volume,
-        meta: item.meta,
-        atingimento,
-        tempo: item.tempo,
-        status
-      };
-    });
+    const indicadores = rawIndicadores.map(item => ({
+      categoria: item.categoria,
+      volume: item.volume,
+      meta: null,
+      atingimento: null,
+      tempo: null,
+      status: 'SEM META'
+    }));
 
     // Backlog 3 (7f) / Tarefa 14: mantém a cópia em memória para a exportação da planilha
     window.__nexusIndicadoresExecutivos = indicadores;
 
     execTableBody.innerHTML = indicadores.map((i, idx) => {
-      const pctBarra = Math.max(0, Math.min(100, Number(i.atingimento) || 0));
+      const temMeta = i.meta != null && Number.isFinite(Number(i.meta));
+      const temAtingimento = i.atingimento != null && Number.isFinite(Number(i.atingimento));
+      const temTempo = i.tempo != null && Number.isFinite(Number(i.tempo));
+      const pctBarra = temAtingimento ? Math.max(0, Math.min(100, Number(i.atingimento))) : 0;
       const corBarra = i.status === 'IDEAL'
         ? 'bg-emerald-500'
         : i.status === 'ATENÇÃO'
           ? 'bg-amber-500'
-          : 'bg-rose-500';
+          : i.status === 'CRÍTICO'
+            ? 'bg-rose-500'
+            : 'bg-slate-400';
       const corTextoPct = i.status === 'IDEAL'
         ? 'text-emerald-700 dark:text-emerald-400'
         : i.status === 'ATENÇÃO'
           ? 'text-amber-700 dark:text-amber-400'
-          : 'text-rose-700 dark:text-rose-400';
+          : i.status === 'CRÍTICO'
+            ? 'text-rose-700 dark:text-rose-400'
+            : 'text-slate-600 dark:text-slate-300';
       return `
       <tr class="${idx % 2 === 0 ? 'bg-slate-50/70 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'} hover:bg-indigo-50/50 dark:hover:bg-slate-800 transition-colors">
         <td class="p-3.5 text-left font-bold text-nexus-900 dark:text-white">${esc(i.categoria)}</td>
         <td class="p-3.5 text-right font-mono font-bold text-slate-800 dark:text-slate-100">${esc(i.volume.toLocaleString('pt-BR'))}</td>
-        <td class="p-3.5 text-right font-mono text-slate-600 dark:text-slate-400">${esc(i.meta.toLocaleString('pt-BR'))}</td>
+        <td class="p-3.5 text-right font-mono text-slate-600 dark:text-slate-400">${temMeta ? esc(i.meta.toLocaleString('pt-BR')) : '—'}</td>
         <td class="p-3.5 text-right font-mono font-bold ${esc(corTextoPct)}">
-          <div class="inline-flex items-center justify-end gap-2">
+          ${temAtingimento ? `<div class="inline-flex items-center justify-end gap-2">
             <div class="w-16 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden hidden sm:block">
               <div class="h-full ${esc(corBarra)} rounded-full" style="width: ${esc(pctBarra)}%"></div>
             </div>
             <span>${esc(i.atingimento)}%</span>
-          </div>
+          </div>` : '—'}
         </td>
-        <td class="p-3.5 text-right font-mono text-slate-700 dark:text-slate-300">${esc(String(i.tempo).replace('.', ','))} h</td>
+        <td class="p-3.5 text-right font-mono text-slate-700 dark:text-slate-300">${esc(temTempo ? String(i.tempo).replace('.', ',') + ' h' : '—')}</td>
         <td class="p-3.5 text-center">
           <span class="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wide ${
             i.status === 'IDEAL' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60' :
             i.status === 'ATENÇÃO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60' :
-            'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60'
+            i.status === 'CRÍTICO' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60' :
+            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
           }">${esc(i.status)}</span>
         </td>
       </tr>
@@ -252,25 +247,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const execTableFoot = document.getElementById('indicadoresExecutivosTableFoot');
     if (execTableFoot) {
+      const temMeta = indicadores.some((item) => item.meta != null && Number.isFinite(Number(item.meta)));
+      const temTempo = indicadores.some((item) => item.tempo != null && Number.isFinite(Number(item.tempo)));
       const somaVolume = indicadores.reduce((acc, item) => acc + (Number(item.volume) || 0), 0);
       const somaMeta = indicadores.reduce((acc, item) => acc + (Number(item.meta) || 0), 0);
-      const atingimentoGeral = somaMeta > 0 ? Math.round((somaVolume / somaMeta) * 100) : 0;
-      const mediaTempo = indicadores.length > 0
+      const atingimentoGeral = temMeta && somaMeta > 0 ? Math.round((somaVolume / somaMeta) * 100) : null;
+      const mediaTempo = temTempo
         ? (indicadores.reduce((acc, item) => acc + (Number(item.tempo) || 0), 0) / indicadores.length).toFixed(1)
-        : '0.0';
-      const statusGeral = calcularStatus(atingimentoGeral);
+        : null;
+      const statusGeral = atingimentoGeral == null
+        ? 'SEM META'
+        : (atingimentoGeral >= 85 ? 'IDEAL' : (atingimentoGeral >= 50 ? 'ATENÇÃO' : 'CRÍTICO'));
       execTableFoot.innerHTML = `
         <tr>
           <td class="p-3.5 text-left font-display font-bold uppercase tracking-wider text-nexus-900 dark:text-white">Consolidado Geral do Terminal</td>
           <td class="p-3.5 text-right font-mono font-bold">${esc(somaVolume.toLocaleString('pt-BR'))}</td>
-          <td class="p-3.5 text-right font-mono">${esc(somaMeta.toLocaleString('pt-BR'))}</td>
-          <td class="p-3.5 text-right font-mono font-bold text-nexus-500 dark:text-indigo-400">${esc(atingimentoGeral)}%</td>
-          <td class="p-3.5 text-right font-mono">${esc(String(mediaTempo).replace('.', ','))} h (média)</td>
+          <td class="p-3.5 text-right font-mono">${temMeta ? esc(somaMeta.toLocaleString('pt-BR')) : '—'}</td>
+          <td class="p-3.5 text-right font-mono font-bold text-nexus-500 dark:text-indigo-400">${esc(atingimentoGeral == null ? '—' : atingimentoGeral + '%')}</td>
+          <td class="p-3.5 text-right font-mono">${esc(mediaTempo == null ? '—' : String(mediaTempo).replace('.', ',') + ' h (média)')}</td>
           <td class="p-3.5 text-center">
             <span class="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wide ${
               statusGeral === 'IDEAL' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' :
               statusGeral === 'ATENÇÃO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' :
-              'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+              statusGeral === 'CRÍTICO' ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' :
+              'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
             }">${esc(statusGeral)}</span>
           </td>
         </tr>
@@ -432,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
       icone = 'pie_chart';
       const patioCargas = (indic.ocupacaoPatio.lista || []).map(c => `• Carga ${c.qr_code_url ? c.qr_code_url.replace('QR-', '') : (c.id || c.codigo)}: ${c.natureza || c.tipo || 'Geral'} [${c.porto_descarga || c.portoDescarga || 'Setor Pátio'}] (${c.status_fluxo || c.status || 'PÁTIO'})`);
       const detalheLista = patioCargas.length > 0 ? `\n\nCargas Ocupando o Pátio:\n${patioCargas.join('\n')}` : '\n\nNenhuma carga ocupando o pátio no momento.';
-      detalhe = `Capacidade Máxima Regulamentar: ${indic.ocupacaoPatio.capacidade} posições (100 Hectares / 1.000.000 m²)\nCargas Ocupando o Pátio: ${indic.ocupacaoPatio.ocupados}\nTaxa de Ocupação Atual: ${indic.ocupacaoPatio.taxa}%${detalheLista}`;
+      detalhe = `Limite operacional configurado: ${indic.ocupacaoPatio.capacidade} cargas ativas\nCargas Ocupando o Pátio: ${indic.ocupacaoPatio.ocupados}\nTaxa de Ocupação Atual: ${indic.ocupacaoPatio.taxa}%${detalheLista}`;
     } else if (tipo === 'PREVENTIVA_SUGERIDA') {
       // Item 1.8: Usa O MESMO RETORNO de buscarEquipamentosPreventivaSugerida()
       titulo = 'Manutenções Preventivas Sugeridas (> 3 Anos de Uso)';
@@ -899,13 +899,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const operadorNome = (session && session.nome) || 'Operador Portuário';
     const operadorCargo = (session && (session.cargo_nome || session.cargo)) || 'Gestão Operacional';
 
+    // Metas e tempos não existem no banco/especificação: quando ausentes, a
+    // planilha mostra "—" em vez de transformar null em zero e inventar
+    // atingimento/status.
+    const temMeta = dados.some((i) => i.meta != null && Number.isFinite(Number(i.meta)));
+    const temTempo = dados.some((i) => i.tempo != null && Number.isFinite(Number(i.tempo)));
     const somaVolume = dados.reduce((acc, i) => acc + (Number(i.volume) || 0), 0);
     const somaMeta = dados.reduce((acc, i) => acc + (Number(i.meta) || 0), 0);
-    const atingimentoGeral = somaMeta > 0 ? Math.round((somaVolume / somaMeta) * 100) : 0;
-    const mediaTempo = dados.length > 0
+    const atingimentoGeral = temMeta && somaMeta > 0 ? Math.round((somaVolume / somaMeta) * 100) : null;
+    const mediaTempo = temTempo
       ? (dados.reduce((acc, i) => acc + (Number(i.tempo) || 0), 0) / dados.length).toFixed(1)
-      : '0.0';
-    const statusGeral = atingimentoGeral >= 85 ? 'IDEAL' : (atingimentoGeral >= 50 ? 'ATENÇÃO' : 'CRÍTICO');
+      : null;
+    const statusGeral = atingimentoGeral == null
+      ? 'SEM META'
+      : (atingimentoGeral >= 85 ? 'IDEAL' : (atingimentoGeral >= 50 ? 'ATENÇÃO' : 'CRÍTICO'));
 
     const estiloBadgeStatus = (status) => {
       if (status === 'IDEAL') {
@@ -914,25 +921,31 @@ document.addEventListener('DOMContentLoaded', () => {
       if (status === 'ATENÇÃO') {
         return 'background-color:#FEF3C7;color:#92400E;font-weight:700;text-align:center;border:1px solid #FDE68A;';
       }
-      return 'background-color:#FFE4E6;color:#9F1239;font-weight:700;text-align:center;border:1px solid #FECDD3;';
+      if (status === 'CRÍTICO') {
+        return 'background-color:#FFE4E6;color:#9F1239;font-weight:700;text-align:center;border:1px solid #FECDD3;';
+      }
+      return 'background-color:#E2E8F0;color:#475569;font-weight:700;text-align:center;border:1px solid #CBD5E1;';
     };
 
     const corTextoAtingimento = (status) => {
       if (status === 'IDEAL') return '#047857';
       if (status === 'ATENÇÃO') return '#B45309';
-      return '#BE123C';
+      if (status === 'CRÍTICO') return '#BE123C';
+      return '#475569';
     };
 
     const linhasHtml = dados.map((i, idx) => {
       const bgLinha = idx % 2 === 0 ? '#F8FAFC' : '#FFFFFF';
-      const tempoFmt = String(i.tempo).replace('.', ',');
+      const temMetaLinha = i.meta != null && Number.isFinite(Number(i.meta));
+      const temAtingimentoLinha = i.atingimento != null && Number.isFinite(Number(i.atingimento));
+      const temTempoLinha = i.tempo != null && Number.isFinite(Number(i.tempo));
       return `
         <tr style="height:30px;">
           <td style="background-color:${esc(bgLinha)};color:#141A29;font-family:'Segoe UI',Inter,Arial,sans-serif;font-size:10.5pt;font-weight:700;padding:8px 12px;border:1px solid #CBD5E1;text-align:left;">${esc(i.categoria)}</td>
           <td style="background-color:${esc(bgLinha)};color:#1E293B;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:700;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;mso-number-format:'\\#\\,\\#\\#0';">${esc(Number(i.volume || 0).toLocaleString('pt-BR'))}</td>
-          <td style="background-color:${esc(bgLinha)};color:#475569;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:600;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;mso-number-format:'\\#\\,\\#\\#0';">${esc(Number(i.meta || 0).toLocaleString('pt-BR'))}</td>
+          <td style="background-color:${esc(bgLinha)};color:#475569;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:600;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;mso-number-format:'\\#\\,\\#\\#0';">${temMetaLinha ? esc(Number(i.meta).toLocaleString('pt-BR')) : '—'}</td>
           <td style="background-color:${esc(bgLinha)};color:${esc(corTextoAtingimento(i.status))};font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:700;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;">${esc(i.atingimento)}%</td>
-          <td style="background-color:${esc(bgLinha)};color:#334155;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:600;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;">${esc(tempoFmt)} h</td>
+          <td style="background-color:${esc(bgLinha)};color:#334155;font-family:Consolas,'Courier New',monospace;font-size:10.5pt;font-weight:600;padding:8px 12px;border:1px solid #CBD5E1;text-align:right;">${esc(temTempoLinha ? String(i.tempo).replace('.', ',') + ' h' : '—')}</td>
           <td style="font-family:Consolas,'Courier New',monospace;font-size:10pt;padding:8px 12px;${esc(estiloBadgeStatus(i.status))}">${esc(i.status)}</td>
         </tr>`;
     }).join('');

@@ -27,6 +27,39 @@ document.addEventListener('DOMContentLoaded', () => {
   const esc = window.nexusEsc || (window.NexusSecurity && window.NexusSecurity.escapeHtml);
   const jsArg = window.nexusJsArg || (window.NexusSecurity && window.NexusSecurity.jsString);
 
+  // ── Autoria (FK → funcionarios.id) ────────────────────────────────
+  // `solicitado_por` e `registrado_por` são uuid com FK para funcionarios(id).
+  // Sessões antigas podem trazer a matrícula em `session.id`; gravar texto ali
+  // fazia o insert falhar (22P02) e a operação não era registrada.
+  const UUID_FUNCIONARIO_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  async function resolverFuncionarioId() {
+    if (UUID_FUNCIONARIO_RE.test(String(session.id || ''))) return session.id;
+    const chave = session.matricula || session.codigo_individual || session.codigo || '';
+    if (!chave) return null;
+    if (window.nexusSupabase) {
+      try {
+        for (const campo of ['matricula', 'codigo_individual']) {
+          const { data } = await window.nexusSupabase
+            .from('funcionarios')
+            .select('id')
+            .eq(campo, chave)
+            .maybeSingle();
+          if (data && UUID_FUNCIONARIO_RE.test(String(data.id || ''))) return data.id;
+        }
+      } catch (e) {
+        console.warn('[NexusPort] Não foi possível resolver o funcionário da sessão:', e);
+      }
+    }
+    try {
+      const locais = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+      const achado = (Array.isArray(locais) ? locais : []).find(f => f
+        && (f.matricula === chave || f.codigo_individual === chave || f.codigo === chave));
+      if (achado && UUID_FUNCIONARIO_RE.test(String(achado.id || ''))) return achado.id;
+    } catch (e) { /* cache local inválido */ }
+    return null;
+  }
+
+
   const toggleOsBtn = document.getElementById('toggleOsFormBtn');
   const osForm = document.getElementById('osForm');
   const osTableBody = document.getElementById('osTableBody');
@@ -342,10 +375,20 @@ document.addEventListener('DOMContentLoaded', () => {
           .update({ estado: 'EM_MANUTENCAO' })
           .eq('numero_identificacao', identificacao);
 
+        // O vínculo com o guindaste é uma FK real, não texto livre: sem
+        // `guindaste_id` a OS ficava órfã e não aparecia no histórico do ativo.
+        const { data: gndDb } = await window.nexusSupabase
+          .from('guindastes')
+          .select('id')
+          .eq('numero_identificacao', identificacao)
+          .maybeSingle();
+
         await window.nexusSupabase.from('manutencoes').insert({
           entidade_tipo: 'GUINDASTE',
+          guindaste_id: gndDb ? gndDb.id : null,
           descricao: `[${newOsId}][ALTA] Guindaste: ${identificacao} - ${descricao}`,
-          status: 'APROVADA'
+          status: 'APROVADA',
+          solicitado_por: await resolverFuncionarioId()
         });
 
         if (window.registrarTrailDecisao) {
@@ -394,9 +437,17 @@ document.addEventListener('DOMContentLoaded', () => {
           .update({ estado: 'OPERANTE', data_ultima_manutencao: todayStr })
           .eq('numero_identificacao', identificacao);
 
+        const { data: gndHist } = await window.nexusSupabase
+          .from('guindastes')
+          .select('id')
+          .eq('numero_identificacao', identificacao)
+          .maybeSingle();
+
         await window.nexusSupabase.from('historico_manutencoes').insert({
+          guindaste_id: gndHist ? gndHist.id : null,
           data_manutencao: todayStr,
-          descricao_servicos: `Conclusão da manutenção do Guindaste ${identificacao}`
+          descricao_servicos: `Conclusão da manutenção do Guindaste ${identificacao}`,
+          registrado_por: await resolverFuncionarioId()
         });
 
         const isUuid = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -816,10 +867,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (window.nexusSupabase) {
         try {
+          // Resolve a FK do equipamento escolhido (navio, contêiner ou
+          // guindaste). Sem a FK, a OS só existia como texto na descrição.
+          const nomeEquip = equipamento
+            .replace(/^(Navio|Cont[eê]iner|Container|Guindaste)\s+/i, '')
+            .trim();
+          const fkPayload = {};
+          try {
+            if (entidadeTipo === 'NAVIO' && nomeEquip) {
+              const { data: navioDb } = await window.nexusSupabase.from('navios').select('id').eq('nome', nomeEquip).maybeSingle();
+              if (navioDb) fkPayload.navio_id = navioDb.id;
+            } else if (entidadeTipo === 'CONTAINER' && nomeEquip) {
+              const { data: contDb } = await window.nexusSupabase.from('containers').select('id').eq('numero_identificacao', nomeEquip).maybeSingle();
+              if (contDb) fkPayload.container_id = contDb.id;
+            } else if (entidadeTipo === 'GUINDASTE' && nomeEquip) {
+              const { data: gndDb } = await window.nexusSupabase.from('guindastes').select('id').eq('numero_identificacao', nomeEquip).maybeSingle();
+              if (gndDb) fkPayload.guindaste_id = gndDb.id;
+            }
+          } catch (eFk) {
+            console.warn('[NexusPort] Não foi possível resolver o equipamento da OS:', eFk);
+          }
+
           const { data: insOs } = await window.nexusSupabase.from('manutencoes').insert({
             entidade_tipo: entidadeTipo,
+            ...fkPayload,
             descricao: `[${newId}][${prioridade}] Equipamento: ${equipamento} - ${descricao}`,
-            status: 'SOLICITADA'
+            status: 'SOLICITADA',
+            solicitado_por: await resolverFuncionarioId()
           }).select('id').single();
 
           if (window.registrarLogAlteracao) {

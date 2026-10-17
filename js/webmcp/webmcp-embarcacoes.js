@@ -330,6 +330,15 @@
     }
   };
 
+  // Sem catálogo lido do banco, nenhum tipo é aceito (falha fechada).
+  async function garantirCatalogoTipos() {
+    if (typeof D.assegurarTiposCarga === 'function') return D.assegurarTiposCarga();
+    return true;
+  }
+  function catalogoTipos() {
+    return typeof D.tiposCarga === 'function' ? D.tiposCarga() : [];
+  }
+
   const cadastrarContainer = {
     nome: 'cadastrar_container',
     titulo: 'Cadastrar contêiner',
@@ -349,9 +358,15 @@
       required: ['identificacao', 'tipo', 'data_fabricacao', 'referencia_tempo'],
       additionalProperties: false
     },
-    precondicao: (args) => {
+    precondicao: async (args) => {
       if (args.identificacao !== undefined) { const v = NexusCodigos.validarConteiner(args.identificacao); if (!v.ok) return { codigo: 'FORMATO_INVALIDO', mensagem: v.erro }; }
-      if (args.tipo !== undefined && window.getNexusTipoCarga?.(args.tipo)?.nome !== args.tipo) return { codigo: 'TIPO_INVALIDO', mensagem: 'Selecione um tipo de carga cadastrado, como no agendamento de cargas.' };
+      if (args.tipo !== undefined) {
+        // Somente o catálogo lido do banco. O catálogo estático de referência
+        // não pode validar (nem sugerir) um tipo que talvez não exista.
+        const catalogoOk = await garantirCatalogoTipos();
+        if (!catalogoOk) return { codigo: 'CATALOGO_INDISPONIVEL', mensagem: 'Não foi possível ler os tipos de carga no banco de dados; o contêiner não pode ser validado.' };
+        if (!catalogoTipos().some((t) => t.nome === args.tipo)) return { codigo: 'TIPO_INVALIDO', mensagem: 'Selecione um tipo de carga cadastrado, como no agendamento de cargas.' };
+      }
       if (args.identificacao !== undefined && D.containers().some((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(NexusCodigos.formatarConteiner(args.identificacao)))) {
         return { codigo: 'CONTAINER_DUPLICADO', mensagem: `O contêiner ${NexusCodigos.formatarConteiner(args.identificacao)} já está cadastrado.` };
       }
