@@ -58,9 +58,18 @@ document.addEventListener('DOMContentLoaded', () => {
     return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
   }
 
-  function resolverCodigoContainerLegivel(ref) {
+  // Performance optimization: accepts an optional pre-indexed Map (mapaConts)
+  // to perform O(1) container resolution instead of parsing localStorage and O(N) array search on every call.
+  function resolverCodigoContainerLegivel(ref, mapaConts) {
     const bruto = String(ref || '').trim();
     if (!bruto) return '';
+    if (mapaConts && mapaConts instanceof Map) {
+      const achado = mapaConts.get(bruto.toLowerCase());
+      if (achado && (achado.identificacao || achado.numero_identificacao)) {
+        return String(achado.identificacao || achado.numero_identificacao).trim();
+      }
+      return bruto;
+    }
     try {
       const lista = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
       if (Array.isArray(lista)) {
@@ -75,10 +84,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return bruto;
   }
 
-  function formatarSetorPatioLegivel(setor) {
+  function formatarSetorPatioLegivel(setor, mapaConts) {
     const txt = String(setor || '');
     return txt.replace(/^(Cont[eê]iner\s+)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, (_, prefixo, uuid) => {
-      const cod = resolverCodigoContainerLegivel(uuid);
+      const cod = resolverCodigoContainerLegivel(uuid, mapaConts);
       return cod ? `${prefixo}${cod}` : txt;
     });
   }
@@ -1186,6 +1195,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Herança pós-vinculação: contêiner que ganhou navio atualiza as cargas
     sincronizarNaviosHerdados();
+    // Performance optimization: Pre-index container map once for O(1) lookups during table rendering
+    const mapaConts = contemineresPorIdentificacao();
     const naviosLocais = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
 
     const filterNavioVal = (document.getElementById('filterNavio')?.value || '').trim().toLowerCase();
@@ -1211,7 +1222,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const userItems = cargasAtivas.filter(c => {
       if (filterNavioVal && !(c.navio || '').toLowerCase().includes(filterNavioVal)) return false;
       if (filterContVal) {
-        const contLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '');
+        const contLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '', mapaConts);
         const contHay = `${c.container || ''} ${c.container_id || ''} ${contLegivel}`.toLowerCase();
         if (!contHay.includes(filterContVal)) return false;
       }
@@ -1227,7 +1238,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Busca rápida livre (Backlog 3 - 7b): código, QR, tipo, natureza, contêiner, navio
       if (filterBuscaVal) {
-        const contLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '');
+        const contLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '', mapaConts);
         const haystack = `${c.id || ''} ${c.qrCode || ''} ${c.tipo || ''} ${c.natureza || ''} ${c.container || ''} ${contLegivel} ${c.navio || ''} ${c.estivador || ''}`.toLowerCase();
         if (!haystack.includes(filterBuscaVal)) return false;
       }
@@ -1332,8 +1343,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const etaLinha = etaCargaTexto(c, naviosLocais);
-      const containerLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '');
-      const setorLegivel = formatarSetorPatioLegivel(c.portoDescarga);
+      const containerLegivel = resolverCodigoContainerLegivel(c.container || c.container_id || '', mapaConts);
+      const setorLegivel = formatarSetorPatioLegivel(c.portoDescarga, mapaConts);
       const destinoFinalLegivel = String(c.destino || '').trim() || 'Destino não informado';
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">

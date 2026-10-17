@@ -2,13 +2,27 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" /> />
   <title>NexusPort — Pilar 1: Acesso, Identidade & Camadas de Visão RBAC</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Fontes locais em vez de Google Fonts CDN -->
+  
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/montserrat-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin />
+
+  <link rel="stylesheet" href="css/fonts.css?v=20261012-icons" />
+
+    
+  <link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/montserrat-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/jetbrains-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <script src="https://cdn.tailwindcss.com">
+  <link rel="stylesheet" href="css/fonts.css?v=20261012-icons" />
+</script>
+
   <script>
     tailwind.config = {
       theme: {
@@ -38,66 +52,64 @@
       }
     }
   </script>
-  <style>
-    .sidebar-collapsed { width: 4.5rem; }
-    .sidebar-collapsed .sidebar-text { display: none; }
-    .sidebar-collapsed .sidebar-header { justify-content: center; }
-    .sidebar-collapsed .logo-full { display: none; }
-    .sidebar-collapsed .logo-mini { display: block; }
-    .logo-mini { display: none; }
-    .transition-width { transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
-  </style>
+
+  <script>
+    // Material Symbols Outlined — ícones consistentes em todo o app
+    // A fonte é carregada via css/fonts.css
+    // Class: material-symbols-outlined
+  </script>
 </head>
-<body class="bg-[#F5F7FA] text-[#222222] font-sans antialiased flex h-screen overflow-hidden">
+
+<body class="bg-nexus-50 text-nexus-900 font-sans antialiased flex h-screen overflow-hidden">
 
   <!-- SIDEBAR RETRÁTIL -->
-  <aside id="sidebar" class="bg-[#1E293B] text-white flex flex-col justify-between transition-width w-64 shrink-0 h-full select-none z-30 shadow-xl border-r border-[#2A3B53]">
+  <aside id="sidebar" class="bg-nexus-900 text-white flex flex-col justify-between transition-width w-64 shrink-0 h-full select-none z-30 shadow-xl border-r border-nexus-border">
     <div>
       <!-- Topo da Sidebar -->
-      <div class="sidebar-header h-16 flex items-center justify-between px-4 border-b border-[#2A3B53]">
+      <div class="sidebar-header h-16 flex items-center justify-between px-4 border-b border-nexus-border">
         <div class="flex items-center gap-3 overflow-hidden">
-          <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjB5KtwhvbXd-hczRKx1GZCrsw3JYpEKjUHWm-6KinABpQn_LSAkvqlKYvBNhowI5dhSKDnXxUvB2x3DHbWU-Sip1I3Zi_hME5H5OSO96agtUNBoBpVkY18UyQOZb8qbzz0u84F7aj4627jmU9j3wFwPf0Rmn0ZrO7lmgzzrSC9SKk0Sm-hih3FmQKeG3Sg9XouIVZzzTVjF493md5nzowwP0gOIw3eLx8QQwerje3DA5w1Yef3DqXyoaPSF1PG0tw4g" alt="NexusPort Logo" class="h-9 w-9 object-contain rounded shrink-0" />
+          <img src="design/logo_porto.webp" type="image/webp" width="24" height="24" alt="NexusPort Logo" class="h-6 w-6 object-contain rounded shrink-0" />
           <div class="sidebar-text flex flex-col">
             <span class="font-display font-bold text-base tracking-wide text-white leading-tight">NexusPort</span>
-            <span class="text-[10px] text-gray-400 uppercase tracking-wider font-mono">Terminal STS-01</span>
+            <span class="text-[10px] text-slate-400 uppercase tracking-wider font-mono">Terminal STS-01</span>
           </div>
         </div>
-        <button id="toggle-sidebar-btn" class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-[#2A3B53] transition-colors focus:outline-none" title="Recolher / Expandir Menu">
-          <i data-lucide="panel-left" class="w-5 h-5"></i>
+        <button id="toggle-sidebar-btn" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-nexus-800 transition-colors focus:outline-none" title="Recolher / Expandir Menu">
+          <i class="material-symbols-outlined w-5 h-5">menu</i>
         </button>
       </div>
 
       <!-- Navegação Universal dos 7 Pilares -->
       <div class="px-3 py-4 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)]">
         <div>
-          <div class="sidebar-text px-3 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider font-mono">7 Pilares Operacionais</div>
+          <div class="sidebar-text px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider font-mono">7 Pilares Operacionais</div>
           <nav class="space-y-1">
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#445987] text-white font-medium text-sm transition-all shadow-sm">
-              <i data-lucide="shield-check" class="w-5 h-5 shrink-0 text-sky-300"></i>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-nexus-500 text-white font-medium text-sm transition-all shadow-sm">
+              <i class="material-symbols-outlined w-5 h-5 shrink-0 text-sky-300">shield-check</i>
               <span class="sidebar-text truncate">Pilar 1: Acesso & RBAC</span>
             </a>
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-[#2A3B53] font-medium text-sm transition-all">
-              <i data-lucide="qr-code" class="w-5 h-5 shrink-0 text-emerald-400"></i>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-nexus-800 font-medium text-sm transition-all">
+              <i class="material-symbols-outlined w-5 h-5 shrink-0 text-emerald-400">qr-code</i>
               <span class="sidebar-text truncate">Pilar 2: Agendamento & QR</span>
             </a>
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-[#2A3B53] font-medium text-sm transition-all">
-              <i data-lucide="clipboard-check" class="w-5 h-5 shrink-0 text-amber-400"></i>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-nexus-800 font-medium text-sm transition-all">
+              <i class="material-symbols-outlined w-5 h-5 shrink-0 text-amber-400">clipboard-check</i>
               <span class="sidebar-text truncate">Pilar 3: Inspeção Formal</span>
             </a>
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-[#2A3B53] font-medium text-sm transition-all">
-              <i data-lucide="container" class="w-5 h-5 shrink-0 text-indigo-300"></i>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-nexus-800 font-medium text-sm transition-all">
+              <i class="material-symbols-outlined w-5 h-5 shrink-0 text-indigo-300">container</i>
               <span class="sidebar-text truncate">Pilar 4: Pátio & Vinculação</span>
             </a>
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-[#2A3B53] font-medium text-sm transition-all">
-              <i data-lucide="ship" class="w-5 h-5 shrink-0 text-blue-400"></i>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-nexus-800 font-medium text-sm transition-all">
+              <i class="material-symbols-outlined w-5 h-5 shrink-0 text-sky-300">ship</i>
               <span class="sidebar-text truncate">Pilar 5: Despacho Supervisor</span>
             </a>
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-[#2A3B53] font-medium text-sm transition-all">
-              <i data-lucide="layout-dashboard" class="w-5 h-5 shrink-0 text-cyan-300"></i>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-nexus-800 font-medium text-sm transition-all">
+              <i class="material-symbols-outlined w-5 h-5 shrink-0 text-cyan-300">layout-dashboard</i>
               <span class="sidebar-text truncate">Pilar 6: Painel & Trail</span>
             </a>
-            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:text-white hover:bg-[#2A3B53] font-medium text-sm transition-all">
-              <i data-lucide="smartphone" class="w-5 h-5 shrink-0 text-teal-300"></i>
+            <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-nexus-800 font-medium text-sm transition-all">
+              <i class="material-symbols-outlined w-5 h-5 shrink-0 text-teal-300">smartphone</i>
               <span class="sidebar-text truncate">Pilar 7: Leitura Campo Mobile</span>
             </a>
           </nav>
@@ -106,12 +118,12 @@
     </div>
 
     <!-- Rodapé da Sidebar: Usuário Autenticado -->
-    <div class="p-3 border-t border-[#2A3B53] bg-[#16202E]">
+    <div class="p-3 border-t border-nexus-border bg-nexus-dark-card">
       <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-full bg-[#445987] flex items-center justify-center font-mono font-bold text-xs shrink-0 text-white">SP</div>
+        <div class="w-8 h-8 rounded-full bg-nexus-500 flex items-center justify-center font-mono font-bold text-xs shrink-0 text-white">SP</div>
         <div class="sidebar-text flex flex-col overflow-hidden">
           <span class="text-xs font-semibold text-white truncate">Carlos Mendonça</span>
-          <span class="text-[11px] font-mono text-gray-400 truncate">SUPERVISOR #OP-8821</span>
+          <span class="text-[11px] font-mono text-slate-400 truncate">SUPERVISOR #OP-8821</span>
         </div>
       </div>
     </div>
@@ -119,15 +131,16 @@
 
   <!-- CONTEÚDO PRINCIPAL -->
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
     <!-- Topbar Institucional -->
-    <header class="h-16 bg-white border-b border-[#E1E5ED] flex items-center justify-between px-6 shrink-0">
+    <header class="h-16 bg-white border-b border-nexus-border flex items-center justify-between px-6 shrink-0">
       <div class="flex items-center gap-4">
-        <button id="mobile-menu-btn" class="md:hidden p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100">
-          <i data-lucide="menu" class="w-5 h-5"></i>
+        <button id="mobile-menu-btn" class="md:hidden p-2 text-slate-600 hover:text-nexus-900 rounded-lg hover:bg-slate-100">
+          <i class="material-symbols-outlined w-5 h-5">menu</i>
         </button>
         <div>
-          <span class="text-xs font-mono font-semibold uppercase tracking-wider text-[#445987] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">RF 01 & RN 15 — Segurança & Permissões</span>
-          <h1 class="font-display font-bold text-lg text-[#1E293B] leading-tight">Pilar 1 — Acesso, Identidade & Camadas de Visão RBAC</h1>
+          <span class="text-xs font-mono font-semibold uppercase tracking-wider text-nexus-500 bg-slate-100 px-2 py-0.5 rounded border border-nexus-border">RF 01 & RN 15 — Segurança & Permissões</span>
+          <h1 class="font-display font-bold text-lg text-nexus-900 leading-tight">Pilar 1 — Acesso, Identidade & Camadas de Visão RBAC</h1>
         </div>
       </div>
       <div class="flex items-center gap-3">
@@ -135,8 +148,8 @@
           <span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
           <span class="font-medium">Sessão Autenticada Ativa</span>
         </div>
-        <div class="text-right font-mono text-xs text-gray-500 border-l border-[#E1E5ED] pl-3">
-          <div>TOKEN: <span class="font-bold text-[#1E293B]">NX-PORT-9941</span></div>
+        <div class="text-right font-mono text-xs text-slate-500 border-l border-nexus-border pl-3">
+          <div>TOKEN: <span class="font-bold text-nexus-900">NX-PORT-9941</span></div>
           <div class="text-[10px]">TERMINAL INTERNO</div>
         </div>
       </div>
@@ -144,60 +157,62 @@
 
     <!-- Scrollable Body Content -->
     <main class="flex-1 overflow-y-auto p-6 space-y-6">
-      
+
       <!-- Banner Didático de Regra de Negócio (RF 1) -->
-      <div class="bg-white border border-[#E1E5ED] rounded-xl p-5 shadow-sm">
+      <div class="bg-white border border-nexus-border rounded-xl p-5 shadow-sm">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="flex items-start gap-3">
-            <div class="p-2.5 rounded-lg bg-blue-50 text-[#445987] border border-blue-100">
-              <i data-lucide="key-round" class="w-6 h-6"></i>
+            <div class="p-2.5 rounded-lg bg-nexus-100 border border-nexus-border">
+              <i class="material-symbols-outlined w-6 h-6 text-nexus-500">key-round</i>
             </div>
             <div>
-              <h2 class="font-display font-bold text-base text-[#1E293B]">Mecanismo de Login por Código Individual & Autonomia</h2>
-              <p class="text-sm text-gray-600 mt-0.5">O funcionário insere unicamente seu código individual único vinculado à matrícula. O sistema carrega e exibe o cargo de forma travada exclusivamente para confirmação (sem autosseleção).</p>
+              <h2 class="font-display font-bold text-base text-nexus-900">Mecanismo de Login por Código Individual & Autonomia</h2>
+              <p class="text-sm text-slate-600 mt-0.5">O funcionário insere unicamente seu código individual único vinculado à matrícula. O sistema carrega e exibe o cargo de forma travada exclusivamente para confirmação (sem autosseleção).</p>
             </div>
           </div>
           <div class="flex items-center gap-2 self-start md:self-auto shrink-0">
-            <span class="text-xs bg-gray-100 text-gray-700 font-mono px-2 py-1 rounded border border-gray-200">Perda de Código? RF 1 / T2.8</span>
+            <span class="text-xs bg-slate-100 text-slate-700 font-mono px-2 py-1 rounded border border-slate-200">Perda de Código? RF 1 / T2.8</span>
           </div>
         </div>
       </div>
 
       <!-- Grid Principal: Módulo de Autenticação + 3 Camadas de Visão -->
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
+
         <!-- Bloco 1: Simulador de Entrada & Credenciamento (Col 5) -->
-        <div class="lg:col-span-5 bg-white border border-[#E1E5ED] rounded-xl p-5 shadow-sm flex flex-col justify-between">
+        <div class="lg:col-span-5 bg-white border border-nexus-border rounded-xl p-5 shadow-sm flex flex-col justify-between">
+
           <div>
-            <div class="flex items-center justify-between pb-3 border-b border-[#E1E5ED]">
-              <span class="font-display font-bold text-sm text-[#1E293B] flex items-center gap-2">
-                <i data-lucide="lock" class="w-4 h-4 text-[#445987]"></i> Terminal de Autenticação Operacional
+            <div class="flex items-center justify-between pb-3 border-b border-nexus-border">
+              <span class="font-display font-bold text-sm text-nexus-900 flex items-center gap-2">
+                <i class="material-symbols-outlined w-4 h-4 text-nexus-500">lock</i> Terminal de Autenticação Operacional
               </span>
-              <span class="text-[11px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 font-medium">Ativo</span>
+              <span class="text-[11px] font-mono text-nexus-500 bg-nexus-100 px-2 py-0.5 rounded border border-nexus-100 font-medium">Ativo</span>
             </div>
 
             <div class="mt-4 space-y-4">
+
               <!-- Campo de Matrícula / Código Único -->
               <div>
-                <label class="block text-xs font-semibold text-gray-700 mb-1">CÓDIGO INDIVIDUAL ÚNICO (MATRÍCULA) *</label>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">CÓDIGO INDIVIDUAL ÚNICO (MATRÍCULA) *</label>
                 <div class="relative">
-                  <input type="text" value="NX-8821-SP" readonly class="w-full bg-gray-50 border border-[#E1E5ED] rounded-lg px-3 py-2.5 font-mono text-sm font-semibold text-[#1E293B] focus:outline-none cursor-default" />
-                  <span class="absolute right-3 top-2.5 text-xs text-gray-400 font-mono">HASH SHA-256</span>
+                  <input type="text" value="NX-8821-SP" readonly class="w-full bg-slate-50 border border-nexus-border rounded-lg px-3 py-2.5 font-mono text-sm font-semibold text-nexus-900 focus:outline-none cursor-default" />
+                  <span class="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">HASH SHA-256</span>
                 </div>
-                <p class="text-[11px] text-gray-500 mt-1 flex items-center gap-1">
-                  <i data-lucide="info" class="w-3 h-3 text-blue-500"></i> Código único gerado e gerenciado pelo Técnico em Portos (T2.8).
+                <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                  <i class="material-symbols-outlined w-3 h-3 text-nexus-500">info</i> Código único gerado e gerenciado pelo Técnico em Portos (T2.8).
                 </p>
               </div>
 
-              <!-- Campo Cargo Detectado Automático -->
+              <!-- Campo Cargo Detectado Automaticamente -->
               <div>
-                <label class="block text-xs font-semibold text-gray-700 mb-1">CARGO DETECTADO PELO SISTEMA (SOMENTE CONFIRMAÇÃO) *</label>
-                <div class="flex items-center justify-between bg-blue-50/60 border border-[#445987]/30 rounded-lg px-3 py-2.5">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">CARGO DETECTADO PELO SISTEMA (SOMENTE CONFIRMAÇÃO) *</label>
+                <div class="flex items-center justify-between bg-nexus-100/60 border border-nexus-500/30 rounded-lg px-3 py-2.5">
                   <div class="flex items-center gap-2">
-                    <i data-lucide="badge-check" class="w-5 h-5 text-[#445987]"></i>
-                    <span class="font-semibold text-sm text-[#1E293B]">Supervisor / Gerente de Operações</span>
+                    <i class="material-symbols-outlined w-5 h-5 text-nexus-500">badge-check</i>
+                    <span class="font-semibold text-sm text-nexus-900">Supervisor / Gerente de Operações</span>
                   </div>
-                  <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-[#445987] text-white">Nível Gestão</span>
+                  <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-nexus-500 text-white">Nível Gestão</span>
                 </div>
                 <p class="text-[11px] text-amber-700 font-medium mt-1">
                   🔒 Travado: O usuário não escolhe o cargo. É resolvido pela matrícula no banco de dados.
@@ -207,77 +222,78 @@
               <!-- Cartão de Apoio: Técnico em Portos e Invalidação (RN 15) -->
               <div class="bg-amber-50/70 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
                 <div class="font-semibold flex items-center gap-1.5 mb-1 text-amber-950">
-                  <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i> Protocolo de Perda ou Esquecimento (RN 15 / T2.8)
+                  <i class="material-symbols-outlined w-4 h-4 text-amber-600">alert-triangle</i> Protocolo de Perda ou Esquecimento (RN 15 / T2.8)
                 </div>
                 Em caso de extravio de crachá ou perda de código, somente o <strong>Técnico em Portos</strong> possui autoridade para invalidar a chave e expedir novo código mantendo o histórico da mesma matrícula.
               </div>
             </div>
           </div>
 
-          <div class="pt-4 mt-4 border-t border-[#E1E5ED]">
-            <button class="w-full bg-[#1E293B] hover:bg-[#2A3B53] text-white font-medium py-2.5 px-4 rounded-lg text-sm flex items-center justify-center gap-2 transition-all shadow-sm">
-              <i data-lucide="refresh-cw" class="w-4 h-4"></i> Alternar Perfil em Ambiente de Demonstração
+          <div class="pt-4 mt-4 border-t border-nexus-border">
+            <button class="w-full bg-nexus-900 hover:bg-nexus-800 text-white font-medium py-2.5 px-4 rounded-lg text-sm flex items-center justify-center gap-2 transition-all shadow-sm">
+              <i class="material-symbols-outlined w-4 h-4">refresh-cw</i> Alternar Perfil em Ambiente de Demonstração
             </button>
           </div>
         </div>
 
         <!-- Bloco 2: As 3 Camadas de Visão do Sistema (Col 7) -->
-        <div class="lg:col-span-7 bg-white border border-[#E1E5ED] rounded-xl p-5 shadow-sm">
-          <div class="flex items-center justify-between pb-3 border-b border-[#E1E5ED]">
-            <span class="font-display font-bold text-sm text-[#1E293B] flex items-center gap-2">
-              <i data-lucide="layers" class="w-4 h-4 text-[#445987]"></i> As 3 Camadas de Acesso à Informação (Spec.md RF 1)
+        <div class="lg:col-span-7 bg-white border border-nexus-border rounded-xl p-5 shadow-sm">
+
+          <div class="flex items-center justify-between pb-3 border-b border-nexus-border">
+            <span class="font-display font-bold text-sm text-nexus-900 flex items-center gap-2">
+              <i class="material-symbols-outlined w-4 h-4 text-nexus-500">layers</i> As 3 Camadas de Acesso à Informação (Spec.md RF 1)
             </span>
-            <span class="text-xs font-mono text-gray-500">RBAC HIERÁRQUICO</span>
+            <span class="text-xs font-mono text-slate-500">RBAC HIERÁRQUICO</span>
           </div>
 
           <div class="mt-4 space-y-4">
-            
+
             <!-- Camada 1: Visão Própria -->
-            <div class="border border-[#E1E5ED] rounded-lg p-4 hover:border-[#445987] transition-all bg-gray-50/50">
+            <div class="border border-nexus-border rounded-lg p-4 hover:border-nexus-500 transition-all bg-slate-100/50">
               <div class="flex items-start justify-between">
                 <div class="flex items-center gap-2.5">
                   <span class="w-6 h-6 rounded-full bg-slate-200 text-slate-800 font-mono font-bold text-xs flex items-center justify-center">1</span>
-                  <h3 class="font-display font-bold text-sm text-[#1E293B]">Visão Própria (Todos os Cargos)</h3>
+                  <h3 class="font-display font-bold text-sm text-nexus-900">Visão Própria (Todos os Cargos)</h3>
                 </div>
-                <span class="text-[11px] font-mono bg-gray-200 text-gray-700 px-2 py-0.5 rounded font-medium">Autonomia Operacional</span>
+                <span class="text-[11px] font-mono bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-medium">Autonomia Operacional</span>
               </div>
-              <p class="text-xs text-gray-600 mt-2">
+              <p class="text-xs text-slate-600 mt-2">
                 Cada operador visualiza e interage unicamente com os dados atrelados à sua tarefa corrente. Sem necessidade de comunicação verbal externa.
               </p>
               <div class="mt-2.5 flex flex-wrap gap-2 text-[11px] font-mono">
-                <span class="bg-white border border-gray-200 px-2 py-0.5 rounded text-gray-700">• Estivador: suas cargas atribuídas</span>
-                <span class="bg-white border border-gray-200 px-2 py-0.5 rounded text-gray-700">• Conferente: seus lançamentos físicos</span>
+                <span class="bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700">• Estivador: suas cargas atribuídas</span>
+                <span class="bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700">• Conferente: seus lançamentos físicos</span>
               </div>
             </div>
 
             <!-- Camada 2: Visão Operacional -->
-            <div class="border-2 border-[#445987] rounded-lg p-4 bg-blue-50/30">
+            <div class="border-2 border-nexus-500 rounded-lg p-4 bg-nexus-100/30">
               <div class="flex items-start justify-between">
                 <div class="flex items-center gap-2.5">
-                  <span class="w-6 h-6 rounded-full bg-[#445987] text-white font-mono font-bold text-xs flex items-center justify-center">2</span>
-                  <h3 class="font-display font-bold text-sm text-[#1E293B]">Visão Operacional (Inspetor & Supervisor)</h3>
+                  <span class="w-6 h-6 rounded-full bg-nexus-500 text-white font-mono font-bold text-xs flex items-center justify-center">2</span>
+                  <h3 class="font-display font-bold text-sm text-nexus-900">Visão Operacional (Inspetor & Supervisor)</h3>
                 </div>
-                <span class="text-[11px] font-mono bg-[#445987] text-white px-2 py-0.5 rounded font-semibold">Perfil Atual</span>
+                <span class="text-[11px] font-mono bg-nexus-500 text-white px-2 py-0.5 rounded font-semibold">Perfil Atual</span>
               </div>
-              <p class="text-xs text-gray-700 mt-2">
+              <p class="text-xs text-slate-700 mt-2">
                 Acesso de leitura irrestrito a todas as operações dos cargos inferiores (cargas, pátio, embarcações, manutenções, checklists, log de alterações e trail de decisões).
               </p>
-              <div class="mt-2.5 flex items-center gap-2 text-[11px] font-mono text-red-700 bg-red-50 p-2 rounded border border-red-100">
-                <i data-lucide="shield-alert" class="w-4 h-4 shrink-0"></i>
+              <div class="mt-2.5 flex items-center gap-2 text-[11px] font-mono text-nexus-700 bg-nexus-100 p-2 rounded border border-nexus-200">
+                <i class="material-symbols-outlined w-4 h-4 shrink-0">shield-alert</i>
                 <span>Restrição estrita: Sem acesso à documentação interna de funcionários ou fichas de visitantes (exclusivo Técnico em Portos).</span>
               </div>
             </div>
 
             <!-- Camada 3: Visão Estratégica -->
-            <div class="border border-[#E1E5ED] rounded-lg p-4 bg-gray-50/50">
+            <div class="border border-nexus-border rounded-lg p-4 bg-slate-100/50">
               <div class="flex items-start justify-between">
                 <div class="flex items-center gap-2.5">
                   <span class="w-6 h-6 rounded-full bg-slate-200 text-slate-800 font-mono font-bold text-xs flex items-center justify-center">3</span>
-                  <h3 class="font-display font-bold text-sm text-[#1E293B]">Visão Estratégica (Diretoria Executiva)</h3>
+                  <h3 class="font-display font-bold text-sm text-nexus-900">Visão Estratégica (Diretoria Executiva)</h3>
                 </div>
-                <span class="text-[11px] font-mono bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-medium">Nível Executivo</span>
+                <span class="text-[11px] font-mono bg-slate-100 text-slate-800 px-2 py-0.5 rounded font-medium">Nível Executivo</span>
               </div>
-              <p class="text-xs text-gray-600 mt-2">
+              <p class="text-xs text-slate-600 mt-2">
                 Acesso global para leitura integral, consumo de dashboards consolidados (produtividade TEU/hora, dwell time de pátio, taxa de recusa de cargas) e exportação de dados históricos.
               </p>
             </div>
@@ -288,18 +304,18 @@
       </div>
 
       <!-- Tabela da Matriz de Autonomia e Escopo por Cargo (Spec.md) -->
-      <div class="bg-white border border-[#E1E5ED] rounded-xl p-5 shadow-sm">
-        <div class="flex items-center justify-between pb-3 border-b border-[#E1E5ED]">
+      <div class="bg-white border border-nexus-border rounded-xl p-5 shadow-sm">
+        <div class="flex items-center justify-between pb-3 border-b border-nexus-border">
           <div>
-            <h3 class="font-display font-bold text-base text-[#1E293B]">Matriz de Competências & Ações Autorizadas</h3>
-            <p class="text-xs text-gray-500">Mapeamento funcional rigoroso dos 8 cargos oficiais do porto conforme a especificação técnica.</p>
+            <h3 class="font-display font-bold text-base text-nexus-900">Matriz de Competências & Ações Autorizadas</h3>
+            <p class="text-xs text-slate-500">Mapeamento funcional rigoroso dos 8 cargos oficiais do porto conforme a especificação técnica.</p>
           </div>
-          <span class="text-xs font-mono text-gray-500">8 CARGOS HOMOLOGADOS</span>
+          <span class="text-xs font-mono text-slate-500">8 CARGOS HOMOLOGADOS</span>
         </div>
 
         <div class="overflow-x-auto mt-4">
           <table class="w-full text-left text-xs">
-            <thead class="bg-[#F5F7FA] text-[#1E293B] font-semibold border-b border-[#E1E5ED]">
+            <thead class="bg-nexus-100 text-nexus-900 font-semibold border-b border-nexus-border">
               <tr>
                 <th class="py-2.5 px-3">Cargo / Perfil</th>
                 <th class="py-2.5 px-3">Nível Hierárquico</th>
@@ -308,73 +324,73 @@
                 <th class="py-2.5 px-3 text-center">Permissão Crítica</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-[#E1E5ED] text-gray-700">
-              <tr class="hover:bg-gray-50">
-                <td class="py-3 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                  <i data-lucide="user" class="w-4 h-4 text-gray-500"></i> Estivador
+            <tbody class="divide-y divide-nexus-border text-slate-700">
+              <tr class="hover:bg-slate-50">
+                <td class="py-3 px-3 font-semibold text-nexus-900 flex items-center gap-2">
+                  <i class="material-symbols-outlined w-4 h-4 text-slate-500">user</i> Estivador
                 </td>
-                <td class="py-3 px-3"><span class="bg-gray-100 px-2 py-0.5 rounded">Operacional</span></td>
+                <td class="py-3 px-3"><span class="bg-slate-100 px-2 py-0.5 rounded">Operacional</span></td>
                 <td class="py-3 px-3 font-mono text-[11px]">Visão Própria</td>
                 <td class="py-3 px-3">Movimentar cargas selecionadas no pátio e registrar início/conclusão.</td>
-                <td class="py-3 px-3 text-center text-gray-400 font-mono">—</td>
+                <td class="py-3 px-3 text-center text-slate-400 font-mono">—</td>
               </tr>
-              <tr class="hover:bg-gray-50">
-                <td class="py-3 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                  <i data-lucide="package-check" class="w-4 h-4 text-gray-500"></i> Conferente de Carga
+              <tr class="hover:bg-slate-50">
+                <td class="py-3 px-3 font-semibold text-nexus-900 flex items-center gap-2">
+                  <i class="material-symbols-outlined w-4 h-4 text-slate-500">package-check</i> Conferente de Carga
                 </td>
-                <td class="py-3 px-3"><span class="bg-gray-100 px-2 py-0.5 rounded">Operacional</span></td>
+                <td class="py-3 px-3"><span class="bg-slate-100 px-2 py-0.5 rounded">Operacional</span></td>
                 <td class="py-3 px-3 font-mono text-[11px]">Visão Própria</td>
                 <td class="py-3 px-3">Registro de recebimento físico (gate-in) e conferência do estado físico na saída.</td>
-                <td class="py-3 px-3 text-center text-gray-400 font-mono">—</td>
+                <td class="py-3 px-3 text-center text-slate-400 font-mono">—</td>
               </tr>
-              <tr class="hover:bg-gray-50">
-                <td class="py-3 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                  <i data-lucide="box" class="w-4 h-4 text-gray-500"></i> Arrumador & Consertador
+              <tr class="hover:bg-slate-50">
+                <td class="py-3 px-3 font-semibold text-nexus-900 flex items-center gap-2">
+                  <i class="material-symbols-outlined w-4 h-4 text-slate-500">box</i> Arrumador & Consertador
                 </td>
-                <td class="py-3 px-3"><span class="bg-gray-100 px-2 py-0.5 rounded">Operacional</span></td>
+                <td class="py-3 px-3"><span class="bg-slate-100 px-2 py-0.5 rounded">Operacional</span></td>
                 <td class="py-3 px-3 font-mono text-[11px]">Visão Própria</td>
                 <td class="py-3 px-3">Organizar estivagem e alterar status para "Pronta para Entrega" (T4.14).</td>
-                <td class="py-3 px-3 text-center text-gray-400 font-mono">—</td>
+                <td class="py-3 px-3 text-center text-slate-400 font-mono">—</td>
               </tr>
-              <tr class="hover:bg-gray-50">
-                <td class="py-3 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                  <i data-lucide="anchor" class="w-4 h-4 text-gray-500"></i> Planejador de Pátio/Navios
+              <tr class="hover:bg-slate-50">
+                <td class="py-3 px-3 font-semibold text-nexus-900 flex items-center gap-2">
+                  <i class="material-symbols-outlined w-4 h-4 text-slate-500">anchor</i> Planejador de Pátio/Navios
                 </td>
-                <td class="py-3 px-3"><span class="bg-gray-100 px-2 py-0.5 rounded">Operacional</span></td>
+                <td class="py-3 px-3"><span class="bg-slate-100 px-2 py-0.5 rounded">Operacional</span></td>
                 <td class="py-3 px-3 font-mono text-[11px]">Visão Própria</td>
                 <td class="py-3 px-3">Atualização de dados operacionais de navios e contêineres (coordenadas, tempo fora).</td>
-                <td class="py-3 px-3 text-center text-gray-400 font-mono">—</td>
+                <td class="py-3 px-3 text-center text-slate-400 font-mono">—</td>
               </tr>
-              <tr class="hover:bg-gray-50">
-                <td class="py-3 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                  <i data-lucide="user-cog" class="w-4 h-4 text-gray-500"></i> Técnico em Portos
+              <tr class="hover:bg-slate-50 bg-slate-100/50">
+                <td class="py-3 px-3 font-semibold text-nexus-900 flex items-center gap-2">
+                  <i class="material-symbols-outlined w-4 h-4 text-nexus-500">user-cog</i> Técnico em Portos
                 </td>
-                <td class="py-3 px-3"><span class="bg-gray-100 px-2 py-0.5 rounded">Operacional</span></td>
-                <td class="py-3 px-3 font-mono text-[11px]">Própria / Restrita</td>
+                <td class="py-3 px-3"><span class="bg-slate-100 px-2 py-0.5 rounded font-medium">Operacional</span></td>
+                <td class="py-3 px-3 font-mono text-[11px] font-medium">Própria / Restrita</td>
                 <td class="py-3 px-3">Cadastro de documentação interna, fichas de visitantes e reemissão de código (T2.8).</td>
-                <td class="py-3 px-3 text-center font-mono text-emerald-700 font-semibold">Gestão Acesso</td>
+                <td class="py-3 px-3 text-center font-mono text-nexus-500 font-semibold">Gestão Acesso</td>
               </tr>
-              <tr class="hover:bg-gray-50 bg-blue-50/30">
-                <td class="py-3 px-3 font-semibold text-[#445987] flex items-center gap-2">
-                  <i data-lucide="shield-alert" class="w-4 h-4 text-[#445987]"></i> Inspetor
+              <tr class="hover:bg-slate-50 bg-nexus-100/30">
+                <td class="py-3 px-3 font-semibold text-nexus-700 flex items-center gap-2">
+                  <i class="material-symbols-outlined w-4 h-4 text-nexus-500">shield-alert</i> Inspetor
                 </td>
-                <td class="py-3 px-3"><span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-medium">Tático</span></td>
-                <td class="py-3 px-3 font-mono text-[11px] font-semibold text-[#445987]">Visão Operacional</td>
+                <td class="py-3 px-3"><span class="bg-nexus-100 text-nexus-700 px-2 py-0.5 rounded font-medium">Tático</span></td>
+                <td class="py-3 px-3 font-mono text-[11px] font-semibold text-nexus-700">Visão Operacional</td>
                 <td class="py-3 px-3">Inspeção formal com checklist, aprovação/recusa, cadastro de navios/contêineres e alarmes.</td>
                 <td class="py-3 px-3 text-center font-mono text-amber-700 font-semibold">Aprovar/Recusar</td>
               </tr>
-              <tr class="hover:bg-gray-50 bg-blue-50/50">
-                <td class="py-3 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                  <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i> Supervisor / Gerente
+              <tr class="hover:bg-slate-50 bg-nexus-100/50">
+                <td class="py-3 px-3 font-semibold text-nexus-900 flex items-center gap-2">
+                  <i class="material-symbols-outlined w-4 h-4 text-emerald-600">shield-check</i> Supervisor / Gerente
                 </td>
                 <td class="py-3 px-3"><span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">Gestão</span></td>
-                <td class="py-3 px-3 font-mono text-[11px] font-semibold text-[#1E293B]">Visão Operacional</td>
+                <td class="py-3 px-3 font-mono text-[11px] font-semibold text-nexus-900">Visão Operacional</td>
                 <td class="py-3 px-3">Liberação de saída de navios/cargas, cancelamento, aprovação de manutenções e delegação.</td>
                 <td class="py-3 px-3 text-center font-mono text-emerald-700 font-bold">Liberação Saída</td>
               </tr>
-              <tr class="hover:bg-gray-50">
-                <td class="py-3 px-3 font-semibold text-[#1E293B] flex items-center gap-2">
-                  <i data-lucide="line-chart" class="w-4 h-4 text-purple-600"></i> Diretor de Operações
+              <tr class="hover:bg-slate-50">
+                <td class="py-3 px-3 font-semibold text-nexus-900 flex items-center gap-2">
+                  <i class="material-symbols-outlined w-4 h-4 text-purple-600">line-chart</i> Diretor de Operações
                 </td>
                 <td class="py-3 px-3"><span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-medium">Estratégico</span></td>
                 <td class="py-3 px-3 font-mono text-[11px] font-semibold text-purple-800">Visão Estratégica</td>
@@ -390,7 +406,8 @@
   </div>
 
   <script>
-    lucide.createIcons();
+    // Material Symbols Icons — initialize via CSS class; no separate JS needed since font is preloaded
+    // Os ícones são renderidos via a classe .material-symbols-outlined definida em css/fonts.css
 
     // Toggle da Sidebar Retrátil
     const sidebar = document.getElementById('sidebar');
