@@ -61,6 +61,7 @@ create type status_carga_enum as enum (
 create type tipo_decisao_enum as enum (
   'APROVOU_CARGA',
   'RECUSOU_CARGA',
+  'ENTREGOU_CARGA',
   'SOLICITOU_MANUTENCAO_NAVIO',
   'SOLICITOU_MANUTENCAO_CONTAINER',
   'LIBEROU_NAVIO',
@@ -481,6 +482,112 @@ begin
           and c.navio_id = NEW.id
           and c.status_fluxo not in ('ENTREGUE', 'CANCELADA', 'RECUSADA')
       );
+
+    -- Registra no Log de Alterações e no Trail de Decisões Críticas cada carga entregue,
+    -- isolado em bloco de exceção para nunca bloquear a transação do navio.
+    begin
+      insert into logs_alteracoes (
+        data_hora, cargo, codigo_individual, entidade_tipo, entidade_id, tipo_alteracao, detalhes
+      )
+      select
+        now(),
+        'SUPERVISOR_GERENTE_OPERACOES',
+        'SISTEMA',
+        'CARGA',
+        coalesce(nullif(regexp_replace(c.qr_code_url, '^QR-', '', 'i'), ''), c.id::text),
+        'EDICAO',
+        jsonb_build_object(
+          'referencia_id', c.id,
+          'codigo', coalesce(nullif(regexp_replace(c.qr_code_url, '^QR-', '', 'i'), ''), c.id::text),
+          'acao_exibicao', 'ENTREGOU_CARGA',
+          'status_fluxo', 'ENTREGUE',
+          'navio', coalesce(nullif(btrim(c.navio_nome_historico), ''), NEW.nome),
+          'container', coalesce(
+            nullif(btrim(c.container_identificacao_historico), ''),
+            (select k.numero_identificacao from containers k where k.id = c.container_id)
+          ),
+          'destino', coalesce(nullif(btrim(c.destino), ''), NEW.destino),
+          'descricao', format(
+            'Carga %s marcada como ENTREGUE no porto de destino (destino: %s · navio: %s%s)',
+            coalesce(nullif(regexp_replace(c.qr_code_url, '^QR-', '', 'i'), ''), c.id::text),
+            coalesce(nullif(btrim(c.destino), ''), nullif(btrim(NEW.destino), ''), 'Destino Final'),
+            coalesce(nullif(btrim(c.navio_nome_historico), ''), NEW.nome),
+            case
+              when coalesce(
+                nullif(btrim(c.container_identificacao_historico), ''),
+                (select k.numero_identificacao from containers k where k.id = c.container_id)
+              ) is not null then
+                ' · contêiner: ' || coalesce(
+                  nullif(btrim(c.container_identificacao_historico), ''),
+                  (select k.numero_identificacao from containers k where k.id = c.container_id)
+                )
+              else ''
+            end
+          )
+        )
+      from cargas c
+      where c.status_fluxo = 'EM_TRANSITO'
+        and coalesce(c.qr_code_url, '') not like 'QR-DEMO-%'
+        and (
+          c.navio_id = NEW.id
+          or c.container_id in (select id from containers where navio_id = NEW.id)
+        )
+        and not exists (
+          select 1 from logs_alteracoes la
+          where la.entidade_tipo = 'CARGA'
+            and la.entidade_id = coalesce(nullif(regexp_replace(c.qr_code_url, '^QR-', '', 'i'), ''), c.id::text)
+            and (la.detalhes->>'acao_exibicao' = 'ENTREGOU_CARGA' or la.detalhes->>'status_fluxo' = 'ENTREGUE')
+        );
+
+      insert into trail_decisoes (
+        data_hora, cargo, codigo_individual, tipo_decisao, entidade_tipo, entidade_id, motivo, detalhes
+      )
+      select
+        now(),
+        'SUPERVISOR_GERENTE_OPERACOES',
+        'SISTEMA',
+        'ENTREGOU_CARGA',
+        'CARGA',
+        coalesce(nullif(regexp_replace(c.qr_code_url, '^QR-', '', 'i'), ''), c.id::text),
+        format(
+          'Carga %s marcada como ENTREGUE no porto de destino (destino: %s · navio: %s%s)',
+          coalesce(nullif(regexp_replace(c.qr_code_url, '^QR-', '', 'i'), ''), c.id::text),
+          coalesce(nullif(btrim(c.destino), ''), nullif(btrim(NEW.destino), ''), 'Destino Final'),
+          coalesce(nullif(btrim(c.navio_nome_historico), ''), NEW.nome),
+          case
+            when coalesce(
+              nullif(btrim(c.container_identificacao_historico), ''),
+              (select k.numero_identificacao from containers k where k.id = c.container_id)
+            ) is not null then
+              ' · contêiner: ' || coalesce(
+                nullif(btrim(c.container_identificacao_historico), ''),
+                (select k.numero_identificacao from containers k where k.id = c.container_id)
+              )
+            else ''
+          end
+        ),
+        jsonb_build_object(
+          'referencia_id', c.id,
+          'rotulo', 'Carga ' || coalesce(nullif(regexp_replace(c.qr_code_url, '^QR-', '', 'i'), ''), c.id::text),
+          'acao_exibicao', 'ENTREGOU_CARGA',
+          'status_fluxo', 'ENTREGUE'
+        )
+      from cargas c
+      where c.status_fluxo = 'EM_TRANSITO'
+        and coalesce(c.qr_code_url, '') not like 'QR-DEMO-%'
+        and (
+          c.navio_id = NEW.id
+          or c.container_id in (select id from containers where navio_id = NEW.id)
+        )
+        and not exists (
+          select 1 from trail_decisoes td
+          where td.entidade_tipo = 'CARGA'
+            and td.entidade_id = coalesce(nullif(regexp_replace(c.qr_code_url, '^QR-', '', 'i'), ''), c.id::text)
+            and (td.tipo_decisao = 'ENTREGOU_CARGA' or td.detalhes->>'acao_exibicao' = 'ENTREGOU_CARGA')
+        );
+    exception when others then
+      null;
+    end;
 
     -- Entrega as cargas vinculadas (diretamente ou via contêiner), preserva
     -- navio/contêiner como snapshot histórico e libera os vínculos ativos.
