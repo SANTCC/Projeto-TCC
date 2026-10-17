@@ -20,9 +20,13 @@ BEGIN
       ('historico_manutencoes', 'registrado_por',  'fk_hist_manut_registrado_por'),
       ('inspecoes',             'inspetor_id',     'fk_inspecoes_inspetor_id'),
       ('logs_alteracoes',       'funcionario_id',  'fk_logs_alt_funcionario_id'),
-      ('trail_decisoes',        'funcionario_id',  'fk_trail_dec_funcionario_id'),
-      ('retificacoes_trail',    'funcionario_id',  'fk_retif_trail_funcionario_id'),
-      ('leituras_qr_code',      'funcionario_id',  'fk_leituras_qr_funcionario_id')
+      ('trail_decisoes',        'funcionario_id',        'fk_trail_dec_funcionario_id'),
+      ('retificacoes_trail',    'funcionario_id',        'fk_retif_trail_funcionario_id'),
+      ('leituras_qr_code',      'funcionario_id',        'fk_leituras_qr_funcionario_id'),
+      ('delegacoes_supervisor', 'supervisor_titular_id', 'fk_deleg_sup_titular_id'),
+      ('delegacoes_supervisor', 'substituto_id',         'fk_deleg_sup_substituto_id'),
+      ('checklist_modelos',     'criado_por',            'fk_checklist_mod_criado_por'),
+      ('emergencias',           'funcionario_id',        'fk_emergencias_funcionario_id')
     ) AS t(tabela, coluna, nome_fk)
   LOOP
     IF EXISTS (

@@ -15,12 +15,12 @@ const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Expose-Headers': 'Content-Disposition, X-Relatorio-Cache, X-Relatorio-Hash'
+  'Access-Control-Expose-Headers': 'Content-Disposition, X-Relatorio-Cache, X-Relatorio-Hash, X-Relatorio-Versao'
 };
 const LIMITE_CORPO_BYTES = 4096;
 
 const SELECAO_CARGA = [
-  'id, natureza, material, quantidade, peso, volume, valor_declarado, destino, porto_descarga,',
+  'id, qr_code_url, natureza, material, quantidade, peso, volume, valor_declarado, destino, porto_descarga,',
   'status_fluxo, resultado_inspecao, motivo_recusa, data_entrada, data_saida,',
   'navio_nome_historico, container_identificacao_historico,',
   'navios:navio_id(nome, numero_imo, porto_origem, porto_destino),',
@@ -110,7 +110,8 @@ export function criarHandler({ criarCliente, lib, env }) {
         'Content-Disposition': `attachment; filename="Relatorio_A4_${cargaId}.pdf"`,
         'Cache-Control': 'no-store',
         'X-Relatorio-Cache': cache,
-        'X-Relatorio-Hash': hash
+        'X-Relatorio-Hash': hash,
+        'X-Relatorio-Versao': '2'
       }
     });
   };

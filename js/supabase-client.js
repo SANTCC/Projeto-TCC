@@ -101,9 +101,6 @@
         const urlStr = String(input || '');
         const ehRpcLeitura = /\/rpc\/(login_funcionario|login_tentativas_relatorio)\b/.test(urlStr);
         if (!ehRpcLeitura && typeof window !== 'undefined' && window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
-          if (typeof window.mostrarFeedback === 'function') {
-            window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
-          }
           const corpoErro = JSON.stringify({
             code: 'READ_ONLY_PROFILE',
             message: 'Perfil Espectador (MAT-1111) possui acesso somente leitura. Alterações não são permitidas.'

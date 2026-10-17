@@ -122,6 +122,9 @@ async function main() {
       check('1: botão "Vincular" do contêiner com navio fora do porto está DESATIVADO',
         Boolean(btn) && btn.disabled === true && btn.getAttribute('data-vinculo-bloqueado') === 'true',
         btn ? `disabled=${btn.disabled} data=${btn.getAttribute('data-vinculo-bloqueado')}` : 'botão ausente');
+      check('1: botão "Vincular" desativado exibe apenas "Vincular" (sem link_off/OFF_)',
+        Boolean(btn) && btn.textContent.trim() === 'Vincular',
+        btn ? btn.textContent.trim() : '');
       check('1: motivo acessível (title/aria-label) cita que o navio está fora do porto',
         /fora do porto/i.test(btn.getAttribute('title') || '') && (btn.getAttribute('aria-label') || '') === btn.getAttribute('title'),
         btn.getAttribute('title'));

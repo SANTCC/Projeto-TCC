@@ -165,17 +165,16 @@ document.addEventListener('DOMContentLoaded', () => {
   function montarOpcaoSessaoHtml(escala) {
     const proprio = funcionarioDaSessao(Array.isArray(escala) ? escala : []);
     const nome = (proprio && proprio.nome) || session.nome || 'Responsável logado';
-    const mat = (proprio && proprio.matricula) || session.matricula || '-';
-    const val = (proprio && (proprio.id || proprio.matricula || proprio.codigo_individual)) || session.matricula || session.codigo_individual || 'SESSAO_ATUAL';
+    const val = (proprio && proprio.id) || 'SESSAO_ATUAL';
     return {
       val: String(val),
-      html: `<option value="${esc(String(val))}" data-matricula="${esc(mat)}" data-nome="${esc(nome)}" data-cargo="${esc(session.cargo)}">${esc(nome)} — ${esc(session.cargo_nome || session.cargo)} (você)</option>`
+      html: `<option value="${esc(String(val))}" data-sessao="1" data-nome="${esc(nome)}" data-cargo="${esc(session.cargo)}">${esc(nome)} — ${esc(session.cargo_nome || session.cargo)} (você)</option>`
     };
   }
 
-  function montarOpEscalaHtml(f) {
-    const val = f.id || f.matricula || f.codigo_individual || '';
-    return `<option value="${esc(String(val))}" data-matricula="${esc(f.matricula || '')}" data-nome="${esc(f.nome || '')}" data-cargo="${esc(f.cargo || '')}">${esc(f.nome || 'Funcionário')} — ${esc(f.cargo_nome || f.cargo || 'Operacional')} (Mat: ${esc(f.matricula || '-')})</option>`;
+  function montarOpEscalaHtml(f, indice) {
+    const val = f.id || `ESC-${indice}`;
+    return `<option value="${esc(String(val))}" data-escala-idx="${esc(String(indice))}" data-nome="${esc(f.nome || '')}" data-cargo="${esc(f.cargo || '')}">${esc(f.nome || 'Funcionário')} — ${esc(f.cargo_nome || f.cargo || 'Operacional')}</option>`;
   }
 
   async function preencherSelectEstivadorResponsavel() {
@@ -227,11 +226,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!agEstivadorSel) return null;
     const opt = agEstivadorSel.options[agEstivadorSel.selectedIndex];
     if (!opt || !opt.value) return null;
+    const idxAttr = opt.getAttribute('data-escala-idx');
+    const daEscala = (idxAttr !== null && idxAttr !== '' && funcionariosEscalaCache[Number(idxAttr)])
+      || (funcionariosEscalaCache || []).find(f => f && String(f.id || '') === String(opt.value));
+    if (daEscala) {
+      return {
+        id: daEscala.id || opt.value,
+        matricula: daEscala.matricula || null,
+        nome: daEscala.nome || opt.getAttribute('data-nome') || opt.text,
+        cargo: daEscala.cargo || opt.getAttribute('data-cargo') || null
+      };
+    }
+    const proprio = funcionarioDaSessao(funcionariosEscalaCache || []);
     return {
-      id: opt.value,
-      matricula: opt.getAttribute('data-matricula') || opt.value,
-      nome: opt.getAttribute('data-nome') || opt.text,
-      cargo: opt.getAttribute('data-cargo') || null
+      id: (proprio && proprio.id) || opt.value,
+      matricula: (proprio && proprio.matricula) || session.matricula || null,
+      nome: opt.getAttribute('data-nome') || (proprio && proprio.nome) || session.nome || opt.text,
+      cargo: opt.getAttribute('data-cargo') || (proprio && proprio.cargo) || session.cargo || null
     };
   }
 
@@ -416,6 +427,13 @@ document.addEventListener('DOMContentLoaded', () => {
     transicoes.forEach((t) => {
       if (t.statusNovo === 'ENTREGUE') t.historicoEntrega = snapshotHistoricoEntrega(t.carga, t.navio);
     });
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+      transicoes.forEach((t) => {
+        t.carga.status = t.statusNovo;
+        if (t.statusNovo === 'ENTREGUE') finalizarEntregaLocal(t.carga, t.historicoEntrega);
+      });
+      return false;
+    }
     const locais = transicoes.filter((t) => !client || !CARGA_UUID_RE.test(String(t.carga.rawDbId || '')));
     const remotas = transicoes.filter((t) => client && CARGA_UUID_RE.test(String(t.carga.rawDbId || '')));
     const promessasPorChave = new Map();
@@ -539,10 +557,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function carregarCargasSupabase(revision) {
     const requestRevision = revision === undefined ? ++cargasLoadRevision : revision;
-    // Tarefa 3 (Correções): navios frescos do banco antes de ler as cargas — as
-    // transições automáticas (entrega/chegada) não podem depender de um cache
-    // local obsoleto escrito por outra página.
-    await atualizarNaviosCacheDoBanco();
+    // Tarefa 3 & Tarefa 4 (Correções): navios frescos do banco e confirmação de
+    // chegadas vencidas (ETA zerado) antes de ler as cargas — as transições
+    // automáticas (entrega/chegada) funcionam sem depender de abrir Embarcações.
+    await sincronizarChegadasNavios();
     if (requestRevision !== cargasLoadRevision) return;
     if (window.NexusRepository) {
       try {
@@ -606,12 +624,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 100);
   }
 
+  let etaCountdownIntervalCargas = null;
+  let etaArrivalTimeoutCargas = null;
+  let verificandoChegadaEmVooCargas = false;
+
+  function limparTimersEtaCargas() {
+    if (etaCountdownIntervalCargas !== null) {
+      clearInterval(etaCountdownIntervalCargas);
+      etaCountdownIntervalCargas = null;
+    }
+    if (etaArrivalTimeoutCargas !== null) {
+      clearTimeout(etaArrivalTimeoutCargas);
+      etaArrivalTimeoutCargas = null;
+    }
+  }
+
   window.addEventListener('pagehide', () => {
     cargasLoadRevision += 1;
     if (cargasRefreshTimer !== null) {
       clearTimeout(cargasRefreshTimer);
       cargasRefreshTimer = null;
     }
+    limparTimersEtaCargas();
     if (window.NexusRepository && typeof window.NexusRepository.invalidarLeiturasCargas === 'function') {
       window.NexusRepository.invalidarLeiturasCargas();
     }
@@ -880,8 +914,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.nexusSupabase) {
       try {
         const { data, error } = await window.nexusSupabase.from('rotas_maritimas').select('*');
-        if (!error && Array.isArray(data)) rotasCacheCargas = data;
+        if (!error && Array.isArray(data) && data.length > 0) rotasCacheCargas = data;
       } catch (e) { /* mantém vazio */ }
+    }
+    if (rotasCacheCargas.length === 0) {
+      try {
+        const localRotas = JSON.parse(localStorage.getItem('nexus_rotas_maritimas') || '[]');
+        if (Array.isArray(localRotas) && localRotas.length > 0) rotasCacheCargas = localRotas;
+      } catch (e) { /* ignora */ }
     }
     return rotasCacheCargas;
   }
@@ -889,9 +929,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function distanciaRotaCargas(origem, destino) {
     const o = String(origem || '').trim().toLowerCase();
     const d = String(destino || '').trim().toLowerCase();
-    if (!o || !d || !Array.isArray(rotasCacheCargas)) return null;
+    if (!o || !d) return null;
+    let listaRotas = Array.isArray(rotasCacheCargas) ? rotasCacheCargas : [];
+    if (listaRotas.length === 0) {
+      try {
+        const localRotas = JSON.parse(localStorage.getItem('nexus_rotas_maritimas') || '[]');
+        if (Array.isArray(localRotas)) listaRotas = localRotas;
+      } catch (e) { /* ignora */ }
+    }
+    if (listaRotas.length === 0) return null;
     // A rota vale nos dois sentidos: o caminho de volta tem a mesma distância.
-    const rota = rotasCacheCargas.find(r => {
+    const rota = listaRotas.find(r => {
       const ro = String(r.origem || '').trim().toLowerCase();
       const rd = String(r.destino || '').trim().toLowerCase();
       return (ro === o && rd === d) || (ro === d && rd === o);
@@ -900,17 +948,11 @@ document.addEventListener('DOMContentLoaded', () => {
     return km > 0 ? km : null;
   }
 
-  // ── Tarefa 3 (Correções): chegada do navio independente da página Embarcações ──
+  // ── Tarefa 3 & Tarefa 4 (Correções): chegada do navio independente da página Embarcações ──
   // A classificação de chegada (ETA zerado → NO_PORTO_DE_DESTINO, ou
-  // DENTRO_DO_PORTO quando o destino é o próprio Porto de Santos) rodava apenas
-  // no render da página Embarcações & GPS. Sem abrir aquela tela, o navio
-  // seguia FORA_DO_PORTO no banco e as cargas ficavam presas em EM_TRANSITO,
-  // mesmo com o ETA da página de cargas zerado. Cargas & Pátio agora:
-  //   1) atualiza os navios do banco no cache local (fonte de verdade), e
-  //   2) confirma as chegadas vencidas com o MESMO compare-and-set de
-  //      embarcacoes.js — o trigger fn_propagar_status_navio marca as cargas
-  //      EM_TRANSITO como ENTREGUE no banco e as transições automáticas desta
-  //      página cobrem as cargas restantes ao carregar.
+  // DENTRO_DO_PORTO quando o destino é o próprio Porto de Santos) funciona
+  // tanto ao abrir/recarregar Cargas & Pátio quanto em tempo real segundo a
+  // segundo quando o ETA zera enquanto o operador acompanha a carga.
   const VELOCIDADE_MEDIA_KMH = 33; // RN 9 — mesma premissa do ETA de embarcacoes.js
 
   function ehPortoSantosCargas(nomePorto) {
@@ -927,18 +969,36 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const { data, error } = await window.nexusSupabase.from('navios').select('*');
       if (error || !Array.isArray(data) || data.length === 0) return;
-      const navios = data.map(n => ({
-        id: n.id,
-        nome: n.nome,
-        imo: n.numero_imo || n.imo,
-        localizacao: n.localizacao || 'DENTRO_DO_PORTO',
-        origem: n.porto_origem || 'Porto de Santos',
-        destino: n.porto_destino || '',
-        // A distância não é gravada no navio: vem da rota marítima cadastrada.
-        distancia: null,
-        // Nunca inventa horário de saída: sem data persistida, não há ETA.
-        dataSaida: n.data_saida || null
-      }));
+      let existentes = [];
+      try {
+        existentes = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+      } catch (e) { existentes = []; }
+      const porId = new Map();
+      const porImo = new Map();
+      if (Array.isArray(existentes)) {
+        existentes.forEach(item => {
+          if (!item) return;
+          if (item.id) porId.set(String(item.id), item);
+          if (item.imo) porImo.set(String(item.imo), item);
+        });
+      }
+      const navios = data.map(n => {
+        const imoVal = n.numero_imo || n.imo;
+        const ant = (n.id && porId.get(String(n.id))) || (imoVal && porImo.get(String(imoVal))) || null;
+        const distBancoOuAnt = parseFloat(n.distancia_km || n.distancia) || (ant && parseFloat(ant.distancia)) || null;
+        return {
+          id: n.id,
+          nome: n.nome,
+          imo: imoVal,
+          localizacao: n.localizacao || 'DENTRO_DO_PORTO',
+          origem: n.porto_origem || 'Porto de Santos',
+          destino: n.porto_destino || '',
+          // A distância vem da rota marítima cadastrada ou do cache local anterior.
+          distancia: distBancoOuAnt,
+          // Nunca inventa horário de saída: sem data persistida, não há ETA.
+          dataSaida: n.data_saida || null
+        };
+      });
       localStorage.setItem('nexus_navios_list', JSON.stringify(navios));
     } catch (e) {
       console.warn('[NexusPort] Cargas: não foi possível atualizar os navios do banco:', e);
@@ -952,19 +1012,19 @@ document.addEventListener('DOMContentLoaded', () => {
    * confirmação remota; falha em um navio não impede os demais.
    */
   async function confirmarChegadasVencidas() {
-    if (!window.nexusSupabase) return;
     let navios = [];
     try {
       navios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
     } catch (e) {
       navios = [];
     }
-    if (!Array.isArray(navios)) return;
+    if (!Array.isArray(navios)) return false;
     const candidatos = navios.filter(n => n && n.localizacao === 'FORA_DO_PORTO'
-      && CARGA_UUID_RE.test(String(n.id || '')) // padrão UUID (mesmo formato do id de navio)
       && Number.isFinite(n.dataSaida ? new Date(n.dataSaida).getTime() : NaN));
-    if (candidatos.length === 0) return;
+    if (candidatos.length === 0) return false;
     await carregarRotasCacheCargas();
+    const somenteLeitura = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly());
+    let houveChegada = false;
     for (const navio of candidatos) {
       try {
         const saida = new Date(navio.dataSaida).getTime();
@@ -973,6 +1033,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const msPrevistos = (km / VELOCIDADE_MEDIA_KMH) * 3600 * 1000;
         if (Date.now() - saida < msPrevistos) continue; // ainda em viagem
         const novaLocalizacao = ehPortoSantosCargas(navio.destino) ? 'DENTRO_DO_PORTO' : 'NO_PORTO_DE_DESTINO';
+        if (somenteLeitura || !window.nexusSupabase || !CARGA_UUID_RE.test(String(navio.id || ''))) {
+          navio.localizacao = novaLocalizacao;
+          localStorage.setItem('nexus_navios_list', JSON.stringify(navios));
+          houveChegada = true;
+          continue;
+        }
         const { data, error } = await window.nexusSupabase
           .from('navios')
           .update({ localizacao: novaLocalizacao })
@@ -988,16 +1054,18 @@ document.addEventListener('DOMContentLoaded', () => {
         navio.localizacao = registro.localizacao;
         navio.dataSaida = registro.data_saida || navio.dataSaida;
         localStorage.setItem('nexus_navios_list', JSON.stringify(navios));
+        houveChegada = true;
       } catch (e) {
         console.warn('[NexusPort] Cargas: falha ao confirmar chegada vencida do navio:', e);
       }
     }
+    return houveChegada;
   }
 
-  /** Sincronização completa de chegada usada ao abrir a página (Tarefa 3). */
+  /** Sincronização completa de chegada usada ao abrir/atualizar a página (Tarefas 3 e 4). */
   async function sincronizarChegadasNavios() {
     await atualizarNaviosCacheDoBanco();
-    await confirmarChegadasVencidas();
+    return confirmarChegadasVencidas();
   }
 
   function etaCargaTexto(carga, naviosLocais) {
@@ -1008,10 +1076,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (navio.localizacao === 'DENTRO_DO_PORTO') {
       const km = parseFloat(navio.distancia) || distanciaRotaCargas(navio.origem, navio.destino);
       if (!(km > 0)) return 'ETA após liberação do navio';
-      const horas = km / 33;
-      const d = Math.floor(horas / 24);
-      const h = Math.round(horas % 24);
-      return `ETA previsto: ${d}d ${h}h após liberação`;
+      const totalSeg = Math.max(0, Math.round((km / VELOCIDADE_MEDIA_KMH) * 3600));
+      const d = Math.floor(totalSeg / 86400);
+      const h = Math.floor((totalSeg % 86400) / 3600);
+      const m = Math.floor((totalSeg % 3600) / 60);
+      const s = totalSeg % 60;
+      return `ETA previsto: ${d}d ${h}h ${m}m ${s}s após liberação`;
     }
     const km = parseFloat(navio.distancia) || distanciaRotaCargas(navio.origem, navio.destino);
     if (!(km > 0)) return 'ETA indisponível: rota sem distância';
@@ -1020,11 +1090,91 @@ document.addEventListener('DOMContentLoaded', () => {
       const parsed = new Date(navio.dataSaida).getTime();
       if (!isNaN(parsed)) saida = parsed;
     }
-    const restante = Math.max(0, (km / 33) * 3600 * 1000 - (Date.now() - saida));
+    const restante = Math.max(0, (km / VELOCIDADE_MEDIA_KMH) * 3600 * 1000 - (Date.now() - saida));
     const d = Math.floor(restante / 86400000);
     const h = Math.floor((restante % 86400000) / 3600000);
     const m = Math.floor((restante % 3600000) / 60000);
-    return `ETA: ${d}d ${h}h ${m}m`;
+    const s = Math.floor((restante % 60000) / 1000);
+    return `ETA: ${d}d ${h}h ${m}m ${s}s`;
+  }
+
+  async function verificarChegadaEmTempoRealCargas() {
+    if (verificandoChegadaEmVooCargas) return;
+    verificandoChegadaEmVooCargas = true;
+    try {
+      const chegou = await confirmarChegadasVencidas();
+      if (chegou) {
+        await carregarCargasSupabase();
+      }
+    } finally {
+      verificandoChegadaEmVooCargas = false;
+    }
+  }
+
+  function agendarMonitoramentoEtaCargas(naviosLocais) {
+    limparTimersEtaCargas();
+    const listaNavios = Array.isArray(naviosLocais) ? naviosLocais : [];
+    const emViagem = listaNavios.filter(n => n && n.localizacao === 'FORA_DO_PORTO'
+      && Number.isFinite(n.dataSaida ? new Date(n.dataSaida).getTime() : NaN));
+    if (emViagem.length === 0) return;
+
+    const calcularMenorRestante = () => {
+      let menor = Infinity;
+      let algumVencido = false;
+      for (const n of emViagem) {
+        const km = parseFloat(n.distancia) || distanciaRotaCargas(n.origem, n.destino);
+        if (!(km > 0)) continue;
+        const saida = new Date(n.dataSaida).getTime();
+        const msPrevistos = (km / VELOCIDADE_MEDIA_KMH) * 3600 * 1000;
+        const rest = msPrevistos - (Date.now() - saida);
+        if (rest <= 0) {
+          algumVencido = true;
+          menor = 0;
+        } else if (rest < menor) {
+          menor = rest;
+        }
+      }
+      return { menor, algumVencido };
+    };
+
+    if (!Array.isArray(rotasCacheCargas)) {
+      carregarRotasCacheCargas().then(() => {
+        agendarMonitoramentoEtaCargas(lerListaLocalCargas('nexus_navios_list'));
+      });
+      return;
+    }
+
+    const { menor, algumVencido } = calcularMenorRestante();
+    if (algumVencido) {
+      verificarChegadaEmTempoRealCargas();
+      return;
+    }
+    if (!Number.isFinite(menor)) return;
+
+    // Disparo exato no instante em que o primeiro navio atinge ETA = 0s
+    const delayChegada = Math.min(Math.max(25, Math.ceil(menor) + 25), 2147483647);
+    etaArrivalTimeoutCargas = setTimeout(() => {
+      etaArrivalTimeoutCargas = null;
+      verificarChegadaEmTempoRealCargas();
+    }, delayChegada);
+
+    // Atualização visual segundo a segundo dos contadores de ETA na tabela
+    etaCountdownIntervalCargas = setInterval(() => {
+      const naviosAtuais = lerListaLocalCargas('nexus_navios_list');
+      if (cargasTableBody) {
+        const spans = cargasTableBody.querySelectorAll('[data-eta-carga-navio]');
+        spans.forEach(sp => {
+          const nomeNav = sp.getAttribute('data-eta-carga-navio') || '';
+          const txt = etaCargaTexto({ navio: nomeNav }, naviosAtuais);
+          if (txt && sp.textContent !== txt) sp.textContent = txt;
+        });
+      }
+      const estadoAtual = calcularMenorRestante();
+      if (estadoAtual.algumVencido) {
+        limparTimersEtaCargas();
+        verificarChegadaEmTempoRealCargas();
+      }
+    }, 1000);
   }
 
   function renderTable() {
@@ -1112,6 +1262,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td colspan="7" class="p-4 text-center text-slate-600 italic">Nenhuma carga encontrada para os filtros aplicados.</td>
         </tr>
       `;
+      agendarMonitoramentoEtaCargas(naviosLocais);
       return;
     }
 
@@ -1131,6 +1282,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isEstivador) {
         if (c.status === 'AGENDAMENTO') {
           actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Aguardando recebimento físico no Porto de Santos: a carga ainda não pode ser movimentada" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
+        } else if (c.status === 'PRONTA_PARA_ENTREGA') {
+          actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga pronta para entrega e alocada no contêiner: a movimentação para o pátio não é permitida" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
         } else if (cargaEmTransito) {
           // Carga em trânsito não pode ser movimentada pelo sistema
           actionButtonsHtml += `<button type="button" disabled aria-disabled="true" title="Carga em trânsito: a movimentação fica bloqueada até a entrega no porto de destino" class="px-2.5 py-1.5 min-w-[44px] min-h-[40px] justify-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 font-semibold flex items-center gap-1 cursor-not-allowed"><span class="material-symbols-outlined text-[18px]">forklift</span><span class="hidden sm:inline">Movimentar</span></button>`;
@@ -1192,7 +1345,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="p-3 text-xs whitespace-nowrap">
             <span class="block font-mono ${containerLegivel ? '' : 'text-slate-600 italic'}">${containerLegivel ? esc(containerLegivel) : 'Contêiner: não vinculado'}</span>
             <span class="block text-[10px] ${c.navio ? 'text-slate-600 dark:text-slate-400' : 'text-slate-600 italic'}">${c.navio ? esc(c.navio) : 'Navio: não vinculado'}</span>
-            ${etaLinha ? `<span class="block text-[10px] font-mono text-indigo-600 dark:text-indigo-400" title="Estimativa calculada pelo navio vinculado (@ 33 km/h)">${esc(etaLinha)}</span>` : ''}
+            ${etaLinha ? `<span data-eta-carga-navio="${esc(c.navio || '')}" class="block text-[10px] font-mono text-indigo-600 dark:text-indigo-400" title="Estimativa calculada pelo navio vinculado (@ 33 km/h)">${esc(etaLinha)}</span>` : ''}
           </td>
           <td class="p-3 whitespace-nowrap">
             <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase ${
@@ -1214,6 +1367,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </tr>
       `;
     }).join('');
+    agendarMonitoramentoEtaCargas(naviosLocais);
   }
 
   // Reset de filtros na inicialização para evitar que valores preenchidos/autofill ocultem cargas
@@ -1800,6 +1954,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.abrirModalVinculacao = async function(idCarga) {
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return;
+    }
     if (userCargo === 'ESTIVADOR') return;
     targetCargaParaVinculacao = cargasFluxoList.find(c => c.id === idCarga);
     if (!targetCargaParaVinculacao || !vincularModal) return;
@@ -2134,9 +2294,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function validarRecebimentoParaMovimentacao(carga) {
     if (!carga) return false;
-    if (carga.status !== 'AGENDAMENTO') return true;
-    if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Aguardando Recebimento', 'A carga ainda está em agendamento. Registre o recebimento físico no Porto de Santos antes de movimentá-la.');
-    return false;
+    if (carga.status === 'AGENDAMENTO') {
+      if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Aguardando Recebimento', 'A carga ainda está em agendamento. Registre o recebimento físico no Porto de Santos antes de movimentá-la.');
+      return false;
+    }
+    if (carga.status === 'PRONTA_PARA_ENTREGA') {
+      if (window.mostrarFeedback) window.mostrarFeedback('alerta', 'Movimentação Bloqueada', `A carga ${carga.id} já foi movimentada até o contêiner e está PRONTA PARA ENTREGA, não podendo mais ser movimentada para o pátio.`);
+      return false;
+    }
+    return true;
   }
 
   async function criarTarefaMovimentacao(carga, setorDestino, guindasteIdent) {
@@ -2238,6 +2404,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.abrirModalMovimentacao = function(idCarga) {
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return;
+    }
     targetCargaMovimentacao = cargasFluxoList.find(c => c.id === idCarga);
     if (!targetCargaMovimentacao || !movimentarModal) return;
     if (!validarRecebimentoParaMovimentacao(targetCargaMovimentacao)) {
@@ -2520,11 +2692,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // página concluem o restante. Assim a carga aparece na tabela de entregues ao
   // abrir/recarregar Cargas & Pátio, sem depender de abrir Embarcações & GPS.
   (async () => {
-    try {
-      await sincronizarChegadasNavios();
-    } catch (e) {
-      console.warn('[NexusPort] Cargas: sincronização de chegada dos navios falhou:', e);
-    }
     await carregarCargasSupabase();
   })();
 

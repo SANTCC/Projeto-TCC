@@ -10,10 +10,12 @@
 window.calcularEstimativaChegada = function(distanciaKm) {
   if (!distanciaKm || distanciaKm <= 0) return 'Atracado / Viagem Concluída';
   const velocidade = 33; // km/h (RN 9)
-  const horasTotais = distanciaKm / velocidade;
-  const dias = Math.floor(horasTotais / 24);
-  const horas = Math.round(horasTotais % 24);
-  return `${dias}d ${horas}h (Distância: ${distanciaKm} km @ 33 km/h)`;
+  const totalSegundos = Math.max(0, Math.round((distanciaKm / velocidade) * 3600));
+  const dias = Math.floor(totalSegundos / 86400);
+  const horas = Math.floor((totalSegundos % 86400) / 3600);
+  const minutos = Math.floor((totalSegundos % 3600) / 60);
+  const segundos = totalSegundos % 60;
+  return `${dias}d ${horas}h ${minutos}m ${segundos}s (Distância: ${distanciaKm} km @ 33 km/h)`;
 };
 
 window.calcularTempoPermanenciaPorto = function(dataEntradaStr) {
@@ -437,7 +439,100 @@ document.addEventListener('DOMContentLoaded', () => {
     const revisao = ++auditoriaLeituraRevision;
     if (!auditTableBody) return;
     let logs = [];
-    const localLogs = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+    const localLogsRaw = JSON.parse(localStorage.getItem('nexus_audit_logs') || '[]');
+    const localNavios = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+    const mapaNavios = {};
+    localNavios.forEach(n => {
+      if (!n || !n.nome) return;
+      if (n.id) mapaNavios[String(n.id).trim().toLowerCase()] = n.nome;
+      if (n.imo) mapaNavios[String(n.imo).trim().toLowerCase()] = n.nome;
+      if (n.numero_imo) mapaNavios[String(n.numero_imo).trim().toLowerCase()] = n.nome;
+    });
+    const ehUuidLog = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '').trim());
+    const extrairNomeNavioTexto = (txt) => {
+      const s = String(txt || '').trim();
+      if (!s) return '';
+      const m = s.match(/(?:navio|embarca[çc][ãa]o)\s+([A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9\s._-]{1,50}?)(?=\s*\(|\s+liberado|\s+com\s+destino|\s+para\s+retorno|\s+alterada|\s+vinculado|\s+exclu[íi]do|\s+por\s+|\s+no\s+cadastro|$)/i);
+      return m && m[1] && !ehUuidLog(m[1]) ? m[1].trim() : '';
+    };
+    const normalizarTipoAlteracaoExibicao = (tipo) => {
+      const t = String(tipo || 'EDICAO').trim().toUpperCase();
+      return t === 'EXPORTACAO' ? 'GERACAO_PDF' : (t || 'EDICAO');
+    };
+    const resolverEntidadeLogItem = (item) => {
+      let tipoEnt = String((item && item.entidade_tipo) || '').trim().toUpperCase();
+      let idEnt = String((item && item.entidade_id) || '').trim();
+      if ((!tipoEnt || !idEnt) && item && item.entidade) {
+        const partes = String(item.entidade).trim().split(/\s+/);
+        if (partes.length >= 2) {
+          tipoEnt = tipoEnt || partes[0].toUpperCase();
+          idEnt = idEnt || partes.slice(1).join(' ');
+        } else if (partes.length === 1) {
+          idEnt = idEnt || partes[0];
+          tipoEnt = tipoEnt || (idEnt.toUpperCase().startsWith('CONT') ? 'CONTAINER' : 'CARGA');
+        }
+      }
+      if (tipoEnt === 'NAVIO' && (!idEnt || idEnt.toUpperCase() === 'N/A' || idEnt === 'null' || ehUuidLog(idEnt))) {
+        const det = item && item.detalhes && typeof item.detalhes === 'object' ? item.detalhes : null;
+        const refId = det && det.referencia_id ? String(det.referencia_id).trim().toLowerCase() : '';
+        const imoDet = det && (det.numero_imo || det.imo) ? String(det.numero_imo || det.imo).trim().toLowerCase() : '';
+        const nomeResolvido = (det && (det.nome || det.navio))
+          || (idEnt && mapaNavios[idEnt.toLowerCase()])
+          || (refId && mapaNavios[refId])
+          || (imoDet && mapaNavios[imoDet])
+          || extrairNomeNavioTexto((det && det.descricao) || item.descricao || (typeof (item && item.detalhes) === 'string' ? item.detalhes : ''))
+          || (det && (det.numero_imo || det.imo))
+          || '';
+        if (nomeResolvido && !ehUuidLog(nomeResolvido)) {
+          idEnt = String(nomeResolvido).trim();
+        }
+      }
+      const entStr = `${tipoEnt || ''} ${idEnt || ''}`.trim() || String((item && item.entidade) || 'Sistema').trim();
+      return { tipoEnt, idEnt, entStr };
+    };
+    const chaveEventoLog = (x) => {
+      const tempo = x && x.data_hora ? new Date(x.data_hora).getTime() : NaN;
+      const bucketTempo = Number.isNaN(tempo) ? String((x && x.data_hora) || '') : Math.floor(tempo / 2000);
+      const { tipoEnt, idEnt } = resolverEntidadeLogItem(x);
+      let tipoAlt = String((x && x.tipo_alteracao) || '').trim().toUpperCase();
+      if (tipoAlt === 'EXPORTACAO' || tipoAlt === 'GERACAO_PDF') tipoAlt = 'GERACAO_PDF';
+      else if (tipoAlt.includes('LEITURA QR') || tipoAlt.includes('ETIQUETA')) tipoAlt = 'REIMPRESSAO_ETIQUETA';
+      else if (tipoAlt.includes('CRI')) tipoAlt = 'CRIACAO';
+      else if (tipoAlt.includes('EXCLU') || tipoAlt.includes('DELET')) tipoAlt = 'EXCLUSAO';
+      else if (tipoAlt && !['CRIACAO', 'EDICAO', 'EXCLUSAO', 'REIMPRESSAO_ETIQUETA', 'GERACAO_PDF'].includes(tipoAlt)) tipoAlt = 'EDICAO';
+      return [
+        bucketTempo,
+        (x && x.codigo_usuario) || '--',
+        tipoEnt,
+        (idEnt || 'N/A').toUpperCase(),
+        tipoAlt
+      ].join('|');
+    };
+    const deduplicarListaLogs = (lista) => {
+      const vistos = new Map();
+      const resultado = [];
+      for (const item of lista) {
+        const { tipoEnt, idEnt, entStr } = resolverEntidadeLogItem(item);
+        const normalizado = Object.assign({}, item, {
+          entidade_tipo: tipoEnt || item.entidade_tipo || '',
+          entidade_id: idEnt || item.entidade_id || '',
+          entidade: entStr,
+          tipo_alteracao: normalizarTipoAlteracaoExibicao(item.tipo_alteracao)
+        });
+        const chave = chaveEventoLog(normalizado);
+        if (!vistos.has(chave)) {
+          vistos.set(chave, normalizado);
+          resultado.push(normalizado);
+        } else {
+          const existente = vistos.get(chave);
+          if ((!existente.descricao || /^Decis[ãa]o Cr[íi]tica:/i.test(existente.descricao)) && normalizado.descricao) {
+            existente.descricao = normalizado.descricao;
+          }
+        }
+      }
+      return resultado;
+    };
+    const localLogs = localLogsRaw.map(ll => Object.assign({}, ll));
     const contextoPrivacidade = [session, ...JSON.parse(localStorage.getItem('nexus_func_list') || '[]')];
 
     if (window.nexusSupabase) {
@@ -451,6 +546,26 @@ document.addEventListener('DOMContentLoaded', () => {
           .order('id'));
 
         if (Array.isArray(dbLogs) && dbLogs.length > 0) {
+          const idsNaviosPendentes = [...new Set(dbLogs
+            .filter(l => String(l.entidade_tipo || '').toUpperCase() === 'NAVIO')
+            .flatMap(l => [l.entidade_id, l.detalhes && l.detalhes.referencia_id])
+            .filter(id => id && ehUuidLog(id) && !mapaNavios[String(id).trim().toLowerCase()]))];
+          if (idsNaviosPendentes.length > 0) {
+            try {
+              const { data: naviosRows } = await window.nexusSupabase
+                .from('navios')
+                .select('id, nome, numero_imo')
+                .in('id', idsNaviosPendentes);
+              if (Array.isArray(naviosRows)) {
+                naviosRows.forEach(n => {
+                  if (n && n.nome) {
+                    if (n.id) mapaNavios[String(n.id).trim().toLowerCase()] = n.nome;
+                    if (n.numero_imo) mapaNavios[String(n.numero_imo).trim().toLowerCase()] = n.nome;
+                  }
+                });
+              }
+            } catch (eNav) { /* fallback silencioso */ }
+          }
           const localFuncs = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
           // Responsável de cada linha: pelo funcionario_id e, se faltar, pelo codigo_individual gravado no log.
           const idsFunc = [...new Set(dbLogs.map(l => l.funcionario_id).filter(Boolean))];
@@ -481,7 +596,8 @@ document.addEventListener('DOMContentLoaded', () => {
               entidade: `${l.entidade_tipo || ''} ${l.entidade_id || ''}`.trim(),
               entidade_tipo: l.entidade_tipo || '',
               entidade_id: l.entidade_id || '',
-              tipo_alteracao: l.tipo_alteracao,
+              tipo_alteracao: normalizarTipoAlteracaoExibicao(l.tipo_alteracao),
+              detalhes: l.detalhes,
               // Tarefa 9 (Correções): frase do que foi feito (gravada em
               // detalhes.descricao); logs legados sem a frase recebem uma
               // síntese na projeção, via NexusAuditoria.descricaoDoLog.
@@ -489,45 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
           });
 
-          // Tarefa 9 (Correções): deduplicação robusta — o MESMO evento (gravado
-          // localmente e no banco na mesma chamada de registrarLogAlteracao)
-          // aparecia DUPLICADO porque a chave comparava as strings cruas de
-          // data_hora: o banco (timestamptz/PostgREST) devolve o instante em
-          // formato/precisão diferentes do ISO local ("...+00:00" × "...Z").
-          // A chave agora compara o INSTANTE (epoch ms) + código do usuário +
-          // entidade (tipo/id normalizado) + tipo de alteração.
-          const chaveEventoLog = (x) => {
-            const tempo = x && x.data_hora ? new Date(x.data_hora).getTime() : NaN;
-            let tipoEnt = String((x && x.entidade_tipo) || '').trim().toUpperCase();
-            let idEnt = String((x && x.entidade_id) || '').trim();
-            if ((!tipoEnt || !idEnt) && x && x.entidade) {
-              const partes = String(x.entidade).trim().split(/\s+/);
-              if (partes.length >= 2) {
-                tipoEnt = tipoEnt || partes[0].toUpperCase();
-                idEnt = idEnt || partes.slice(1).join(' ');
-              } else if (partes.length === 1) {
-                idEnt = idEnt || partes[0];
-                tipoEnt = tipoEnt || (idEnt.toUpperCase().startsWith('CONT') ? 'CONTAINER' : 'CARGA');
-              }
-            }
-            let tipoAlt = String((x && x.tipo_alteracao) || '').trim().toUpperCase();
-            if (tipoAlt.includes('LEITURA QR') || tipoAlt.includes('ETIQUETA')) tipoAlt = 'REIMPRESSAO_ETIQUETA';
-            else if (tipoAlt.includes('CRI')) tipoAlt = 'CRIACAO';
-            else if (tipoAlt.includes('EXCLU') || tipoAlt.includes('DELET')) tipoAlt = 'EXCLUSAO';
-            else if (tipoAlt && !['CRIACAO', 'EDICAO', 'EXCLUSAO', 'REIMPRESSAO_ETIQUETA', 'EXPORTACAO'].includes(tipoAlt)) tipoAlt = 'EDICAO';
-            return [
-              Number.isNaN(tempo) ? String((x && x.data_hora) || '') : tempo,
-              (x && x.codigo_usuario) || '--',
-              tipoEnt,
-              idEnt || 'N/A',
-              tipoAlt
-            ].join('|');
-          };
-          const keys = new Set(mappedDbLogs.map(chaveEventoLog));
-          localLogs.forEach(ll => {
-            if (!keys.has(chaveEventoLog(ll))) mappedDbLogs.push(ll);
-          });
-          logs = mappedDbLogs;
+          logs = deduplicarListaLogs([...mappedDbLogs, ...localLogs]);
         }
       } catch (err) {
         console.warn('Erro ao consultar logs_alteracoes no Supabase:', err);
@@ -535,7 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (logs.length === 0) {
-      logs = localLogs;
+      logs = deduplicarListaLogs(localLogs);
     }
 
     if (revisao !== auditoriaLeituraRevision) return;

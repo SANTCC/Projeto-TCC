@@ -154,7 +154,7 @@ function testarModeloEFormatacao() {
   check('data de entrada no fuso de Brasília', texto.includes('08/10/2026 09:30'));
 
   const vazia = relatorio.montarModelo(linhaCarga({
-    quantidade: null, peso: null, volume: null, valor_declarado: null, destino: null,
+    natureza: null, quantidade: null, peso: null, volume: null, valor_declarado: null, destino: null,
     material: null, data_entrada: null, containers: null, motivo_recusa: null
   }));
   const textoVazio = JSON.stringify(relatorio.secoesDoRelatorio(vazia));
@@ -162,7 +162,11 @@ function testarModeloEFormatacao() {
     const campo = relatorio.secoesDoRelatorio(vazia)[secao].campos.find((c) => c[0] === rotuloCampo);
     return campo ? campo[1] : '(campo ausente)';
   };
-  check('campo de texto vazio (Material) mostra exatamente "Não informado"', valorDoCampo(0, 'Material') === 'Não informado', valorDoCampo(0, 'Material'));
+  check('campo de texto vazio (Natureza) mostra exatamente "Não informado"', valorDoCampo(0, 'Natureza') === 'Não informado', valorDoCampo(0, 'Natureza'));
+  check('código da carga usa formato CRG-2026-xxx (não UUID)', /^CRG-2026-\d{3,}$/.test(valorDoCampo(0, 'Código da carga')), valorDoCampo(0, 'Código da carga'));
+  check('campos Material e Quantidade foram removidos da seção 1. Dados da carga',
+    valorDoCampo(0, 'Material') === '(campo ausente)' && valorDoCampo(0, 'Quantidade') === '(campo ausente)',
+    `${valorDoCampo(0, 'Material')} / ${valorDoCampo(0, 'Quantidade')}`);
   check('campo de texto vazio (Destino) mostra exatamente "Não informado"', valorDoCampo(3, 'Destino') === 'Não informado', valorDoCampo(3, 'Destino'));
   check('campo vazio aparece como "Não informado"', textoVazio.includes('Não informado'));
   check('carga sem contêiner: seção de contêiner diz que não há vínculo',
@@ -228,7 +232,9 @@ async function testarPdf() {
   const doc = await pdfLib.PDFDocument.load(bytes);
   check('carrega de volta e tem 1 página A4 (carga de tamanho normal)', doc.getPageCount() === 1, `${doc.getPageCount()}`);
   check('título e palavra-chave (hash) nos metadados',
-    doc.getTitle().includes(ID_CARGA) && doc.getKeywords().includes(hash));
+    doc.getTitle().includes(ID_CARGA) && doc.getTitle().includes('CRG-2026-') && doc.getKeywords().includes(hash));
+  const pdfAscii = Buffer.from(bytes).toString('latin1');
+  check('PDF gerado incorpora a imagem da logo oficial (/Subtype /Image)', /\/Subtype\s*\/Image/.test(pdfAscii));
 
   const { gerarPdfRelatorio } = pdf;
   const longo = relatorio.montarModelo(linhaCarga({ natureza: 'Texto muito longo. '.repeat(400) }));

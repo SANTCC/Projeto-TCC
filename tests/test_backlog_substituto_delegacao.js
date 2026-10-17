@@ -124,5 +124,20 @@ const enviar=w=>w.document.getElementById('delegacaoForm').dispatchEvent(new w.E
       await j.w.nexusRevogarDelegacao({confirmado:true});assert.ok(JSON.parse(j.w.localStorage.getItem('nexus_active_delegation')),'Falha de revogação não remove presença da delegação no cache');
     }finally{j.w.close();}
   }
+  // Tarefa 6: Supervisor ou qualquer cargo igual/acima na hierarquia não pode ser escolhido como substituto.
+  for(const cargoInelegivel of['SUPERVISOR_GERENTE_OPERACOES','INSPETOR','DIRETOR_OPERACOES_LOGISTICA']){
+    const j=await abrir(titular,null,{remoto:true});const w=j.w;
+    try{
+      const cand={id:uuid(30),nome:'Colaborador Acima',cargo:cargoInelegivel,matricula:'MAT-3030',cpf:'99988877766',ativo:true};
+      j.tabelas.funcionarios.push(cand);
+      w.localStorage.setItem('nexus_func_list',JSON.stringify([titular,sub,cand]));
+      for(const[id,v]of Object.entries({delegSubstituidoNome:uuid(1),delegSubstitutoNome:cand.nome,delegSubstitutoCpf:cand.cpf,delegSubstitutoDataNasc:'1990-01-01',delegDataInicio:'2000-01-01T00:00',delegDataFim:'2099-01-01T00:00'}))w.document.getElementById(id).value=v;
+      enviar(w);await H.aguardar(50);
+      assert.equal(j.writes.length,0,`Cargo ${cargoInelegivel} não pode ser designado como substituto`);
+      assert.equal(JSON.parse(w.localStorage.getItem('nexus_active_delegation')),null);
+      const tituloModal = (w.document.getElementById('globalFeedbackTitle') || {}).textContent || '';
+      assert.ok(j.feedback.some(f=>f.titulo==='Cargo Inelegível para Substituto') || /Cargo Inelegível para Substituto/.test(tituloModal));
+    }finally{w.close();}
+  }
   console.log('✅ Tarefa 23: perfil explícito/derivado, vigência, titular legado, rota/menu, handlers, chamadas confirmadas, mudanças assíncronas, WebMCP e poderes de liberação preservados. Bloqueio no aplicativo, não substitui autorização no servidor.');
 })().catch(e=>{console.error(e);process.exit(1);});

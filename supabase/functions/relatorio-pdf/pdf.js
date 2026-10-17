@@ -5,7 +5,7 @@
  * `npm:pdf-lib`; nos testes Node, de `pdf-lib`. O conteúdo vem de `secoesDoRelatorio` (relatorio.js)
  * e o logotipo oficial vem de `logo.js` (`design/logo_porto.png`).
  */
-import { secoesDoRelatorio } from './relatorio.js';
+import { formatarCodigoCarga, secoesDoRelatorio } from './relatorio.js';
 import { obterLogoBytes } from './logo.js';
 
 const A4 = { largura: 595.28, altura: 841.89 };
@@ -68,7 +68,9 @@ function quebrar(texto, fonte, tamanho, largura) {
 export async function gerarPdfRelatorio(modelo, hash, lib) {
   const { PDFDocument, StandardFonts, rgb } = lib;
   const doc = await PDFDocument.create({ updateMetadata: false });
-  doc.setTitle(`Relatório operacional de carga ${modelo.carga.id}`);
+  const codigoCarga = (modelo.carga && (modelo.carga.codigo || formatarCodigoCarga(modelo.carga))) || '';
+  const idCarga = (modelo.carga && modelo.carga.id) || '';
+  doc.setTitle(`Relatório operacional de carga ${codigoCarga}${idCarga && idCarga !== codigoCarga ? ` (${idCarga})` : ''}`);
   doc.setAuthor('NexusPort — Terminal STS-01');
   doc.setSubject('Relatório operacional integrado de carga (formato A4)');
   doc.setKeywords([hash]);
@@ -132,7 +134,7 @@ export async function gerarPdfRelatorio(modelo, hash, lib) {
         });
         xCont = MARGEM.esquerda + 22;
       }
-      pagina.drawText(sanitizar(`Relatório operacional de carga · ${modelo.carga.id}`, regular), {
+      pagina.drawText(sanitizar(`Relatório operacional de carga · ${codigoCarga || idCarga}`, regular), {
         x: xCont, y: A4.altura - 31, size: 8.5, font: negrito, color: cor(COR.rotulo)
       });
       pagina.drawLine({

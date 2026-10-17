@@ -16,6 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectCarga = document.getElementById('relatorioCargaSelect');
   const gerarPdfBtn = document.getElementById('gerarPdfBtn');
   const prodTableBody = document.getElementById('produtividadeTableBody');
+  const mostrarMaisProdutividadeBtn = document.getElementById('mostrarMaisProdutividadeBtn');
+  const produtividadeContador = document.getElementById('produtividadeContador');
+  const PRODUTIVIDADE_LIMITE_INICIAL = 5;
+  let produtividadeExpandida = false;
+  let ultimoProdData = [];
 
   let cargas = [];
   let produtividadeLeituraRevision = 0;
@@ -25,6 +30,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // (Hoje / 7 dias / 30 dias / Este mês) e o select compartilham este estado e
   // filtram o histórico de operações da tabela de produtividade.
   let periodoRelatorioAtual = (document.getElementById('relatorioPeriodoSelect') || { value: '30D' }).value || '30D';
+
+  const UUID_CANONICO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function formatarCodigoCargaRelatorio(c) {
+    if (!c) return 'Não informado';
+    const candidato = c.qr_code_url ? String(c.qr_code_url).replace(/^QR-/i, '') : (c.codigo || '');
+    const limpo = String(candidato || '').trim();
+    if (/^CRG-\d{4}-\d+$/i.test(limpo)) return limpo.toUpperCase();
+    const mDemo = limpo.match(/^(?:DEMO-)?CRG-(\d+)$/i);
+    if (mDemo) return `CRG-2026-${mDemo[1].padStart(3, '0')}`;
+    if (limpo && !UUID_CANONICO.test(limpo.replace(/^CRG-/i, ''))) {
+      return limpo.startsWith('CRG-') ? limpo : `CRG-${limpo}`;
+    }
+    const semente = String(c.id || c.rawDbId || limpo || '').trim();
+    if (!semente) return 'CRG-2026-001';
+    let acc = 0;
+    for (let i = 0; i < semente.length; i += 1) {
+      acc = ((acc * 31) + semente.charCodeAt(i)) >>> 0;
+    }
+    return `CRG-2026-${String((acc % 900) + 100).padStart(3, '0')}`;
+  }
 
   function inicioDoPeriodo(periodo) {
     const agora = new Date();
@@ -148,8 +174,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const loadingStatus = document.getElementById('pdfLoadingStatus');
   const idleStatus = document.getElementById('pdfIdleStatus');
 
-  const UUID_CANONICO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
   function avisarPdf(tipo, titulo, mensagem) {
     if (window.mostrarFeedback) window.mostrarFeedback(tipo, titulo, mensagem);
   }
@@ -163,6 +187,258 @@ document.addEventListener('DOMContentLoaded', () => {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function extrairLogoPngChunks() {
+    try {
+      const resp = await fetch('design/logo_porto.png');
+      if (!resp.ok) return null;
+      const bytes = new Uint8Array(await resp.arrayBuffer());
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let off = 8;
+      let width = 256;
+      let height = 256;
+      let plte = null;
+      const idats = [];
+      while (off + 8 <= bytes.length) {
+        const len = view.getUint32(off, false);
+        const tipo = String.fromCharCode(bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
+        const chunk = bytes.subarray(off + 8, off + 8 + len);
+        if (tipo === 'IHDR' && len >= 8) {
+          width = view.getUint32(off + 8, false);
+          height = view.getUint32(off + 12, false);
+        } else if (tipo === 'PLTE') {
+          plte = chunk;
+        } else if (tipo === 'IDAT') {
+          idats.push(chunk);
+        }
+        off += 12 + len;
+      }
+      if (!plte || idats.length === 0) return null;
+      const total = idats.reduce((s, c) => s + c.length, 0);
+      const idat = new Uint8Array(total);
+      let pos = 0;
+      idats.forEach((c) => { idat.set(c, pos); pos += c.length; });
+      let plteHex = '';
+      for (let i = 0; i < plte.length; i += 1) {
+        plteHex += plte[i].toString(16).padStart(2, '0');
+      }
+      return { width, height, plteHex, idat };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function escaparPdfWinAnsi(str) {
+    const s = String(str == null ? '' : str).replace(/[\r\n\t]+/g, ' ');
+    let out = '';
+    for (let i = 0; i < s.length; i += 1) {
+      const code = s.charCodeAt(i);
+      const ch = code <= 255 ? s[i] : '?';
+      if (ch === '\\' || ch === '(' || ch === ')') out += `\\${ch}`;
+      else out += ch;
+    }
+    return out;
+  }
+
+  async function gerarPdfAtualizadoLocal(cargaId, hashExistente) {
+    if (!window.nexusSupabase) return null;
+    const selecao = [
+      'id, qr_code_url, natureza, peso, volume, valor_declarado, destino, porto_descarga,',
+      'status_fluxo, resultado_inspecao, motivo_recusa, data_entrada, data_saida,',
+      'navio_nome_historico, container_identificacao_historico,',
+      'navios:navio_id(nome, numero_imo, porto_origem, porto_destino),',
+      'containers:container_id(numero_identificacao, material_carregado, estado, data_fabricacao,',
+      'tempo_uso_referencia, navios:navio_id(nome, numero_imo, porto_origem, porto_destino))'
+    ].join(' ');
+    const { data: raw, error } = await window.nexusSupabase
+      .from('cargas')
+      .select(selecao)
+      .eq('id', cargaId)
+      .maybeSingle();
+    const linha = Array.isArray(raw) ? raw[0] : raw;
+    if (error || !linha) return null;
+
+    const naoInf = 'Não informado';
+    const txt = (v) => (v === null || v === undefined || String(v).trim() === '' ? naoInf : String(v).trim());
+    const fmtNum = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+    const fmtMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fmtDh = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    const numTxt = (v, u) => {
+      const n = v === null || v === undefined || v === '' ? null : Number(v);
+      if (n === null || !Number.isFinite(n)) return naoInf;
+      return u ? `${fmtNum.format(n)} ${u}` : fmtNum.format(n);
+    };
+    const moedaTxt = (v) => {
+      const n = v === null || v === undefined || v === '' ? null : Number(v);
+      return n === null || !Number.isFinite(n) ? naoInf : fmtMoeda.format(n);
+    };
+    const dhTxt = (iso) => {
+      if (!iso) return naoInf;
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return naoInf;
+      const p = {};
+      fmtDh.formatToParts(d).forEach((x) => { p[x.type] = x.value; });
+      return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
+    };
+    const dataTxt = (iso) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : naoInf;
+    };
+    const rotulos = {
+      status_fluxo: {
+        AGENDAMENTO: 'Agendamento', RECEBIMENTO_INSPECAO: 'Recebimento e inspeção', ARMAZENAGEM: 'Armazenagem',
+        PRONTA_PARA_ENTREGA: 'Pronta para entrega', SAIDA: 'Saída', EM_TRANSITO: 'Em trânsito',
+        ENTREGUE: 'Entregue', RECUSADA: 'Recusada', CANCELADA: 'Cancelada'
+      },
+      resultado_inspecao: { APROVADA: 'Aprovada', RECUSADA: 'Recusada', PENDENTE: 'Pendente' },
+      estado_container: { OPERANTE: 'Operante', NAO_OPERANTE: 'Não operante', EM_MANUTENCAO: 'Em manutenção' },
+      referencia_tempo: { MENOS_1_ANO: 'Menos de 1 ano', ENTRE_1_E_2_ANOS: 'Entre 1 e 2 anos', MAIS_2_ANOS: 'Mais de 2 anos' }
+    };
+    const rotulo = (t, v) => (!v ? naoInf : ((rotulos[t] && rotulos[t][v]) || String(v)));
+
+    const cont = linha.containers || (linha.container_identificacao_historico
+      ? { numero_identificacao: linha.container_identificacao_historico }
+      : null);
+    const navio = (cont && cont.navios) || linha.navios || (linha.navio_nome_historico
+      ? { nome: linha.navio_nome_historico }
+      : null);
+    const codigoCarga = formatarCodigoCargaRelatorio(linha);
+
+    const secoes = [
+      {
+        titulo: '1. Dados da carga',
+        campos: [
+          ['Código da carga', txt(codigoCarga)],
+          ['Natureza', txt(linha.natureza)],
+          ['Peso declarado', numTxt(linha.peso, 't')],
+          ['Volume', numTxt(linha.volume, 'm³')],
+          ['Valor declarado', moedaTxt(linha.valor_declarado)],
+          ['Data de entrada', dhTxt(linha.data_entrada)],
+          ['Data de saída', dhTxt(linha.data_saida)]
+        ]
+      },
+      {
+        titulo: '2. Dados do navio',
+        campos: navio
+          ? [
+            ['Nome da embarcação', txt(navio.nome)],
+            ['Número IMO', txt(navio.numero_imo)],
+            ['Porto de origem', txt(navio.porto_origem)],
+            ['Porto de destino da viagem', txt(navio.porto_destino)]
+          ]
+          : [['Vínculo', 'Carga sem navio vinculado por contêiner']]
+      },
+      {
+        titulo: '3. Dados do contêiner',
+        campos: cont
+          ? [
+            ['Identificação', txt(cont.numero_identificacao)],
+            ['Material carregado', txt(cont.material_carregado)],
+            ['Estado operacional', rotulo('estado_container', cont.estado)],
+            ['Data de fabricação', dataTxt(cont.data_fabricacao)],
+            ['Referência de tempo de uso', rotulo('referencia_tempo', cont.tempo_uso_referencia)]
+          ]
+          : [['Vínculo', 'Carga sem contêiner alocado']]
+      },
+      {
+        titulo: '4. Resumo do fluxo operacional',
+        campos: [
+          ['Status no fluxo', rotulo('status_fluxo', linha.status_fluxo)],
+          ['Resultado da inspeção', rotulo('resultado_inspecao', linha.resultado_inspecao)],
+          ['Porto de descarga', txt(linha.porto_descarga)],
+          ['Destino', txt(linha.destino)],
+          ['Motivo da recusa', txt(linha.motivo_recusa)]
+        ]
+      }
+    ];
+
+    const logo = await extrairLogoPngChunks();
+    const cmds = [];
+    cmds.push('0.102 0.133 0.204 rg 0 773.89 595.28 68 re f');
+    cmds.push('0.267 0.349 0.529 rg 0 770.89 595.28 3 re f');
+    let xTitulo = 40;
+    if (logo) {
+      cmds.push('1 1 1 rg 40 787.89 40 40 re f');
+      cmds.push('q 36 0 0 36 42 789.89 cm /ImLogo Do Q');
+      xTitulo = 90;
+    }
+    cmds.push(`BT /F2 12.5 Tf 1 1 1 rg ${xTitulo} 811.89 Td (${escaparPdfWinAnsi('NEXUSPORT · TERMINAL STS-01')}) Tj ET`);
+    cmds.push(`BT /F1 9.5 Tf 0.796 0.835 0.882 rg ${xTitulo} 794.89 Td (${escaparPdfWinAnsi('Relatório operacional integrado de carga (formato A4)')}) Tj ET`);
+    cmds.push(`BT /F2 7.5 Tf 0.796 0.835 0.882 rg 459.28 812.89 Td (${escaparPdfWinAnsi('PADRÃO A4 · OFICIAL')}) Tj ET`);
+
+    let y = 748.89;
+    const colX = [48, 305.64];
+    secoes.forEach((sec) => {
+      cmds.push(`0.945 0.961 0.976 rg 40 ${(y - 18).toFixed(2)} 515.28 22 re f`);
+      cmds.push(`0.267 0.349 0.529 rg 40 ${(y - 18).toFixed(2)} 3.5 22 re f`);
+      cmds.push(`BT /F2 10.5 Tf 0.059 0.090 0.165 rg 51 ${(y - 11).toFixed(2)} Td (${escaparPdfWinAnsi(sec.titulo)}) Tj ET`);
+      y -= 30;
+      for (let i = 0; i < sec.campos.length; i += 2) {
+        const par = sec.campos.slice(i, i + 2);
+        par.forEach((c, idx) => {
+          const cx = colX[idx];
+          cmds.push(`BT /F2 7 Tf 0.392 0.455 0.545 rg ${cx} ${(y - 8).toFixed(2)} Td (${escaparPdfWinAnsi(String(c[0]).toUpperCase())}) Tj ET`);
+          cmds.push(`BT /F1 9.5 Tf 0.059 0.090 0.165 rg ${cx} ${(y - 20.5).toFixed(2)} Td (${escaparPdfWinAnsi(String(c[1]).slice(0, 48))}) Tj ET`);
+        });
+        cmds.push(`0.886 0.910 0.941 RG 0.4 w 44 ${(y - 26.5).toFixed(2)} m 551.28 ${(y - 26.5).toFixed(2)} l S`);
+        y -= 30.5;
+      }
+      y -= 6;
+    });
+
+    cmds.push('0.886 0.910 0.941 RG 0.6 w 40 46 m 555.28 46 l S');
+    cmds.push(`BT /F1 7 Tf 0.392 0.455 0.545 rg 40 34 Td (${escaparPdfWinAnsi(`Conteúdo SHA-256: ${hashExistente || cargaId}`)}) Tj ET`);
+    cmds.push(`BT /F2 7 Tf 0.392 0.455 0.545 rg 495.28 34 Td (${escaparPdfWinAnsi('Página 1 de 1')}) Tj ET`);
+
+    const streamTxt = cmds.join('\n');
+    const enc = (s) => {
+      const b = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i += 1) b[i] = s.charCodeAt(i) & 0xff;
+      return b;
+    };
+    const partes = [];
+    const offsets = [0];
+    let tamanhoTotal = 0;
+    const pushBytes = (u8) => { partes.push(u8); tamanhoTotal += u8.length; };
+    const pushStr = (s) => pushBytes(enc(s));
+    const iniciarObj = (n) => { offsets[n] = tamanhoTotal; pushStr(`${n} 0 obj\n`); };
+    const fimObj = () => pushStr('\nendobj\n');
+
+    pushStr('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    iniciarObj(1); pushStr('<< /Type /Catalog /Pages 2 0 R >>'); fimObj();
+    iniciarObj(2); pushStr('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'); fimObj();
+    const xobjRef = logo ? '/XObject << /ImLogo 7 0 R >>' : '';
+    iniciarObj(3);
+    pushStr(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> ${xobjRef} >> /Contents 6 0 R >>`);
+    fimObj();
+    iniciarObj(4); pushStr('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'); fimObj();
+    iniciarObj(5); pushStr('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'); fimObj();
+    const contentBytes = enc(streamTxt);
+    iniciarObj(6);
+    pushStr(`<< /Length ${contentBytes.length} >>\nstream\n`);
+    pushBytes(contentBytes);
+    pushStr('\nendstream');
+    fimObj();
+    let maxObj = 6;
+    if (logo) {
+      maxObj = 7;
+      iniciarObj(7);
+      pushStr(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /BitsPerComponent 8 /ColorSpace [ /Indexed /DeviceRGB 255 <${logo.plteHex}> ] /Filter /FlateDecode /DecodeParms << /Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns ${logo.width} >> /Length ${logo.idat.length} >>\nstream\n`);
+      pushBytes(logo.idat);
+      pushStr('\nendstream');
+      fimObj();
+    }
+    const xrefPos = tamanhoTotal;
+    pushStr(`xref\n0 ${maxObj + 1}\n0000000000 65535 f \n`);
+    for (let i = 1; i <= maxObj; i += 1) {
+      pushStr(`${String(offsets[i]).padStart(10, '0')} 00000 n \n`);
+    }
+    pushStr(`trailer\n<< /Size ${maxObj + 1} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
+
+    return new Blob(partes, { type: 'application/pdf' });
   }
 
   if (gerarPdfBtn) {
@@ -237,7 +513,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return false;
     }
 
-    const arquivo = await resposta.blob();
+    let arquivo = await resposta.blob();
+    const versaoServidor = resposta.headers.get('X-Relatorio-Versao') || '';
+    if (arquivo && arquivo.size > 100 && versaoServidor !== '2') {
+      try {
+        const blobAtualizado = await gerarPdfAtualizadoLocal(cargaId, resposta.headers.get('X-Relatorio-Hash') || '');
+        if (blobAtualizado) arquivo = blobAtualizado;
+      } catch (e) {
+        console.warn('Fallback de atualização local do PDF ignorado:', e);
+      }
+    }
     baixarArquivo(arquivo, `Relatorio_A4_${cargaId}.pdf`);
     const hash = resposta.headers.get('X-Relatorio-Hash') || null;
     const cache = resposta.headers.get('X-Relatorio-Cache') || 'MISS';
@@ -349,14 +634,49 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     });
 
-    if (prodData.length === 0) {
+    ultimoProdData = prodData;
+    atualizarDomProdutividade(prodData);
+  }
+
+  function atualizarDomProdutividade(prodData) {
+    if (!prodTableBody) return;
+    const total = Array.isArray(prodData) ? prodData.length : 0;
+    if (total === 0) {
+      if (produtividadeContador) produtividadeContador.textContent = 'Exibindo 0 de 0 funcionários';
+      if (mostrarMaisProdutividadeBtn) {
+        mostrarMaisProdutividadeBtn.classList.add('hidden');
+        mostrarMaisProdutividadeBtn.disabled = true;
+        mostrarMaisProdutividadeBtn.setAttribute('aria-expanded', 'false');
+        mostrarMaisProdutividadeBtn.textContent = 'Mostrar mais';
+      }
       prodTableBody.innerHTML = `
         <tr><td colspan="5" class="p-4 text-center text-slate-600 italic">Nenhum registro de produtividade localizado.</td></tr>
       `;
       return;
     }
 
-    prodTableBody.innerHTML = prodData.map(item => `
+    const visiveis = (produtividadeExpandida || total <= PRODUTIVIDADE_LIMITE_INICIAL)
+      ? prodData
+      : prodData.slice(0, PRODUTIVIDADE_LIMITE_INICIAL);
+
+    if (produtividadeContador) {
+      produtividadeContador.textContent = `Exibindo ${visiveis.length} de ${total} funcionários`;
+    }
+    if (mostrarMaisProdutividadeBtn) {
+      if (total > PRODUTIVIDADE_LIMITE_INICIAL) {
+        mostrarMaisProdutividadeBtn.classList.remove('hidden');
+        mostrarMaisProdutividadeBtn.disabled = false;
+        mostrarMaisProdutividadeBtn.setAttribute('aria-expanded', String(produtividadeExpandida));
+        mostrarMaisProdutividadeBtn.textContent = produtividadeExpandida ? 'Mostrar menos' : 'Mostrar mais';
+      } else {
+        mostrarMaisProdutividadeBtn.classList.add('hidden');
+        mostrarMaisProdutividadeBtn.disabled = true;
+        mostrarMaisProdutividadeBtn.setAttribute('aria-expanded', 'false');
+        mostrarMaisProdutividadeBtn.textContent = 'Mostrar mais';
+      }
+    }
+
+    prodTableBody.innerHTML = visiveis.map(item => `
       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
         <td class="p-3 font-mono font-bold text-nexus-500">${esc(item.matricula)}</td>
         <td class="p-3 font-bold">${esc(item.nome)}</td>
@@ -365,6 +685,13 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="p-3 text-slate-600 font-mono text-[11px]">${esc(item.ultima)}</td>
       </tr>
     `).join('');
+  }
+
+  if (mostrarMaisProdutividadeBtn) {
+    mostrarMaisProdutividadeBtn.addEventListener('click', () => {
+      produtividadeExpandida = !produtividadeExpandida;
+      atualizarDomProdutividade(ultimoProdData);
+    });
   }
 
   renderProdutividadeTable();

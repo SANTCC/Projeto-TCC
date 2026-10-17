@@ -121,6 +121,29 @@ document.addEventListener('DOMContentLoaded', () => {
     return true;
   }
 
+  // Tarefa 6: um Supervisor ou qualquer colaborador com cargo igual ou superior
+  // ao de Supervisor não pode ser escolhido como substituto (cargos acima
+  // perderiam permissões e o mesmo cargo não ganha nada; apenas cargos abaixo
+  // na hierarquia operacional podem atuar como substituto).
+  const CARGOS_INELEGIVEIS_SUBSTITUTO = new Set([
+    'SUPERVISOR_GERENTE_OPERACOES',
+    'SUPERVISOR',
+    'SUPERVISOR_SUBSTITUTO',
+    'INSPETOR',
+    'DIRETOR_OPERACOES_LOGISTICA',
+    'DIRETOR_PRESIDENTE_SUPERINTENDENTE',
+    'CONSELHO_ADMINISTRACAO',
+    'ESPECTADOR'
+  ]);
+
+  function ehCargoElegivelSubstituto(cargoBruto) {
+    if (!cargoBruto) return true;
+    const norm = String(cargoBruto).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase().replace(/[\s/-]+/g, '_');
+    if (CARGOS_INELEGIVEIS_SUBSTITUTO.has(norm)) return false;
+    if (/(^|_)(SUPERVISOR|GERENTE|INSPETOR|DIRETOR|SUPERINTENDENTE|CONSELHO|ESPECTADOR)(_|$)/.test(norm)) return false;
+    return true;
+  }
+
   async function carregarTitulares() {
     if (!verificarAcesso()) return;
     if (!titularSelect) return;
@@ -191,15 +214,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const lista = [];
     const vistos = new Set();
     const push = (f) => {
+      if (!f || f.ativo === false) return;
       const nome = String(f.nome || '').trim();
       if (!nome) return;
+      const cargoAvaliado = f.cargo_enum || f.cargo || f.cargo_nome || '';
+      if (!ehCargoElegivelSubstituto(cargoAvaliado)) return;
       const chave = normalizarNomeBusca(nome) + '|' + String(f.matricula || f.cpf || '');
       if (vistos.has(chave)) return;
       vistos.add(chave);
       lista.push({
+        id: f.id || '',
         nome,
         matricula: f.matricula || '',
         cargo: f.cargo_nome || f.cargo || '',
+        cargo_enum: f.cargo_enum || f.cargo || '',
         cpf: String(f.cpf || f.documento || '').replace(/\D/g, ''),
         data_nascimento: f.data_nascimento || f.dataNascimento || ''
       });
@@ -343,7 +371,9 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             localStorage.removeItem('nexus_active_delegation');
             activeDeleg = null;
-            await window.nexusSupabase.from('delegacoes_supervisor').update({ ativo: false }).eq('id', data.id);
+            if (!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly())) {
+              await window.nexusSupabase.from('delegacoes_supervisor').update({ ativo: false }).eq('id', data.id);
+            }
           }
         } else {
           localStorage.removeItem('nexus_active_delegation');
@@ -427,8 +457,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let supervisorId = isUUID(titular.id) ? titular.id : null;
       const cpfSubstituto = substitutoCpf.replace(/\D/g, '');
-      const substitutoLocal = JSON.parse(localStorage.getItem('nexus_func_list') || '[]')
-        .find(f => f.ativo !== false && String(f.cpf || f.documento || '').replace(/\D/g, '') === cpfSubstituto);
+      const funcsLocais = JSON.parse(localStorage.getItem('nexus_func_list') || '[]');
+      const substitutoLocal = funcsLocais.find(f => f && f.ativo !== false && String(f.cpf || f.documento || '').replace(/\D/g, '') === cpfSubstituto)
+        || funcsLocais.find(f => f && f.ativo !== false && normalizarNomeBusca(f.nome) === normalizarNomeBusca(substitutoNomeInput));
+      if (substitutoLocal) {
+        const cargoSubLocal = substitutoLocal.cargo_enum || substitutoLocal.cargo || substitutoLocal.cargo_nome || '';
+        const mesmoColaborador = (supervisorId && substitutoLocal.id === supervisorId)
+          || (substituidoMatricula && substitutoLocal.matricula && substitutoLocal.matricula === substituidoMatricula);
+        if (mesmoColaborador || !ehCargoElegivelSubstituto(cargoSubLocal)) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('alerta', 'Cargo Inelegível para Substituto', 'Um Supervisor ou qualquer colaborador com cargo igual ou superior na hierarquia não pode ser escolhido como substituto. Selecione apenas cargos operacionais abaixo de Supervisor.');
+          }
+          return;
+        }
+      }
       let substitutoId = isUUID(substitutoLocal?.id) ? substitutoLocal.id : null;
       let substitutoMatricula = substitutoLocal?.matricula || null;
       let substituidoNomeStr = titular.nome;
@@ -455,10 +497,17 @@ document.addEventListener('DOMContentLoaded', () => {
           substitutoMatricula = null;
           // CPF cadastrado identifica o substituto; nomes parciais/homônimos não são identidade.
           const { data: subData } = await window.nexusSupabase.from('funcionarios')
-            .select('id, matricula').eq('cpf', cpfSubstituto).eq('ativo', true).maybeSingle();
-          if (subData && subData.id) {
-            substitutoId = subData.id;
-            substitutoMatricula = subData.matricula || null;
+            .select('id, matricula, cargo, nome').eq('cpf', cpfSubstituto).eq('ativo', true).maybeSingle();
+          const subRegistro = Array.isArray(subData) ? subData[0] : subData;
+          if (subRegistro && subRegistro.id) {
+            if ((supervisorId && subRegistro.id === supervisorId) || !ehCargoElegivelSubstituto(subRegistro.cargo)) {
+              if (window.mostrarFeedback) {
+                window.mostrarFeedback('alerta', 'Cargo Inelegível para Substituto', 'Um Supervisor ou qualquer colaborador com cargo igual ou superior na hierarquia não pode ser escolhido como substituto. Selecione apenas cargos operacionais abaixo de Supervisor.');
+              }
+              return;
+            }
+            substitutoId = subRegistro.id;
+            substitutoMatricula = subRegistro.matricula || null;
           }
         } catch (e) {
           console.warn('Erro ao resolver IDs de funcionários para delegação:', e);
@@ -509,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
             newDeleg.rawDbId = insData.id;
           }
 
-          if (window.registrarLogAlteracao) {
+          if (window.registrarLogAlteracao && !window.registrarTrailDecisao) {
             await window.registrarLogAlteracao(substituidoMatricula, 'CRIACAO', { substituto: substitutoNomeInput, delegacao_id: insertedDelegId, inicio, fim }, newDeleg.referenciaFuncionario);
           }
         } catch (err) {
@@ -561,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
               return;
             }
 
-            if (window.registrarLogAlteracao) {
+            if (window.registrarLogAlteracao && !window.registrarTrailDecisao) {
               await window.registrarLogAlteracao(activeDeleg.substituidoMatricula, 'EDICAO', { ativo: false, delegacao_id: activeDeleg.rawDbId || null, data_revogacao: new Date().toISOString() }, activeDeleg.referenciaFuncionario || {tipo:'FUNCIONARIO',codigo:activeDeleg.substituidoMatricula,legado:true});
             }
           } catch (err) {

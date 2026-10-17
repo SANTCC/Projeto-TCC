@@ -334,7 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     sanearBercosLocais(bercosList);
     // Cadastra apenas os berços ausentes; ignoreDuplicates impede sobrescrever uma linha criada por outro operador.
-    if (leituraOk && faltantes.length > 0 && clientLeitura) {
+    const ehSomenteLeitura = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly());
+    if (!ehSomenteLeitura && leituraOk && faltantes.length > 0 && clientLeitura) {
       try {
         const payload = faltantes.map(b => normalizarBerco(b).payload).filter(Boolean);
         if (payload.length > 0) {
@@ -444,10 +445,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function calcularETA(distanciaKm) {
     if (!distanciaKm || distanciaKm <= 0) return 'Atracado / Viagem Concluída';
     const velocidade = 33; // km/h (RN 9)
-    const horasTotais = distanciaKm / velocidade;
-    const dias = Math.floor(horasTotais / 24);
-    const horas = Math.round(horasTotais % 24);
-    return `${dias}d ${horas}h (Distância: ${distanciaKm} km @ 33 km/h)`;
+    const totalSegundos = Math.max(0, Math.round((distanciaKm / velocidade) * 3600));
+    const dias = Math.floor(totalSegundos / 86400);
+    const horas = Math.floor((totalSegundos % 86400) / 3600);
+    const minutos = Math.floor((totalSegundos % 3600) / 60);
+    const segundos = totalSegundos % 60;
+    return `${dias}d ${horas}h ${minutos}m ${segundos}s (Distância: ${distanciaKm} km @ 33 km/h)`;
   }
 
   /**
@@ -498,6 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Confirma a chegada no banco antes de alterar memória/cache. O render pode
   // rodar a cada segundo, por isso a Set impede requisições duplicadas.
   async function confirmarChegadaNavio(navio, novaLocalizacao) {
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) return;
     const chave = String(navio && (navio.id || navio.imo) || '');
     if (!chave || chegadasEmConfirmacao.has(chave)) return;
     if (!window.nexusSupabase || !UUID_NAVIO_RE.test(String(navio.id || ''))) return;
@@ -728,7 +732,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (novoCargasFluxoRaw !== cargasFluxoRaw) {
         localStorage.setItem('nexus_cargas_fluxo', novoCargasFluxoRaw);
       }
-      if (window.nexusSupabase) {
+      const ehSomenteLeituraRender = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly());
+      if (!ehSomenteLeituraRender && window.nexusSupabase) {
         // Agrupa por snapshot e aplica trava contra loop de 1s (L-01):
         // cada transição de carga só é enviada se não estiver em voo nem já sincronizada.
         const executarAtualizacoes = (atualizacoes, incluirStatus) => {
@@ -1328,8 +1333,19 @@ document.addEventListener('DOMContentLoaded', () => {
     return prontas;
   };
 
+  function bloquearAcaoSomenteLeitura() {
+    if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(session)) {
+      if (window.mostrarFeedback) {
+        window.mostrarFeedback('alerta', 'Modo Somente Leitura (Espectador)', 'O perfil Espectador (MAT-1111) possui acesso exclusivo de visualização e não pode realizar alterações no sistema.');
+      }
+      return true;
+    }
+    return false;
+  }
+
   // RN 3: Liberação de Saída de Navios pelo Supervisor de Operações / Diretor
   window.liberarNavioPeloDiretor = async function(imo, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isEstivador) return;
     const podeLiberar = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     if (!podeLiberar) {
@@ -1545,12 +1561,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxo));
 
+      const identNavioLiberado = navio.nome || navio.imo || navio.id || null;
+      const fraseLiberacao = `Liberou a saída do navio ${navio.nome || navio.imo || 'sem nome'} (${navio.imo}) com destino a ${navio.destino || navio.origem || '—'} por ${session.nome || session.cargo}. Horário: ${new Date(navio.dataSaida).toLocaleString('pt-BR')} (agora Fora do Porto)`;
       if (window.registrarTrailDecisao) {
-        await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id, `Navio ${navio.nome} (${navio.imo}) liberado para saída com destino a ${navio.destino} por ${session.nome || session.cargo}. Horário: ${new Date(navio.dataSaida).toLocaleString('pt-BR')}`);
-      }
-      if (window.registrarLogAlteracao) {
-        // Tarefa 9 (Correções): frase explícita do que foi feito no log geral.
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id, { localizacao: 'FORA_DO_PORTO', data_saida: navio.dataSaida, descricao: `Liberou a saída do navio ${navio.nome || navio.imo || 'sem nome'} com destino a ${navio.destino || navio.origem || '—'} (agora Fora do Porto)` });
+        await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', identNavioLiberado, fraseLiberacao);
+      } else if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EDICAO', 'navios', identNavioLiberado, { nome: navio.nome, localizacao: 'FORA_DO_PORTO', data_saida: navio.dataSaida, descricao: fraseLiberacao });
       }
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('navios');
@@ -1566,6 +1582,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Autorização de retorno do navio ao porto de origem
   window.autorizarRetornoNavio = async function(imo, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isEstivador) return;
     const podeLiberar = ['SUPERVISOR_GERENTE_OPERACOES', 'DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     if (!podeLiberar) {
@@ -1623,13 +1640,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { console.warn('Erro ao atualizar retorno do navio no Supabase:', err); }
       }
 
+      const identNavioRetorno = navio.nome || navio.imo || navio.id || null;
+      const fraseRetorno = `Liberou o navio ${navio.nome || navio.imo || 'sem nome'} para retorno ao porto ${navio.destino || navio.origem || '—'} por ${session.nome || session.cargo} (agora Fora do Porto)`;
       if (window.registrarTrailDecisao) {
-        await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', navio.id || null, `Retorno autorizado para o porto ${navio.destino} por ${session.nome || session.cargo}`);
-      }
-
-      if (window.registrarLogAlteracao) {
-        // Tarefa 9 (Correções): frase explícita do que foi feito no log geral.
-        await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, { porto_origem: navio.origem, porto_destino: navio.destino, localizacao: 'FORA_DO_PORTO', descricao: `Liberou o navio ${navio.nome || navio.imo || 'sem nome'} para retorno ao porto ${navio.destino || navio.origem || '—'} (agora Fora do Porto)` });
+        await window.registrarTrailDecisao('LIBEROU_NAVIO', 'navios', identNavioRetorno, fraseRetorno);
+      } else if (window.registrarLogAlteracao) {
+        await window.registrarLogAlteracao('EDICAO', 'navios', identNavioRetorno, { nome: navio.nome, porto_origem: navio.origem, porto_destino: navio.destino, localizacao: 'FORA_DO_PORTO', descricao: fraseRetorno });
       }
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
@@ -1675,6 +1691,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.selecionarRotaNavio = async function(imo, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isEstivador) return;
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
@@ -1747,7 +1764,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (window.registrarLogAlteracao) {
-      await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Rota do navio ${navio.nome} alterada para ${novaOrigem} ➔ ${novoDestino}`);
+      await window.registrarLogAlteracao('EDICAO', 'navios', navio.nome || navio.imo || navio.id || null, `Rota do navio ${navio.nome} alterada para ${novaOrigem} ➔ ${novoDestino}`);
     }
     if (window.NexusRepository && window.NexusRepository.notifyChange) {
       window.NexusRepository.notifyChange('navios');
@@ -1886,6 +1903,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Vincular Navio a um dos 15 Berços: abre a seleção (somente berços livres habilitados)
   window.vincularNavioABerco = async function(imo, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isEstivador) return;
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) return;
@@ -1974,7 +1992,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGpsTable();
 
     if (window.registrarLogAlteracao) {
-      await window.registrarLogAlteracao('EDICAO', 'navios', navio.id || null, `Navio ${navio.nome} vinculado ao ${bercoAlvo.nome}`);
+      await window.registrarLogAlteracao('EDICAO', 'navios', navio.nome || navio.imo || navio.id || null, `Navio ${navio.nome} vinculado ao ${bercoAlvo.nome}`);
     }
     if (window.mostrarFeedback) {
       window.mostrarFeedback('sucesso', 'Navio Vinculado', `Navio ${navio.nome} vinculado com sucesso ao ${bercoAlvo.nome}!`);
@@ -2031,6 +2049,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.excluirNavio = async function(imo, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isEstivador) return;
     const navio = naviosList.find(n => n.imo === imo);
     if (!navio) {
@@ -2140,7 +2159,7 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
 
     if (window.registrarLogAlteracao) {
-      await window.registrarLogAlteracao('EXCLUSAO', 'navios', navio.id || null, `Navio ${navio.nome} (${imo}) excluído do sistema; ${contsDesvinc} contêiner(es) desvinculados`);
+      await window.registrarLogAlteracao('EXCLUSAO', 'navios', navio.nome || navio.imo || navio.id || null, `Navio ${navio.nome} (${imo}) excluído do sistema; ${contsDesvinc} contêiner(es) desvinculados`);
     }
     if (window.NexusRepository && window.NexusRepository.notifyChange) {
       window.NexusRepository.notifyChange('navios');
@@ -2322,13 +2341,6 @@ document.addEventListener('DOMContentLoaded', () => {
             insertedId = data.id;
             novoNavio.id = data.id;
           }
-
-          if (window.registrarLogAlteracao) {
-            await window.registrarLogAlteracao('CRIACAO', 'navios', insertedId, { nome, numero_imo: imo, porto_origem: origem, porto_destino: destino });
-          }
-          if (window.NexusRepository && window.NexusRepository.notifyChange) {
-            window.NexusRepository.notifyChange('navios');
-          }
         } catch (err) {
           console.warn('[NexusPort] Erro ao sincronizar navio com Supabase:', err);
         }
@@ -2355,9 +2367,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderBercosPanel();
         bercoOcupadoMsg = ` Vinculado imediatamente ao ${bercoEscolhido}.`;
-        if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'navios', novoNavio.id || null, `Navio ${nome} vinculado ao ${bercoEscolhido} no cadastro (DENTRO_DO_PORTO)`);
-        }
+      }
+
+      if (window.registrarLogAlteracao) {
+        const descCadastroNavio = (localizacao === 'DENTRO_DO_PORTO' && bercoEscolhido)
+          ? `Cadastrou o navio ${nome} (${imo}) e vinculou ao ${bercoEscolhido} (DENTRO_DO_PORTO)`
+          : `Cadastrou o navio ${nome} (${imo})`;
+        await window.registrarLogAlteracao('CRIACAO', 'navios', nome || imo || insertedId, { id: insertedId, nome, numero_imo: imo, porto_origem: origem, porto_destino: destino, descricao: descCadastroNavio });
+      }
+      if (window.NexusRepository && window.NexusRepository.notifyChange) {
+        window.NexusRepository.notifyChange('navios');
       }
 
       naviosList.unshift(novoNavio);
@@ -2529,7 +2548,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // (navio atual fora do porto) ou B (contêiner com navio e cargas ativas).
       const bloqueioVinculo = motivoBloqueioVinculoContainer(c);
       const botaoVincularHtml = bloqueioVinculo
-        ? `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="true" disabled aria-disabled="true" title="${esc(bloqueioVinculo.mensagem)}" aria-label="${esc(bloqueioVinculo.mensagem)}" class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold flex items-center gap-1 cursor-not-allowed opacity-70"><span class="material-symbols-outlined text-[13px]">link_off</span><span>Vincular</span></button>`
+        ? `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="true" disabled aria-disabled="true" title="${esc(bloqueioVinculo.mensagem)}" aria-label="${esc(bloqueioVinculo.mensagem)}" class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold flex items-center gap-1 cursor-not-allowed opacity-70"><span>Vincular</span></button>`
         : `<button type="button" id="btnVincularContainer-${esc(c.identificacao)}" data-vinculo-bloqueado="false" onclick="window.vincularContainerANavio(${jsArg(c.identificacao)})" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">link</span><span>Vincular</span></button>`;
 
       let contAcoesHtml = `
@@ -2649,6 +2668,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
   window.vincularContainerANavio = async function(contIdentificacao, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isEstivador) return;
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
     if (!cont) return;
@@ -2825,6 +2845,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Excluir Contêiner (Tarefa 8)
   window.excluirContainer = async function(contIdentificacao, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isEstivador) return;
     const cont = containersList.find(c => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(contIdentificacao));
     if (!cont) {
@@ -3101,6 +3122,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Excluir Guindaste (Item 6)
   window.excluirGuindaste = async function(gndIdentificacao, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isEstivador || isPlanejador) return;
     const guindaste = guindastesList.find(g => NexusCodigos.chave(g.identificacao) === NexusCodigos.chave(gndIdentificacao));
     if (!guindaste) {
@@ -3237,6 +3259,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Conclui a tarefa: atualiza o Setor do Pátio da carga (Cargas & Pátio) e
   // remove a pendência do guindaste.
   window.concluirTarefaGuindaste = async function(tarefaId, opcoes) {
+    if (bloquearAcaoSomenteLeitura()) return;
     if (isPlanejador) return;
     const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
     const tarefa = tarefasGnd.find(t => String(t.id) === String(tarefaId));

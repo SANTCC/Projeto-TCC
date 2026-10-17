@@ -73,7 +73,7 @@ function clienteSupabase(estado) {
   return { from };
 }
 
-async function carregarPagina() {
+async function carregarPagina(cargo = 'TECNICO_PORTOS') {
   const estado = {
     funcionarios: [
       { id: ID1, matricula: 'MAT-5001', nome: 'Funcionário Sem CPF', cargo: 'ESTIVADOR', codigo_individual: 'NX-5001-1', cpf: null, data_nascimento: null, ativo: true },
@@ -87,7 +87,7 @@ async function carregarPagina() {
   const janela = criarJanela({
     url: 'https://nexusport.test/tecnico_portos.html',
     html: htmlDaPagina('tecnico_portos.html'),
-    session: sessao('TECNICO_PORTOS', { matricula: 'MAT-9002', nome: 'Técnico de Testes' }),
+    session: sessao(cargo, { matricula: 'MAT-9002', nome: 'Operador de Testes' }),
     storage: { nexus_func_list: [], nexus_vis_list: [] },
     scripts: [
       'js/security.js',
@@ -209,6 +209,43 @@ async function main() {
     check('cadastro novo continua funcionando (INSERT)',
       p.estado.insercoes.length === 1 && titulos(p.estado, 'Funcionário Cadastrado').length === 1,
       `inserts=${p.estado.insercoes.length}, feedbacks=${JSON.stringify(p.estado.feedbacks)}`);
+
+    log('\n6. Tarefa 7: Edição da documentação interna restrita ao Diretor e ao Técnico em Portos');
+    for (const cargoAutorizado of ['TECNICO_PORTOS', 'DIRETOR_OPERACOES_LOGISTICA']) {
+      const pAut = await carregarPagina(cargoAutorizado);
+      janelas.push(pAut.janela);
+      pAut.w.editarFuncionarioPorIndice(1);
+      await aguardar(30);
+      const docInput = pAut.w.document.getElementById('funcDoc');
+      check(`campo funcDoc habilitado na edição para ${cargoAutorizado}`,
+        docInput.disabled === false && docInput.readOnly === false);
+      const docEsperado = `Livro Registro #700 (${cargoAutorizado})`;
+      docInput.value = docEsperado;
+      enviar(pAut.w);
+      await esperar(() => titulos(pAut.estado, 'Funcionário Atualizado').length === 1);
+      const funcAtualizado = pAut.estado.funcionarios.find(f => f.id === ID2);
+      const textoTabela = pAut.w.document.getElementById('funcCrudTableBody').textContent;
+      check(`documentação interna salva no banco e exibida na tabela para ${cargoAutorizado}`,
+        funcAtualizado.documentacao_interna === docEsperado && textoTabela.includes(docEsperado),
+        `db=${funcAtualizado.documentacao_interna}`);
+      pAut.w.editarFuncionarioPorIndice(1);
+      await aguardar(20);
+      check(`reabrir edição pré-preenche a documentação interna (${cargoAutorizado})`,
+        pAut.w.document.getElementById('funcDoc').value === docEsperado,
+        pAut.w.document.getElementById('funcDoc').value);
+    }
+
+    for (const cargoBloqueado of ['SUPERVISOR_GERENTE_OPERACOES', 'CONSELHO_ADMINISTRACAO']) {
+      const pBloq = await carregarPagina(cargoBloqueado);
+      janelas.push(pBloq.janela);
+      const ret = pBloq.w.editarFuncionarioPorIndice(1);
+      await aguardar(20);
+      check(`edição bloqueada para ${cargoBloqueado}`,
+        ret === null &&
+        pBloq.w.document.getElementById('funcCrudForm').classList.contains('hidden') &&
+        titulos(pBloq.estado, 'Acesso Restrito').length === 1,
+        JSON.stringify(pBloq.estado.feedbacks));
+    }
   } catch (erro) {
     log(`\n❌ Erro inesperado: ${erro && erro.stack ? erro.stack : erro}`);
     process.exitCode = 1;

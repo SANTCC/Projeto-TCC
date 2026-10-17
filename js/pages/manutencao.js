@@ -222,11 +222,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
           await window.nexusSupabase.from('navios').update({ estado_operacional: 'AGENDADO_PARA_REFORMA' }).eq('nome', navioNome);
 
+          const identNavioManut = navioNome || (navio && (navio.nome || navio.imo || navio.id)) || null;
           if (window.registrarTrailDecisao) {
-            await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_NAVIO', 'navios', navio ? navio.id : null, `Solicitada manutenção [${tipoManut}] para o navio ${navioNome} por ${session.nome || session.cargo}. Motivo: ${descricao}`);
-          }
-
-          if (window.registrarLogAlteracao) {
+            await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_NAVIO', 'navios', identNavioManut, `Solicitada manutenção [${tipoManut}] para o navio ${navioNome} por ${session.nome || session.cargo}. Motivo: ${descricao}`);
+          } else if (window.registrarLogAlteracao) {
             await window.registrarLogAlteracao('CRIACAO', 'manutencoes', insOs ? insOs.id : null, { navio: navioNome, tipo: tipoManut, descricao });
           }
         } catch (err) {
@@ -350,10 +349,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (window.registrarTrailDecisao) {
-          await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_CONTAINER', 'guindastes', null, `Solicitou manutenção do Guindaste ${identificacao}: ${descricao}`);
-        }
-        if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'guindastes', null, { estado: 'EM_MANUTENCAO', justificativa: descricao });
+          await window.registrarTrailDecisao('SOLICITOU_MANUTENCAO_CONTAINER', 'guindastes', identificacao || null, `Solicitou manutenção do Guindaste ${identificacao}: ${descricao}`);
+        } else if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'guindastes', identificacao || null, { estado: 'EM_MANUTENCAO', justificativa: descricao });
         }
         if (window.NexusRepository && window.NexusRepository.notifyChange) {
           window.NexusRepository.notifyChange('guindastes');
@@ -411,10 +409,9 @@ document.addEventListener('DOMContentLoaded', () => {
         await q;
 
         if (window.registrarTrailDecisao) {
-          await window.registrarTrailDecisao('APROVOU_MANUTENCAO', 'guindastes', null, `Concluiu manutenção do Guindaste ${identificacao} e reativou para OPERANTE`);
-        }
-        if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'guindastes', null, { estado: 'OPERANTE', data_ultima_manutencao: todayStr });
+          await window.registrarTrailDecisao('APROVOU_MANUTENCAO', 'guindastes', identificacao || null, `Concluiu manutenção do Guindaste ${identificacao} e reativou para OPERANTE`);
+        } else if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'guindastes', identificacao || null, { estado: 'OPERANTE', data_ultima_manutencao: todayStr });
         }
         if (window.NexusRepository && window.NexusRepository.notifyChange) {
           window.NexusRepository.notifyChange('guindastes');
@@ -983,11 +980,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (window.registrarTrailDecisao) {
-          await window.registrarTrailDecisao(tipoTrail, 'manutencoes', os.rawDbId || null, `${feedbackMsg} (Decisão registrada por ${session.nome || session.cargo})`);
-        }
-
-        if (window.registrarLogAlteracao) {
-          await window.registrarLogAlteracao('EDICAO', 'manutencoes', os.rawDbId || null, { idOS, acao, status: supabaseStatus });
+          await window.registrarTrailDecisao(tipoTrail, 'manutencoes', idOS || os.rawDbId || null, `${feedbackMsg} (Decisão registrada por ${session.nome || session.cargo})`);
+        } else if (window.registrarLogAlteracao) {
+          await window.registrarLogAlteracao('EDICAO', 'manutencoes', idOS || os.rawDbId || null, { idOS, acao, status: supabaseStatus });
         }
       } catch (err) {
         console.warn('[NexusPort] Erro ao atualizar status da OS no Supabase:', err);

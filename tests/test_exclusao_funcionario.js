@@ -111,6 +111,25 @@ async function main() {
   check('funcionário preservado', existe(banco, 'MAT-0003'));
   check('delegação preservada', banco.tabelas.delegacoes_supervisor.length === 1);
 
+  log('\n3b. Delegação de supervisão já encerrada (ativo = false): exclusão permitida (caso "João ninguém")');
+  banco = bancoBase();
+  const FUNC_JOAO = '33333333-0000-0000-0000-000000000008';
+  banco.tabelas.funcionarios.push({ id: FUNC_JOAO, matricula: 'MAT-0008', nome: 'João ninguém', cargo: 'PLANEJADOR_PATIO_NAVIOS' });
+  banco.tabelas.delegacoes_supervisor.push({
+    id: 'dg-encerrada',
+    supervisor_titular_id: FUNC3,
+    substituto_id: FUNC_JOAO,
+    substituto_nome: 'João ninguém',
+    ativo: false,
+    data_revogacao: '2026-10-10T12:00:00Z'
+  });
+  w = await repositorio(banco);
+  r = await w.NexusRepository.deleteFuncionario('MAT-0008');
+  check('3b: retorna ok (excluído com delegação encerrada ativo = false)', r && r.ok === true && r.removido === 1, JSON.stringify(r));
+  check('3b: "João ninguém" removido do banco', !existe(banco, 'MAT-0008'));
+  check('3b: substituto_id desvinculado na delegação encerrada',
+    banco.tabelas.delegacoes_supervisor.find(d => d.id === 'dg-encerrada').substituto_id === null);
+
   log('\n4. Banco recusa por vínculo RESTRICT (23503): erro, nada removido localmente');
   banco = bancoBase(undefined, undefined);
   w = await repositorio(banco);
