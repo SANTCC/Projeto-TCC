@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elem) {
       elem.innerHTML = `
         <div class="p-6 text-center text-slate-300 flex flex-col items-center gap-2">
-          <span class="material-symbols-outlined text-4xl text-slate-400">camera_alt</span>
+          <span class="material-symbols-outlined fa-solid fa-camera text-4xl text-slate-400" data-icon="camera_alt" aria-hidden="true"></span>
           <span>Clique no botão acima para iniciar a câmera do dispositivo móvel.</span>
         </div>
       `;
@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
       targetRedirectUrl = 'cargas.html';
       targetChecklistUrl = 'inspecao.html';
       if (window.mostrarFeedback) {
-        window.mostrarFeedback('erro', 'QR Code Não Localizado', `O código "${rawCode}" não corresponde a nenhuma carga ou contêiner cadastrado. Verifique o código e tente novamente — a leitura não foi registrada.`);
+        window.mostrarFeedback('erro', 'QR Code Não Localizado', `O código "${rawCode}" não corresponde a nenhuma carga cadastrada. Verifique o código e tente novamente — a leitura não foi registrada.`);
       }
       return {
         encontrado: false,

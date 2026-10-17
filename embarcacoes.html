@@ -47,7 +47,7 @@
         <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm">
           <div>
             <div class="flex items-center gap-2 text-nexus-500 font-mono text-xs font-bold uppercase tracking-wider">
-              <span class="material-symbols-outlined text-sm">directions_boat</span>
+              <span class="material-symbols-outlined fa-solid fa-ship text-sm" data-icon="directions_boat" aria-hidden="true"></span>
               <span>Rastreamento & Equipamentos</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Embarcações & Equipamentos</h1>
@@ -59,7 +59,7 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-4 flex items-center gap-3">
             <div class="p-3 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400">
-              <span class="material-symbols-outlined text-2xl">sailing</span>
+              <span class="material-symbols-outlined fa-solid fa-sailboat text-2xl" data-icon="sailing" aria-hidden="true"></span>
             </div>
             <div>
               <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Sinal GPS Satelital</span>
@@ -69,7 +69,7 @@
 
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-4 flex items-center gap-3">
             <div class="p-3 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-              <span class="material-symbols-outlined text-2xl">speed</span>
+              <span class="material-symbols-outlined fa-solid fa-gauge text-2xl" data-icon="speed" aria-hidden="true"></span>
             </div>
             <div>
               <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Velocidade Marítima Padrão</span>
@@ -79,7 +79,7 @@
 
           <div class="bg-white dark:bg-slate-900 rounded-xl border border-nexus-border dark:border-nexus-dark-border p-4 flex items-center gap-3">
             <div class="p-3 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400">
-              <span class="material-symbols-outlined text-2xl">anchor</span>
+              <span class="material-symbols-outlined fa-solid fa-anchor text-2xl" data-icon="anchor" aria-hidden="true"></span>
             </div>
             <div>
               <span class="text-slate-600 dark:text-slate-400 font-bold block text-[11px] uppercase">Terminal de Operação</span>
@@ -92,7 +92,7 @@
         <div class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500 text-[22px]">dock</span>
+              <span class="material-symbols-outlined fa-solid fa-anchor-circle-check text-nexus-500 text-[22px]" data-icon="dock" aria-hidden="true"></span>
               <div>
                 <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Painel de Berços de Descarga do Terminal STS-01</h2>
                 <p class="text-[11px] text-slate-600 dark:text-slate-400">Total de 15 berços disponíveis para atracação exclusiva de navios (1 navio por berço)</p>
@@ -113,10 +113,10 @@
           <div class="flex items-center justify-between pb-3 border-b border-nexus-border dark:border-nexus-dark-border">
             <div>
               <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">explore</span>
+                <span class="material-symbols-outlined fa-solid fa-compass text-nexus-500" data-icon="explore" aria-hidden="true"></span>
                 Localização GPS Marítima & Cadastro de Navios
               </h2>
-              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Cadastro inicial por Inspetores/Supervisores e sincronização automática com a tabela navios no Supabase.</p>
+              <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Monitoramento marítimo e sincronização automática com a tabela de navios no Supabase.</p>
             </div>
             <button id="toggleNavioFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs">
               + Cadastrar Novo Navio
@@ -134,7 +134,7 @@
               <input type="text" id="navioImo" required placeholder="Ex: IMO-9821034" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div class="sm:col-span-2">
-              <label class="block font-bold text-slate-600 mb-1">Rota Marítima (cadastrada pelo Supervisor)</label>
+              <label class="block font-bold text-slate-600 mb-1">Rota Marítima</label>
               <select id="navioRotaSelect" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <!-- Preenchido via JS com as rotas registradas no Supabase (rotas_maritimas) -->
                 <option value="">Carregando rotas cadastradas...</option>
@@ -158,7 +158,7 @@
             </div>
             <div class="flex justify-end gap-2 items-end">
               <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 w-full justify-center">
-                <span class="material-symbols-outlined text-[16px]">save</span>
+                <span class="material-symbols-outlined fa-solid fa-floppy-disk text-[16px]" data-icon="save" aria-hidden="true"></span>
                 <span>Salvar Embarcação</span>
               </button>
             </div>
@@ -167,7 +167,7 @@
           <!-- Busca local na tabela de embarcações + contador (Backlog 3 - 7b) -->
           <div class="flex flex-col sm:flex-row sm:items-center gap-2">
             <div class="relative flex-1">
-              <span class="material-symbols-outlined text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <span class="material-symbols-outlined fa-solid fa-magnifying-glass text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2" data-icon="search" aria-hidden="true"></span>
               <input type="search" id="buscarNavioInput" placeholder="Buscar embarcação por nome, IMO ou destino..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
             </div>
             <span id="embarcacoesCounter" class="text-[11px] font-mono text-slate-600 whitespace-nowrap">Exibindo 0 de 0 embarcações</span>
@@ -197,7 +197,7 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">inventory_2</span>
+              <span class="material-symbols-outlined fa-solid fa-boxes-stacked text-nexus-500" data-icon="inventory_2" aria-hidden="true"></span>
               Gestão de Contêineres & Tempo de Uso
             </h2>
             <button id="toggleContainerFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs">
@@ -232,7 +232,7 @@
               <input type="date" id="contManutencao" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
             </div>
             <div>
-              <label class="block font-bold text-slate-600 mb-1">Ref. Tempo de Uso (Supervisor)</label>
+              <label class="block font-bold text-slate-600 mb-1">Ref. Tempo de Uso</label>
               <select id="contRefTempo" required class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-bold">
                 <option value="DATA_FABRICACAO">Data de Fabricação</option>
                 <option value="DATA_ULTIMA_MANUTENCAO">Data da Última Manutenção</option>
@@ -240,7 +240,7 @@
             </div>
             <div class="sm:col-span-2 md:col-span-3 flex justify-end gap-2 items-end">
               <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">save</span>
+                <span class="material-symbols-outlined fa-solid fa-floppy-disk text-[16px]" data-icon="save" aria-hidden="true"></span>
                 <span>Salvar Contêiner</span>
               </button>
             </div>
@@ -271,9 +271,9 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex flex-wrap items-center justify-between gap-2 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500 text-[22px]">alt_route</span>
+              <span class="material-symbols-outlined fa-solid fa-route text-nexus-500 text-[22px]" data-icon="alt_route" aria-hidden="true"></span>
               <div>
-                <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Gestão de Rotas Marítimas (Supervisor)</h2>
+                <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Gestão de Rotas Marítimas</h2>
                 <p class="text-[11px] text-slate-600 dark:text-slate-400">Cadastre a distância oficial das rotas. Navios sem rota cadastrada têm liberação bloqueada.</p>
               </div>
             </div>
@@ -300,7 +300,7 @@
             </div>
             <div class="sm:col-span-3 flex justify-end">
               <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">save</span>
+                <span class="material-symbols-outlined fa-solid fa-floppy-disk text-[16px]" data-icon="save" aria-hidden="true"></span>
                 <span>Salvar Rota</span>
               </button>
             </div>
@@ -330,14 +330,14 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500 text-[22px]">precision_manufacturing</span>
+              <span class="material-symbols-outlined fa-solid fa-gears text-nexus-500 text-[22px]" data-icon="precision_manufacturing" aria-hidden="true"></span>
               <div>
                 <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Cadastro de Guindastes e Pórticos de Pátio (Ship-to-Shore)</h2>
-                <p class="text-[11px] text-slate-600 dark:text-slate-400">Cadastro oficial de equipamentos e maquinários portuários (Inspetor)</p>
+                <p class="text-[11px] text-slate-600 dark:text-slate-400">Cadastro oficial de equipamentos e maquinários portuários</p>
               </div>
             </div>
             <button id="toggleGuindasteFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs flex items-center gap-1">
-              <span>+ Novo Guindaste (Inspetor)</span>
+              <span>+ Novo Guindaste</span>
             </button>
           </div>
 
@@ -359,7 +359,7 @@
             </div>
             <div class="sm:col-span-3 flex justify-end">
               <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">save</span>
+                <span class="material-symbols-outlined fa-solid fa-floppy-disk text-[16px]" data-icon="save" aria-hidden="true"></span>
                 <span>Cadastrar Guindaste</span>
               </button>
             </div>
@@ -404,11 +404,11 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-2xl w-full p-6 shadow-xl flex flex-col gap-4 max-h-[90vh]">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
         <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-amber-700">task</span>
+          <span class="material-symbols-outlined fa-solid fa-file-circle-check text-amber-700" data-icon="task" aria-hidden="true"></span>
           Tarefas do Guindaste <span id="tarefasGuindasteIdLabel" class="font-mono text-nexus-500">--</span>
         </h2>
         <button type="button" id="closeTarefasGuindasteModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-xl" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
 
@@ -429,11 +429,11 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
         <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-indigo-600">alt_route</span>
+          <span class="material-symbols-outlined fa-solid fa-route text-indigo-600" data-icon="alt_route" aria-hidden="true"></span>
           Selecionar Rota Marítima do Navio
         </h2>
         <button type="button" id="closeSelecionarRotaNavioBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-xl" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
       <p class="text-xs text-slate-700 dark:text-slate-200">Navio: <strong id="selecionarRotaNavioLabel" class="font-mono">--</strong></p>
@@ -456,11 +456,11 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
         <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-indigo-600">directions_boat</span>
+          <span class="material-symbols-outlined fa-solid fa-ship text-indigo-600" data-icon="directions_boat" aria-hidden="true"></span>
           Vincular Contêiner a Navio
         </h2>
         <button type="button" id="closeVincularContainerBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-xl" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
       <p class="text-xs text-slate-700 dark:text-slate-200">Contêiner: <strong id="vincularContainerLabel" class="font-mono">--</strong></p>
@@ -483,11 +483,11 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
         <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-indigo-600">dock</span>
+          <span class="material-symbols-outlined fa-solid fa-anchor-circle-check text-indigo-600" data-icon="dock" aria-hidden="true"></span>
           Vincular Navio a Berço
         </h2>
         <button type="button" id="closeVincularBercoBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-xl" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
       <p class="text-xs text-slate-700 dark:text-slate-200">Navio: <strong id="vincularBercoNavioLabel" class="font-mono">--</strong></p>
@@ -516,7 +516,7 @@
   <script src="js/panic-realtime.js"></script>
   <script src="js/padronizacao-codigos.js"></script>
   <script src="js/pages/tipos-carga.js"></script>
-  <script src="js/pages/embarcacoes.js?v=2"></script>
+  <script src="js/pages/embarcacoes.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
   <script src="js/webmcp/webmcp-core.js"></script>
   <script src="js/webmcp/webmcp-ui.js"></script>

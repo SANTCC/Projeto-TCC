@@ -49,22 +49,19 @@
         <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm">
           <div>
             <div class="flex items-center gap-2 text-nexus-500 font-mono text-xs font-bold uppercase tracking-wider">
-              <span class="material-symbols-outlined text-sm">badge</span>
-              <span>Módulo Exclusivo / Acesso Restrito</span>
+              <span class="material-symbols-outlined fa-solid fa-id-card-clip text-sm" data-icon="badge" aria-hidden="true"></span>
+              <span>Gestão de Pessoas & Credenciais</span>
             </div>
-            <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Gestão de Pessoas, Documentos & Reemissão (Técnico)</h1>
+            <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Gestão de Pessoas, Documentos & Reemissão</h1>
             <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Invalidação e reemissão de códigos de acesso, cadastro de funcionários e registro de visitantes.</p>
           </div>
-          <span class="px-3 py-1 rounded-full bg-nexus-500 text-white font-mono text-xs font-bold">
-            Técnico em Portos
-          </span>
         </div>
 
         <!-- Seção 1: Invalidação e Reemissão de Códigos de Acesso -->
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between pb-3 border-b border-nexus-border dark:border-nexus-dark-border">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">key_off</span>
+              <span class="material-symbols-outlined fa-solid fa-key text-nexus-500" data-icon="key_off" aria-hidden="true"></span>
               Reemissão e Invalidação de Códigos Individuais
             </h2>
             <span class="font-mono text-xs text-slate-600">Presencial na Guarita STS-01</span>
@@ -78,12 +75,12 @@
             </div>
 
             <button id="searchEmpBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-10">
-              <span class="material-symbols-outlined text-[18px]">search</span>
+              <span class="material-symbols-outlined fa-solid fa-magnifying-glass text-[18px]" data-icon="search" aria-hidden="true"></span>
               <span>Localizar Funcionário</span>
             </button>
 
             <button id="regenCodeBtn" type="button" disabled class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-10 disabled:opacity-50 disabled:cursor-not-allowed">
-              <span class="material-symbols-outlined text-[18px]">autorenew</span>
+              <span class="material-symbols-outlined fa-solid fa-arrows-rotate text-[18px]" data-icon="autorenew" aria-hidden="true"></span>
               <span>Invalidar & Gerar Novo Código</span>
             </button>
           </div>
@@ -103,7 +100,7 @@
           <!-- Alert de Sucesso -->
           <div id="codeRegenNotice" class="hidden p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-[20px] text-emerald-700">check_circle</span>
+              <span class="material-symbols-outlined fa-solid fa-circle-check text-[20px] text-emerald-700" data-icon="check_circle" aria-hidden="true"></span>
               <span>Código antigo invalidado! Novo código gerado: <strong id="newGeneratedCode" class="font-mono text-sm underline">--</strong></span>
             </div>
             <span class="font-mono text-[10px] bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100 px-2 py-0.5 rounded">Mesma Matrícula</span>
@@ -114,7 +111,7 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">group</span>
+              <span class="material-symbols-outlined fa-solid fa-user-group text-nexus-500" data-icon="group" aria-hidden="true"></span>
               Cadastro de Funcionários & Documentação Interna
             </h2>
             <button id="toggleFuncFormBtn" type="button" class="px-3 py-1.5 rounded-lg bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs">
@@ -158,12 +155,12 @@
               <input type="text" id="funcDoc" placeholder="Ex: Livro Registro #102" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
             <div class="sm:col-span-2 md:col-span-4 flex items-center justify-end gap-2 mt-1">
-              <span id="funcEdicaoAviso" class="hidden mr-auto text-[11px] font-semibold text-nexus-700 dark:text-nexus-300">Editando CPF, data de nascimento e documentação interna — matrícula, nome e cargo ficam travados (restrito ao Diretor e ao Técnico em Portos).</span>
+              <span id="funcEdicaoAviso" class="hidden mr-auto text-[11px] font-semibold text-nexus-700 dark:text-nexus-300">Editando CPF, data de nascimento e documentação interna — matrícula, nome e cargo ficam travados.</span>
               <button id="cancelarEdicaoFuncionarioBtn" type="button" class="hidden px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold text-xs">
                 Cancelar Edição
               </button>
               <button id="funcFormSubmitBtn" type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">save</span>
+                <span class="material-symbols-outlined fa-solid fa-floppy-disk text-[16px]" data-icon="save" aria-hidden="true"></span>
                 <span id="funcFormSubmitLabel">Salvar Funcionário</span>
               </button>
             </div>
@@ -196,7 +193,7 @@
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div>
               <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">assignment_ind</span>
+                <span class="material-symbols-outlined fa-solid fa-id-badge text-nexus-500" data-icon="assignment_ind" aria-hidden="true"></span>
                 Visitantes Ativos / No Porto
               </h2>
               <p class="text-[11px] text-slate-600 dark:text-slate-400">Visitantes com entrada registrada no porto. Ao concluir a visita, a data de saída e o parecer da vistoria são salvos e o visitante é movido para o histórico.</p>
@@ -221,7 +218,7 @@
             </div>
             <div class="sm:col-span-2 md:col-span-4 flex justify-end gap-2 mt-1">
               <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                <span class="material-symbols-outlined fa-solid fa-circle-check text-[16px]" data-icon="check_circle" aria-hidden="true"></span>
                 <span>Registrar Entrada</span>
               </button>
             </div>
@@ -252,7 +249,7 @@
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div>
               <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">history_edu</span>
+                <span class="material-symbols-outlined fa-solid fa-file-signature text-nexus-500" data-icon="history_edu" aria-hidden="true"></span>
                 Histórico de Visitas e Vistorias Concluídas no Ano
               </h2>
               <p class="text-[11px] text-slate-600 dark:text-slate-400">Registro permanente das visitas finalizadas e o parecer das vistorias realizadas durante o ano.</p>
@@ -309,7 +306,7 @@
   <script src="js/data-repository.js"></script>
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
-  <script src="js/pages/tecnico_portos.js?v=2"></script>
+  <script src="js/pages/tecnico_portos.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
   <script src="js/padronizacao-codigos.js"></script>
   <script src="js/webmcp/webmcp-core.js"></script>

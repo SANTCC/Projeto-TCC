@@ -105,7 +105,7 @@ const PAGINAS = [
     titulo: 'QR Code',
     subtitulo: 'Leitura móvel por câmera ou entrada manual',
     publica: false,
-    resumo: 'Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.',
+    resumo: 'Leitura de etiquetas QR das cargas. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.',
     destaques: [
       'Aceita o código impresso na etiqueta QR Code ou o identificador operacional do ativo.',
       'Fallback de digitação manual para ambientes sem câmera.',
@@ -131,7 +131,7 @@ const PAGINAS = [
   {
     chave: 'manutencao',
     arquivo: 'manutencao.html',
-    titulo: 'Manutenção & Tarefas',
+    titulo: 'Manutenção',
     subtitulo: 'Abertura, aprovação e conclusão de OS',
     publica: false,
     resumo: 'Ciclo de manutenção de navios, contêineres e guindastes: solicitação, aprovação ou recusa e conclusão, com histórico de serviços e o botão de pânico global no cabeçalho.',

@@ -28,18 +28,18 @@
 <body class="bg-nexus-bg dark:bg-nexus-dark-bg text-nexus-text dark:text-slate-100 font-sans min-h-screen flex flex-col justify-between transition-colors duration-200">
 
   <!-- Header Superior -->
-  <header class="w-full px-6 py-4 flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900/80 backdrop-blur-md">
-    <div class="flex items-center gap-3">
-      <picture class="w-10 h-10 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img width="40" height="40" src="design/logo_porto.png" alt="NexusPort Logo" class="w-10 h-10 object-contain rounded-lg" /></picture>
-      <div class="flex flex-col">
-        <span class="font-display font-bold text-lg text-nexus-900 dark:text-white leading-tight">NexusPort</span>
-        <span class="font-mono text-xs text-slate-600 dark:text-slate-400">Terminal STS-01 • Identificação Operacional</span>
+  <header class="w-full px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 border-b border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900/80 backdrop-blur-md">
+    <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+      <picture class="w-9 h-9 sm:w-10 sm:h-10 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img width="40" height="40" src="design/logo_porto.png" alt="NexusPort Logo" class="w-9 h-9 sm:w-10 sm:h-10 object-contain rounded-lg" /></picture>
+      <div class="flex flex-col min-w-0">
+        <span class="font-display font-bold text-base sm:text-lg text-nexus-900 dark:text-white leading-tight truncate">NexusPort</span>
+        <span class="font-mono text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 truncate">Terminal STS-01 • Identificação Operacional</span>
       </div>
     </div>
 
     <div class="flex items-center gap-3">
       <button id="themeToggle" type="button" aria-label="Alternar tema escuro" class="p-2.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center">
-        <span class="material-symbols-outlined text-[20px]" id="themeToggleIcon">dark_mode</span>
+        <span class="material-symbols-outlined fa-solid fa-moon text-[20px]" id="themeToggleIcon" data-icon="dark_mode" aria-hidden="true"></span>
       </button>
     </div>
   </header>
@@ -52,14 +52,14 @@
       <div class="flex items-start justify-between pb-4 mb-6 border-b border-nexus-border dark:border-nexus-dark-border">
         <div>
           <div class="flex items-center gap-1.5 text-nexus-500 dark:text-indigo-400 mb-1">
-            <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">how_to_reg</span>
+            <span class="material-symbols-outlined fa-solid fa-user-check text-[20px]" style="font-variation-settings: 'FILL' 1;" data-icon="how_to_reg" aria-hidden="true"></span>
             <span class="font-mono text-xs uppercase font-bold tracking-wider">Confirmação de Perfil</span>
           </div>
           <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white">Confirme seu Cargo</h1>
           <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">O sistema identificou automaticamente seu perfil de acesso.</p>
         </div>
         <div class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-nexus-500 dark:text-indigo-400 flex-shrink-0">
-          <span class="material-symbols-outlined text-[24px]">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved text-[24px]" data-icon="verified_user" aria-hidden="true"></span>
         </div>
       </div>
 
@@ -87,43 +87,25 @@
               <span>Cargo Resolvido pelo Sistema</span>
             </label>
             <span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-              <span class="material-symbols-outlined text-[12px]">lock</span>
+              <span class="material-symbols-outlined fa-solid fa-lock text-[12px]" data-icon="lock" aria-hidden="true"></span>
               Trava Ativa
             </span>
           </div>
 
           <!-- Container do Cargo Desabilitado -->
-          <div class="relative w-full rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 p-4 flex flex-col gap-3">
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-3 min-w-0">
-                <div id="roleBadgeIcon" class="w-10 h-10 rounded-lg bg-nexus-500 text-white flex items-center justify-center font-mono text-xs font-bold flex-shrink-0">
-                  --
-                </div>
-                <div class="flex flex-col min-w-0">
-                  <span id="roleTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white truncate">--</span>
-                  <span id="roleLevelBadge" class="text-xs text-slate-600 dark:text-slate-400 font-medium">--</span>
-                </div>
+          <div class="relative w-full rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 p-4 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-3 min-w-0">
+              <div id="roleBadgeIcon" class="w-10 h-10 rounded-lg bg-nexus-500 text-white flex items-center justify-center font-mono text-xs font-bold flex-shrink-0">
+                --
               </div>
-              <span class="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-mono text-xs font-bold whitespace-nowrap flex items-center gap-1">
-                <span class="material-symbols-outlined text-[14px]">check</span>
-                Confirmado
-              </span>
+              <div class="flex flex-col min-w-0">
+                <span id="roleTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white truncate">--</span>
+              </div>
             </div>
-
-            <!-- Disclaimer de Regra de Negócio -->
-            <div class="flex items-start gap-1.5 text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700/80 text-xs leading-relaxed">
-              <span class="material-symbols-outlined text-[16px] text-nexus-500 flex-shrink-0 mt-0.5">info</span>
-              <span>O cargo é resolvido exclusivamente pelo banco de dados via código individual e não permite alteração manual pelo operador.</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Descrição da Camada de Visão Vinculada -->
-        <div id="visionScopeBox" class="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 text-indigo-900 dark:text-indigo-200 text-xs flex items-start gap-2.5">
-          <span class="material-symbols-outlined text-[20px] text-nexus-500 dark:text-indigo-400 flex-shrink-0 mt-0.5">visibility</span>
-          <div>
-            <span id="visionTitle" class="font-bold block">Camada de Visão Habilitada:</span>
-            <span id="visionDescription" class="mt-0.5 block leading-relaxed">--</span>
+            <span class="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-mono text-xs font-bold whitespace-nowrap flex items-center gap-1">
+              <span class="material-symbols-outlined fa-solid fa-check text-[14px]" data-icon="check" aria-hidden="true"></span>
+              Confirmado
+            </span>
           </div>
         </div>
 
@@ -133,7 +115,7 @@
           id="confirmRoleBtn"
           class="w-full h-12 rounded-lg bg-nexus-500 hover:bg-nexus-900 active:scale-[0.99] text-white font-semibold text-base flex items-center justify-center gap-2 transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-nexus-500 mt-2"
         >
-          <span class="material-symbols-outlined text-[20px]">task_alt</span>
+          <span class="material-symbols-outlined fa-solid fa-circle-check text-[20px]" data-icon="task_alt" aria-hidden="true"></span>
           <span>Confirmar Cargo e Acessar Sistema</span>
         </button>
 

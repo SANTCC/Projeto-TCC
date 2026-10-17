@@ -7,8 +7,8 @@
   <script defer src="js/analytics.js"></script>
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>NexusPort — Manutenção & Tarefas</title>
-  <meta name="description" content="Manutenção e tarefas no NexusPort: chamados, guindastes e botão de pânico global." />
+  <title>NexusPort — Manutenção</title>
+  <meta name="description" content="Manutenção no NexusPort: chamados, guindastes e botão de pânico global." />
 
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
 
@@ -47,10 +47,10 @@
         <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm">
           <div>
             <div class="flex items-center gap-2 text-nexus-500 font-mono text-xs font-bold uppercase tracking-wider">
-              <span class="material-symbols-outlined text-sm">build</span>
+              <span class="material-symbols-outlined fa-solid fa-wrench text-sm" data-icon="build" aria-hidden="true"></span>
               <span>Engenharia & Ativos</span>
             </div>
-            <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Manutenção & Tarefas</h1>
+            <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Manutenção</h1>
             <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Histórico operacional de manutenções, controle de ciclo preventivo e protocolos de emergência.</p>
           </div>
         </div>
@@ -58,14 +58,14 @@
         <!-- Banner de Emergência Crítica / Pânico -->
         <div id="emergencyAlertBanner" class="hidden p-4 rounded-xl bg-red-600 text-white shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-pulse">
           <div class="flex items-center gap-3">
-            <span class="material-symbols-outlined text-[36px]">warning</span>
+            <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-[36px]" data-icon="warning" aria-hidden="true"></span>
             <div>
               <span class="font-display font-bold text-lg block">ALERTA DE EMERGÊNCIA CRÍTICA ATIVO!</span>
               <p class="text-xs text-red-100">BLOQUEIO OPERACIONAL TEMPORÁRIO NO PÁTIO STS-01 ATIVADO. Siga os protocolos de evacuação e segurança.</p>
             </div>
           </div>
           <button id="resetEmergencyBtn" type="button" class="px-4 py-2 rounded-xl bg-white text-red-700 hover:bg-red-50 font-bold text-xs flex items-center gap-1 flex-shrink-0">
-            <span class="material-symbols-outlined text-[18px]">notifications_off</span>
+            <span class="material-symbols-outlined fa-solid fa-bell-slash text-[18px]" data-icon="notifications_off" aria-hidden="true"></span>
             <span>Desativar Alarme</span>
           </button>
         </div>
@@ -73,15 +73,15 @@
         <!-- Botão de Pânico e Protocolo de Emergência (Preservado oculto no DOM; acionamento exclusivo na Sidebar) -->
         <div class="hidden p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 flex-col sm:flex-row items-center justify-between gap-4" aria-hidden="true">
           <div class="flex items-center gap-3">
-            <span class="material-symbols-outlined text-red-600 text-[32px]">campaign</span>
+            <span class="material-symbols-outlined fa-solid fa-bullhorn text-red-600 text-[32px]" data-icon="campaign" aria-hidden="true"></span>
             <div>
-              <span class="font-bold text-sm text-red-900 dark:text-red-200 block">Protocolo de Emergência / Botão de Pânico Global (Inspetor)</span>
+              <span class="font-bold text-sm text-red-900 dark:text-red-200 block">Protocolo de Emergência / Botão de Pânico Global</span>
               <p class="text-xs text-red-700 dark:text-red-300">Acione em caso de incêndio, vazamento químico ou acidente grave no pátio. O alerta bloqueia imediatamente as operações e avisa todas as telas do terminal em tempo real.</p>
             </div>
           </div>
           <div class="flex items-center gap-2 w-full sm:w-auto">
             <button id="panicButton" type="button" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-display font-bold text-xs uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2">
-              <span class="material-symbols-outlined text-[20px]">e911_emergency</span>
+              <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-[20px]" data-icon="e911_emergency" aria-hidden="true"></span>
               <span>BOTÃO DE PÂNICO</span>
             </button>
           </div>
@@ -92,20 +92,20 @@
           <div id="hapticsPanel" class="p-5 md:p-6 rounded-2xl bg-white dark:bg-slate-900 w-full max-w-2xl border border-nexus-border dark:border-nexus-dark-border shadow-2xl flex flex-col gap-3 max-h-[92vh] overflow-y-auto">
             <div class="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
               <div class="flex items-start gap-3">
-                <span class="material-symbols-outlined text-nexus-500 text-[24px] shrink-0 mt-0.5">vibration</span>
+                <span class="material-symbols-outlined fa-solid fa-mobile-screen text-nexus-500 text-[24px] shrink-0 mt-0.5" data-icon="vibration" aria-hidden="true"></span>
                 <div class="min-w-0">
                   <span id="hapticsModalTitle" class="font-bold text-sm text-nexus-900 dark:text-white block">Alerta no Aparelho (vibração / som)</span>
                   <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">Durante uma emergência ativa, o aparelho emite alerta sonoro contínuo e vibração periódica (em dispositivos Android compatíveis). Mantenha o som do aparelho ligado e toque em "Testar vibração e som" para validar seu dispositivo.</p>
                 </div>
               </div>
               <button type="button" id="closeHapticsSettingsModalBtn" aria-label="Fechar configurações de alerta" class="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors shrink-0">
-                <span class="material-symbols-outlined text-[20px]">close</span>
+                <span class="material-symbols-outlined fa-solid fa-xmark text-[20px]" data-icon="close" aria-hidden="true"></span>
               </button>
             </div>
             <div class="grid sm:grid-cols-2 gap-3">
               <label class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700 cursor-pointer">
                 <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
-                  <span class="material-symbols-outlined text-[18px]">vibration</span>
+                  <span class="material-symbols-outlined fa-solid fa-mobile-screen text-[18px]" data-icon="vibration" aria-hidden="true"></span>
                   <span>Vibração</span>
                 </span>
                 <input type="checkbox" id="hapticsEnabledToggle" class="sr-only peer" />
@@ -113,7 +113,7 @@
               </label>
               <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-nexus-border dark:border-slate-700">
                 <span class="text-xs font-bold text-nexus-900 dark:text-white flex items-center gap-2">
-                  <span class="material-symbols-outlined text-[18px]" aria-hidden="true">volume_up</span>
+                  <span class="material-symbols-outlined fa-solid fa-volume-high text-[18px]" aria-hidden="true" data-icon="volume_up"></span>
                   <span>Alerta sonoro</span>
                 </span>
                 <input type="checkbox" id="hapticsSoundToggle" aria-label="Som de emergência obrigatório" class="sr-only" checked disabled />
@@ -122,15 +122,15 @@
             </div>
             <div class="flex flex-wrap gap-2">
               <button id="hapticsTestBtn" type="button" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-bold text-xs transition-colors shadow-sm flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">sensors</span>
+                <span class="material-symbols-outlined fa-solid fa-tower-broadcast text-[16px]" data-icon="sensors" aria-hidden="true"></span>
                 <span>Testar vibração e som</span>
               </button>
               <button id="hapticsRefreshBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">refresh</span>
+                <span class="material-symbols-outlined fa-solid fa-arrows-rotate text-[16px]" data-icon="refresh" aria-hidden="true"></span>
                 <span>Verificar novamente</span>
               </button>
               <a href="teste-vibracao.html" class="px-4 py-2 rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950/60 text-red-700 dark:text-red-300 font-bold text-xs transition-colors flex items-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">smartphone</span>
+                <span class="material-symbols-outlined fa-solid fa-mobile-screen-button text-[16px]" data-icon="smartphone" aria-hidden="true"></span>
                 <span>Abrir teste no celular</span>
               </a>
             </div>
@@ -141,7 +141,7 @@
 
         <!-- Alerta de Manutenção Preventiva Sugerida (> 3 Anos) -->
         <div id="alertaPreventivaBox" class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
-          <span class="material-symbols-outlined text-2xl text-amber-700 shrink-0 mt-0.5">warning</span>
+          <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-2xl text-amber-700 shrink-0 mt-0.5" data-icon="warning" aria-hidden="true"></span>
           <div>
             <span class="font-bold text-sm block">Alerta de Manutenção Preventiva Sugerida (Ciclo > 3 Anos):</span>
             <div id="alertaPreventivaList" class="mt-0.5 leading-relaxed">
@@ -154,7 +154,7 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500 text-[22px]">assignment</span>
+              <span class="material-symbols-outlined fa-solid fa-clipboard-list text-nexus-500 text-[22px]" data-icon="assignment" aria-hidden="true"></span>
               <div>
                 <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white leading-tight">Ordens de Serviço e Solicitações de Manutenção (OS)</h2>
                 <p class="text-[11px] text-slate-600 dark:text-slate-400">Abertura unificada de solicitações para equipamentos de pátio, contêineres e embarcações atracadas.</p>
@@ -172,11 +172,11 @@
             <div id="unifiedManutTabs" class="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-700 pb-3">
               <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-1">Categoria do Ativo:</span>
               <button type="button" id="tabOsEquipamentoBtn" data-target="EQUIPAMENTO" aria-pressed="true" class="px-3 py-1.5 rounded-lg bg-nexus-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm">
-                <span class="material-symbols-outlined text-[16px]">precision_manufacturing</span>
+                <span class="material-symbols-outlined fa-solid fa-gears text-[16px]" data-icon="precision_manufacturing" aria-hidden="true"></span>
                 <span>Equipamento / Contêiner</span>
               </button>
               <button type="button" id="tabOsNavioBtn" data-target="NAVIO" aria-pressed="false" class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors">
-                <span class="material-symbols-outlined text-[16px]">directions_boat</span>
+                <span class="material-symbols-outlined fa-solid fa-ship text-[16px]" data-icon="directions_boat" aria-hidden="true"></span>
                 <span>Embarcação (Navio)</span>
               </button>
             </div>
@@ -202,7 +202,7 @@
               </div>
               <div class="sm:col-span-3 flex justify-end">
                 <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[16px]">save</span>
+                  <span class="material-symbols-outlined fa-solid fa-floppy-disk text-[16px]" data-icon="save" aria-hidden="true"></span>
                   <span>Criar Ordem de Serviço</span>
                 </button>
               </div>
@@ -231,7 +231,7 @@
                 </div>
                 <div class="sm:col-span-3 flex justify-end">
                   <button type="submit" class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1">
-                    <span class="material-symbols-outlined text-[16px]">save</span>
+                    <span class="material-symbols-outlined fa-solid fa-floppy-disk text-[16px]" data-icon="save" aria-hidden="true"></span>
                     <span>Registrar Solicitação</span>
                   </button>
                 </div>
@@ -242,7 +242,7 @@
           <!-- Busca + filtros por status das OS (Backlog 3 - 7b/7h) -->
           <div class="flex flex-col gap-2">
             <div class="relative">
-              <span class="material-symbols-outlined text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
+              <span class="material-symbols-outlined fa-solid fa-magnifying-glass text-[18px] text-slate-600 absolute left-2.5 top-1/2 -translate-y-1/2" data-icon="search" aria-hidden="true"></span>
               <input type="search" id="buscarOsInput" placeholder="Buscar OS por número, equipamento ou descrição..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-xs font-sans focus:outline-none focus:ring-2 focus:ring-nexus-500/60" />
             </div>
             <div id="osStatusChips" class="flex flex-wrap items-center gap-1.5">
@@ -265,7 +265,7 @@
                   <th class="p-3">Descrição da Falha</th>
                   <th class="p-3">Data Manutenção</th>
                   <th class="p-3">Status OS</th>
-                  <th class="p-3 text-right">Ações do Supervisor</th>
+                  <th class="p-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody id="osTableBody" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">

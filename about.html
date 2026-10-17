@@ -54,10 +54,10 @@
     html.dark a { color: #A5B4FC; }
     code { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace; background: rgba(68, 89, 135, .12); padding: .1rem .35rem; border-radius: .35rem; font-size: .9em; }
     .material-symbols-outlined {
-      font-family: 'Material Symbols Outlined';
-      font-weight: normal; font-style: normal; font-size: 24px; line-height: 1;
-      letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap;
-      word-wrap: normal; direction: ltr; -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga';
+      font-family: 'Font Awesome 6 Free' !important;
+      font-weight: 900; font-style: normal; font-size: 20px; line-height: 1;
+      letter-spacing: normal; text-transform: none; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
+      word-wrap: normal; direction: ltr;
     }
     .visualmente-oculto {
       position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
@@ -246,7 +246,7 @@
       <a href="index.html">Acessar o sistema</a>
     </nav>
     <button id="botaoTema" type="button" class="botao-tema" aria-label="Alternar tema claro/escuro">
-      <span class="material-symbols-outlined" id="iconeTema" aria-hidden="true">dark_mode</span>
+      <span class="material-symbols-outlined fa-solid fa-moon" id="iconeTema" data-icon="dark_mode" aria-hidden="true"></span>
     </button>
   </header>
 
@@ -270,7 +270,7 @@
           <li><strong>9</strong><span>status no fluxo da carga</span></li>
         </ul>
         <p class="nota">
-          <span class="material-symbols-outlined" aria-hidden="true">info</span>
+          <span class="material-symbols-outlined fa-solid fa-circle-info" data-icon="info" aria-hidden="true"></span>
           <span>O acesso ao sistema é controlado por perfil funcional (RBAC), garantindo que cada cargo visualize e execute apenas as operações compatíveis com sua função no terminal.</span>
         </p>
       </div>
@@ -282,7 +282,7 @@
 
   <!-- Fluxo operacional -->
   <section id="fluxo">
-    <h2><span class="material-symbols-outlined" aria-hidden="true">route</span> Fluxo operacional, do agendamento à auditoria</h2>
+    <h2><span class="material-symbols-outlined fa-solid fa-route" data-icon="route" aria-hidden="true"></span> Fluxo operacional, do agendamento à auditoria</h2>
     <p class="secao-texto">
       Cada pilar abaixo corresponde a uma etapa da operação portuária no terminal: identidade, entrada da carga,
       inspeção técnica, armazenagem no pátio, despacho marítimo, comando executivo e operação em campo.
@@ -293,7 +293,7 @@
           <img src="design/undraw/authentication.svg" alt="Ícone unDraw de autenticação e acesso seguro com credencial" class="undraw-pilar-img" loading="lazy" />
         </div>
         <div class="pilar-cabecalho">
-          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">badge</span>
+          <span class="material-symbols-outlined fa-solid fa-id-card-clip pilar-icone" data-icon="badge" aria-hidden="true"></span>
           <h3>1. Acesso e identidade</h3>
         </div>
         <p>Login pelo código individual institucional, confirmação obrigatória do cargo e sessão em cookie de 12 h (um turno). O cargo define a camada de visão: própria, operacional ou estratégica.</p>
@@ -303,7 +303,7 @@
           <img src="design/undraw/deliveries.svg" alt="Ícone unDraw de agendamento de entrega e recebimento de cargas" class="undraw-pilar-img" loading="lazy" />
         </div>
         <div class="pilar-cabecalho">
-          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">event_available</span>
+          <span class="material-symbols-outlined fa-solid fa-calendar-check pilar-icone" data-icon="event_available" aria-hidden="true"></span>
           <h3>2. Agendamento e recebimento</h3>
         </div>
         <p>A carga entra em AGENDAMENTO com data prevista de entrega e destino; no recebimento é conferida contra o checklist do tipo de carga e recebe QR Code com etiqueta A4.</p>
@@ -313,7 +313,7 @@
           <img src="design/undraw/inspection.svg" alt="Ícone unDraw de inspeção técnica formal e conferência de itens" class="undraw-pilar-img" loading="lazy" />
         </div>
         <div class="pilar-cabecalho">
-          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">fact_check</span>
+          <span class="material-symbols-outlined fa-solid fa-clipboard-check pilar-icone" data-icon="fact_check" aria-hidden="true"></span>
           <h3>3. Inspeção formal</h3>
         </div>
         <p>O inspetor executa o checklist item a item. A aprovação só é liberada quando 100% dos itens críticos estão conformes (RN 14); a recusa exige motivo formal, que vai para a auditoria.</p>
@@ -323,7 +323,7 @@
           <img src="design/undraw/logistics.svg" alt="Ícone unDraw de armazenagem e logística de contêineres no pátio" class="undraw-pilar-img" loading="lazy" />
         </div>
         <div class="pilar-cabecalho">
-          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">warehouse</span>
+          <span class="material-symbols-outlined fa-solid fa-warehouse pilar-icone" data-icon="warehouse" aria-hidden="true"></span>
           <h3>4. Pátio e vínculo</h3>
         </div>
         <p>Aprovada, a carga é armazenada em baia e vinculada a contêiner e navio. O sistema mantém berços, guindastes e a localização das embarcações com ETA por rota a partir do Porto de Santos.</p>
@@ -333,7 +333,7 @@
           <img src="design/undraw/security.svg" alt="Ícone unDraw de despacho operacional supervisionado e liberação segura" class="undraw-pilar-img" loading="lazy" />
         </div>
         <div class="pilar-cabecalho">
-          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved pilar-icone" data-icon="verified_user" aria-hidden="true"></span>
           <h3>5. Despacho e liberação</h3>
         </div>
         <p>O supervisor (ou o substituto delegado) libera a saída, cancela entregas e responde por decisões que ficam registradas na trilha imutável com justificativa formal.</p>
@@ -343,7 +343,7 @@
           <img src="design/undraw/dashboard.svg" alt="Ícone unDraw de painel de controle executivo com gráficos e KPIs" class="undraw-pilar-img" loading="lazy" />
         </div>
         <div class="pilar-cabecalho">
-          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">monitoring</span>
+          <span class="material-symbols-outlined fa-solid fa-chart-line pilar-icone" data-icon="monitoring" aria-hidden="true"></span>
           <h3>6. Comando e auditoria</h3>
         </div>
         <p>O painel consolida KPIs e gráficos por camada de visão; toda alteração relevante vai para logs_alteracoes e toda decisão crítica para trail_decisoes com retificações anexáveis.</p>
@@ -353,7 +353,7 @@
           <img src="design/undraw/qr-code-scan.svg" alt="Ícone unDraw de operação de campo e leitura de QR Code em smartphone" class="undraw-pilar-img" loading="lazy" />
         </div>
         <div class="pilar-cabecalho">
-          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">qr_code_scanner</span>
+          <span class="material-symbols-outlined fa-solid fa-qrcode pilar-icone" data-icon="qr_code_scanner" aria-hidden="true"></span>
           <h3>7. Operação em campo</h3>
         </div>
         <p>O leitor de QR Code funciona no celular: leitura por câmera ou digitação, com registro da leitura. O botão de pânico é global e propaga o alerta em tempo real para todas as telas.</p>
@@ -376,7 +376,7 @@
 
   <!-- Arquitetura -->
   <section id="arquitetura">
-    <h2><span class="material-symbols-outlined" aria-hidden="true">account_tree</span> Como o sistema é construído</h2>
+    <h2><span class="material-symbols-outlined fa-solid fa-sitemap" data-icon="account_tree" aria-hidden="true"></span> Como o sistema é construído</h2>
     <p class="secao-texto">
       O NexusPort é um front-end estático que conversa diretamente com o Supabase (PostgREST, Realtime e
       Edge Functions). As regras de negócio são aplicadas nas telas, nas políticas do banco e nas funções de borda.
@@ -387,7 +387,7 @@
           <img src="design/undraw/source-code.svg" alt="Ícone unDraw de front-end estático em JavaScript" class="undraw-arq-img" loading="lazy" />
         </div>
         <header>
-          <span class="material-symbols-outlined" aria-hidden="true">web</span>
+          <span class="material-symbols-outlined fa-solid fa-window-maximize" data-icon="web" aria-hidden="true"></span>
           <h3>Front-end estático e acessível</h3>
         </header>
         <ul>
@@ -402,7 +402,7 @@
           <img src="design/undraw/server.svg" alt="Ícone unDraw de banco de dados e PostgREST Supabase" class="undraw-arq-img" loading="lazy" />
         </div>
         <header>
-          <span class="material-symbols-outlined" aria-hidden="true">storage</span>
+          <span class="material-symbols-outlined fa-solid fa-database" data-icon="storage" aria-hidden="true"></span>
           <h3>Supabase (PostgreSQL + PostgREST)</h3>
         </header>
         <ul>
@@ -417,7 +417,7 @@
           <img src="design/undraw/cloud-sync.svg" alt="Ícone unDraw de computação serverless com Edge Functions" class="undraw-arq-img" loading="lazy" />
         </div>
         <header>
-          <span class="material-symbols-outlined" aria-hidden="true">functions</span>
+          <span class="material-symbols-outlined fa-solid fa-calculator" data-icon="functions" aria-hidden="true"></span>
           <h3>Edge Functions (Deno)</h3>
         </header>
         <ul>
@@ -432,7 +432,7 @@
           <img src="design/undraw/secure-server.svg" alt="Ícone unDraw de segurança, RBAC e trilha de auditoria" class="undraw-arq-img" loading="lazy" />
         </div>
         <header>
-          <span class="material-symbols-outlined" aria-hidden="true">shield</span>
+          <span class="material-symbols-outlined fa-solid fa-shield" data-icon="shield" aria-hidden="true"></span>
           <h3>Segurança e conformidade</h3>
         </header>
         <ul>
@@ -447,7 +447,7 @@
           <img src="design/undraw/teamwork.svg" alt="Ícone unDraw de equipe com diferentes camadas de visão" class="undraw-arq-img" loading="lazy" />
         </div>
         <header>
-          <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+          <span class="material-symbols-outlined fa-solid fa-users" data-icon="groups" aria-hidden="true"></span>
           <h3>Camadas de visão</h3>
         </header>
         <ul>
@@ -461,7 +461,7 @@
           <img src="design/undraw/ai-code-generation.svg" alt="Ícone unDraw de assistente inteligente e agentes de IA WebMCP" class="undraw-arq-img" loading="lazy" />
         </div>
         <header>
-          <span class="material-symbols-outlined" aria-hidden="true">smart_toy</span>
+          <span class="material-symbols-outlined fa-solid fa-robot" data-icon="smart_toy" aria-hidden="true"></span>
           <h3>WebMCP (agentes de IA)</h3>
         </header>
         <ul>
@@ -493,7 +493,7 @@
 
   <!-- Perfis -->
   <section id="perfis">
-    <h2><span class="material-symbols-outlined" aria-hidden="true">badge</span> Perfis, camadas de visão e acessos</h2>
+    <h2><span class="material-symbols-outlined fa-solid fa-id-card-clip" data-icon="badge" aria-hidden="true"></span> Perfis, camadas de visão e acessos</h2>
     <p class="secao-texto">
       O cargo vem do cadastro funcional e não pode ser trocado na tela: ao confirmar, o operador assume a
       camada de visão correspondente. As páginas abaixo são as liberadas para cada cargo pela matriz
@@ -515,31 +515,31 @@
             <th scope="row">Diretor-Presidente/Superintendente</th>
             <td>Nível Estratégico</td>
             <td><span class="etiqueta">Visão Estratégica</span></td>
-            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção &amp; Tarefas · Delegação de Supervisor · Gestão de Pessoas (Técnico em Portos) · Relatórios &amp; PDF</td>
+            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção · Delegação de Supervisor · Gestão de Pessoas (Técnico em Portos) · Relatórios &amp; PDF</td>
           </tr>
           <tr>
             <th scope="row">Diretor de Operações e Logística</th>
             <td>Nível Estratégico</td>
             <td><span class="etiqueta">Visão Estratégica</span></td>
-            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção &amp; Tarefas · Delegação de Supervisor · Gestão de Pessoas (Técnico em Portos) · Relatórios &amp; PDF</td>
+            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção · Delegação de Supervisor · Gestão de Pessoas (Técnico em Portos) · Relatórios &amp; PDF</td>
           </tr>
           <tr>
             <th scope="row">Conselho de Administração</th>
             <td>Nível Estratégico</td>
             <td><span class="etiqueta">Visão Estratégica</span></td>
-            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção &amp; Tarefas · Delegação de Supervisor · Gestão de Pessoas (Técnico em Portos) · Relatórios &amp; PDF</td>
+            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção · Delegação de Supervisor · Gestão de Pessoas (Técnico em Portos) · Relatórios &amp; PDF</td>
           </tr>
           <tr>
             <th scope="row">Supervisor / Gerente de Operações</th>
             <td>Nível Gestão</td>
             <td><span class="etiqueta">Visão Operacional</span></td>
-            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção &amp; Tarefas · Delegação de Supervisor · Relatórios &amp; PDF</td>
+            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção · Delegação de Supervisor · Relatórios &amp; PDF</td>
           </tr>
           <tr>
             <th scope="row">Inspetor</th>
             <td>Nível Tático</td>
             <td><span class="etiqueta">Visão Operacional</span></td>
-            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção &amp; Tarefas · Relatórios &amp; PDF</td>
+            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Inspeção · QR Code · Embarcações &amp; Equipamentos · Manutenção · Relatórios &amp; PDF</td>
           </tr>
           <tr>
             <th scope="row">Técnico em Portos</th>
@@ -551,7 +551,7 @@
             <th scope="row">Estivador</th>
             <td>Nível Operacional</td>
             <td><span class="etiqueta">Visão Própria</span></td>
-            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · QR Code · Embarcações &amp; Equipamentos · Manutenção &amp; Tarefas</td>
+            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · QR Code · Embarcações &amp; Equipamentos · Manutenção</td>
           </tr>
           <tr>
             <th scope="row">Conferente de Carga</th>
@@ -563,13 +563,13 @@
             <th scope="row">Arrumador e Consertador</th>
             <td>Nível Operacional</td>
             <td><span class="etiqueta">Visão Própria</span></td>
-            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Manutenção &amp; Tarefas</td>
+            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Cargas &amp; Operações de Pátio · Manutenção</td>
           </tr>
           <tr>
             <th scope="row">Planejador de Pátio e de Navios</th>
             <td>Nível Operacional</td>
             <td><span class="etiqueta">Visão Própria</span></td>
-            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Embarcações &amp; Equipamentos · Manutenção &amp; Tarefas</td>
+            <td class="telas-perfil">Confirmação de Cargo · Painel de Comando · Embarcações &amp; Equipamentos · Manutenção</td>
           </tr>
         </tbody>
       </table>
@@ -578,7 +578,7 @@
 
   <!-- Funcionalidades por página -->
   <section id="telas">
-    <h2><span class="material-symbols-outlined" aria-hidden="true">apps</span> Funcionalidades de cada página do sistema</h2>
+    <h2><span class="material-symbols-outlined fa-solid fa-grip" data-icon="apps" aria-hidden="true"></span> Funcionalidades de cada página do sistema</h2>
     <p class="secao-texto">
       Abaixo está cada página do NexusPort com sua finalidade operacional, suas funcionalidades principais
       e os cargos que possuem permissão de acesso.
@@ -609,7 +609,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Tela pública (etapa de autenticação — não exige sessão prévia)
         </p>
       </article>
@@ -639,7 +639,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Estivador, Conferente de Carga, Arrumador e Consertador, Planejador de Pátio e de Navios, Técnico em Portos, Supervisor / Gerente de Operações, Inspetor, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -669,7 +669,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Estivador, Conferente de Carga, Arrumador e Consertador, Planejador de Pátio e de Navios, Técnico em Portos, Supervisor / Gerente de Operações, Inspetor, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -699,7 +699,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Estivador, Conferente de Carga, Arrumador e Consertador, Supervisor / Gerente de Operações, Inspetor, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -729,7 +729,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Conferente de Carga, Inspetor, Supervisor / Gerente de Operações, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -750,7 +750,7 @@
           </div>
         </div>
 
-        <p class="tela-resumo">Leitura de etiquetas QR das cargas, contêineres e guindastes. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.</p>
+        <p class="tela-resumo">Leitura de etiquetas QR das cargas. Aceita câmera do dispositivo ou digitação do código, com registro da leitura e histórico.</p>
         <h4>Funcionalidades principais</h4>
         <ul class="tela-destaques">
             <li>Aceita o código impresso na etiqueta QR Code ou o identificador operacional do ativo.</li>
@@ -759,7 +759,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Estivador, Conferente de Carga, Supervisor / Gerente de Operações, Inspetor, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -789,7 +789,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Estivador, Planejador de Pátio e de Navios, Inspetor, Supervisor / Gerente de Operações, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -798,7 +798,7 @@
         <div class="tela-topo">
           <div>
             <p class="tela-caminho"><code>manutencao.html</code></p>
-            <h3>Manutenção &amp; Tarefas</h3>
+            <h3>Manutenção</h3>
             <p class="tela-subtitulo">Abertura, aprovação e conclusão de OS</p>
           </div>
           <div class="tela-etiquetas">
@@ -819,7 +819,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Estivador, Arrumador e Consertador, Planejador de Pátio e de Navios, Inspetor, Supervisor / Gerente de Operações, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -849,7 +849,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Supervisor / Gerente de Operações, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -879,7 +879,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Técnico em Portos, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -909,7 +909,7 @@
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          <span class="material-symbols-outlined fa-solid fa-shield-halved" data-icon="verified_user" aria-hidden="true"></span>
           Cargos com acesso: Conferente de Carga, Supervisor / Gerente de Operações, Inspetor, Diretor de Operações e Logística, Diretor-Presidente/Superintendente, Conselho de Administração
         </p>
       </article>
@@ -937,7 +937,11 @@
       var botao = document.getElementById('botaoTema');
       var icone = document.getElementById('iconeTema');
       function pintarIcone() {
-        if (icone) icone.textContent = raiz.classList.contains('dark') ? 'light_mode' : 'dark_mode';
+        if (!icone) return;
+        var escuro = raiz.classList.contains('dark');
+        icone.setAttribute('data-icon', escuro ? 'light_mode' : 'dark_mode');
+        icone.classList.toggle('fa-sun', escuro);
+        icone.classList.toggle('fa-moon', !escuro);
       }
       pintarIcone();
       if (botao) {

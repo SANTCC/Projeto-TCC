@@ -55,6 +55,21 @@
   font-display: swap;
   src: url('../fonts/jetbrains-mono-latin-600-normal.woff2') format('woff2');
 }
+/* Font Awesome Free — biblioteca oficial de ícones do sistema (Tarefa 3). */
+@font-face {
+  font-family: 'Font Awesome 6 Free';
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url('../fonts/fa-solid-900.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Font Awesome 6 Free';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('../fonts/fa-regular-400.woff2') format('woff2');
+}
 /* Material Symbols Outlined — subconjunto com os ícones usados pelas telas. */
 @font-face {
   font-family: 'Material Symbols Outlined';
@@ -63,19 +78,269 @@
   font-display: block;
   src: url('../fonts/material-symbols-outlined-v3.woff2') format('woff2');
 }
-.material-symbols-outlined {
-  font-family: 'Material Symbols Outlined';
-  font-weight: normal;
+.fa-solid, .fas, .fa-regular, .far, .fa, .material-symbols-outlined {
+  font-family: 'Font Awesome 6 Free' !important;
+  font-weight: 900;
   font-style: normal;
-  font-size: 24px;
   line-height: 1;
   letter-spacing: normal;
   text-transform: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   white-space: nowrap;
   word-wrap: normal;
   direction: ltr;
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  -webkit-font-feature-settings: 'liga';
-  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variation-settings: normal !important;
+  -webkit-font-feature-settings: normal !important;
+  font-feature-settings: normal !important;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  speak: never;
 }
+.fa-regular, .far {
+  font-weight: 400;
+}
+.fa-solid::before, .fas::before, .fa-regular::before, .far::before, .fa::before, .material-symbols-outlined::before {
+  content: var(--fa);
+  content: var(--fa) / "";
+  font-family: 'Font Awesome 6 Free' !important;
+  font-weight: inherit;
+  line-height: 1;
+  speak: never;
+}
+.fa-anchor { --fa: "\f13d"; }
+.fa-anchor-circle-check { --fa: "\e4aa"; }
+.fa-arrows-left-right { --fa: "\f07e"; }
+.fa-arrows-rotate { --fa: "\f021"; }
+.fa-award { --fa: "\f559"; }
+.fa-ban { --fa: "\f05e"; }
+.fa-bars { --fa: "\f0c9"; }
+.fa-bell { --fa: "\f0f3"; }
+.fa-bell-slash { --fa: "\f1f6"; }
+.fa-boxes-stacked { --fa: "\f468"; }
+.fa-bullhorn { --fa: "\f0a1"; }
+.fa-calculator { --fa: "\f1ec"; }
+.fa-calendar-check { --fa: "\f274"; }
+.fa-camera { --fa: "\f030"; }
+.fa-certificate { --fa: "\f0a3"; }
+.fa-chart-column { --fa: "\e0e3"; }
+.fa-chart-line { --fa: "\f201"; }
+.fa-chart-pie { --fa: "\f200"; }
+.fa-check { --fa: "\f00c"; }
+.fa-chevron-down { --fa: "\f078"; }
+.fa-chevron-left { --fa: "\f053"; }
+.fa-chevron-right { --fa: "\f054"; }
+.fa-chevron-up { --fa: "\f077"; }
+.fa-circle-check { --fa: "\f058"; }
+.fa-circle-exclamation { --fa: "\f06a"; }
+.fa-circle-info { --fa: "\f05a"; }
+.fa-circle-plus { --fa: "\f055"; }
+.fa-circle-question { --fa: "\f059"; }
+.fa-circle-user { --fa: "\f2bd"; }
+.fa-circle-xmark { --fa: "\f057"; }
+.fa-clipboard-check { --fa: "\f46c"; }
+.fa-clipboard-list { --fa: "\f46d"; }
+.fa-clock { --fa: "\f017"; }
+.fa-clock-rotate-left { --fa: "\f1da"; }
+.fa-cloud-bolt { --fa: "\f76c"; }
+.fa-cog { --fa: "\f013"; }
+.fa-compass { --fa: "\f14e"; }
+.fa-cube { --fa: "\f1b2"; }
+.fa-database { --fa: "\f1c0"; }
+.fa-dolly { --fa: "\f472"; }
+.fa-download { --fa: "\f019"; }
+.fa-eye { --fa: "\f06e"; }
+.fa-eye-slash { --fa: "\f070"; }
+.fa-file-circle-check { --fa: "\e5a0"; }
+.fa-file-csv { --fa: "\f6dd"; }
+.fa-file-excel { --fa: "\f1c3"; }
+.fa-file-pdf { --fa: "\f1c1"; }
+.fa-file-pen { --fa: "\f31c"; }
+.fa-file-signature { --fa: "\f573"; }
+.fa-filter { --fa: "\f0b0"; }
+.fa-filter-circle-xmark { --fa: "\e17b"; }
+.fa-fingerprint { --fa: "\f577"; }
+.fa-floppy-disk { --fa: "\f0c7"; }
+.fa-gauge { --fa: "\f624"; }
+.fa-gauge-high { --fa: "\f625"; }
+.fa-gavel { --fa: "\f0e3"; }
+.fa-gear { --fa: "\f013"; }
+.fa-gears { --fa: "\f085"; }
+.fa-globe { --fa: "\f0ac"; }
+.fa-grip { --fa: "\f58d"; }
+.fa-headset { --fa: "\f590"; }
+.fa-helmet-safety { --fa: "\f807"; }
+.fa-hourglass-half { --fa: "\f252"; }
+.fa-id-badge { --fa: "\f2c1"; }
+.fa-id-card { --fa: "\f2c2"; }
+.fa-id-card-clip { --fa: "\f47f"; }
+.fa-key { --fa: "\f084"; }
+.fa-link { --fa: "\f0c1"; }
+.fa-link-slash { --fa: "\f127"; }
+.fa-list-check { --fa: "\f0ae"; }
+.fa-lock { --fa: "\f023"; }
+.fa-magnifying-glass { --fa: "\f002"; }
+.fa-magnifying-glass-minus { --fa: "\f010"; }
+.fa-mobile-screen { --fa: "\f3cf"; }
+.fa-mobile-screen-button { --fa: "\f3cd"; }
+.fa-money-bill-wave { --fa: "\f53a"; }
+.fa-moon { --fa: "\f186"; }
+.fa-network-wired { --fa: "\f6ff"; }
+.fa-pen-nib { --fa: "\f5ad"; }
+.fa-pen-to-square { --fa: "\f044"; }
+.fa-plus { --fa: "\+"; }
+.fa-print { --fa: "\f02f"; }
+.fa-qrcode { --fa: "\f029"; }
+.fa-right-from-bracket { --fa: "\f2f5"; }
+.fa-right-to-bracket { --fa: "\f2f6"; }
+.fa-robot { --fa: "\f544"; }
+.fa-rotate { --fa: "\f2f1"; }
+.fa-route { --fa: "\f4d7"; }
+.fa-sailboat { --fa: "\e445"; }
+.fa-screwdriver-wrench { --fa: "\f7d9"; }
+.fa-shapes { --fa: "\f61f"; }
+.fa-shield { --fa: "\f132"; }
+.fa-shield-halved { --fa: "\f3ed"; }
+.fa-ship { --fa: "\f21a"; }
+.fa-sitemap { --fa: "\f0e8"; }
+.fa-spinner { --fa: "\f110"; }
+.fa-sun { --fa: "\f185"; }
+.fa-table { --fa: "\f0ce"; }
+.fa-table-cells-large { --fa: "\f009"; }
+.fa-table-list { --fa: "\f00b"; }
+.fa-timeline { --fa: "\e29c"; }
+.fa-tower-broadcast { --fa: "\f519"; }
+.fa-trash-can { --fa: "\f2ed"; }
+.fa-triangle-exclamation { --fa: "\f071"; }
+.fa-truck-ramp-box { --fa: "\f4de"; }
+.fa-unlock { --fa: "\f09c"; }
+.fa-user { --fa: "\f007"; }
+.fa-user-check { --fa: "\f4fc"; }
+.fa-user-group { --fa: "\f500"; }
+.fa-user-shield { --fa: "\f505"; }
+.fa-users { --fa: "\f0c0"; }
+.fa-volume-high { --fa: "\f028"; }
+.fa-warehouse { --fa: "\f494"; }
+.fa-window-maximize { --fa: "\f2d0"; }
+.fa-wrench { --fa: "\f0ad"; }
+.fa-xmark { --fa: "\f00d"; }
+[data-icon="account_tree"] { --fa: "\f0e8"; }
+[data-icon="add"] { --fa: "\+"; }
+[data-icon="add_circle"] { --fa: "\f055"; }
+[data-icon="alt_route"] { --fa: "\f4d7"; }
+[data-icon="anchor"] { --fa: "\f13d"; }
+[data-icon="apps"] { --fa: "\f58d"; }
+[data-icon="assessment"] { --fa: "\e0e3"; }
+[data-icon="assignment"] { --fa: "\f46d"; }
+[data-icon="assignment_ind"] { --fa: "\f2c1"; }
+[data-icon="autorenew"] { --fa: "\f021"; }
+[data-icon="badge"] { --fa: "\f47f"; }
+[data-icon="bar_chart"] { --fa: "\e0e3"; }
+[data-icon="block"] { --fa: "\f05e"; }
+[data-icon="build"] { --fa: "\f0ad"; }
+[data-icon="build_circle"] { --fa: "\f7d9"; }
+[data-icon="camera_alt"] { --fa: "\f030"; }
+[data-icon="campaign"] { --fa: "\f0a1"; }
+[data-icon="cancel"] { --fa: "\f057"; }
+[data-icon="category"] { --fa: "\f61f"; }
+[data-icon="check"] { --fa: "\f00c"; }
+[data-icon="check_circle"] { --fa: "\f058"; }
+[data-icon="close"] { --fa: "\f00d"; }
+[data-icon="cloud_off"] { --fa: "\f76c"; }
+[data-icon="contact_support"] { --fa: "\f590"; }
+[data-icon="conveyor_belt"] { --fa: "\f472"; }
+[data-icon="dark_mode"] { --fa: "\f186"; }
+[data-icon="dashboard"] { --fa: "\f625"; }
+[data-icon="delete"] { --fa: "\f2ed"; }
+[data-icon="deployed_code"] { --fa: "\f1b2"; }
+[data-icon="directions_boat"] { --fa: "\f21a"; }
+[data-icon="dock"] { --fa: "\e4aa"; }
+[data-icon="download"] { --fa: "\f019"; }
+[data-icon="draw"] { --fa: "\f5ad"; }
+[data-icon="e911_emergency"] { --fa: "\f071"; }
+[data-icon="edit"] { --fa: "\f044"; }
+[data-icon="edit_note"] { --fa: "\f31c"; }
+[data-icon="engineering"] { --fa: "\f807"; }
+[data-icon="error"] { --fa: "\f06a"; }
+[data-icon="event_available"] { --fa: "\f274"; }
+[data-icon="explore"] { --fa: "\f14e"; }
+[data-icon="fact_check"] { --fa: "\f46c"; }
+[data-icon="filter_alt"] { --fa: "\f0b0"; }
+[data-icon="filter_alt_off"] { --fa: "\e17b"; }
+[data-icon="fingerprint"] { --fa: "\f577"; }
+[data-icon="forklift"] { --fa: "\f4de"; }
+[data-icon="functions"] { --fa: "\f1ec"; }
+[data-icon="gavel"] { --fa: "\f0e3"; }
+[data-icon="grid_view"] { --fa: "\f009"; }
+[data-icon="group"] { --fa: "\f500"; }
+[data-icon="groups"] { --fa: "\f0c0"; }
+[data-icon="help"] { --fa: "\f059"; }
+[data-icon="help_outline"] { --fa: "\f059"; }
+[data-icon="history"] { --fa: "\f1da"; }
+[data-icon="history_edu"] { --fa: "\f573"; }
+[data-icon="hourglass_empty"] { --fa: "\f252"; }
+[data-icon="how_to_reg"] { --fa: "\f4fc"; }
+[data-icon="id_card"] { --fa: "\f2c2"; }
+[data-icon="info"] { --fa: "\f05a"; }
+[data-icon="insights"] { --fa: "\f201"; }
+[data-icon="inventory_2"] { --fa: "\f468"; }
+[data-icon="key_off"] { --fa: "\f084"; }
+[data-icon="lan"] { --fa: "\f6ff"; }
+[data-icon="light_mode"] { --fa: "\f185"; }
+[data-icon="link"] { --fa: "\f0c1"; }
+[data-icon="link_off"] { --fa: "\f127"; }
+[data-icon="lock"] { --fa: "\f023"; }
+[data-icon="login"] { --fa: "\f2f6"; }
+[data-icon="logout"] { --fa: "\f2f5"; }
+[data-icon="menu"] { --fa: "\f0c9"; }
+[data-icon="monitoring"] { --fa: "\f201"; }
+[data-icon="notifications_off"] { --fa: "\f1f6"; }
+[data-icon="payments"] { --fa: "\f53a"; }
+[data-icon="photo_camera"] { --fa: "\f030"; }
+[data-icon="picture_as_pdf"] { --fa: "\f1c1"; }
+[data-icon="pie_chart"] { --fa: "\f200"; }
+[data-icon="precision_manufacturing"] { --fa: "\f085"; }
+[data-icon="print"] { --fa: "\f02f"; }
+[data-icon="progress_activity"] { --fa: "\f110"; }
+[data-icon="qr_code"] { --fa: "\f029"; }
+[data-icon="qr_code_2"] { --fa: "\f029"; }
+[data-icon="qr_code_scanner"] { --fa: "\f029"; }
+[data-icon="refresh"] { --fa: "\f021"; }
+[data-icon="route"] { --fa: "\f4d7"; }
+[data-icon="rule"] { --fa: "\f0ae"; }
+[data-icon="sailing"] { --fa: "\e445"; }
+[data-icon="save"] { --fa: "\f0c7"; }
+[data-icon="schedule"] { --fa: "\f017"; }
+[data-icon="search"] { --fa: "\f002"; }
+[data-icon="search_off"] { --fa: "\f010"; }
+[data-icon="sensors"] { --fa: "\f519"; }
+[data-icon="settings"] { --fa: "\f013"; }
+[data-icon="shield"] { --fa: "\f132"; }
+[data-icon="shield_lock"] { --fa: "\f3ed"; }
+[data-icon="shield_person"] { --fa: "\f505"; }
+[data-icon="smart_toy"] { --fa: "\f544"; }
+[data-icon="smartphone"] { --fa: "\f3cd"; }
+[data-icon="speed"] { --fa: "\f624"; }
+[data-icon="storage"] { --fa: "\f1c0"; }
+[data-icon="swipe"] { --fa: "\f07e"; }
+[data-icon="sync"] { --fa: "\f2f1"; }
+[data-icon="table_chart"] { --fa: "\f0ce"; }
+[data-icon="table_rows"] { --fa: "\f00b"; }
+[data-icon="task"] { --fa: "\e5a0"; }
+[data-icon="task_alt"] { --fa: "\f058"; }
+[data-icon="timeline"] { --fa: "\e29c"; }
+[data-icon="travel_explore"] { --fa: "\f0ac"; }
+[data-icon="verified"] { --fa: "\f0a3"; }
+[data-icon="verified_user"] { --fa: "\f3ed"; }
+[data-icon="vibration"] { --fa: "\f3cf"; }
+[data-icon="visibility"] { --fa: "\f06e"; }
+[data-icon="visibility_off"] { --fa: "\f070"; }
+[data-icon="volume_up"] { --fa: "\f028"; }
+[data-icon="warehouse"] { --fa: "\f494"; }
+[data-icon="warning"] { --fa: "\f071"; }
+[data-icon="web"] { --fa: "\f2d0"; }
+[data-icon="workspace_premium"] { --fa: "\f559"; }

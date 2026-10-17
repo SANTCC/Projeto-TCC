@@ -305,7 +305,8 @@ const itemAuditoria = (doc) => doc.querySelector('#appSidebar a[href="seguranca.
     check('o 5º clique faz o item aparecer na barra lateral', Boolean(item));
     check('o item aponta para o painel de auditoria com o rótulo/ícone esperados',
       Boolean(item) && item.textContent.includes('Auditoria de Login') &&
-      item.querySelector('.material-symbols-outlined').textContent === 'shield_lock' &&
+      (item.querySelector('.material-symbols-outlined').getAttribute('data-icon') === 'shield_lock' ||
+       item.querySelector('.material-symbols-outlined').textContent === 'shield_lock') &&
       item.classList.contains('sidebar-nav-item'),
       item && item.textContent.trim());
     check('a liberação fica registrada na sessão da aba', w.NexusAuditoriaLogin.liberado() === true);

@@ -54,8 +54,8 @@ async function abrirAuditoria(banco) {
 }
 
 // ---------- Painel (dashboard.js) -------------------------------------------
-async function abrirPainel({ dbLogs, localLogs }) {
-  const banco = criarBancoFalso({ logs_alteracoes: dbLogs });
+async function abrirPainel({ dbLogs, localLogs, tabelasExtras }) {
+  const banco = criarBancoFalso(Object.assign({ logs_alteracoes: dbLogs }, tabelasExtras || {}));
   const j = criarJanela({
     url: 'https://nexusport.test/dashboard.html',
     html: htmlDaPagina('dashboard.html'),
@@ -270,6 +270,36 @@ async function main() {
   check('S8: geração de PDF exibe GERACAO_PDF em vez de EXPORTACAO',
     textoDoLog(w).includes('GERACAO_PDF') && !/\bEXPORTACAO\b/.test(textoDoLog(w)),
     textoDoLog(w).slice(0, 300));
+  painel.j.dom.window.close();
+
+  // ---------- S9: Navio, Guindaste, Carga, Funcionário, Contêiner e Emergência sem UUID ----
+  log('\nS9. Entidades (Navio, Guindaste, Carga, Funcionário, Contêiner) e Emergência (ativada/desativada) sem UUID');
+  const uCarga = UUID(801), uGnd = UUID(802), uCont = UUID(803), uFunc = UUID(804), uEmg1 = UUID(805), uEmg2 = UUID(806);
+  painel = await abrirPainel({
+    dbLogs: [
+      { id: UUID(720), data_hora: '2026-10-16T17:01:00Z', codigo_individual: 'NX-7001-DIR', cargo: 'INSPETOR', entidade_tipo: 'CARGA', entidade_id: uCarga, tipo_alteracao: 'CRIACAO', detalhes: {} },
+      { id: UUID(721), data_hora: '2026-10-16T17:02:00Z', codigo_individual: 'NX-7001-DIR', cargo: 'INSPETOR', entidade_tipo: 'GUINDASTE', entidade_id: uGnd, tipo_alteracao: 'CRIACAO', detalhes: {} },
+      { id: UUID(722), data_hora: '2026-10-16T17:03:00Z', codigo_individual: 'NX-7001-DIR', cargo: 'INSPETOR', entidade_tipo: 'CONTAINER', entidade_id: uCont, tipo_alteracao: 'CRIACAO', detalhes: {} },
+      { id: UUID(723), data_hora: '2026-10-16T17:04:00Z', codigo_individual: 'NX-7001-DIR', cargo: 'TECNICO_PORTOS', entidade_tipo: 'FUNCIONARIO', entidade_id: uFunc, tipo_alteracao: 'EDICAO', detalhes: { nome: 'Marina Costa' } },
+      { id: UUID(724), data_hora: '2026-10-16T17:05:00Z', codigo_individual: 'NX-7001-DIR', cargo: 'INSPETOR', entidade_tipo: 'EMERGENCIA', entidade_id: uEmg1, tipo_alteracao: 'EDICAO', detalhes: { estado: 'EMERGENCIA_CRITICA_ATIVADA', emergencia_id: uEmg1 } },
+      { id: UUID(725), data_hora: '2026-10-16T17:06:00Z', codigo_individual: 'NX-7001-DIR', cargo: 'SUPERVISOR_GERENTE_OPERACOES', entidade_tipo: 'EMERGENCIA', entidade_id: uEmg2, tipo_alteracao: 'EDICAO', detalhes: { estado: 'EMERGENCIA_DESATIVADA', emergencia_id: uEmg2 } }
+    ],
+    localLogs: [],
+    tabelasExtras: {
+      cargas: [{ id: uCarga, qr_code_url: 'QR-CRG-2026-777' }],
+      guindastes: [{ id: uGnd, numero_identificacao: 'STS-404-PRT' }],
+      containers: [{ id: uCont, numero_identificacao: 'MSCU-7654321' }],
+      funcionarios: [{ id: uFunc, nome: 'Marina Costa', cargo: 'ESTIVADOR', matricula: 'MAT-4321' }]
+    }
+  });
+  w = painel.j.w;
+  const txtS9 = textoDoLog(w);
+  check('S9: carga resolve UUID para CRG-2026-777', txtS9.includes('CARGA CRG-2026-777') && !txtS9.includes(uCarga), txtS9.slice(0, 300));
+  check('S9: guindaste resolve UUID para STS-404-PRT', txtS9.includes('GUINDASTE STS-404-PRT') && !txtS9.includes(uGnd), txtS9.slice(0, 300));
+  check('S9: contêiner resolve UUID para MSCU-7654321', txtS9.includes('CONTAINER MSCU-7654321') && !txtS9.includes(uCont), txtS9.slice(0, 300));
+  check('S9: funcionário exibe o nome Marina Costa sem UUID', txtS9.includes('Marina Costa') && !txtS9.includes(uFunc), txtS9.slice(0, 300));
+  check('S9: ativação de emergência informa que foi ativado sem UUID', txtS9.includes('Botão de emergência ativado') && !txtS9.includes(uEmg1), txtS9.slice(0, 300));
+  check('S9: desativação de emergência informa que foi desativado sem UUID', txtS9.includes('Botão de emergência desativado') && !txtS9.includes(uEmg2), txtS9.slice(0, 300));
   painel.j.dom.window.close();
 
   const r = resumo();
