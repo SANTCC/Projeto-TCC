@@ -128,27 +128,27 @@ const DADOS = {
 // abaixo renderizam relatorios.html com os conjuntos expandidos por cargo.
 const CENARIOS_DOM = [
   {
-    cargo: 'ESTIVADOR', titulo: 'Meus indicadores operacionais', camada: 'Visão Própria (RLS)',
+    cargo: 'ESTIVADOR', titulo: 'Meus indicadores operacionais', camada: 'Visão Própria',
     esperados: ['minhas_operacoes_7d', 'minhas_cargas_status'],
     proibidos: ['valor_declarado_mes', 'produtividade_cargo', 'bercos_ocupacao', 'funcionarios_cargo', 'navios_localizacao']
   },
   {
-    cargo: 'TECNICO_PORTOS', titulo: 'Painel de gestão de pessoas no porto', camada: 'Visão Própria (RLS)',
+    cargo: 'TECNICO_PORTOS', titulo: 'Painel de gestão de pessoas no porto', camada: 'Visão Própria',
     esperados: ['meus_registros_pessoas_7d', 'visitantes_motivo'],
     proibidos: ['valor_declarado_mes', 'bercos_ocupacao', 'navios_localizacao']
   },
   {
-    cargo: 'INSPETOR', titulo: 'Painel operacional do inspetor', camada: 'Visão Operacional (RLS)',
+    cargo: 'INSPETOR', titulo: 'Painel operacional do inspetor', camada: 'Visão Operacional',
     esperados: ['produtividade_cargo', 'inspecoes_resultado', 'cargas_fluxo', 'manutencoes_status', 'navios_localizacao', 'embarcacoes_utilizadas'],
     proibidos: ['visitantes_7d', 'visitantes_motivo', 'funcionarios_cargo', 'valor_declarado_mes']
   },
   {
-    cargo: 'SUPERVISOR_GERENTE_OPERACOES', titulo: 'Painel tático de operações', camada: 'Visão Operacional (RLS)',
+    cargo: 'SUPERVISOR_GERENTE_OPERACOES', titulo: 'Painel tático de operações', camada: 'Visão Operacional',
     esperados: ['fila_liberacao', 'manutencoes_status', 'bercos_ocupacao', 'trail_decisoes_tipo', 'navios_localizacao', 'embarcacoes_utilizadas'],
     proibidos: ['visitantes_motivo', 'funcionarios_cargo', 'valor_declarado_mes']
   },
   {
-    cargo: 'DIRETOR_OPERACOES_LOGISTICA', titulo: 'Painel estratégico consolidado', camada: 'Visão Estratégica (RLS)',
+    cargo: 'DIRETOR_OPERACOES_LOGISTICA', titulo: 'Painel estratégico consolidado', camada: 'Visão Estratégica',
     esperados: ['produtividade_cargo', 'aprovacao_recusa', 'valor_declarado_mes', 'bercos_ocupacao', 'embarcacoes_utilizadas', 'navios_localizacao'],
     proibidos: ['minhas_cargas_status', 'visitantes_motivo', 'fila_liberacao']
   }

@@ -187,8 +187,8 @@
     OPERACIONAL_CARGA: {
       cargo: 'OPERACIONAL',
       titulo: 'Meus indicadores operacionais',
-      subtitulo: 'Visão Própria — apenas cargas e registros vinculados às suas atribuições no Terminal STS-01.',
-      camada: 'Visão Própria (RLS)',
+      subtitulo: 'Visão Própria — cargas e registros vinculados às suas atribuições no Terminal STS-01.',
+      camada: 'Visão Própria',
       fontes: ['cargas', 'logs'],
       charts: [
         {
@@ -219,7 +219,7 @@
       cargo: 'PLANEJADOR_PATIO_NAVIOS',
       titulo: 'Painel de pátio e embarcações',
       subtitulo: 'Visão Própria — estado operacional das embarcações, contêineres e seus registros de atualização.',
-      camada: 'Visão Própria (RLS)',
+      camada: 'Visão Própria',
       fontes: ['navios', 'containers', 'logs'],
       charts: [
         {
@@ -250,7 +250,7 @@
       cargo: 'TECNICO_PORTOS',
       titulo: 'Painel de gestão de pessoas no porto',
       subtitulo: 'Visão Própria ampliada — visitantes temporários, efetivo cadastrado e seus próprios registros.',
-      camada: 'Visão Própria (RLS)',
+      camada: 'Visão Própria',
       fontes: ['visitantes', 'funcionarios', 'logs'],
       charts: [
         {
@@ -287,8 +287,8 @@
     INSPETOR: {
       cargo: 'INSPETOR',
       titulo: 'Painel operacional do inspetor',
-      subtitulo: 'Visão Operacional — inspeções técnicas, fluxo de cargas e manutenções. Dados de pessoas não são exibidos.',
-      camada: 'Visão Operacional (RLS)',
+      subtitulo: 'Visão Operacional — inspeções técnicas, fluxo de cargas e manutenções no terminal.',
+      camada: 'Visão Operacional',
       fontes: ['cargas', 'manutencoes', 'navios'],
       charts: [
         {
@@ -325,8 +325,8 @@
     SUPERVISOR: {
       cargo: 'SUPERVISOR_GERENTE_OPERACOES',
       titulo: 'Painel tático de operações',
-      subtitulo: 'Visão Operacional — fila de liberação, manutenções, berços e trail de decisões. Dados de pessoas não são exibidos.',
-      camada: 'Visão Operacional (RLS)',
+      subtitulo: 'Visão Operacional — fila de liberação, manutenções, berços e trail de decisões.',
+      camada: 'Visão Operacional',
       fontes: ['cargas', 'manutencoes', 'bercos', 'trail'],
       charts: [
         {
@@ -363,8 +363,8 @@
     DIRETOR: {
       cargo: 'DIRETOR_OPERACOES_LOGISTICA',
       titulo: 'Painel estratégico consolidado',
-      subtitulo: 'Visão Estratégica — consolidação total do terminal, incluindo indicadores financeiros exclusivos deste nível.',
-      camada: 'Visão Estratégica (RLS)',
+      subtitulo: 'Visão Estratégica — consolidação total do terminal, incluindo indicadores financeiros e operacionais.',
+      camada: 'Visão Estratégica',
       fontes: ['cargas', 'navios', 'bercos', 'logs', 'funcionarios'],
       charts: [
         {
@@ -398,7 +398,7 @@
         {
           id: 'valor_declarado_mes',
           titulo: 'Valor declarado movimentado (6 meses)',
-          descricao: 'Não inclui cargas canceladas. Indicador financeiro estratégico restrito à Direção e ao Conselho.',
+          descricao: 'Não inclui cargas canceladas. Consolidação financeira mensal das cargas movimentadas.',
           icone: 'payments',
           badge: 'ESTRATÉGICO'
         }
@@ -1723,11 +1723,15 @@
 
   function cartaoGrafico(definicao, indice, spec) {
     const canvasId = `nexusChart_${definicao.id}_${indice}`;
+    const iconeChave = definicao.icone || 'insights';
+    const faCls = (window.NexusFontAwesome && typeof window.NexusFontAwesome.classeFa === 'function')
+      ? window.NexusFontAwesome.classeFa(iconeChave)
+      : 'fa-chart-line';
     return `
       <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3" data-chart-card="${esc(definicao.id)}">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-start gap-2 min-w-0">
-            <span class="material-symbols-outlined text-[20px] text-nexus-500 dark:text-indigo-400 shrink-0">${esc(definicao.icone || 'insights')}</span>
+            <span class="material-symbols-outlined fa-solid ${esc(faCls)} text-[20px] text-nexus-500 dark:text-indigo-400 shrink-0" data-icon="${esc(iconeChave)}" aria-hidden="true"></span>
             <div class="min-w-0">
               <h3 class="font-display font-bold text-xs text-nexus-900 dark:text-white leading-snug">${esc(definicao.titulo)}</h3>
               <p class="text-[11px] text-slate-600 dark:text-slate-400 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
@@ -1744,11 +1748,15 @@
   }
 
   function cartaoVazio(definicao, mensagem) {
+    const iconeChave = definicao.icone || 'insights';
+    const faCls = (window.NexusFontAwesome && typeof window.NexusFontAwesome.classeFa === 'function')
+      ? window.NexusFontAwesome.classeFa(iconeChave)
+      : 'fa-chart-line';
     return `
       <div class="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-nexus-border dark:border-nexus-dark-border p-4 flex flex-col gap-3" data-chart-card="${esc(definicao.id)}" data-empty="true">
         <div class="flex items-start justify-between gap-2">
           <div class="flex items-start gap-2 min-w-0">
-            <span class="material-symbols-outlined text-[20px] text-slate-600 shrink-0">${esc(definicao.icone || 'insights')}</span>
+            <span class="material-symbols-outlined fa-solid ${esc(faCls)} text-[20px] text-slate-600 shrink-0" data-icon="${esc(iconeChave)}" aria-hidden="true"></span>
             <div class="min-w-0">
               <h3 class="font-display font-bold text-xs text-slate-600 dark:text-slate-400 leading-snug">${esc(definicao.titulo)}</h3>
               <p class="text-[11px] text-slate-600 dark:text-slate-500 leading-snug mt-0.5">${esc(definicao.descricao)}</p>
@@ -1757,7 +1765,7 @@
           <span class="font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-nexus-border dark:border-nexus-dark-border text-slate-600 shrink-0">${esc(definicao.badge || 'INDICADOR')}</span>
         </div>
         <div class="flex flex-col items-center justify-center gap-2 h-56 text-center">
-          <span class="material-symbols-outlined text-[36px] text-slate-300 dark:text-slate-600">bar_chart</span>
+          <span class="material-symbols-outlined fa-solid fa-chart-column text-[36px] text-slate-300 dark:text-slate-600" data-icon="bar_chart" aria-hidden="true"></span>
           <p class="text-[11px] text-slate-600 dark:text-slate-500 max-w-[240px]">${esc(mensagem)}</p>
         </div>
       </div>
@@ -1876,7 +1884,7 @@
         const pai = canvas && canvas.parentNode;
         if (pai) {
           pai.innerHTML = `<div class="flex flex-col items-center justify-center gap-2 h-full text-center">
-            <span class="material-symbols-outlined text-[32px] text-slate-300 dark:text-slate-600">cloud_off</span>
+            <span class="material-symbols-outlined fa-solid fa-cloud-bolt text-[32px] text-slate-300 dark:text-slate-600" data-icon="cloud_off" aria-hidden="true"></span>
             <p class="text-[11px] text-slate-600">Chart.js indisponível no momento. Verifique a conexão com a CDN para exibir este gráfico.</p>
           </div>`;
         }

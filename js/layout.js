@@ -59,8 +59,6 @@
     // Identificação do Usuário
     const userName = session.nome || 'Operador Porto';
     const userRoleName = session.cargo_nome || session.cargo || 'Operador';
-    const userCode = session.codigo_individual || session.codigo || '--';
-    const userMatricula = session.matricula || '--';
 
     const isDiretor = ['DIRETOR_OPERACOES_LOGISTICA', 'DIRETOR_PRESIDENTE_SUPERINTENDENTE', 'CONSELHO_ADMINISTRACAO'].includes(session.cargo);
     // Cargo que pode ver o painel de auditoria (regra do auth-guard para seguranca.html)
@@ -89,7 +87,7 @@
       { id: 'inspecao.html', label: 'Inspeção', icon: 'fact_check', href: 'inspecao.html', visible: () => isDiretor || isSupervisor || isInspetor || isConferente },
       { id: 'scanner.html', label: 'QR Code', icon: 'qr_code_scanner', href: 'scanner.html', visible: () => isDiretor || isSupervisor || isInspetor || isEstivador || isConferente },
       { id: 'embarcacoes.html', label: 'Embarcações & Equipamentos', icon: 'directions_boat', href: 'embarcacoes.html', visible: () => isDiretor || isSupervisor || isInspetor || isPlanejador || isEstivador },
-      { id: 'manutencao.html', label: 'Manutenção & Tarefas', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador || isEstivador || isPlanejador },
+      { id: 'manutencao.html', label: 'Manutenção', icon: 'build', href: 'manutencao.html', visible: () => isDiretor || isSupervisor || isInspetor || isArrumador || isEstivador || isPlanejador },
       { id: 'delegacao.html', label: 'Delegação Supervisor', icon: 'how_to_reg', href: 'delegacao.html', visible: () => (isDiretor || isSupervisor) && NexusAuth.canAccessPage('delegacao.html') },
       { id: 'tecnico_portos.html', label: 'Gestão de Pessoas', icon: 'badge', href: 'tecnico_portos.html', visible: () => isTecnico || isDiretor },
       // Item oculto por padrão: só aparece depois dos 5 cliques no nome do
@@ -103,11 +101,15 @@
     // recalculado sempre que o menu precisa ser redesenhado.
     let navItemsHtml = '';
     function montarNavItemsHtml() {
+      const faDe = (nome) => (window.NexusFontAwesome && typeof window.NexusFontAwesome.classeFa === 'function')
+        ? window.NexusFontAwesome.classeFa(nome)
+        : 'fa-circle-dot';
       navItemsHtml = menuItems.filter(item => item.visible()).map(item => {
         const isActive = activePage === item.id;
+        const faCls = faDe(item.icon);
         return `
         <a href="${esc(item.href)}" title="${esc(item.label)}" class="sidebar-nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg ${isActive ? 'bg-nexus-500 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} text-sm font-medium transition-colors">
-          <span class="material-symbols-outlined text-[20px] shrink-0">${esc(item.icon)}</span>
+          <span class="material-symbols-outlined fa-solid ${esc(faCls)} text-[20px] shrink-0" data-icon="${esc(item.icon)}" aria-hidden="true" translate="no"></span>
           <span class="sidebar-nav-label whitespace-nowrap">${esc(item.label)}</span>
         </a>
       `;
@@ -123,10 +125,10 @@
       topbarElem.innerHTML = `
         <div id="headerBrand" class="flex items-center gap-3">
           <button id="mobileMenuToggle" type="button" aria-label="Abrir menu de navegação" class="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
-            <span class="material-symbols-outlined text-[24px]">menu</span>
+            <span class="material-symbols-outlined fa-solid fa-bars text-[24px]" data-icon="menu" aria-hidden="true"></span>
           </button>
           <button id="desktopSidebarToggle" type="button" aria-label="Recolher ou expandir menu lateral" aria-expanded="true" title="Recolher ou expandir menu lateral" class="hidden md:inline-flex p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            <span class="material-symbols-outlined text-[20px]">menu</span>
+            <span class="material-symbols-outlined fa-solid fa-bars text-[20px]" data-icon="menu" aria-hidden="true"></span>
           </button>
           <picture class="w-9 h-9 shrink-0"><source srcset="design/logo_porto.webp" type="image/webp" /><img src="design/logo_porto.png" alt="NexusPort Logo" width="36" height="36" class="w-9 h-9 object-contain rounded-lg" /></picture>
           <div id="headerBrandText" class="flex flex-col min-w-0">
@@ -137,7 +139,7 @@
 
         <div id="headerActions" class="flex items-center gap-3">
           <div id="headerOnline" data-estado="indisponivel" title="Contagem indisponível: sem conexão com o Supabase." class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60">
-            <span class="material-symbols-outlined text-[16px] text-emerald-700 dark:text-emerald-400" aria-hidden="true">group</span>
+            <span class="material-symbols-outlined fa-solid fa-user-group text-[16px] text-emerald-700 dark:text-emerald-400" aria-hidden="true" data-icon="group"></span>
             <span class="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 whitespace-nowrap"><span id="headerOnlineCount" aria-live="polite">—</span><span class="hidden md:inline"> on-line</span></span>
           </div>
           <div id="headerProfile" class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
@@ -148,18 +150,16 @@
               <span id="headerUserName" class="text-xs font-bold text-nexus-900 dark:text-white truncate">${esc(userName)}</span>
               <div class="flex items-center gap-1.5">
                 <span id="headerUserRole" class="text-[10px] text-slate-600 dark:text-slate-400 truncate">${esc(userRoleName)}</span>
-                <span class="text-[10px] text-slate-300 dark:text-slate-600">•</span>
-                <span id="headerUserCode" class="font-mono text-[10px] font-semibold text-nexus-500 dark:text-indigo-400">${esc(userCode)}</span>
               </div>
             </div>
           </div>
 
           <button id="themeToggle" type="button" aria-label="Alternar tema escuro" class="p-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-            <span class="material-symbols-outlined text-[18px]" id="themeToggleIcon">dark_mode</span>
+            <span class="material-symbols-outlined fa-solid fa-moon text-[18px]" id="themeToggleIcon" data-icon="dark_mode" aria-hidden="true"></span>
           </button>
 
           <button id="logoutBtn" type="button" aria-label="Sair da sessão" class="p-2 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors flex items-center gap-1 text-xs font-semibold">
-            <span class="material-symbols-outlined text-[18px]">logout</span>
+            <span class="material-symbols-outlined fa-solid fa-right-from-bracket text-[18px]" data-icon="logout" aria-hidden="true"></span>
             <span>Sair</span>
           </button>
         </div>
@@ -190,7 +190,7 @@
                 <span class="font-display font-bold text-sm text-white">NexusPort</span>
               </div>
               <button id="closeMobileSidebarBtn" type="button" aria-label="Fechar menu de navegação" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
-                <span class="material-symbols-outlined text-[22px]">close</span>
+                <span class="material-symbols-outlined fa-solid fa-xmark text-[22px]" data-icon="close" aria-hidden="true"></span>
               </button>
             </div>
 
@@ -205,12 +205,8 @@
                   <span class="text-[11px] text-slate-400 truncate">${esc(userRoleName)}</span>
                 </div>
               </div>
-              <div class="flex items-center justify-between pt-2 border-t border-slate-700/60 font-mono text-[10px]">
-                <span class="text-slate-400">Código/Mat:</span>
-                <span class="font-bold text-indigo-400">${esc(userCode)} / ${esc(userMatricula)}</span>
-              </div>
               <div class="mt-1 px-2 py-1 rounded bg-indigo-950/80 border border-indigo-800 text-indigo-300 font-mono text-[10px] font-bold text-center">
-                ${esc(visionLayer)} (RLS)
+                ${esc(visionLayer.replace(/\s*\(RLS\)\s*/gi, ''))}
               </div>
             </div>
 
@@ -232,15 +228,12 @@
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
                 </span>
-                <span class="material-symbols-outlined text-[20px]">e911_emergency</span>
+                <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-[20px]" data-icon="e911_emergency" aria-hidden="true"></span>
                 <span>Emergência</span>
               </button>
               <button id="sidebarEmergencySettingsBtn" type="button" aria-label="Configurações de alerta de emergência (vibração e som)" title="Configurações de vibração e som do alerta"
                 class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-all flex items-center justify-center shrink-0">
-                <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                </svg>
+                <i class="fa-solid fa-gear text-[16px] shrink-0" aria-hidden="true" translate="no"></i>
               </button>
             </div>
 
@@ -249,7 +242,7 @@
           <div id="sidebarFooter" class="pt-4 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono text-slate-400">
             <span>Porto de Santos • STS-01</span>
             <a href="index.html" aria-label="Sair da sessão" title="Sair da sessão" onclick="if(window.NexusAuth) NexusAuth.logout();" class="text-slate-400 hover:text-white flex items-center gap-1">
-              <span class="material-symbols-outlined text-[16px]" aria-hidden="true">logout</span>
+              <span class="material-symbols-outlined fa-solid fa-right-from-bracket text-[16px]" aria-hidden="true" data-icon="logout"></span>
               <span>Sair</span>
             </a>
           </div>
@@ -263,6 +256,7 @@
       function atualizarAriaSidebar(aberta) {
         if (desktopToggleBtn) desktopToggleBtn.setAttribute('aria-expanded', String(Boolean(aberta)));
         if (mobileToggleBtn) mobileToggleBtn.setAttribute('aria-expanded', String(Boolean(aberta)));
+        document.documentElement.classList.toggle('nexus-sidebar-open', Boolean(aberta));
       }
 
       function abrirSidebarMobile() {
@@ -309,8 +303,20 @@
         }
       });
 
+      function vlibrasEstaCapturandoTexto(alvo) {
+        if (document.body && document.body.classList.contains('vpw-selectText')) return true;
+        if (alvo && alvo.classList && (alvo.classList.contains('vw-text-active') || alvo.classList.contains('vw-text'))) return true;
+        if (alvo && typeof alvo.querySelector === 'function' && alvo.querySelector('.vw-text-active, .vw-text')) return true;
+        return false;
+      }
+
+      function aoClicarLinkSidebar(ev) {
+        if (ev && (ev.defaultPrevented || vlibrasEstaCapturandoTexto(ev.currentTarget))) return;
+        fecharSidebarMobile();
+      }
+
       const navLinks = sidebarElem.querySelectorAll('.sidebar-nav-item');
-      navLinks.forEach(link => link.addEventListener('click', fecharSidebarMobile));
+      navLinks.forEach(link => link.addEventListener('click', aoClicarLinkSidebar));
 
       // Redesenha SÓ a lista de navegação: usado quando o gesto de desbloqueio
       // libera o item "Auditoria de Login" sem recarregar a página.
@@ -318,8 +324,15 @@
         const nav = sidebarElem.querySelector('nav');
         if (!nav) return;
         nav.innerHTML = montarNavItemsHtml();
-        nav.querySelectorAll('.sidebar-nav-item').forEach(link => link.addEventListener('click', fecharSidebarMobile));
+        if (window.NexusFontAwesome && typeof window.NexusFontAwesome.sincronizar === 'function') {
+          window.NexusFontAwesome.sincronizar(nav);
+        }
+        nav.querySelectorAll('.sidebar-nav-item').forEach(link => link.addEventListener('click', aoClicarLinkSidebar));
       };
+      if (window.NexusFontAwesome && typeof window.NexusFontAwesome.sincronizar === 'function') {
+        window.NexusFontAwesome.sincronizar(topbarElem);
+        window.NexusFontAwesome.sincronizar(sidebarElem);
+      }
     }
 
     // O perfil derivado pode mudar com delegação em outra aba ou ao voltar à página.
@@ -382,7 +395,7 @@
         const hint = document.createElement('div');
         hint.className = 'sticky left-full float-right pointer-events-none select-none text-[10px] font-bold text-nexus-500 bg-indigo-50/90 dark:bg-slate-800/90 border border-nexus-border dark:border-slate-700 rounded-full px-2 py-1 m-2 shadow-sm items-center gap-1 sm:hidden';
         hint.style.display = 'none';
-        hint.innerHTML = '<span class="material-symbols-outlined text-[14px] align-middle">swipe</span> <span class="align-middle">Deslize</span>';
+        hint.innerHTML = '<span class="material-symbols-outlined fa-solid fa-arrows-left-right text-[14px] align-middle" data-icon="swipe" aria-hidden="true"></span> <span class="align-middle">Deslize</span>';
         box.appendChild(hint);
         const atualizar = () => {
           hint.style.display = (needsScroll() && box.scrollLeft <= 4) ? 'inline-flex' : 'none';
@@ -415,7 +428,7 @@
       feedbackModal.innerHTML = `
         <div class="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-5 flex flex-col items-center text-center gap-3 transform transition-all scale-100">
           <div id="globalFeedbackIconBox" class="w-12 h-12 rounded-2xl flex items-center justify-center bg-indigo-100 dark:bg-indigo-950/60 text-nexus-500 shrink-0">
-            <span id="globalFeedbackIcon" class="material-symbols-outlined text-[28px]">info</span>
+            <span id="globalFeedbackIcon" class="material-symbols-outlined fa-solid fa-circle-info text-[28px]" data-icon="info" aria-hidden="true"></span>
           </div>
           <div class="flex flex-col gap-1">
             <h3 id="globalFeedbackTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Mensagem do Sistema</h3>
@@ -450,7 +463,7 @@
         <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-6 flex flex-col gap-4 transform transition-all scale-100">
           <div class="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
             <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 flex items-center justify-center shrink-0">
-              <span class="material-symbols-outlined text-[24px]">help_outline</span>
+              <span class="material-symbols-outlined fa-solid fa-circle-question text-[24px]" data-icon="help_outline" aria-hidden="true"></span>
             </div>
             <div>
               <h3 id="nexusConfirmTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Confirmação Operacional</h3>
@@ -483,7 +496,7 @@
         <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-nexus-border dark:border-slate-800 p-6 flex flex-col gap-4 transform transition-all scale-100">
           <div class="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
             <div class="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-nexus-500 flex items-center justify-center shrink-0">
-              <span class="material-symbols-outlined text-[24px]">edit_note</span>
+              <span class="material-symbols-outlined fa-solid fa-file-pen text-[24px]" data-icon="edit_note" aria-hidden="true"></span>
             </div>
             <div>
               <h3 id="nexusPromptTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Solicitação de Informação</h3>
@@ -523,7 +536,7 @@
         <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border-2 border-red-500 p-6 flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
           <div class="flex items-center gap-3 border-b border-red-200 dark:border-red-900 pb-3">
             <div class="w-11 h-11 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0">
-              <span class="material-symbols-outlined text-[26px]" aria-hidden="true">e911_emergency</span>
+              <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-[26px]" aria-hidden="true" data-icon="e911_emergency"></span>
             </div>
             <h3 id="nexusEmergencyTitle" class="font-display font-bold text-base text-red-700 dark:text-red-400">Ativar alerta de emergência?</h3>
           </div>
@@ -574,7 +587,7 @@
       });
 
       const avisarAtiva = () => {
-        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Emergência Já Ativa', 'O alarme já está ativo. A desativação é feita na página Manutenção & Tarefas por um responsável autorizado.');
+        if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Emergência Já Ativa', 'O alarme já está ativo. A desativação é feita na página Manutenção por um responsável autorizado.');
       };
       confirmarBtn.addEventListener('click', async () => {
         // Também protege chamadas programáticas sem abrir/confirmar a tela.
@@ -649,7 +662,7 @@
             <div class="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
               <div class="flex items-center gap-2.5">
                 <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
-                  <span class="material-symbols-outlined text-[22px]">vibration</span>
+                  <span class="material-symbols-outlined fa-solid fa-mobile-screen text-[22px]" data-icon="vibration" aria-hidden="true"></span>
                 </div>
                 <div>
                   <h3 id="hapticsModalTitle" class="font-display font-bold text-base text-nexus-900 dark:text-white">Alerta no Aparelho (Vibração e Som)</h3>
@@ -657,7 +670,7 @@
                 </div>
               </div>
               <button type="button" id="closeHapticsSettingsModalBtn" aria-label="Fechar configurações de alerta" class="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
-                <span class="material-symbols-outlined text-[20px]">close</span>
+                <span class="material-symbols-outlined fa-solid fa-xmark text-[20px]" data-icon="close" aria-hidden="true"></span>
               </button>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-700 dark:text-slate-300">
@@ -672,15 +685,15 @@
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <button id="hapticsTestBtn" type="button" class="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors shadow-sm">
-                <span class="material-symbols-outlined text-[16px]">vibration</span>
+                <span class="material-symbols-outlined fa-solid fa-mobile-screen text-[16px]" data-icon="vibration" aria-hidden="true"></span>
                 Testar vibração e som agora
               </button>
               <button id="hapticsRefreshBtn" type="button" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs inline-flex items-center gap-1 transition-colors">
-                <span class="material-symbols-outlined text-[15px]">refresh</span>
+                <span class="material-symbols-outlined fa-solid fa-arrows-rotate text-[15px]" data-icon="refresh" aria-hidden="true"></span>
                 Atualizar diagnóstico
               </button>
               <a href="teste-vibracao.html" class="px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs inline-flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 transition-colors">
-                <span class="material-symbols-outlined text-[15px]">smartphone</span>
+                <span class="material-symbols-outlined fa-solid fa-mobile-screen-button text-[15px]" data-icon="smartphone" aria-hidden="true"></span>
                 Abrir página de teste no celular
               </a>
             </div>

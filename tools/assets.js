@@ -57,6 +57,128 @@ const FONTE_ICONES = 'material-symbols-outlined-v3.woff2';
 /** Nome original da fonte completa publicada pelo pacote npm material-symbols. */
 const FONTE_ICONES_COMPLETA = 'material-symbols-outlined.woff2';
 const PACOTE_ICONES = 'material-symbols';
+const PACOTE_FONTAWESOME = '@fortawesome/fontawesome-free';
+const FONTES_FONTAWESOME = ['fa-solid-900.woff2', 'fa-regular-400.woff2'];
+
+/** Mapeamento canônico de todos os ícones do sistema para Font Awesome. */
+const MAPA_ICONES_FA = {
+  account_tree: 'fa-sitemap',
+  add: 'fa-plus',
+  add_circle: 'fa-circle-plus',
+  alt_route: 'fa-route',
+  anchor: 'fa-anchor',
+  apps: 'fa-grip',
+  assessment: 'fa-chart-column',
+  assignment: 'fa-clipboard-list',
+  assignment_ind: 'fa-id-badge',
+  autorenew: 'fa-arrows-rotate',
+  badge: 'fa-id-card-clip',
+  bar_chart: 'fa-chart-column',
+  block: 'fa-ban',
+  build: 'fa-wrench',
+  build_circle: 'fa-screwdriver-wrench',
+  camera_alt: 'fa-camera',
+  campaign: 'fa-bullhorn',
+  cancel: 'fa-circle-xmark',
+  category: 'fa-shapes',
+  check: 'fa-check',
+  check_circle: 'fa-circle-check',
+  close: 'fa-xmark',
+  cloud_off: 'fa-cloud-bolt',
+  contact_support: 'fa-headset',
+  conveyor_belt: 'fa-dolly',
+  dark_mode: 'fa-moon',
+  dashboard: 'fa-gauge-high',
+  delete: 'fa-trash-can',
+  deployed_code: 'fa-cube',
+  directions_boat: 'fa-ship',
+  dock: 'fa-anchor-circle-check',
+  download: 'fa-download',
+  draw: 'fa-pen-nib',
+  e911_emergency: 'fa-triangle-exclamation',
+  edit: 'fa-pen-to-square',
+  edit_note: 'fa-file-pen',
+  engineering: 'fa-helmet-safety',
+  error: 'fa-circle-exclamation',
+  event_available: 'fa-calendar-check',
+  explore: 'fa-compass',
+  fact_check: 'fa-clipboard-check',
+  filter_alt: 'fa-filter',
+  filter_alt_off: 'fa-filter-circle-xmark',
+  fingerprint: 'fa-fingerprint',
+  forklift: 'fa-truck-ramp-box',
+  functions: 'fa-calculator',
+  gavel: 'fa-gavel',
+  grid_view: 'fa-table-cells-large',
+  group: 'fa-user-group',
+  groups: 'fa-users',
+  help: 'fa-circle-question',
+  help_outline: 'fa-circle-question',
+  history: 'fa-clock-rotate-left',
+  history_edu: 'fa-file-signature',
+  hourglass_empty: 'fa-hourglass-half',
+  how_to_reg: 'fa-user-check',
+  id_card: 'fa-id-card',
+  info: 'fa-circle-info',
+  insights: 'fa-chart-line',
+  inventory_2: 'fa-boxes-stacked',
+  key_off: 'fa-key',
+  lan: 'fa-network-wired',
+  light_mode: 'fa-sun',
+  link: 'fa-link',
+  link_off: 'fa-link-slash',
+  lock: 'fa-lock',
+  login: 'fa-right-to-bracket',
+  logout: 'fa-right-from-bracket',
+  menu: 'fa-bars',
+  monitoring: 'fa-chart-line',
+  notifications_off: 'fa-bell-slash',
+  payments: 'fa-money-bill-wave',
+  photo_camera: 'fa-camera',
+  picture_as_pdf: 'fa-file-pdf',
+  pie_chart: 'fa-chart-pie',
+  precision_manufacturing: 'fa-gears',
+  print: 'fa-print',
+  progress_activity: 'fa-spinner',
+  qr_code: 'fa-qrcode',
+  qr_code_2: 'fa-qrcode',
+  qr_code_scanner: 'fa-qrcode',
+  refresh: 'fa-arrows-rotate',
+  route: 'fa-route',
+  rule: 'fa-list-check',
+  sailing: 'fa-sailboat',
+  save: 'fa-floppy-disk',
+  schedule: 'fa-clock',
+  search: 'fa-magnifying-glass',
+  search_off: 'fa-magnifying-glass-minus',
+  sensors: 'fa-tower-broadcast',
+  settings: 'fa-gear',
+  shield: 'fa-shield',
+  shield_lock: 'fa-shield-halved',
+  shield_person: 'fa-user-shield',
+  smart_toy: 'fa-robot',
+  smartphone: 'fa-mobile-screen-button',
+  speed: 'fa-gauge',
+  storage: 'fa-database',
+  swipe: 'fa-arrows-left-right',
+  sync: 'fa-rotate',
+  table_chart: 'fa-table',
+  table_rows: 'fa-table-list',
+  task: 'fa-file-circle-check',
+  task_alt: 'fa-circle-check',
+  timeline: 'fa-timeline',
+  travel_explore: 'fa-globe',
+  verified: 'fa-certificate',
+  verified_user: 'fa-shield-halved',
+  vibration: 'fa-mobile-screen',
+  visibility: 'fa-eye',
+  visibility_off: 'fa-eye-slash',
+  volume_up: 'fa-volume-high',
+  warehouse: 'fa-warehouse',
+  warning: 'fa-triangle-exclamation',
+  web: 'fa-window-maximize',
+  workspace_premium: 'fa-award'
+};
 
 /**
  * Bibliotecas de terceiros. `origem` é o arquivo publicado no npm (mesma versão que os CDNs
@@ -123,7 +245,33 @@ function cssDeFontes() {
       );
     });
   });
+
+  const faCssPath = path.join(RAIZ, 'node_modules', PACOTE_FONTAWESOME, 'css', 'fontawesome.css');
+  exigir(faCssPath, `CSS do Font Awesome ausente em ${PACOTE_FONTAWESOME}`);
+  const faCssOrig = fs.readFileSync(faCssPath, 'utf-8');
+  const glifosFa = new Map();
+  const reFa = /\.(fa-[a-z0-9-]+)\s*\{\s*--fa:\s*("[^"]+");\s*\}/g;
+  let mFa;
+  while ((mFa = reFa.exec(faCssOrig)) !== null) {
+    glifosFa.set(mFa[1], mFa[2]);
+  }
+
   linhas.push(
+    '/* Font Awesome Free — biblioteca oficial de ícones do sistema (Tarefa 3). */',
+    '@font-face {',
+    "  font-family: 'Font Awesome 6 Free';",
+    '  font-style: normal;',
+    '  font-weight: 900;',
+    '  font-display: block;',
+    "  src: url('../fonts/fa-solid-900.woff2') format('woff2');",
+    '}',
+    '@font-face {',
+    "  font-family: 'Font Awesome 6 Free';",
+    '  font-style: normal;',
+    '  font-weight: 400;',
+    '  font-display: block;',
+    "  src: url('../fonts/fa-regular-400.woff2') format('woff2');",
+    '}',
     '/* Material Symbols Outlined — subconjunto com os ícones usados pelas telas. */',
     '@font-face {',
     `  font-family: 'Material Symbols Outlined';`,
@@ -132,23 +280,62 @@ function cssDeFontes() {
     '  font-display: block;',
     `  src: url('../fonts/${FONTE_ICONES}') format('woff2');`,
     '}',
-    '.material-symbols-outlined {',
-    "  font-family: 'Material Symbols Outlined';",
-    '  font-weight: normal;',
+    '.fa-solid, .fas, .fa-regular, .far, .fa, .material-symbols-outlined {',
+    "  font-family: 'Font Awesome 6 Free' !important;",
+    '  font-weight: 900;',
     '  font-style: normal;',
-    '  font-size: 24px;',
     '  line-height: 1;',
     '  letter-spacing: normal;',
     '  text-transform: none;',
-    '  display: inline-block;',
+    '  display: inline-flex;',
+    '  align-items: center;',
+    '  justify-content: center;',
     '  white-space: nowrap;',
     '  word-wrap: normal;',
     '  direction: ltr;',
-    "  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;",
-    "  -webkit-font-feature-settings: 'liga';",
-    "  font-feature-settings: 'liga';",
+    '  -webkit-font-smoothing: antialiased;',
+    '  -moz-osx-font-smoothing: grayscale;',
+    '  font-variation-settings: normal !important;',
+    '  -webkit-font-feature-settings: normal !important;',
+    '  font-feature-settings: normal !important;',
+    '  pointer-events: none;',
+    '  user-select: none;',
+    '  -webkit-user-select: none;',
+    '  speak: never;',
+    '}',
+    '.fa-regular, .far {',
+    '  font-weight: 400;',
+    '}',
+    '.fa-solid::before, .fas::before, .fa-regular::before, .far::before, .fa::before, .material-symbols-outlined::before {',
+    '  content: var(--fa);',
+    '  content: var(--fa) / "";',
+    "  font-family: 'Font Awesome 6 Free' !important;",
+    '  font-weight: inherit;',
+    '  line-height: 1;',
+    '  speak: never;',
     '}'
   );
+
+  const classesFaUsadas = new Set([
+    ...Object.values(MAPA_ICONES_FA),
+    'fa-eye', 'fa-eye-slash', 'fa-gear', 'fa-cog', 'fa-file-excel', 'fa-file-csv',
+    'fa-chevron-down', 'fa-chevron-up', 'fa-chevron-left', 'fa-chevron-right',
+    'fa-circle-user', 'fa-user', 'fa-bell', 'fa-unlock'
+  ]);
+  Array.from(classesFaUsadas).sort().forEach((cls) => {
+    const glifo = glifosFa.get(cls);
+    if (glifo) {
+      linhas.push(`.${cls} { --fa: ${glifo}; }`);
+    }
+  });
+  Object.keys(MAPA_ICONES_FA).sort().forEach((chave) => {
+    const cls = MAPA_ICONES_FA[chave];
+    const glifo = glifosFa.get(cls);
+    if (glifo) {
+      linhas.push(`[data-icon="${chave}"] { --fa: ${glifo}; }`);
+    }
+  });
+
   return `${linhas.join('\n')}\n`;
 }
 
@@ -169,6 +356,12 @@ async function gerarRecursos() {
       exigir(origem, `Fonte ausente em ${pacote}`);
       recursos.set(path.join(PASTA_FONTES, nome), fs.readFileSync(origem));
     });
+  });
+
+  FONTES_FONTAWESOME.forEach((nome) => {
+    const origem = path.join(RAIZ, 'node_modules', PACOTE_FONTAWESOME, 'webfonts', nome);
+    exigir(origem, `Fonte Font Awesome ausente em ${PACOTE_FONTAWESOME}`);
+    recursos.set(path.join(PASTA_FONTES, nome), fs.readFileSync(origem));
   });
 
   // O pacote npm traz a fonte completa (3,7 MB); o subconjunto com os ícones usados é gerado uma vez
@@ -277,6 +470,7 @@ module.exports = {
   conferirRecursos,
   cssDeFontes,
   compilarTailwind,
+  MAPA_ICONES_FA,
   RAIZ,
   CSS_TAILWIND,
   CSS_FONTES

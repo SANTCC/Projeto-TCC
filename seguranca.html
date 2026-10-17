@@ -57,20 +57,17 @@
         <div class="flex items-center justify-between bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm">
           <div>
             <div class="flex items-center gap-2 text-nexus-500 font-mono text-xs font-bold uppercase tracking-wider">
-              <span class="material-symbols-outlined text-sm">shield_lock</span>
-              <span>Módulo Exclusivo / Acesso Restrito</span>
+              <span class="material-symbols-outlined fa-solid fa-shield-halved text-sm" data-icon="shield_lock" aria-hidden="true"></span>
+              <span>Segurança & Monitoramento de Acesso</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Auditoria de Tentativas de Login</h1>
             <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Log permanente das tentativas erradas (migration <span class="font-mono">20261011000000</span>): IP, código tentado, quantas vezes aquele IP errou <em>qualquer</em> código e quando. O log não é apagado quando o login acerta.</p>
           </div>
-          <span class="px-3 py-1 rounded-full bg-nexus-500 text-white font-mono text-xs font-bold">
-            Direção / Supervisor
-          </span>
         </div>
 
         <!-- Aviso de erro / estado vazio -->
         <div id="segAviso" class="hidden bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-2xl p-4 text-xs font-medium flex items-start gap-2">
-          <span class="material-symbols-outlined text-[18px] shrink-0">error</span>
+          <span class="material-symbols-outlined fa-solid fa-circle-exclamation text-[18px] shrink-0" data-icon="error" aria-hidden="true"></span>
           <span id="segAvisoTexto" class="leading-relaxed"></span>
         </div>
 
@@ -78,7 +75,7 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">filter_alt</span>
+              <span class="material-symbols-outlined fa-solid fa-filter text-nexus-500" data-icon="filter_alt" aria-hidden="true"></span>
               Período Analisado
             </h2>
             <span id="segStatus" role="status" aria-live="polite" class="text-[10px] font-mono text-slate-600 dark:text-slate-500 max-w-[220px] truncate">Aguardando consulta…</span>
@@ -96,7 +93,7 @@
             </div>
             <div class="md:col-span-2 flex items-end gap-2">
               <button id="segAtualizarBtn" type="button" title="Consulta o servidor e redesenha o painel com os dados mais recentes" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors h-10 disabled:opacity-60 disabled:cursor-wait">
-                <span class="material-symbols-outlined text-[18px]">refresh</span>
+                <span class="material-symbols-outlined fa-solid fa-arrows-rotate text-[18px]" data-icon="refresh" aria-hidden="true"></span>
                 <span>Atualizar Log</span>
               </button>
               <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Renovação automática a cada 60 s</span>
@@ -133,7 +130,7 @@
           <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
             <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
               <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">lan</span>
+                <span class="material-symbols-outlined fa-solid fa-network-wired text-nexus-500" data-icon="lan" aria-hidden="true"></span>
                 IPs por Tentativas Erradas
               </h2>
               <span class="font-mono text-[10px] text-slate-500 dark:text-slate-500">Top 10</span>
@@ -146,7 +143,7 @@
           <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
             <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
               <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-nexus-500">schedule</span>
+                <span class="material-symbols-outlined fa-solid fa-clock text-nexus-500" data-icon="schedule" aria-hidden="true"></span>
                 Atividade por Hora
               </h2>
               <span class="font-mono text-[10px] text-slate-500 dark:text-slate-500">IPs com tentativa</span>
@@ -162,7 +159,7 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">key_off</span>
+              <span class="material-symbols-outlined fa-solid fa-key text-nexus-500" data-icon="key_off" aria-hidden="true"></span>
               Códigos Mais Tentados
             </h2>
             <span id="segTotalCodigos" class="font-mono text-[10px] text-slate-500 dark:text-slate-500">-- códigos distintos</span>
@@ -192,7 +189,7 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">travel_explore</span>
+              <span class="material-symbols-outlined fa-solid fa-globe text-nexus-500" data-icon="travel_explore" aria-hidden="true"></span>
               Log Completo por IP
             </h2>
             <span class="font-mono text-[10px] text-slate-500 dark:text-slate-500">Janela de bloqueio: 15 min</span>

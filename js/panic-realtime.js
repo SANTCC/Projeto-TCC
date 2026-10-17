@@ -157,12 +157,64 @@
         96% { transform: translateX(2px); }
         98% { transform: translateX(-1px); }
       }
+      #nexusPanicFooter {
+        transition: left 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      }
       #nexusPanicFooter:not(.hidden) { animation: nexusPanicSlideUp 0.35s ease-out; }
       .nexus-panic-vibrating { animation: nexusPanicVibrate 1.8s linear infinite !important; }
       #nexusPanicFooter:not(.hidden).nexus-panic-vibrating {
         animation: nexusPanicSlideUp 0.35s ease-out, nexusPanicVibrate 1.8s linear 0.35s infinite !important;
       }
       html.nexus-panic-active body { padding-bottom: 58px; }
+      @media (min-width: 640px) {
+        html.nexus-sidebar-open #nexusPanicFooter {
+          left: min(20rem, 90vw) !important;
+          right: 0 !important;
+          width: auto !important;
+        }
+      }
+      @media (max-width: 639px) {
+        #nexusPanicFooter {
+          z-index: 55 !important;
+        }
+        #nexusPanicFooter .nexus-panic-footer-inner {
+          padding: 0.4rem 0.65rem !important;
+          gap: 0.5rem !important;
+          flex-wrap: nowrap !important;
+        }
+        #nexusPanicFooter #nexusPanicFooterTitle {
+          font-size: 0.6875rem !important;
+          line-height: 1.15 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+        #nexusPanicFooter #nexusPanicFooterDetail {
+          font-size: 0.625rem !important;
+          line-height: 1.15 !important;
+          display: -webkit-box !important;
+          -webkit-line-clamp: 1 !important;
+          -webkit-box-orient: vertical !important;
+          overflow: hidden !important;
+        }
+        #nexusPanicFooter #nexusPanicFooterHaptics {
+          display: none !important;
+        }
+        #nexusPanicFooter #nexusPanicFooterDeactivate {
+          padding: 0.3rem 0.55rem !important;
+          font-size: 0.625rem !important;
+        }
+        html.nexus-panic-active body {
+          padding-bottom: 48px !important;
+        }
+        html.nexus-panic-active #appSidebar {
+          bottom: var(--nexus-panic-footer-h, 48px) !important;
+          height: calc(100vh - var(--nexus-panic-footer-h, 48px)) !important;
+          height: calc(100dvh - var(--nexus-panic-footer-h, 48px)) !important;
+          max-height: calc(100vh - var(--nexus-panic-footer-h, 48px)) !important;
+          max-height: calc(100dvh - var(--nexus-panic-footer-h, 48px)) !important;
+        }
+      }
       @media (prefers-reduced-motion: reduce) {
         .nexus-panic-vibrating { animation: none !important; }
       }
@@ -174,26 +226,46 @@
     banner.className = 'hidden fixed bottom-0 left-0 right-0 z-[45] bg-red-600 text-white shadow-[0_-4px_20px_rgba(0,0,0,0.35)] border-t-2 border-red-800';
     banner.setAttribute('role', 'alert');
     banner.innerHTML = `
-      <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2.5">
-        <div class="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-          <span class="relative flex h-3 w-3 shrink-0 mt-1 sm:mt-0">
+      <div class="nexus-panic-footer-inner flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2.5">
+        <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+          <span class="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+            <span class="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-white"></span>
           </span>
-          <span class="material-symbols-outlined text-[22px] shrink-0 mt-0.5 sm:mt-0">e911_emergency</span>
+          <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-[16px] sm:text-[22px] shrink-0" data-icon="e911_emergency" aria-hidden="true"></span>
           <div class="min-w-0 flex-1">
             <span id="nexusPanicFooterTitle" class="font-display font-bold text-xs sm:text-sm uppercase tracking-wider block whitespace-normal sm:truncate break-words">Emergência global ativa — Terminal STS-01</span>
             <span id="nexusPanicFooterDetail" class="text-[11px] text-red-100 block whitespace-normal sm:truncate break-words">Uma emergência crítica está em andamento no terminal.</span>
             <span id="nexusPanicFooterHaptics" class="hidden text-[10px] text-red-100/90 block whitespace-normal sm:truncate break-words"></span>
           </div>
         </div>
-        <button id="nexusPanicFooterDeactivate" type="button" class="hidden flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-red-700 hover:bg-red-50 font-bold text-[11px] uppercase tracking-wide transition-colors">
-          <span class="material-symbols-outlined text-[16px]">notifications_off</span>
+        <button id="nexusPanicFooterDeactivate" type="button" class="hidden flex shrink-0 items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-white text-red-700 hover:bg-red-50 font-bold text-[10px] sm:text-[11px] uppercase tracking-wide transition-colors">
+          <span class="material-symbols-outlined fa-solid fa-bell-slash text-[14px] sm:text-[16px]" data-icon="notifications_off" aria-hidden="true"></span>
           <span>Desativar Alarme</span>
         </button>
       </div>
     `;
     document.body.appendChild(banner);
+
+    const syncSidebarState = () => {
+      const sb = document.getElementById('appSidebar');
+      if (!sb) return;
+      const aberta = !sb.classList.contains('-translate-x-full') && !sb.classList.contains('nexus-sidebar-collapsed');
+      document.documentElement.classList.toggle('nexus-sidebar-open', aberta);
+      if (banner && !banner.classList.contains('hidden')) {
+        const h = banner.offsetHeight;
+        if (h > 0) document.documentElement.style.setProperty('--nexus-panic-footer-h', `${h}px`);
+      }
+    };
+    syncSidebarState();
+    const sbElem = document.getElementById('appSidebar');
+    if (sbElem && typeof window.MutationObserver === 'function') {
+      try {
+        const obsSb = new window.MutationObserver(syncSidebarState);
+        obsSb.observe(sbElem, { attributes: true, attributeFilter: ['class'] });
+      } catch (e) { /* noop */ }
+    }
+    window.addEventListener('resize', syncSidebarState);
 
     const deactivateBtn = banner.querySelector('#nexusPanicFooterDeactivate');
     if (deactivateBtn) {
@@ -411,9 +483,17 @@
       if (deactivateBtn) deactivateBtn.classList.toggle('hidden', !canDeactivate());
       el.classList.remove('hidden');
       document.documentElement.classList.add('nexus-panic-active');
+      const sb = document.getElementById('appSidebar');
+      if (sb) {
+        const aberta = !sb.classList.contains('-translate-x-full') && !sb.classList.contains('nexus-sidebar-collapsed');
+        document.documentElement.classList.toggle('nexus-sidebar-open', aberta);
+      }
+      const h = el.offsetHeight;
+      if (h > 0) document.documentElement.style.setProperty('--nexus-panic-footer-h', `${h}px`);
     } else {
       el.classList.add('hidden');
       document.documentElement.classList.remove('nexus-panic-active');
+      document.documentElement.style.removeProperty('--nexus-panic-footer-h');
     }
 
     // Toda página conectada recebe o mesmo indicador animado de SOS. Nos
@@ -696,14 +776,21 @@
     if (!sb) return { ok: false, motivo: 'sem_cliente' };
     try {
       const cargoEnum = CARGOS_VALIDOS.includes(session.cargo) ? session.cargo : 'ESTIVADOR';
+      const estadoUpper = String(estadoAudit || '').toUpperCase();
+      const desativou = estadoUpper.includes('DESATIV') || estadoUpper.includes('RESOLV');
+      const motivoLimpo = detalhes && detalhes.motivo ? String(detalhes.motivo).trim() : '';
+      const descricaoEmergencia = desativou
+        ? 'Botão de emergência desativado — Operações normalizadas'
+        : (motivoLimpo ? `Botão de emergência ativado — Motivo: ${motivoLimpo}` : 'Botão de emergência ativado no terminal');
+      const detalhesLimpos = Object.assign({ estado: estadoAudit, via: detalhes && detalhes.via, descricao: descricaoEmergencia }, detalhes);
       const payload = {
         data_hora: new Date().toISOString(),
         cargo: cargoEnum,
         codigo_individual: session.codigo_individual || session.codigo || '--',
         entidade_tipo: 'EMERGENCIA',
-        entidade_id: (detalhes && detalhes.emergencia_id) || 'PANICO_GLOBAL',
+        entidade_id: 'BOTAO_EMERGENCIA',
         tipo_alteracao: 'EDICAO',
-        detalhes: Object.assign({ estado: estadoAudit, via: detalhes && detalhes.via }, detalhes)
+        detalhes: detalhesLimpos
       };
       if (isUuid(session.id)) payload.funcionario_id = session.id;
       // O supabase-js devolve o erro do PostgREST no objeto de resposta (não

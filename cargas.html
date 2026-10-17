@@ -48,15 +48,15 @@
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm">
           <div>
             <div class="flex items-center gap-2 text-nexus-500 font-mono text-xs font-bold uppercase tracking-wider">
-              <span class="material-symbols-outlined text-sm">inventory_2</span>
+              <span class="material-symbols-outlined fa-solid fa-boxes-stacked text-sm" data-icon="inventory_2" aria-hidden="true"></span>
               <span>Módulo de Gestão Operacional</span>
             </div>
             <h1 class="font-display text-2xl font-bold text-nexus-900 dark:text-white mt-1">Cargas & Operações de Pátio</h1>
-            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Acompanhamento do fluxo em 8 etapas e controle de ações restritas por cargo.</p>
+            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Acompanhamento do fluxo operacional de cargas no pátio em 8 etapas.</p>
           </div>
 
           <button id="toggleAgendamentoFormBtn" type="button" class="px-4 py-2.5 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-2 transition-all shadow-md">
-            <span class="material-symbols-outlined text-[18px]">add_circle</span>
+            <span class="material-symbols-outlined fa-solid fa-circle-plus text-[18px]" data-icon="add_circle" aria-hidden="true"></span>
             <span>Agendar Nova Carga</span>
           </button>
         </div>
@@ -66,7 +66,7 @@
         <form id="agendamentoCargaForm" class="hidden bg-white dark:bg-slate-900 p-6 rounded-2xl border border-nexus-border dark:border-nexus-dark-border shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div class="sm:col-span-2 md:col-span-4 border-b border-nexus-border dark:border-nexus-dark-border pb-3">
             <h2 class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">event_available</span>
+              <span class="material-symbols-outlined fa-solid fa-calendar-check text-nexus-500" data-icon="event_available" aria-hidden="true"></span>
               Agendamento de Nova Carga
             </h2>
           </div>
@@ -127,9 +127,9 @@
             <select id="agEstivadorResponsavel" required class="w-full px-3 py-2 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-nexus-bg dark:bg-slate-800 font-bold">
               <option value="">Carregando funcionários em escala...</option>
             </select>
-            <p id="agEstivadorResponsavelHint" class="text-[11px] text-slate-600 mt-1">
-              Gestão: selecione um funcionário em escala para assumir a carga. Funcionário operacional: a carga é automaticamente atribuída a você.
-            </p>
+                <p id="agEstivadorResponsavelHint" class="text-[11px] text-slate-600 mt-1">
+                  Selecione o funcionário em escala responsável pela carga.
+                </p>
           </div>
           </fieldset>
 
@@ -138,7 +138,7 @@
               Cancelar
             </button>
             <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm">
-              <span class="material-symbols-outlined text-[18px]">check_circle</span>
+              <span class="material-symbols-outlined fa-solid fa-circle-check text-[18px]" data-icon="check_circle" aria-hidden="true"></span>
               <span>Agendar e gerar QR</span>
             </button>
           </div>
@@ -148,12 +148,10 @@
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border p-6 shadow-sm flex flex-col gap-4">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-nexus-border dark:border-nexus-dark-border">
             <span class="font-display font-bold text-sm text-nexus-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-nexus-500">table_rows</span>
+              <span class="material-symbols-outlined fa-solid fa-table-list text-nexus-500" data-icon="table_rows" aria-hidden="true"></span>
               Tabela de Cargas no Fluxo Operacional
             </span>
-            <span id="roleNoticeTag" class="text-xs font-mono text-nexus-500 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded border border-indigo-200 dark:border-indigo-900">
-              Visualização por Cargo
-            </span>
+            <span id="roleNoticeTag" class="hidden text-xs font-mono text-nexus-500 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded border border-indigo-200 dark:border-indigo-900"></span>
           </div>
 
           <!-- Painel de Pesquisa e Filtros em 5 Campos (RF 10.1) -->
@@ -178,7 +176,7 @@
               <label class="block font-bold text-slate-600 mb-1">3. Tipo de Carga</label>
               <input type="text" id="filterTipo" placeholder="Ex: Grãos, Eletrônicos" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900" />
             </div>
-            <div>
+            <div class="sm:col-span-2">
               <label class="block font-bold text-slate-600 mb-1">4. Período (De / Até)</label>
               <div class="flex items-center gap-1">
                 <input type="date" id="filterDataInicio" title="Data Inicial" class="w-1/2 px-1.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono text-[11px]" />
@@ -199,7 +197,7 @@
             </div>
             <div class="flex items-end">
               <button id="limparFiltrosBtn" type="button" class="w-full px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1">
-                <span class="material-symbols-outlined text-[16px]">filter_alt_off</span>
+                <span class="material-symbols-outlined fa-solid fa-filter-circle-xmark text-[16px]" data-icon="filter_alt_off" aria-hidden="true"></span>
                 <span>Limpar Filtros</span>
               </button>
             </div>
@@ -224,9 +222,10 @@
                   <th class="p-3">Tipo / Natureza</th>
                   <th class="p-3">Peso / Volume</th>
                   <th class="p-3">Setor do Pátio</th>
+                  <th class="p-3">Destino Final</th>
                   <th class="p-3">Contêiner / Navio</th>
                   <th class="p-3">Status do Fluxo</th>
-                  <th class="p-3 text-right">Ações do Cargo</th>
+                  <th class="p-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody id="cargasTableBody" class="divide-y divide-nexus-border dark:divide-slate-800 font-medium">
@@ -240,7 +239,7 @@
         <div class="bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between pb-3 border-b border-emerald-200 dark:border-emerald-800">
             <span class="font-display font-bold text-sm text-emerald-900 dark:text-emerald-300 flex items-center gap-2">
-              <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400">task_alt</span>
+              <span class="material-symbols-outlined fa-solid fa-circle-check text-emerald-600 dark:text-emerald-400" data-icon="task_alt" aria-hidden="true"></span>
               Tabela de Cargas Entregues
             </span>
             <span class="text-xs font-mono text-emerald-700 dark:text-emerald-400">
@@ -275,7 +274,7 @@
         <div class="bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-300 dark:border-slate-700 p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between pb-3 border-b border-slate-300 dark:border-slate-700">
             <span class="font-display font-bold text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
-              <span class="material-symbols-outlined text-slate-600">block</span>
+              <span class="material-symbols-outlined fa-solid fa-ban text-slate-600" data-icon="block" aria-hidden="true"></span>
               Tabela de Cargas Canceladas
             </span>
             <span class="text-xs font-mono text-slate-600">
@@ -310,7 +309,7 @@
         <div class="bg-red-50 dark:bg-red-950/30 rounded-2xl border border-red-200 dark:border-red-900/60 p-6 shadow-sm flex flex-col gap-4">
           <div class="flex items-center justify-between pb-3 border-b border-red-200 dark:border-red-900/60">
             <span class="font-display font-bold text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
-              <span class="material-symbols-outlined text-red-600">cancel</span>
+              <span class="material-symbols-outlined fa-solid fa-circle-xmark text-red-600" data-icon="cancel" aria-hidden="true"></span>
               Tabela de Cargas Recusadas
             </span>
             <span class="text-xs font-mono text-red-700 dark:text-red-500">
@@ -364,11 +363,11 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-md w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
         <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-nexus-500">qr_code_2</span>
+          <span class="material-symbols-outlined fa-solid fa-qrcode text-nexus-500" data-icon="qr_code_2" aria-hidden="true"></span>
           Etiqueta de QR Code Gerado
         </h2>
         <button type="button" id="closeQrModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-xl" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
 
@@ -383,7 +382,7 @@
 
       <div class="flex items-center justify-end gap-2 pt-2">
         <button type="button" id="printEtiquetaBtn" class="px-4 py-2 rounded-xl bg-nexus-500 hover:bg-nexus-900 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors">
-          <span class="material-symbols-outlined text-sm">print</span>
+          <span class="material-symbols-outlined fa-solid fa-print text-sm" data-icon="print" aria-hidden="true"></span>
           Imprimir Etiqueta (PDF)
         </button>
       </div>
@@ -414,18 +413,19 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-xl w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
         <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-nexus-500">link</span>
+          <span class="material-symbols-outlined fa-solid fa-link text-nexus-500" data-icon="link" aria-hidden="true"></span>
           Vincular Carga a Contêiner
         </h2>
         <button type="button" id="closeVincularModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-xl" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
 
       <div class="flex flex-col gap-3 text-xs">
         <p class="text-slate-600 dark:text-slate-400">
           Carga selecionada: <strong id="vincularCargaIdLabel" class="text-nexus-500">--</strong>
-          (Volume: <span id="vincularCargaVolumeLabel" class="font-mono font-bold text-nexus-900 dark:text-white">--</span>)
+          (Volume: <span id="vincularCargaVolumeLabel" class="font-mono font-bold text-nexus-900 dark:text-white">--</span>
+          • Destino Final: <strong id="vincularCargaDestinoLabel" class="text-nexus-900 dark:text-white">--</strong>)
         </p>
 
         <div>
@@ -434,6 +434,10 @@
             <!-- Preenchido via JS: apenas navios aptos para receber carga -->
           </select>
           <p id="vincularNavioAviso" class="hidden mt-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400"></p>
+          <div id="vincularDestinoAviso" role="alert" class="hidden mt-1.5 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-[11px] font-semibold text-amber-800 dark:text-amber-300 flex items-start gap-2">
+            <span class="material-symbols-outlined fa-solid fa-triangle-exclamation text-[14px] text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" data-icon="warning" aria-hidden="true"></span>
+            <span id="vincularDestinoAvisoTexto"></span>
+          </div>
         </div>
 
         <div>
@@ -449,7 +453,7 @@
           Cancelar
         </button>
         <button type="button" id="confirmVincularModalBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors">
-          <span class="material-symbols-outlined text-sm">link</span>
+          <span class="material-symbols-outlined fa-solid fa-link text-sm" data-icon="link" aria-hidden="true"></span>
           Confirmar Vinculação
         </button>
       </div>
@@ -461,11 +465,11 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl border border-nexus-border dark:border-nexus-dark-border max-w-xl w-full p-6 shadow-xl flex flex-col gap-4">
       <div class="flex items-center justify-between border-b border-nexus-border dark:border-nexus-dark-border pb-3">
         <h2 class="font-display font-bold text-base text-nexus-900 dark:text-white flex items-center gap-2">
-          <span class="material-symbols-outlined text-amber-700">forklift</span>
+          <span class="material-symbols-outlined fa-solid fa-truck-ramp-box text-amber-700" data-icon="forklift" aria-hidden="true"></span>
           Movimentar Carga entre Setores do Pátio
         </h2>
         <button type="button" id="closeMovimentarModalBtn" class="text-slate-600 hover:text-slate-600 dark:hover:text-slate-200">
-          <span class="material-symbols-outlined text-xl">close</span>
+          <span class="material-symbols-outlined fa-solid fa-xmark text-xl" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
 
@@ -506,7 +510,7 @@
           Cancelar
         </button>
         <button type="button" id="confirmMovimentarModalBtn" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors">
-          <span class="material-symbols-outlined text-sm">forklift</span>
+          <span class="material-symbols-outlined fa-solid fa-truck-ramp-box text-sm" data-icon="forklift" aria-hidden="true"></span>
           Criar Tarefa de Movimentação
         </button>
       </div>
@@ -523,7 +527,7 @@
   <script src="js/haptics.js"></script>
   <script src="js/panic-realtime.js"></script>
   <script src="js/padronizacao-codigos.js"></script>
-  <script src="js/pages/cargas.js?v=2"></script>
+  <script src="js/pages/cargas.js"></script>
   <!-- WebMCP: ferramentas para agentes de IA (README, seção WebMCP) -->
   <script src="js/webmcp/webmcp-core.js"></script>
   <script src="js/webmcp/webmcp-ui.js"></script>

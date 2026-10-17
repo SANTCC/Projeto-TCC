@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el.btn) {
       el.btn.disabled = true;
       el.btn.innerHTML =
-        '<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>' +
+        '<span class="material-symbols-outlined fa-solid fa-spinner text-[18px] animate-spin" data-icon="progress_activity" aria-hidden="true"></span>' +
         '<span>Consultando…</span>';
     }
     status('Consultando o log…');
@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (el.btn) {
         el.btn.disabled = false;
         el.btn.innerHTML =
-          '<span class="material-symbols-outlined text-[18px]">refresh</span>' +
+          '<span class="material-symbols-outlined fa-solid fa-arrows-rotate text-[18px]" data-icon="refresh" aria-hidden="true"></span>' +
           '<span>Atualizar Log</span>';
       }
     }

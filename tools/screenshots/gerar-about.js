@@ -19,6 +19,14 @@ const path = require('path');
 
 const { PAGINAS_DO_ABOUT } = require('./paginas');
 const { CARGO_META } = require('./demo-data');
+const { MAPA_ICONES_FA } = require('../assets');
+
+const faIcon = (nome, extraCls = '', extraAttr = '') => {
+  const chave = String(nome || '').trim();
+  const faCls = (MAPA_ICONES_FA && MAPA_ICONES_FA[chave]) || 'fa-circle-dot';
+  const cls = ['material-symbols-outlined', 'fa-solid', faCls, extraCls].filter(Boolean).join(' ');
+  return `<span class="${cls}"${extraAttr ? ` ${extraAttr}` : ''} data-icon="${esc(chave)}" aria-hidden="true"></span>`;
+};
 
 const RAIZ = path.join(__dirname, '..', '..');
 const MANIFEST_PADRAO = path.join(RAIZ, 'docs', 'screenshots', 'manifest.json');
@@ -206,7 +214,7 @@ function blocoCabecalho() {
       <a href="index.html">Acessar o sistema</a>
     </nav>
     <button id="botaoTema" type="button" class="botao-tema" aria-label="Alternar tema claro/escuro">
-      <span class="material-symbols-outlined" id="iconeTema" aria-hidden="true">dark_mode</span>
+      ${faIcon('dark_mode', '', 'id="iconeTema"')}
     </button>
   </header>`;
 }
@@ -231,7 +239,7 @@ function blocoHero() {
           <li><strong>9</strong><span>status no fluxo da carga</span></li>
         </ul>
         <p class="nota">
-          <span class="material-symbols-outlined" aria-hidden="true">info</span>
+          ${faIcon('info')}
           <span>O acesso ao sistema é controlado por perfil funcional (RBAC), garantindo que cada cargo visualize e execute apenas as operações compatíveis com sua função no terminal.</span>
         </p>
       </div>
@@ -248,7 +256,7 @@ function blocoFluxo() {
           <img src="design/undraw/${esc(p.undraw)}" alt="${esc(p.undrawAlt)}" class="undraw-pilar-img" loading="lazy" />
         </div>
         <div class="pilar-cabecalho">
-          <span class="material-symbols-outlined pilar-icone" aria-hidden="true">${esc(p.icone)}</span>
+          ${faIcon(p.icone, 'pilar-icone')}
           <h3>${esc(p.titulo)}</h3>
         </div>
         <p>${esc(p.texto)}</p>
@@ -256,7 +264,7 @@ function blocoFluxo() {
 
   return `  <!-- Fluxo operacional -->
   <section id="fluxo">
-    <h2><span class="material-symbols-outlined" aria-hidden="true">route</span> Fluxo operacional, do agendamento à auditoria</h2>
+    <h2>${faIcon('route')} Fluxo operacional, do agendamento à auditoria</h2>
     <p class="secao-texto">
       Cada pilar abaixo corresponde a uma etapa da operação portuária no terminal: identidade, entrada da carga,
       inspeção técnica, armazenagem no pátio, despacho marítimo, comando executivo e operação em campo.
@@ -286,7 +294,7 @@ function blocoArquitetura() {
           <img src="design/undraw/${esc(a.undraw)}" alt="${esc(a.undrawAlt)}" class="undraw-arq-img" loading="lazy" />
         </div>
         <header>
-          <span class="material-symbols-outlined" aria-hidden="true">${esc(a.icone)}</span>
+          ${faIcon(a.icone)}
           <h3>${esc(a.titulo)}</h3>
         </header>
         <ul>
@@ -296,7 +304,7 @@ ${a.itens.map((i) => `          <li>${esc(i)}</li>`).join('\n')}
 
   return `  <!-- Arquitetura -->
   <section id="arquitetura">
-    <h2><span class="material-symbols-outlined" aria-hidden="true">account_tree</span> Como o sistema é construído</h2>
+    <h2>${faIcon('account_tree')} Como o sistema é construído</h2>
     <p class="secao-texto">
       O NexusPort é um front-end estático que conversa diretamente com o Supabase (PostgREST, Realtime e
       Edge Functions). As regras de negócio são aplicadas nas telas, nas políticas do banco e nas funções de borda.
@@ -337,7 +345,7 @@ function blocoPerfis() {
 
   return `  <!-- Perfis -->
   <section id="perfis">
-    <h2><span class="material-symbols-outlined" aria-hidden="true">badge</span> Perfis, camadas de visão e acessos</h2>
+    <h2>${faIcon('badge')} Perfis, camadas de visão e acessos</h2>
     <p class="secao-texto">
       O cargo vem do cadastro funcional e não pode ser trocado na tela: ao confirmar, o operador assume a
       camada de visão correspondente. As páginas abaixo são as liberadas para cada cargo pela matriz
@@ -388,7 +396,7 @@ ${destaques}
         </ul>
 
         <p class="tela-acesso">
-          <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+          ${faIcon('verified_user')}
           ${pagina.publica
     ? 'Tela pública (etapa de autenticação — não exige sessão prévia)'
     : `Cargos com acesso: ${esc(nomesCargos.join(', '))}`}
@@ -401,7 +409,7 @@ function blocoTelas() {
 
   return `  <!-- Funcionalidades por página -->
   <section id="telas">
-    <h2><span class="material-symbols-outlined" aria-hidden="true">apps</span> Funcionalidades de cada página do sistema</h2>
+    <h2>${faIcon('apps')} Funcionalidades de cada página do sistema</h2>
     <p class="secao-texto">
       Abaixo está cada página do NexusPort com sua finalidade operacional, suas funcionalidades principais
       e os cargos que possuem permissão de acesso.
@@ -456,10 +464,10 @@ const CSS = `
     html.dark a { color: #A5B4FC; }
     code { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace; background: rgba(68, 89, 135, .12); padding: .1rem .35rem; border-radius: .35rem; font-size: .9em; }
     .material-symbols-outlined {
-      font-family: 'Material Symbols Outlined';
-      font-weight: normal; font-style: normal; font-size: 24px; line-height: 1;
-      letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap;
-      word-wrap: normal; direction: ltr; -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga';
+      font-family: 'Font Awesome 6 Free' !important;
+      font-weight: 900; font-style: normal; font-size: 20px; line-height: 1;
+      letter-spacing: normal; text-transform: none; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
+      word-wrap: normal; direction: ltr;
     }
     .visualmente-oculto {
       position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
@@ -640,7 +648,11 @@ const SCRIPT = `
       var botao = document.getElementById('botaoTema');
       var icone = document.getElementById('iconeTema');
       function pintarIcone() {
-        if (icone) icone.textContent = raiz.classList.contains('dark') ? 'light_mode' : 'dark_mode';
+        if (!icone) return;
+        var escuro = raiz.classList.contains('dark');
+        icone.setAttribute('data-icon', escuro ? 'light_mode' : 'dark_mode');
+        icone.classList.toggle('fa-sun', escuro);
+        icone.classList.toggle('fa-moon', !escuro);
       }
       pintarIcone();
       if (botao) {

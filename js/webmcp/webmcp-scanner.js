@@ -18,7 +18,7 @@
   const ler = {
     nome: 'ler_codigo_qr',
     titulo: 'Ler código QR',
-    descricao: 'Identifica uma carga ou contêiner pelo código do QR (como o scanner da tela) e mostra os dados e a ação sugerida. Registra a leitura na auditoria.',
+    descricao: 'Identifica uma carga pelo código do QR (como o scanner da tela) e mostra os dados e a ação sugerida. Registra a leitura na auditoria.',
     anotacoes: { untrustedContentHint: true },
     cargos: D.GRUPOS.todos,
     limiteMinuto: 10,
