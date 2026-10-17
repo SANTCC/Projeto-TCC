@@ -7,7 +7,7 @@
  * "Não informado"; nada de valor padrão (peso, volume, valor, destino ou navio fictícios).
  */
 
-export const VERSAO_MODELO = 2;
+export const VERSAO_MODELO = 3;
 export const BUCKET = 'relatorios-pdf';
 export const NAO_INFORMADO = 'Não informado';
 
@@ -117,11 +117,82 @@ export function rotulo(grupo, valor) {
   return Object.prototype.hasOwnProperty.call(tabela, valor) ? tabela[valor] : String(valor);
 }
 
+/** true quando o texto de porto_descarga na verdade referencia um contêiner alocado. */
+export function ehReferenciaContainer(valor) {
+  if (vazio(valor)) return false;
+  return /^\s*cont[eê]iner\b/i.test(String(valor).trim());
+}
+
+function resolverPortoDescarga(linha, navio) {
+  const bruto = linha && linha.porto_descarga;
+  if (!vazio(bruto) && !ehReferenciaContainer(bruto)) {
+    return String(bruto).trim();
+  }
+  const setorOriginal = linha && (linha.setor_patio_original || linha.setorPatioOriginal);
+  if (!vazio(setorOriginal) && !ehReferenciaContainer(setorOriginal)) {
+    return String(setorOriginal).trim();
+  }
+  if (linha && !vazio(linha.destino)) {
+    return String(linha.destino).trim();
+  }
+  if (navio && !vazio(navio.porto_destino)) {
+    return String(navio.porto_destino).trim();
+  }
+  return null;
+}
+
+function resolverDataEntrada(linha) {
+  if (!linha) return null;
+  if (!vazio(linha.data_entrada)) return linha.data_entrada;
+  if (!vazio(linha.data_prevista_entrega)) return linha.data_prevista_entrega;
+  const ags = Array.isArray(linha.agendamentos)
+    ? linha.agendamentos
+    : (linha.agendamentos ? [linha.agendamentos] : []);
+  const agComData = ags.find((a) => a && !vazio(a.data_prevista_entrega));
+  if (agComData) return agComData.data_prevista_entrega;
+  return null;
+}
+
+function resolverDataSaida(linha, navio) {
+  if (!linha) return null;
+  if (!vazio(linha.data_saida)) return linha.data_saida;
+  if (navio && !vazio(navio.data_saida)) return navio.data_saida;
+  if (!vazio(linha.data_saida_navio)) return linha.data_saida_navio;
+  return null;
+}
+
+function normalizarNavioParaCarga(navioBruto, linha) {
+  if (!navioBruto) return null;
+  let portoOrigem = navioBruto.porto_origem ?? null;
+  let portoDestino = navioBruto.porto_destino ?? null;
+  const destinoCarga = linha && !vazio(linha.destino) ? String(linha.destino).trim() : null;
+  if (
+    destinoCarga
+    && !vazio(portoOrigem)
+    && !vazio(portoDestino)
+    && String(portoOrigem).trim().toLowerCase() === destinoCarga.toLowerCase()
+    && String(portoDestino).trim().toLowerCase() !== destinoCarga.toLowerCase()
+  ) {
+    portoOrigem = navioBruto.porto_destino;
+    portoDestino = destinoCarga;
+  } else if (destinoCarga && vazio(portoDestino) && !vazio(navioBruto.numero_imo)) {
+    portoDestino = destinoCarga;
+  }
+  return {
+    nome: navioBruto.nome ?? null,
+    numero_imo: navioBruto.numero_imo ?? null,
+    porto_origem: portoOrigem,
+    porto_destino: portoDestino,
+    data_saida: navioBruto.data_saida ?? null
+  };
+}
+
 /**
  * Converte a linha de `cargas` (com `containers` e, dentro dele, `navios`) em um modelo estável.
  * Carga ENTREGUE não tem mais vínculo ativo: navio/contêiner vêm dos snapshots
  * históricos gravados na entrega (navio_nome_historico /
- * container_identificacao_historico), sem inventar os demais dados cadastrais.
+ * container_identificacao_historico) enriquecidos pelo handler a partir das
+ * tabelas `containers` e `navios`.
  */
 export function montarModelo(linha) {
   const cont = linha.containers || (linha.container_identificacao_historico
@@ -134,14 +205,16 @@ export function montarModelo(linha) {
       navios: null
     }
     : null);
-  const navio = (cont && cont.navios) || linha.navios || (linha.navio_nome_historico
+  const navioBruto = (cont && cont.navios) || linha.navios || (linha.navio_nome_historico
     ? {
       nome: linha.navio_nome_historico,
       numero_imo: null,
       porto_origem: null,
-      porto_destino: null
+      porto_destino: null,
+      data_saida: null
     }
     : null);
+  const navio = normalizarNavioParaCarga(navioBruto, linha);
   return {
     versao: VERSAO_MODELO,
     carga: {
@@ -152,12 +225,12 @@ export function montarModelo(linha) {
       volume_m3: numeroOuNulo(linha.volume),
       valor_declarado_brl: numeroOuNulo(linha.valor_declarado),
       destino: linha.destino ?? null,
-      porto_descarga: linha.porto_descarga ?? null,
+      porto_descarga: resolverPortoDescarga(linha, navio),
       status_fluxo: linha.status_fluxo ?? null,
       resultado_inspecao: linha.resultado_inspecao ?? null,
       motivo_recusa: linha.motivo_recusa ?? null,
-      data_entrada: linha.data_entrada ?? null,
-      data_saida: linha.data_saida ?? null
+      data_entrada: resolverDataEntrada(linha),
+      data_saida: resolverDataSaida(linha, navio)
     },
     container: cont
       ? {
@@ -203,10 +276,14 @@ export function formatarMoeda(valor) {
   return valor === null || valor === undefined ? NAO_INFORMADO : FMT_MOEDA.format(valor);
 }
 
-/** Data e hora de um timestamp, no fuso de Brasília (America/Sao_Paulo). */
+/** Data e hora de um timestamp, no fuso de Brasília (America/Sao_Paulo). Datas puras (AAAA-MM-DD) não sofrem deslocamento de fuso. */
 export function formatarDataHora(iso) {
   if (vazio(iso)) return NAO_INFORMADO;
-  const data = new Date(iso);
+  const texto = String(iso).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) {
+    return formatarData(texto);
+  }
+  const data = new Date(texto);
   if (Number.isNaN(data.getTime())) return NAO_INFORMADO;
   const partes = {};
   FMT_DATA_HORA.formatToParts(data).forEach((p) => { partes[p.type] = p.value; });
@@ -258,7 +335,6 @@ export function secoesDoRelatorio(modelo) {
         ? [
           ['Identificação', textoOu(k.numero_identificacao)],
           ['Material carregado', textoOu(k.material_carregado)],
-          ['Estado operacional', rotulo('estado_container', k.estado)],
           ['Data de fabricação', formatarData(k.data_fabricacao)],
           ['Referência de tempo de uso', rotulo('referencia_tempo', k.tempo_uso_referencia)]
         ]
