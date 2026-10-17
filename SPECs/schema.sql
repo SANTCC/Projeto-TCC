@@ -178,6 +178,7 @@ create table navios (
   nome text not null,
   numero_imo text not null unique,
   data_registro_sistema date not null default current_date,
+  data_ultima_manutencao date,
   quantidade_cargas_realizadas int not null default 0 check (quantidade_cargas_realizadas >= 0),
   estado_operacional estado_navio_enum not null default 'OPERANTE',
   coordenadas_gps text,
@@ -469,6 +470,18 @@ returns trigger as $$
 begin
   -- Se a localização do navio mudar para NO_PORTO_DE_DESTINO
   if NEW.localizacao = 'NO_PORTO_DE_DESTINO' then
+    -- Tarefa 9: garante que os contêineres com cargas do navio mantenham o
+    -- vínculo com o navio antes de liberar container_id e navio_id da carga.
+    update containers k
+    set navio_id = NEW.id
+    where k.navio_id is null
+      and exists (
+        select 1 from cargas c
+        where c.container_id = k.id
+          and c.navio_id = NEW.id
+          and c.status_fluxo not in ('ENTREGUE', 'CANCELADA', 'RECUSADA')
+      );
+
     -- Entrega as cargas vinculadas (diretamente ou via contêiner), preserva
     -- navio/contêiner como snapshot histórico e libera os vínculos ativos.
     update cargas c
@@ -487,6 +500,17 @@ begin
         or c.container_id in (select id from containers where navio_id = NEW.id)
       );
   elsif NEW.localizacao = 'FORA_DO_PORTO' then
+    -- Tarefa 9: garante que os contêineres das cargas embarcadas estejam vinculados ao navio
+    update containers k
+    set navio_id = NEW.id
+    where k.navio_id is null
+      and exists (
+        select 1 from cargas c
+        where c.container_id = k.id
+          and c.navio_id = NEW.id
+          and c.status_fluxo not in ('ENTREGUE', 'CANCELADA', 'RECUSADA')
+      );
+
     -- Atualiza status das cargas para EM_TRANSITO
     update cargas
     set status_fluxo = 'EM_TRANSITO', updated_at = now()

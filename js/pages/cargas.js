@@ -427,6 +427,44 @@ document.addEventListener('DOMContentLoaded', () => {
     return transicoes;
   }
 
+  function preservarVinculoContainerComNavioNaEntrega(carga, navio, historico) {
+    if (!navio) return;
+    const nomeNavio = textoHistoricoEntrega(navio.nome) || textoHistoricoEntrega(historico && historico.navio_nome_historico);
+    const idNavio = navio.id || null;
+    if (!nomeNavio && !idNavio) return;
+    const refs = [
+      carga && carga.container,
+      carga && carga.container_id,
+      carga && carga.containerId,
+      historico && historico.container_identificacao_historico
+    ].map(textoHistoricoEntrega).filter(Boolean);
+    if (refs.length === 0) return;
+    try {
+      const listaConts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+      if (!Array.isArray(listaConts) || listaConts.length === 0) return;
+      let alterou = false;
+      listaConts.forEach((ct) => {
+        if (!ct) return;
+        const bate = [ct.identificacao, ct.numero_identificacao, ct.id, ct.rawDbId]
+          .some((v) => v && refs.some((r) => String(v).trim().toLowerCase() === r.toLowerCase()));
+        if (!bate) return;
+        if (!ct.navio_id && idNavio) {
+          ct.navio_id = idNavio;
+          ct.navioId = idNavio;
+          alterou = true;
+        }
+        if ((!ct.navio || ct.navio === 'Não Vinculado' || ct.navio === 'Vinculado') && nomeNavio) {
+          ct.navio = nomeNavio;
+          ct.navio_nome = nomeNavio;
+          alterou = true;
+        }
+      });
+      if (alterou) {
+        localStorage.setItem('nexus_containers_list', JSON.stringify(listaConts));
+      }
+    } catch (e) { /* cache indisponível */ }
+  }
+
   /** Persiste transições reais uma vez por grupo de status; não dispara um refresh local. */
   async function aplicarStatusAutomaticoCargas(cargas, requestRevision) {
     const transicoes = obterTransicoesAutomaticas(cargas);
@@ -434,8 +472,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const client = window.nexusSupabase || null;
     // O snapshot precisa ser resolvido ANTES de qualquer vínculo ser liberado.
+    // Tarefa 9: apenas a carga se desvincula de ambos ao chegar no destino;
+    // o contêiner permanece vinculado ao navio.
     transicoes.forEach((t) => {
-      if (t.statusNovo === 'ENTREGUE') t.historicoEntrega = snapshotHistoricoEntrega(t.carga, t.navio);
+      if (t.statusNovo === 'ENTREGUE') {
+        t.historicoEntrega = snapshotHistoricoEntrega(t.carga, t.navio);
+        preservarVinculoContainerComNavioNaEntrega(t.carga, t.navio, t.historicoEntrega);
+      }
     });
     if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
       transicoes.forEach((t) => {
@@ -2209,6 +2252,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
       localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasFluxoList));
 
+      // Tarefa 9: ao vincular uma carga a um contêiner e a um navio, o contêiner
+      // também fica vinculado ao navio (e permanece vinculado a ele até que ambos
+      // estejam no Porto de Santos e o contêiner seja vinculado a outro navio ou excluído).
+      if (navVal || navUuid) {
+        try {
+          const contListLocal = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+          let alterouContLocal = false;
+          contListLocal.forEach((ct) => {
+            if (!ct) return;
+            const bate = [ct.id, ct.rawDbId, ct.identificacao, ct.numero_identificacao]
+              .some((v) => v && (String(v) === String(contUuid) || String(v).toUpperCase() === String(contIdentificacao).toUpperCase()));
+            if (!bate) return;
+            if (navVal) {
+              ct.navio = navVal;
+              ct.navio_nome = navVal;
+              alterouContLocal = true;
+            }
+            if (navUuid) {
+              ct.navio_id = navUuid;
+              ct.navioId = navUuid;
+              alterouContLocal = true;
+            }
+          });
+          if (alterouContLocal) {
+            localStorage.setItem('nexus_containers_list', JSON.stringify(contListLocal));
+          }
+        } catch (eContLocal) { /* cache indisponível */ }
+      }
+
       if (window.nexusSupabase) {
         try {
           const isUuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2248,6 +2320,13 @@ document.addEventListener('DOMContentLoaded', () => {
               query = query.eq('qr_code_url', targetQr);
             }
             await query;
+          }
+
+          if (contUuidToUse && navUuidToUse && (!contAtual || String(contAtual.navio_id || '') !== String(navUuidToUse))) {
+            const tblContainers = window.nexusSupabase.from('containers');
+            if (tblContainers && typeof tblContainers.update === 'function') {
+              await tblContainers.update({ navio_id: navUuidToUse }).eq('id', contUuidToUse);
+            }
           }
         } catch (e) { console.warn('Erro ao atualizar vinculação no Supabase:', e); }
       }

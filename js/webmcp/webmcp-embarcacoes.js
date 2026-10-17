@@ -355,6 +355,17 @@
       if (args.identificacao !== undefined && D.containers().some((c) => NexusCodigos.chave(c.identificacao) === NexusCodigos.chave(NexusCodigos.formatarConteiner(args.identificacao)))) {
         return { codigo: 'CONTAINER_DUPLICADO', mensagem: `O contêiner ${NexusCodigos.formatarConteiner(args.identificacao)} já está cadastrado.` };
       }
+      const agora = new Date();
+      const hojeIso = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
+      if (args.data_fabricacao && String(args.data_fabricacao) > hojeIso) {
+        return { codigo: 'DATA_FUTURA_INVALIDA', mensagem: 'A data de fabricação do contêiner não pode ser uma data futura.' };
+      }
+      if (args.data_ultima_manutencao && String(args.data_ultima_manutencao) > hojeIso) {
+        return { codigo: 'DATA_FUTURA_INVALIDA', mensagem: 'A data da última manutenção do contêiner não pode ser uma data futura.' };
+      }
+      if (args.data_fabricacao && args.data_ultima_manutencao && String(args.data_ultima_manutencao) < String(args.data_fabricacao)) {
+        return { codigo: 'DATA_INCONSISTENTE', mensagem: 'A data da última manutenção não pode ser anterior à data de fabricação do contêiner.' };
+      }
       return null;
     },
     resumo: (args) => [`Cadastrar o contêiner ${NexusCodigos.formatarConteiner(args.identificacao)} (${args.tipo}).`, `Referência de manutenção: ${args.referencia_tempo}.`],

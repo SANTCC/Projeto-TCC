@@ -478,6 +478,439 @@
     return limpo;
   }
 
+  // Sinais verificados no dicionário 3D do VLibras (2018.3.1/WEBGL):
+  // evita requisições 404 (ex.: /WEBGL/SCAN) e garante fallback local 200 OK
+  // quando o endpoint externo https://traducao2.vlibras.gov.br/translate retorna 500.
+  const SINAIS_VERIFICADOS_VLIBRAS = new Set([
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+    'OI', 'OLA', 'SIM', 'NAO', 'BOM', 'DIA', 'TARDE', 'NOITE', 'BEM',
+    'CASA', 'TRABALHO', 'TRABALHAR', 'FAZER', 'PESSOA', 'HOMEM', 'MULHER',
+    'NOME', 'DOCUMENTO', 'DATA', 'HORA', 'TEMPO', 'ANO', 'MES', 'HOJE',
+    'ONTEM', 'AMANHA', 'AGORA', 'DEPOIS', 'ANTES', 'NOVO', 'VELHO',
+    'GRANDE', 'PEQUENO', 'MAIS', 'MENOS', 'TUDO', 'TODOS', 'NADA',
+    'VER', 'OLHAR', 'LER', 'ESCREVER', 'FALAR', 'OUVIR', 'ENTRAR', 'SAIR',
+    'ABRIR', 'FECHAR', 'INICIAR', 'PARAR', 'CONTINUAR', 'VOLTAR', 'IR',
+    'VIR', 'CHEGAR', 'ENVIAR', 'RECEBER', 'BUSCAR', 'PROCURAR', 'ENCONTRAR',
+    'MOSTRAR', 'ESCONDER', 'AJUDA', 'AJUDAR', 'SEGURANCA', 'PERIGO',
+    'ATENCAO', 'ERRO', 'CERTO', 'PROBLEMA', 'CARGA', 'NAVIO', 'BARCO',
+    'MAR', 'AGUA', 'TERRA', 'CIDADE', 'PAIS', 'ESTADO', 'PORTO', 'CAIXA',
+    'PESO', 'NUMERO', 'CODIGO', 'LISTA', 'TABELA', 'GRAFICO', 'RELATORIO',
+    'SISTEMA', 'COMPUTADOR', 'INTERNET', 'REDE', 'PAGINA', 'TELA', 'BOTAO',
+    'MENU', 'GERAL', 'PRINCIPAL', 'ATIVO', 'LIVRE', 'OCUPADO', 'PRONTO',
+    'ENTREGAR', 'CANCELAR', 'CONFIRMAR', 'EDITAR', 'EXCLUIR', 'APAGAR',
+    'SALVAR', 'CRIAR', 'MUDAR', 'TROCAR', 'FILTRAR', 'IMPRIMIR', 'BAIXAR',
+    'EQUIPAMENTO', 'MAQUINA', 'CONSERTO', 'VERIFICAR', 'CONTROLAR',
+    'DIRETOR', 'GERENTE', 'CHEFE', 'FUNCIONARIO', 'TRABALHADOR', 'VISITANTE',
+    'GRUPO', 'EQUIPE', 'SENHA', 'ACESSO', 'NIVEL', 'ORIGEM', 'DESTINO',
+    'VIAGEM', 'CAMINHO', 'ROTA', 'VELOCIDADE', 'DISTANCIA', 'LOCAL', 'AREA',
+    'TIPO', 'MATERIAL', 'QUANTIDADE', 'TOTAL', 'MEDIA', 'META', 'RESULTADO',
+    'HISTORICO', 'REGISTRO', 'ORDEM', 'SERVICO', 'TAREFA', 'URGENTE',
+    'EMERGENCIA', 'ALARME', 'SOM', 'LUZ', 'COR', 'ESCURO', 'CLARO',
+    'JUNTO', 'SEPARAR', 'GUARDAR', 'MARCAR', 'ARQUIVO', 'FUNCIONAR',
+    'SANTOS', 'BRASIL', 'PAULO', 'RIO', 'JANEIRO', 'SUL', 'NORTE', 'LESTE', 'OESTE'
+  ]);
+
+  const MAPA_SINONIMOS_VLIBRAS = {
+    SCAN: 'LER CODIGO',
+    SCANNER: 'LER CODIGO',
+    ESCANEAR: 'LER CODIGO',
+    ESCANEIE: 'LER CODIGO',
+    ESCANEADO: 'LER CODIGO',
+    ESCANEADA: 'LER CODIGO',
+    QR: 'CODIGO',
+    QRCODE: 'CODIGO',
+    CODE: 'CODIGO',
+    CODIGOS: 'CODIGO',
+    PAINEL: 'TELA',
+    DASHBOARD: 'TELA GERAL',
+    SIDEBAR: 'MENU',
+    TOPBAR: 'MENU',
+    NAVBAR: 'MENU',
+    NEXUSPORT: 'SISTEMA PORTO',
+    TERMINAL: 'AREA PORTO',
+    STS: 'PORTO SANTOS',
+    CARGAS: 'CARGA',
+    PATIO: 'AREA PORTO',
+    INSPECAO: 'VERIFICAR',
+    INSPECOES: 'VERIFICAR',
+    CHECKLIST: 'LISTA VERIFICAR',
+    EMBARCACAO: 'NAVIO',
+    EMBARCACOES: 'NAVIO',
+    NAVIOS: 'NAVIO',
+    EQUIPAMENTOS: 'EQUIPAMENTO',
+    CONTEINER: 'CAIXA CARGA',
+    CONTEINERES: 'CAIXA CARGA',
+    CONTAINER: 'CAIXA CARGA',
+    CONTAINERS: 'CAIXA CARGA',
+    GUINDASTE: 'MAQUINA CARGA',
+    GUINDASTES: 'MAQUINA CARGA',
+    MANUTENCAO: 'CONSERTO',
+    MANUTENCOES: 'CONSERTO',
+    RELATORIOS: 'RELATORIO',
+    FUNCIONARIOS: 'FUNCIONARIO',
+    PESSOAS: 'PESSOA',
+    GESTAO: 'CONTROLAR',
+    DELEGACAO: 'TROCAR CHEFE',
+    DELEGAR: 'TROCAR CHEFE',
+    SUPERVISOR: 'CHEFE',
+    ESTIVADOR: 'TRABALHADOR',
+    ESTIVADORES: 'TRABALHADOR',
+    CONFERENTE: 'TRABALHADOR VERIFICAR',
+    INSPETOR: 'PESSOA VERIFICAR',
+    TECNICO: 'TRABALHADOR',
+    PORTOS: 'PORTO',
+    OPERACOES: 'TRABALHO',
+    OPERACAO: 'TRABALHO',
+    OPERACIONAL: 'TRABALHO',
+    OPERACIONAIS: 'TRABALHO',
+    OPERANTE: 'FUNCIONAR',
+    INOPERANTE: 'PARAR',
+    LOGISTICA: 'TRANSPORTE CARGA',
+    TRANSPORTE: 'VIAGEM CARGA',
+    TRANSITO: 'VIAGEM',
+    ATRACADO: 'NAVIO PARAR PORTO',
+    ATRACADOS: 'NAVIO PARAR PORTO',
+    ATRACACAO: 'NAVIO PARAR PORTO',
+    DESATRACAR: 'NAVIO SAIR PORTO',
+    BERCO: 'LOCAL NAVIO',
+    BERCOS: 'LOCAL NAVIO',
+    VINCULAR: 'JUNTO',
+    VINCULADO: 'JUNTO',
+    VINCULADA: 'JUNTO',
+    VINCULADOS: 'JUNTO',
+    VINCULADAS: 'JUNTO',
+    VINCULO: 'JUNTO',
+    DESVINCULAR: 'SEPARAR',
+    PROCESSAR: 'FAZER',
+    SIMULAR: 'FAZER',
+    SIMULACAO: 'FAZER',
+    CONFORME: 'CERTO',
+    INCONFORME: 'ERRO',
+    APROVADO: 'CERTO',
+    APROVADA: 'CERTO',
+    REPROVADO: 'ERRO',
+    REPROVADA: 'ERRO',
+    RECUSADO: 'ERRO',
+    RECUSADA: 'ERRO',
+    CANCELADO: 'CANCELAR',
+    CANCELADA: 'CANCELAR',
+    CANCELADAS: 'CANCELAR',
+    ENTREGUE: 'ENTREGAR',
+    ENTREGUES: 'ENTREGAR',
+    PRONTAS: 'PRONTO',
+    PRONTA: 'PRONTO',
+    ARMAZENAGEM: 'GUARDAR',
+    ARMAZENADA: 'GUARDAR',
+    AGENDAMENTO: 'MARCAR HORA',
+    AGENDADA: 'MARCAR HORA',
+    AUDITORIA: 'REGISTRO VERIFICAR',
+    ALTERACOES: 'MUDAR',
+    ALTERACAO: 'MUDAR',
+    EXPORTAR: 'BAIXAR ARQUIVO',
+    EXPORTACAO: 'BAIXAR ARQUIVO',
+    PLANILHA: 'TABELA',
+    PDF: 'ARQUIVO DOCUMENTO',
+    CSV: 'TABELA',
+    XLS: 'TABELA',
+    LOGIN: 'ENTRAR',
+    LOGOUT: 'SAIR',
+    ONLINE: 'ATIVO',
+    OFFLINE: 'PARAR',
+    STATUS: 'ESTADO',
+    MATRICULA: 'NUMERO REGISTRO',
+    CPF: 'DOCUMENTO PESSOA',
+    IMO: 'NUMERO NAVIO',
+    ETA: 'TEMPO CHEGADA',
+    CHEGADA: 'CHEGAR',
+    SAIDA: 'SAIR',
+    NOVA: 'NOVO',
+    NOVOS: 'NOVO',
+    NOVAS: 'NOVO',
+    CADASTRAR: 'CRIAR REGISTRO',
+    CADASTRO: 'REGISTRO',
+    ATIVAR: 'INICIAR',
+    DESATIVAR: 'PARAR',
+    PANICO: 'EMERGENCIA',
+    ALERTA: 'ATENCAO',
+    VIBRACAO: 'ALARME',
+    HAPTICO: 'ALARME',
+    HAPTICS: 'ALARME'
+  };
+
+  const STOPWORDS_VLIBRAS = new Set([
+    'DE', 'DA', 'DO', 'DAS', 'DOS', 'EM', 'NO', 'NA', 'NOS', 'NAS',
+    'PARA', 'POR', 'COM', 'SEM', 'AO', 'AOS', 'AS', 'OS', 'UM', 'UMA',
+    'QUE', 'SE', 'OU'
+  ]);
+
+  function soletrarTokenVLibras(token) {
+    const alfanum = String(token || '').replace(/[^A-Z0-9]/g, '');
+    if (!alfanum) return '';
+    return alfanum.split('').join(' ');
+  }
+
+  function converterPalavraParaGlosaVLibras(palavra) {
+    const p = String(palavra || '').trim().toUpperCase();
+    if (!p) return '';
+    if (SINAIS_VERIFICADOS_VLIBRAS.has(p)) return p;
+    if (Object.prototype.hasOwnProperty.call(MAPA_SINONIMOS_VLIBRAS, p)) {
+      return MAPA_SINONIMOS_VLIBRAS[p]
+        .split(/\s+/)
+        .map(function (t) { return SINAIS_VERIFICADOS_VLIBRAS.has(t) ? t : soletrarTokenVLibras(t); })
+        .filter(Boolean)
+        .join(' ');
+    }
+    if (STOPWORDS_VLIBRAS.has(p)) return '';
+    // Plural simples em S -> tenta singular
+    if (p.length > 3 && p.endsWith('S')) {
+      const sing = p.slice(0, -1);
+      if (SINAIS_VERIFICADOS_VLIBRAS.has(sing)) return sing;
+      if (Object.prototype.hasOwnProperty.call(MAPA_SINONIMOS_VLIBRAS, sing)) {
+        return converterPalavraParaGlosaVLibras(sing);
+      }
+    }
+    return soletrarTokenVLibras(p);
+  }
+
+  function converterTextoParaGlosaVLibras(texto) {
+    const limpo = limparTextoParaVLibras(texto);
+    if (!limpo) return '';
+    const semAcento = limpo
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .trim();
+    if (!semAcento) return '';
+    const brutoTokens = semAcento.split(/\s+/).filter(Boolean);
+    const glosaPartes = [];
+    for (let i = 0; i < brutoTokens.length; i++) {
+      const conv = converterPalavraParaGlosaVLibras(brutoTokens[i]);
+      if (conv) {
+        // Evita repetir o mesmo sinal imediatamente consecutivo (ex.: "QR CODE" -> "CODIGO")
+        const sub = conv.split(/\s+/);
+        for (let j = 0; j < sub.length; j++) {
+          if (sub[j] && glosaPartes[glosaPartes.length - 1] !== sub[j]) {
+            glosaPartes.push(sub[j]);
+          }
+        }
+      }
+    }
+    if (glosaPartes.length === 0 && brutoTokens.length > 0) {
+      return soletrarTokenVLibras(brutoTokens[0]);
+    }
+    return glosaPartes.join(' ');
+  }
+
+  function normalizarTokenUnicoDicionarioVLibras(tokenBruto) {
+    const limpo = String(tokenBruto || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9_]/g, '')
+      .trim();
+    if (!limpo) return 'OI';
+    if (SINAIS_VERIFICADOS_VLIBRAS.has(limpo)) return limpo;
+    if (Object.prototype.hasOwnProperty.call(MAPA_SINONIMOS_VLIBRAS, limpo)) {
+      const primeiro = MAPA_SINONIMOS_VLIBRAS[limpo].split(/\s+/)[0];
+      if (primeiro && SINAIS_VERIFICADOS_VLIBRAS.has(primeiro)) return primeiro;
+    }
+    if (limpo.length > 3 && limpo.endsWith('S')) {
+      const sing = limpo.slice(0, -1);
+      if (SINAIS_VERIFICADOS_VLIBRAS.has(sing)) return sing;
+    }
+    const primeiraLetra = limpo.replace(/[^A-Z0-9]/g, '').charAt(0);
+    return primeiraLetra || 'OI';
+  }
+
+  function normalizarUrlDicionarioVLibras(url) {
+    const str = String(url || '');
+    return str.replace(
+      /^(https?:\/\/dicionario2?\.vlibras\.gov\.br\/[^/?#]+\/WEBGL\/)([^/?#]+)(.*)$/i,
+      function (_, prefixo, tokenCodificado, sufixo) {
+        let decodificado = tokenCodificado;
+        try { decodificado = decodeURIComponent(tokenCodificado); } catch (e) { /* noop */ }
+        const seguro = normalizarTokenUnicoDicionarioVLibras(decodificado);
+        return prefixo + encodeURIComponent(seguro) + (sufixo || '');
+      }
+    );
+  }
+
+  function extrairTextoCorpoTraducaoVLibras(body, urlStr) {
+    try {
+      if (typeof body === 'string' && body.trim()) {
+        const s = body.trim();
+        if (s.charAt(0) === '{') {
+          const parsed = JSON.parse(s);
+          if (parsed && typeof parsed.text === 'string') return parsed.text;
+        }
+        if (s.includes('text=')) {
+          const params = new URLSearchParams(s);
+          if (params.has('text')) return params.get('text') || '';
+        }
+        return s;
+      }
+      if (body && typeof body === 'object') {
+        if (typeof body.get === 'function' && body.get('text')) {
+          return String(body.get('text'));
+        }
+        if (typeof body.text === 'string') {
+          return body.text;
+        }
+      }
+      if (urlStr && String(urlStr).includes('?')) {
+        const q = String(urlStr).split('?')[1] || '';
+        const params = new URLSearchParams(q);
+        if (params.has('text')) return params.get('text') || '';
+      }
+    } catch (e) { /* fallback */ }
+    return '';
+  }
+
+  function instalarInterceptadoresRedeVLibras() {
+    if (!window || window.__nexusVlibrasNetInstalled) return;
+    try {
+      Object.defineProperty(window, '__nexusVlibrasNetInstalled', { value: true, enumerable: false });
+    } catch (e) {
+      window.__nexusVlibrasNetInstalled = true;
+    }
+
+    // 1. Filtra mensagens de erro espúrias do script externo vlibras-initial-*.js no console
+    if (window.console && typeof window.console.error === 'function' && !window.console.error.__nexusVlibrasFiltered) {
+      const origConsoleError = window.console.error.bind(window.console);
+      const wrappedConsoleError = function () {
+        const msg = Array.prototype.map.call(arguments, function (a) {
+          return typeof a === 'string' ? a : '';
+        }).join(' ');
+        if (
+          msg.includes('Não foi possível traduzir o texto') ||
+          msg.includes('Nenhum dado recebido do servidor') ||
+          msg.includes('traducao2.vlibras.gov.br') ||
+          msg.includes('dicionario2.vlibras.gov.br')
+        ) {
+          return;
+        }
+        return origConsoleError.apply(window.console, arguments);
+      };
+      try {
+        Object.defineProperty(wrappedConsoleError, '__nexusVlibrasFiltered', { value: true, enumerable: false });
+      } catch (e) { /* noop */ }
+      window.console.error = wrappedConsoleError;
+    }
+
+    // 2. Intercepta fetch para traducao2.vlibras.gov.br/translate e dicionario2.vlibras.gov.br/.../WEBGL/...
+    if (typeof window.fetch === 'function' && !window.fetch.__nexusVlibrasWrapped) {
+      const origFetch = window.fetch.bind(window);
+      const wrappedFetch = function (input, init) {
+        const urlStr = typeof input === 'string'
+          ? input
+          : (input && typeof input.url === 'string' ? input.url : String(input || ''));
+        if (/^https?:\/\/traducao2?\.vlibras\.gov\.br\/translate\b/i.test(urlStr)) {
+          const textoBruto = extrairTextoCorpoTraducaoVLibras(init && init.body, urlStr);
+          const glosa = converterTextoParaGlosaVLibras(textoBruto) || 'OI';
+          if (typeof window.Response === 'function') {
+            const resp = new window.Response(glosa, {
+              status: 200,
+              statusText: 'OK',
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+            });
+            resp.json = function () { return Promise.resolve(glosa); };
+            resp.text = function () { return Promise.resolve(glosa); };
+            return Promise.resolve(resp);
+          }
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            url: urlStr,
+            headers: { get: function () { return 'text/plain; charset=utf-8'; } },
+            text: function () { return Promise.resolve(glosa); },
+            json: function () { return Promise.resolve(glosa); },
+            clone: function () { return this; }
+          });
+        }
+        if (/^https?:\/\/dicionario2?\.vlibras\.gov\.br\/[^/?#]+\/WEBGL\//i.test(urlStr)) {
+          const urlSegura = normalizarUrlDicionarioVLibras(urlStr);
+          if (typeof input === 'string') {
+            return origFetch(urlSegura, init);
+          }
+          return origFetch(urlSegura, init);
+        }
+        return origFetch(input, init);
+      };
+      try {
+        Object.defineProperty(wrappedFetch, '__nexusVlibrasWrapped', { value: true, enumerable: false });
+      } catch (e) { /* noop */ }
+      window.fetch = wrappedFetch;
+    }
+
+    // 3. Intercepta XMLHttpRequest (usado pelo vlibras-initial-*.js e pelo motor Unity WebGL 2018.3.1)
+    if (typeof window.XMLHttpRequest === 'function' &&
+        window.XMLHttpRequest.prototype &&
+        !window.XMLHttpRequest.prototype.__nexusVlibrasWrapped) {
+      const proto = window.XMLHttpRequest.prototype;
+      const origOpen = proto.open;
+      const origSend = proto.send;
+
+      proto.open = function (method, url) {
+        const urlStr = String(url || '');
+        if (/^https?:\/\/traducao2?\.vlibras\.gov\.br\/translate\b/i.test(urlStr)) {
+          this.__nexusVlibrasTranslateUrl = urlStr;
+          return origOpen.apply(this, arguments);
+        }
+        this.__nexusVlibrasTranslateUrl = null;
+        if (/^https?:\/\/dicionario2?\.vlibras\.gov\.br\/[^/?#]+\/WEBGL\//i.test(urlStr)) {
+          const args = Array.prototype.slice.call(arguments);
+          args[1] = normalizarUrlDicionarioVLibras(urlStr);
+          return origOpen.apply(this, args);
+        }
+        return origOpen.apply(this, arguments);
+      };
+
+      proto.send = function (body) {
+        if (this.__nexusVlibrasTranslateUrl) {
+          const xhr = this;
+          const urlAlvo = xhr.__nexusVlibrasTranslateUrl;
+          const textoBruto = extrairTextoCorpoTraducaoVLibras(body, urlAlvo);
+          const glosa = converterTextoParaGlosaVLibras(textoBruto) || 'OI';
+          setTimeout(function () {
+            try {
+              Object.defineProperty(xhr, 'readyState', { configurable: true, get: function () { return 4; } });
+              Object.defineProperty(xhr, 'status', { configurable: true, get: function () { return 200; } });
+              Object.defineProperty(xhr, 'statusText', { configurable: true, get: function () { return 'OK'; } });
+              Object.defineProperty(xhr, 'responseURL', { configurable: true, get: function () { return urlAlvo; } });
+              Object.defineProperty(xhr, 'responseText', { configurable: true, get: function () { return glosa; } });
+              Object.defineProperty(xhr, 'response', { configurable: true, get: function () { return glosa; } });
+              xhr.getAllResponseHeaders = function () { return 'content-type: text/plain; charset=utf-8\r\n'; };
+              xhr.getResponseHeader = function (name) {
+                return String(name || '').toLowerCase() === 'content-type' ? 'text/plain; charset=utf-8' : null;
+              };
+            } catch (e) { /* noop */ }
+            try {
+              if (typeof window.Event === 'function') {
+                xhr.dispatchEvent(new window.Event('readystatechange'));
+                xhr.dispatchEvent(new window.Event('load'));
+                xhr.dispatchEvent(new window.Event('loadend'));
+              } else {
+                if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange();
+                if (typeof xhr.onload === 'function') xhr.onload();
+                if (typeof xhr.onloadend === 'function') xhr.onloadend();
+              }
+            } catch (e) { /* noop */ }
+          }, 0);
+          return;
+        }
+        return origSend.apply(this, arguments);
+      };
+
+      try {
+        Object.defineProperty(proto, '__nexusVlibrasWrapped', { value: true, enumerable: false });
+      } catch (e) { /* noop */ }
+    }
+  }
+
   function extrairTextoLegivelElemento(el) {
     if (!el || el.nodeType !== 1) return '';
     sincronizarIconesFa(el);
@@ -499,19 +932,30 @@
   }
 
   function envolverPluginVLibras() {
+    instalarInterceptadoresRedeVLibras();
     try {
       const p = window.plugin;
       if (p && p.player && typeof p.player.translate === 'function' && !p.player.__nexusVlibrasWrapped) {
         const origTranslate = p.player.translate.bind(p.player);
         p.player.translate = function (texto) {
           const limpo = limparTextoParaVLibras(texto);
-          return origTranslate(limpo || texto);
+          if (!limpo || !/[a-zA-ZÀ-ÿ0-9]/.test(limpo)) return;
+          return origTranslate(limpo);
         };
+        if (typeof p.player.play === 'function') {
+          const origPlay = p.player.play.bind(p.player);
+          p.player.play = function (glosa) {
+            const normalizada = converterTextoParaGlosaVLibras(glosa);
+            if (!normalizada) return;
+            return origPlay(normalizada);
+          };
+        }
         Object.defineProperty(p.player, '__nexusVlibrasWrapped', { value: true, enumerable: false });
       }
       if (window.VLibras && typeof window.VLibras.Widget === 'function' && !window.VLibras.Widget.__nexusVlibrasWrapped) {
         const OrigWidget = window.VLibras.Widget;
         const WrappedWidget = function () {
+          instalarInterceptadoresRedeVLibras();
           const inst = OrigWidget.apply(this, arguments);
           setTimeout(envolverPluginVLibras, 0);
           setTimeout(envolverPluginVLibras, 300);
@@ -524,6 +968,8 @@
     } catch (e) { /* noop */ }
   }
 
+  instalarInterceptadoresRedeVLibras();
+
   window.NexusFontAwesome = {
     mapa: MAPA_ICONES_FA,
     classeFa: classeFaPara,
@@ -533,6 +979,8 @@
 
   window.NexusVLibras = {
     limparTexto: limparTextoParaVLibras,
+    converterGlosa: converterTextoParaGlosaVLibras,
+    normalizarUrlDicionario: normalizarUrlDicionarioVLibras,
     extrairTextoElemento: extrairTextoLegivelElemento,
     protegerPlugin: envolverPluginVLibras
   };

@@ -12,11 +12,88 @@
 @tailwind utilities;
 
 /* A barra de rolagem ocupa o mesmo espaço desde o primeiro quadro: sem isso, a página "pula"
-   para o lado quando o conteúdo cresce e passa a rolar (deslocamento de layout). */
+   para o lado quando o conteúdo cresce e passa a rolar (deslocamento de layout).
+   Padronização global (Tarefa 7): todas as barras de rolagem/arrastar do sistema (incluindo a
+   barra principal da janela no Chrome e áreas internas de tabelas/modais) seguem exatamente o
+   mesmo estilo da sidebar (#sidebarScrollArea). */
 html {
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #445987 #0F172A;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+}
+
+html,
+body,
+main,
+#sidebarScrollArea,
+.overflow-x-auto,
+.overflow-y-auto,
+.overflow-auto,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #445987 #0F172A;
+}
+
+::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+main::-webkit-scrollbar,
+#sidebarScrollArea::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+main::-webkit-scrollbar-track,
+#sidebarScrollArea::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: #0F172A;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+main::-webkit-scrollbar-thumb,
+#sidebarScrollArea::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #445987 0%, #334155 100%);
+  border-radius: 9999px;
+  border: 1px solid rgba(30, 41, 59, 0.85);
+}
+
+::-webkit-scrollbar-thumb:hover,
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+main::-webkit-scrollbar-thumb:hover,
+#sidebarScrollArea::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background: #5b73a8;
+}
+
+::-webkit-scrollbar-corner,
+html::-webkit-scrollbar-corner,
+body::-webkit-scrollbar-corner,
+main::-webkit-scrollbar-corner,
+#sidebarScrollArea::-webkit-scrollbar-corner,
+*::-webkit-scrollbar-corner {
+  background: #0F172A;
+}
+
+::-webkit-scrollbar-button,
+html::-webkit-scrollbar-button,
+body::-webkit-scrollbar-button,
+main::-webkit-scrollbar-button,
+#sidebarScrollArea::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 body {
@@ -34,13 +111,20 @@ main {
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+  scrollbar-color: #445987 #0F172A;
 }
 
 /* Cabeçalhos de cartões/seções e barras de ações quebram linha suavemente em telas estreitas */
-main .flex.items-center.justify-between,
-main .flex.items-start.justify-between {
+main :not(td):not(th):not(.sm\:flex-nowrap).flex.items-center.justify-between,
+main :not(td):not(th):not(.sm\:flex-nowrap).flex.items-start.justify-between {
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  #checklistItemsList > div {
+    flex-wrap: nowrap !important;
+  }
 }
 
 /* Modais adaptáveis em altura e largura para celulares em retrato/paisagem e tablets */
@@ -94,14 +178,6 @@ main .flex.items-start.justify-between {
 }
 
 @media (min-width: 1280px) {
-  /* Em notebooks largos e monitores grandes, abrir a sidebar desloca o conteúdo principal
-     lado a lado sem escurecer a tela com overlay */
-  html.nexus-sidebar-open #sidebarMobileOverlay {
-    display: none !important;
-  }
-  html.nexus-sidebar-open main {
-    margin-left: 20rem;
-  }
   main > div.max-w-5xl,
   main > div.max-w-6xl {
     max-width: min(96%, 1480px);

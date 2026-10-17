@@ -63,7 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
             imo: n.numero_imo || n.imo,
             localizacao: n.localizacao || 'DENTRO_DO_PORTO',
             data_construcao: n.data_registro_sistema || '',
-            data_ultima_manutencao_geral: ''
+            data_ultima_manutencao: n.data_ultima_manutencao || '',
+            data_ultima_manutencao_geral: n.data_ultima_manutencao || ''
           }));
         }
       } catch (e) {
@@ -916,11 +917,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (isNavio) {
           const novoEstadoNavio = (acao === 'APROVAR') ? 'EM_REFORMA' : 'OPERANTE';
+          const hojeManutNavio = new Date().toISOString().split('T')[0];
           let navList = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
           navList.forEach(n => {
             if (limpaNome && (n.nome || '').toLowerCase().includes(limpaNome.toLowerCase())) {
               n.estado_operacional = novoEstadoNavio;
               n.estado = novoEstadoNavio;
+              if (acao === 'CONCLUIR') {
+                n.data_ultima_manutencao = hojeManutNavio;
+                n.dataManut = hojeManutNavio;
+              }
             }
           });
           localStorage.setItem('nexus_navios_list', JSON.stringify(navList));
@@ -928,7 +934,12 @@ document.addEventListener('DOMContentLoaded', () => {
           if (window.nexusSupabase) {
             if (acao === 'APROVAR') {
               await window.nexusSupabase.from('navios').update({ estado_operacional: 'EM_REFORMA' }).ilike('nome', `%${limpaNome}%`);
-            } else if (acao === 'CONCLUIR' || acao === 'REPROVAR') {
+            } else if (acao === 'CONCLUIR') {
+              const { error: errUpdNav } = await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE', data_ultima_manutencao: hojeManutNavio }).ilike('nome', `%${limpaNome}%`);
+              if (errUpdNav && /data_ultima_manutencao/i.test(String(errUpdNav.message || ''))) {
+                await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).ilike('nome', `%${limpaNome}%`);
+              }
+            } else if (acao === 'REPROVAR') {
               await window.nexusSupabase.from('navios').update({ estado_operacional: 'OPERANTE' }).ilike('nome', `%${limpaNome}%`);
             }
           }

@@ -752,17 +752,35 @@
           try {
             const { data, error } = await client.from('containers').select('*');
             if (!error && Array.isArray(data)) {
-              const mapped = data.map(c => ({
-                id: c.id,
-                rawDbId: c.id,
-                identificacao: c.numero_identificacao || c.identificacao || `CONT-${c.id}`,
-                numero_identificacao: c.numero_identificacao || c.identificacao || `CONT-${c.id}`,
-                tipo: window.getNexusTipoCarga?.(c.tipo_carga_id)?.nome || c.tipo_carga_id || 'Geral',
-                tipo_carga_id: c.tipo_carga_id || null,
-                estado: c.estado || 'OPERANTE',
-                navio_id: c.navio_id || null,
-                navioId: c.navio_id || null
-              }));
+              const naviosCache = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+              const localConts = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+              const mapped = data.map(c => {
+                const navioRef = c.navio_id
+                  ? naviosCache.find(n => n && n.id && String(n.id) === String(c.navio_id))
+                  : null;
+                const localRef = localConts.find(lc => lc && (
+                  (c.id && (String(lc.id) === String(c.id) || String(lc.rawDbId) === String(c.id))) ||
+                  (c.numero_identificacao && String(lc.identificacao) === String(c.numero_identificacao))
+                ));
+                const nomeNavio = (navioRef && navioRef.nome)
+                  ? navioRef.nome
+                  : (c.navio_id && localRef && localRef.navio && localRef.navio !== 'Não Vinculado' ? localRef.navio : (c.navio_id ? 'Vinculado' : 'Não Vinculado'));
+                return {
+                  id: c.id,
+                  rawDbId: c.id,
+                  identificacao: c.numero_identificacao || c.identificacao || `CONT-${c.id}`,
+                  numero_identificacao: c.numero_identificacao || c.identificacao || `CONT-${c.id}`,
+                  tipo: window.getNexusTipoCarga?.(c.tipo_carga_id)?.nome || c.material_carregado || c.tipo_carga_id || (localRef && localRef.tipo) || 'Geral',
+                  tipo_carga_id: c.tipo_carga_id || (localRef && localRef.tipo_carga_id) || null,
+                  dataFabr: c.data_fabricacao || (localRef && localRef.dataFabr) || '',
+                  dataManut: c.data_ultima_manutencao || (localRef && localRef.dataManut) || 'Sem Manutenção',
+                  refTempo: c.tempo_uso_referencia || (localRef && localRef.refTempo) || 'DATA_FABRICACAO',
+                  estado: c.estado || 'OPERANTE',
+                  navio: nomeNavio,
+                  navio_id: c.navio_id || null,
+                  navioId: c.navio_id || null
+                };
+              });
               salvarCacheSeMudou('nexus_containers_list', JSON.stringify(mapped));
               return mapped;
             }
@@ -970,7 +988,7 @@
 
       // 3. Navios
       dbNavios.forEach(n => {
-        const dStr = n.data_registro_sistema || n.data_saida || n.created_at;
+        const dStr = n.data_ultima_manutencao || n.data_registro_sistema || n.data_saida || n.created_at;
         if (dStr) {
           const diff = agora - new Date(dStr).getTime();
           if (diff >= tresAnosMs) {

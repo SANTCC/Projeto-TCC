@@ -156,6 +156,17 @@
               </select>
               <p class="text-[11px] text-slate-600 mt-1">Obrigatório para embarcações atracadas no porto.</p>
             </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label for="navioDataManutencao" class="block font-bold text-slate-600">Data Última Manut.</label>
+                <label class="flex items-center gap-1 text-[11px] text-slate-600 font-normal cursor-pointer">
+                  <input type="checkbox" id="navioSemManutencaoCheckbox" class="rounded border-slate-300" />
+                  Sem Manutenção
+                </label>
+              </div>
+              <input type="date" id="navioDataManutencao" class="w-full px-2.5 py-1.5 rounded-lg border border-nexus-border dark:border-nexus-dark-border bg-white dark:bg-slate-900 font-mono" />
+              <p class="text-[11px] text-slate-600 mt-1">Data da última manutenção realizada no navio.</p>
+            </div>
             <div class="flex justify-end gap-2 items-end">
               <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 w-full justify-center">
                 <span class="material-symbols-outlined fa-solid fa-floppy-disk text-[16px]" data-icon="save" aria-hidden="true"></span>
