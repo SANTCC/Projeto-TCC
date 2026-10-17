@@ -1591,7 +1591,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // transição e a operação é idempotente.
       const { error: cargasError } = await window.nexusSupabase
         .from('cargas')
-        .update({ status_fluxo: 'EM_TRANSITO' })
+        .update({ status_fluxo: 'EM_TRANSITO', data_saida: horaSaida })
         .eq('navio_id', navio.id)
         .eq('status_fluxo', 'PRONTA_PARA_ENTREGA');
 
@@ -1599,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!cargasError && containerIdsDoNavio.length > 0) {
         const respostaCont = await window.nexusSupabase
           .from('cargas')
-          .update({ status_fluxo: 'EM_TRANSITO' })
+          .update({ status_fluxo: 'EM_TRANSITO', data_saida: horaSaida })
           .in('container_id', containerIdsDoNavio)
           .eq('status_fluxo', 'PRONTA_PARA_ENTREGA');
         cargasContError = respostaCont ? respostaCont.error : null;
@@ -1642,6 +1642,7 @@ document.addEventListener('DOMContentLoaded', () => {
           .some(ref => chavesContsSaida.has(String(ref).trim().toLowerCase()));
         if (porNavio || porCont) {
           c.status = 'EM_TRANSITO';
+          c.data_saida = navio.dataSaida || c.data_saida || null;
           if (preservarVinculoContainerComNavio(c, navio, null)) {
             containersSaidaAtualizados = true;
           }

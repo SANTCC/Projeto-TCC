@@ -19,14 +19,52 @@ const CORS = {
 };
 const LIMITE_CORPO_BYTES = 4096;
 
+const SELECAO_NAVIO = 'nome, numero_imo, porto_origem, porto_destino, data_saida';
+const SELECAO_CONTAINER = [
+  'numero_identificacao, material_carregado, estado, data_fabricacao,',
+  `tempo_uso_referencia, navios:navio_id(${SELECAO_NAVIO})`
+].join(' ');
 const SELECAO_CARGA = [
   'id, qr_code_url, natureza, material, quantidade, peso, volume, valor_declarado, destino, porto_descarga,',
   'status_fluxo, resultado_inspecao, motivo_recusa, data_entrada, data_saida,',
   'navio_nome_historico, container_identificacao_historico,',
-  'navios:navio_id(nome, numero_imo, porto_origem, porto_destino),',
-  'containers:container_id(numero_identificacao, material_carregado, estado, data_fabricacao,',
-  'tempo_uso_referencia, navios:navio_id(nome, numero_imo, porto_origem, porto_destino))'
+  `navios:navio_id(${SELECAO_NAVIO}),`,
+  `containers:container_id(${SELECAO_CONTAINER}),`,
+  'agendamentos(data_prevista_entrega)'
 ].join(' ');
+
+async function enriquecerDadosHistoricosCarga(admin, linha) {
+  if (!linha || !admin || typeof admin.from !== 'function') return linha;
+  const enriquecida = { ...linha };
+  if (!enriquecida.containers && enriquecida.container_identificacao_historico) {
+    try {
+      const ident = String(enriquecida.container_identificacao_historico).trim();
+      if (ident) {
+        const { data: contHist } = await admin
+          .from('containers')
+          .select(SELECAO_CONTAINER)
+          .eq('numero_identificacao', ident)
+          .maybeSingle();
+        if (contHist) enriquecida.containers = contHist;
+      }
+    } catch (e) { /* consulta complementar opcional */ }
+  }
+  const navioDoContainer = enriquecida.containers && enriquecida.containers.navios;
+  if (!enriquecida.navios && !navioDoContainer && enriquecida.navio_nome_historico) {
+    try {
+      const nomeNavio = String(enriquecida.navio_nome_historico).trim();
+      if (nomeNavio) {
+        const { data: navioHist } = await admin
+          .from('navios')
+          .select(SELECAO_NAVIO)
+          .eq('nome', nomeNavio)
+          .maybeSingle();
+        if (navioHist) enriquecida.navios = navioHist;
+      }
+    } catch (e) { /* consulta complementar opcional */ }
+  }
+  return enriquecida;
+}
 
 function erro(status, mensagem) {
   return new Response(JSON.stringify({ erro: mensagem }), {
@@ -73,14 +111,15 @@ export function criarHandler({ criarCliente, lib, env }) {
       return erro(403, 'Acesso negado para emitir este relatório.');
     }
 
-    const { data: linha, error: erroCarga } = await admin
+    const { data: linhaBruta, error: erroCarga } = await admin
       .from('cargas')
       .select(SELECAO_CARGA)
       .eq('id', cargaId)
       .maybeSingle();
     if (erroCarga) return erro(500, 'Falha ao consultar a carga.');
-    if (!linha) return erro(404, 'Carga não encontrada.');
+    if (!linhaBruta) return erro(404, 'Carga não encontrada.');
 
+    const linha = await enriquecerDadosHistoricosCarga(admin, linhaBruta);
     const modelo = montarModelo(linha);
     const hash = await hashModelo(modelo);
     const caminho = `${hash}.pdf`;
@@ -111,7 +150,7 @@ export function criarHandler({ criarCliente, lib, env }) {
         'Cache-Control': 'no-store',
         'X-Relatorio-Cache': cache,
         'X-Relatorio-Hash': hash,
-        'X-Relatorio-Versao': '2'
+        'X-Relatorio-Versao': '3'
       }
     });
   };

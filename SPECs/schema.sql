@@ -511,9 +511,11 @@ begin
           and c.status_fluxo not in ('ENTREGUE', 'CANCELADA', 'RECUSADA')
       );
 
-    -- Atualiza status das cargas para EM_TRANSITO
+    -- Atualiza status das cargas para EM_TRANSITO e preserva a data de saída do navio
     update cargas
-    set status_fluxo = 'EM_TRANSITO', updated_at = now()
+    set status_fluxo = 'EM_TRANSITO',
+        data_saida = coalesce(data_saida, NEW.data_saida, now()),
+        updated_at = now()
     where status_fluxo not in ('EM_TRANSITO', 'ENTREGUE', 'CANCELADA', 'RECUSADA')
       and (
         navio_id = NEW.id

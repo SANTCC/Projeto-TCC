@@ -84,6 +84,14 @@ function criarClienteFalso(cenario) {
             const linha = cenario.cargaPara ? cenario.cargaPara(consulta.filtros.id) : null;
             return { data: linha, error: null };
           }
+          if (tabela === 'containers') {
+            const cont = cenario.containerPara ? cenario.containerPara(consulta.filtros.numero_identificacao) : null;
+            return { data: cont, error: null };
+          }
+          if (tabela === 'navios') {
+            const nav = cenario.navioPara ? cenario.navioPara(consulta.filtros.nome) : null;
+            return { data: nav, error: null };
+          }
           return { data: null, error: { message: 'tabela desconhecida' } };
         }
       };
@@ -178,8 +186,48 @@ function testarModeloEFormatacao() {
   check('nenhum valor padrão fictício no relatório de carga vazia', achados.length === 0, achados.join(', '));
 
   const estadoPadrao = relatorio.secoesDoRelatorio(relatorio.montarModelo(linhaCarga({ containers: { numero_identificacao: 'X', estado: null } })));
-  check('estado do contêiner ausente vira "Não informado" (não "OPERANTE")',
-    JSON.stringify(estadoPadrao).includes('"Estado operacional","Não informado"') || JSON.stringify(estadoPadrao).includes('["Estado operacional","Não informado"]'));
+  check('campo Estado operacional foi removido da seção 3. Dados do contêiner',
+    !JSON.stringify(estadoPadrao[2].campos).includes('Estado operacional'));
+
+  const entregueComHistorico = relatorio.montarModelo(linhaCarga({
+    status_fluxo: 'ENTREGUE',
+    data_entrada: null,
+    data_saida: null,
+    porto_descarga: 'Contêiner PALM-1234567',
+    destino: 'Porto Rio de Janeiro',
+    agendamentos: [{ data_prevista_entrega: '2026-10-17' }],
+    containers: {
+      numero_identificacao: 'PALM-1234567',
+      material_carregado: 'Granel Sólido',
+      data_fabricacao: '2026-10-17',
+      tempo_uso_referencia: 'DATA_ULTIMA_MANUTENCAO'
+    },
+    navios: {
+      nome: 'Jaguar',
+      numero_imo: 'IMO-1234567',
+      porto_origem: 'Porto Rio de Janeiro',
+      porto_destino: 'Porto de Santos',
+      data_saida: '2026-10-17T15:00:00.000Z'
+    }
+  }));
+  const secoesEntregue = relatorio.secoesDoRelatorio(entregueComHistorico);
+  const valorEntregue = (sec, rot) => (secoesEntregue[sec].campos.find((c) => c[0] === rot) || [])[1];
+  check('data de entrada usa data prevista de entrega do agendamento quando data_entrada é nula',
+    valorEntregue(0, 'Data de entrada') === '17/10/2026', valorEntregue(0, 'Data de entrada'));
+  check('data de saída usa data_saida do navio quando data_saida da carga é nula',
+    valorEntregue(0, 'Data de saída') === '17/10/2026 12:00', valorEntregue(0, 'Data de saída'));
+  check('navio em viagem de retorno preserva porto de origem e destino da viagem da carga entregue',
+    valorEntregue(1, 'Número IMO') === 'IMO-1234567'
+    && valorEntregue(1, 'Porto de origem') === 'Porto de Santos'
+    && valorEntregue(1, 'Porto de destino da viagem') === 'Porto Rio de Janeiro');
+  check('contêiner exibe material carregado, data de fabricação e referência de tempo de uso sem Estado operacional',
+    valorEntregue(2, 'Material carregado') === 'Granel Sólido'
+    && valorEntregue(2, 'Data de fabricação') === '17/10/2026'
+    && valorEntregue(2, 'Referência de tempo de uso') === 'Data da última manutenção'
+    && valorEntregue(2, 'Estado operacional') === undefined);
+  check('resumo do fluxo operacional não exibe o contêiner como porto de descarga',
+    valorEntregue(3, 'Porto de descarga') === 'Porto Rio de Janeiro'
+    && !/Cont[eê]iner/i.test(valorEntregue(3, 'Porto de descarga')));
 
   check('rótulo de status vem do enum', relatorio.rotulo('status_fluxo', 'PRONTA_PARA_ENTREGA') === 'Pronta para entrega');
   check('valor de enum desconhecido aparece como está', relatorio.rotulo('status_fluxo', 'NOVO_STATUS') === 'NOVO_STATUS');
@@ -369,6 +417,43 @@ async function testarHandler() {
     const opcoes = c.registro.clientes[0] && c.registro.clientes[0].opcoes;
     check('cliente criado sem sessão persistida e com a chave de serviço (só no servidor)',
       opcoes && opcoes.auth.persistSession === false && c.registro.clientes[0].chave === SEGREDO);
+  }
+
+  {
+    const { handler: hEntregue, cliente: cEntregue } = montarHandler({
+      funcionarioPara: (codigo) => (codigo === 'NX-OK-1' ? FUNCIONARIO_OK : null),
+      cargaPara: (id) => (id === ID_CARGA ? linhaCarga({
+        status_fluxo: 'ENTREGUE',
+        containers: null,
+        navios: null,
+        navio_nome_historico: 'Jaguar',
+        container_identificacao_historico: 'PALM-1234567',
+        porto_descarga: 'Contêiner PALM-1234567',
+        destino: 'Porto Rio de Janeiro',
+        data_entrada: null,
+        data_saida: null,
+        agendamentos: [{ data_prevista_entrega: '2026-10-17' }]
+      }) : null),
+      containerPara: (ident) => (ident === 'PALM-1234567' ? {
+        numero_identificacao: 'PALM-1234567',
+        material_carregado: 'Granel Sólido',
+        data_fabricacao: '2026-10-17',
+        tempo_uso_referencia: 'DATA_ULTIMA_MANUTENCAO',
+        navios: null
+      } : null),
+      navioPara: (nome) => (nome === 'Jaguar' ? {
+        nome: 'Jaguar',
+        numero_imo: 'IMO-1234567',
+        porto_origem: 'Porto de Santos',
+        porto_destino: 'Porto Rio de Janeiro',
+        data_saida: '2026-10-17T15:00:00.000Z'
+      } : null)
+    });
+    const rEntregue = await hEntregue(criarRequisicao(corpoOk));
+    check('handler enriquece carga ENTREGUE consultando containers e navios pelo histórico',
+      rEntregue.status === 200
+      && cEntregue.registro.consultas.some((q) => q.tabela === 'containers' && q.filtros.numero_identificacao === 'PALM-1234567')
+      && cEntregue.registro.consultas.some((q) => q.tabela === 'navios' && q.filtros.nome === 'Jaguar'));
   }
 }
 

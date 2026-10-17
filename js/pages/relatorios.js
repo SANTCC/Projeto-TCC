@@ -243,13 +243,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function gerarPdfAtualizadoLocal(cargaId, hashExistente) {
     if (!window.nexusSupabase) return null;
+    const selecaoNavio = 'nome, numero_imo, porto_origem, porto_destino, data_saida';
+    const selecaoContainer = [
+      'numero_identificacao, material_carregado, estado, data_fabricacao,',
+      `tempo_uso_referencia, navios:navio_id(${selecaoNavio})`
+    ].join(' ');
     const selecao = [
       'id, qr_code_url, natureza, peso, volume, valor_declarado, destino, porto_descarga,',
       'status_fluxo, resultado_inspecao, motivo_recusa, data_entrada, data_saida,',
       'navio_nome_historico, container_identificacao_historico,',
-      'navios:navio_id(nome, numero_imo, porto_origem, porto_destino),',
-      'containers:container_id(numero_identificacao, material_carregado, estado, data_fabricacao,',
-      'tempo_uso_referencia, navios:navio_id(nome, numero_imo, porto_origem, porto_destino))'
+      `navios:navio_id(${selecaoNavio}),`,
+      `containers:container_id(${selecaoContainer}),`,
+      'agendamentos(data_prevista_entrega)'
     ].join(' ');
     const { data: raw, error } = await window.nexusSupabase
       .from('cargas')
@@ -259,8 +264,70 @@ document.addEventListener('DOMContentLoaded', () => {
     const linha = Array.isArray(raw) ? raw[0] : raw;
     if (error || !linha) return null;
 
+    if (!linha.containers && linha.container_identificacao_historico) {
+      const ident = String(linha.container_identificacao_historico).trim();
+      if (ident) {
+        try {
+          const { data: contRaw } = await window.nexusSupabase
+            .from('containers')
+            .select(selecaoContainer)
+            .eq('numero_identificacao', ident)
+            .maybeSingle();
+          const contDb = Array.isArray(contRaw) ? contRaw[0] : contRaw;
+          if (contDb) linha.containers = contDb;
+        } catch (e) { /* fallback local abaixo */ }
+        if (!linha.containers) {
+          try {
+            const listaContLocal = JSON.parse(localStorage.getItem('nexus_containers_list') || '[]');
+            const contLocal = listaContLocal.find((c) => c && String(c.identificacao || c.numero_identificacao || '').trim().toUpperCase() === ident.toUpperCase());
+            if (contLocal) {
+              linha.containers = {
+                numero_identificacao: contLocal.identificacao || contLocal.numero_identificacao || ident,
+                material_carregado: contLocal.tipo || contLocal.material_carregado || null,
+                data_fabricacao: contLocal.dataFabr || contLocal.data_fabricacao || null,
+                tempo_uso_referencia: contLocal.refTempo || contLocal.tempo_uso_referencia || null
+              };
+            }
+          } catch (e) { /* sem cache local */ }
+        }
+      }
+    }
+
+    const navioDoCont = linha.containers && linha.containers.navios;
+    if (!linha.navios && !navioDoCont && linha.navio_nome_historico) {
+      const nomeNavio = String(linha.navio_nome_historico).trim();
+      if (nomeNavio) {
+        try {
+          const { data: navioRaw } = await window.nexusSupabase
+            .from('navios')
+            .select(selecaoNavio)
+            .eq('nome', nomeNavio)
+            .maybeSingle();
+          const navioDb = Array.isArray(navioRaw) ? navioRaw[0] : navioRaw;
+          if (navioDb) linha.navios = navioDb;
+        } catch (e) { /* fallback local abaixo */ }
+        if (!linha.navios) {
+          try {
+            const listaNaviosLocal = JSON.parse(localStorage.getItem('nexus_navios_list') || '[]');
+            const navioLocal = listaNaviosLocal.find((n) => n && String(n.nome || '').trim().toLowerCase() === nomeNavio.toLowerCase());
+            if (navioLocal) {
+              linha.navios = {
+                nome: navioLocal.nome || nomeNavio,
+                numero_imo: navioLocal.imo || navioLocal.numero_imo || null,
+                porto_origem: navioLocal.origem || navioLocal.porto_origem || null,
+                porto_destino: navioLocal.destino || navioLocal.porto_destino || null,
+                data_saida: navioLocal.dataSaida || navioLocal.data_saida || null
+              };
+            }
+          } catch (e) { /* sem cache local */ }
+        }
+      }
+    }
+
     const naoInf = 'Não informado';
-    const txt = (v) => (v === null || v === undefined || String(v).trim() === '' ? naoInf : String(v).trim());
+    const vazio = (v) => v === null || v === undefined || String(v).trim() === '';
+    const txt = (v) => (vazio(v) ? naoInf : String(v).trim());
+    const ehRefCont = (v) => !vazio(v) && /^\s*cont[eê]iner\b/i.test(String(v).trim());
     const fmtNum = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
     const fmtMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtDh = new Intl.DateTimeFormat('pt-BR', {
@@ -275,17 +342,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const n = v === null || v === undefined || v === '' ? null : Number(v);
       return n === null || !Number.isFinite(n) ? naoInf : fmtMoeda.format(n);
     };
+    const dataTxt = (iso) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : naoInf;
+    };
     const dhTxt = (iso) => {
-      if (!iso) return naoInf;
-      const d = new Date(iso);
+      if (vazio(iso)) return naoInf;
+      const str = String(iso).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return dataTxt(str);
+      const d = new Date(str);
       if (Number.isNaN(d.getTime())) return naoInf;
       const p = {};
       fmtDh.formatToParts(d).forEach((x) => { p[x.type] = x.value; });
       return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
-    };
-    const dataTxt = (iso) => {
-      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
-      return m ? `${m[3]}/${m[2]}/${m[1]}` : naoInf;
     };
     const rotulos = {
       status_fluxo: {
@@ -294,17 +363,61 @@ document.addEventListener('DOMContentLoaded', () => {
         ENTREGUE: 'Entregue', RECUSADA: 'Recusada', CANCELADA: 'Cancelada'
       },
       resultado_inspecao: { APROVADA: 'Aprovada', RECUSADA: 'Recusada', PENDENTE: 'Pendente' },
-      estado_container: { OPERANTE: 'Operante', NAO_OPERANTE: 'Não operante', EM_MANUTENCAO: 'Em manutenção' },
-      referencia_tempo: { MENOS_1_ANO: 'Menos de 1 ano', ENTRE_1_E_2_ANOS: 'Entre 1 e 2 anos', MAIS_2_ANOS: 'Mais de 2 anos' }
+      referencia_tempo: {
+        DATA_FABRICACAO: 'Data de fabricação',
+        DATA_ULTIMA_MANUTENCAO: 'Data da última manutenção',
+        MENOS_1_ANO: 'Menos de 1 ano',
+        ENTRE_1_E_2_ANOS: 'Entre 1 e 2 anos',
+        MAIS_2_ANOS: 'Mais de 2 anos'
+      }
     };
     const rotulo = (t, v) => (!v ? naoInf : ((rotulos[t] && rotulos[t][v]) || String(v)));
 
     const cont = linha.containers || (linha.container_identificacao_historico
       ? { numero_identificacao: linha.container_identificacao_historico }
       : null);
-    const navio = (cont && cont.navios) || linha.navios || (linha.navio_nome_historico
+    const navioBruto = (cont && cont.navios) || linha.navios || (linha.navio_nome_historico
       ? { nome: linha.navio_nome_historico }
       : null);
+    let navio = null;
+    if (navioBruto) {
+      let pOrig = navioBruto.porto_origem || null;
+      let pDest = navioBruto.porto_destino || null;
+      const destCarga = !vazio(linha.destino) ? String(linha.destino).trim() : null;
+      if (
+        destCarga
+        && !vazio(pOrig)
+        && !vazio(pDest)
+        && String(pOrig).trim().toLowerCase() === destCarga.toLowerCase()
+        && String(pDest).trim().toLowerCase() !== destCarga.toLowerCase()
+      ) {
+        pOrig = navioBruto.porto_destino;
+        pDest = destCarga;
+      } else if (destCarga && vazio(pDest) && !vazio(navioBruto.numero_imo)) {
+        pDest = destCarga;
+      }
+      navio = {
+        nome: navioBruto.nome || null,
+        numero_imo: navioBruto.numero_imo || null,
+        porto_origem: pOrig,
+        porto_destino: pDest,
+        data_saida: navioBruto.data_saida || null
+      };
+    }
+
+    const ags = Array.isArray(linha.agendamentos)
+      ? linha.agendamentos
+      : (linha.agendamentos ? [linha.agendamentos] : []);
+    const agComData = ags.find((a) => a && !vazio(a.data_prevista_entrega));
+    const dataEntradaResolvida = !vazio(linha.data_entrada)
+      ? linha.data_entrada
+      : (agComData ? agComData.data_prevista_entrega : null);
+    const dataSaidaResolvida = !vazio(linha.data_saida)
+      ? linha.data_saida
+      : (navio && !vazio(navio.data_saida) ? navio.data_saida : null);
+    const portoDescargaResolvido = (!vazio(linha.porto_descarga) && !ehRefCont(linha.porto_descarga))
+      ? linha.porto_descarga
+      : (!vazio(linha.destino) ? linha.destino : (navio && !vazio(navio.porto_destino) ? navio.porto_destino : null));
     const codigoCarga = formatarCodigoCargaRelatorio(linha);
 
     const secoes = [
@@ -316,8 +429,8 @@ document.addEventListener('DOMContentLoaded', () => {
           ['Peso declarado', numTxt(linha.peso, 't')],
           ['Volume', numTxt(linha.volume, 'm³')],
           ['Valor declarado', moedaTxt(linha.valor_declarado)],
-          ['Data de entrada', dhTxt(linha.data_entrada)],
-          ['Data de saída', dhTxt(linha.data_saida)]
+          ['Data de entrada', dhTxt(dataEntradaResolvida)],
+          ['Data de saída', dhTxt(dataSaidaResolvida)]
         ]
       },
       {
@@ -337,7 +450,6 @@ document.addEventListener('DOMContentLoaded', () => {
           ? [
             ['Identificação', txt(cont.numero_identificacao)],
             ['Material carregado', txt(cont.material_carregado)],
-            ['Estado operacional', rotulo('estado_container', cont.estado)],
             ['Data de fabricação', dataTxt(cont.data_fabricacao)],
             ['Referência de tempo de uso', rotulo('referencia_tempo', cont.tempo_uso_referencia)]
           ]
@@ -348,7 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
         campos: [
           ['Status no fluxo', rotulo('status_fluxo', linha.status_fluxo)],
           ['Resultado da inspeção', rotulo('resultado_inspecao', linha.resultado_inspecao)],
-          ['Porto de descarga', txt(linha.porto_descarga)],
+          ['Porto de descarga', txt(portoDescargaResolvido)],
           ['Destino', txt(linha.destino)],
           ['Motivo da recusa', txt(linha.motivo_recusa)]
         ]
@@ -515,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let arquivo = await resposta.blob();
     const versaoServidor = resposta.headers.get('X-Relatorio-Versao') || '';
-    if (arquivo && arquivo.size > 100 && versaoServidor !== '2') {
+    if (arquivo && arquivo.size > 100 && versaoServidor !== '3') {
       try {
         const blobAtualizado = await gerarPdfAtualizadoLocal(cargaId, resposta.headers.get('X-Relatorio-Hash') || '');
         if (blobAtualizado) arquivo = blobAtualizado;
