@@ -22,6 +22,12 @@ function bancoFalso(tabelas, opcoes) {
       const estado = { op: 'select', filtros: [], payload: null };
       function executar() {
         if (estado.op === 'insert') {
+          if (tabela === 'logs_alteracoes') {
+            const linhaLog = Object.assign({ id: '7f1d2c3b-0000-4000-8000-00000000abce' }, estado.payload);
+            tabelas.logs_alteracoes = tabelas.logs_alteracoes || [];
+            tabelas.logs_alteracoes.push(linhaLog);
+            return { data: Object.assign({}, linhaLog), error: null };
+          }
           if (tabela !== 'trail_decisoes') return { data: null, error: null };
           if (o.falharInsert) return { data: null, error: { message: 'falha simulada na gravação' } };
           const linha = Object.assign({ id: '6f1d2c3b-0000-4000-8000-00000000abcd' }, estado.payload);
@@ -186,6 +192,42 @@ async function main() {
     const linha = (tabelas.trail_decisoes || [])[0];
     check('legado: entidade NAVIO, id no lugar certo e motivo correto',
       r.ok === true && linha && linha.entidade_tipo === 'NAVIO' && linha.entidade_id === 'n-1' && linha.motivo === 'Manutenção de casco', JSON.stringify(linha));
+    w.close();
+  }
+
+  log('\n[7] Cargas marcadas como ENTREGUE são salvas no Trail de Decisões Críticas e no Log de Alterações');
+  {
+    const tabelas = dadosBase();
+    const w = await abrirPainel(tabelas);
+    check('ENTREGOU_CARGA aceita somente CARGA', JSON.stringify(w.TRAIL_TIPOS_COMPATIVEIS.ENTREGOU_CARGA) === '["CARGA"]');
+
+    const cargaEntregue = {
+      id: 'CRG-2026-711',
+      rawDbId: 'fcb1a1b3-41a3-440a-93d2-e334e763b675',
+      qr_code_url: 'QR-CRG-2026-711',
+      status: 'ENTREGUE',
+      destino: 'Porto Rio de Janeiro',
+      navioNomeHistorico: 'Jaguar',
+      containerIdentificacaoHistorico: 'PALM-1234567'
+    };
+    const r1 = await w.registrarEntregaCargaAuditoria(cargaEntregue, { nome: 'Jaguar', destino: 'Porto Rio de Janeiro' }, {
+      navio_nome_historico: 'Jaguar',
+      container_identificacao_historico: 'PALM-1234567'
+    });
+    const r2 = await w.registrarEntregaCargaAuditoria(cargaEntregue, { nome: 'Jaguar', destino: 'Porto Rio de Janeiro' }, {
+      navio_nome_historico: 'Jaguar',
+      container_identificacao_historico: 'PALM-1234567'
+    });
+    const linhaTrail = (tabelas.trail_decisoes || []).find((x) => x.entidade_id === 'CRG-2026-711');
+    const linhaLog = (tabelas.logs_alteracoes || []).find((x) => x.entidade_id === 'CRG-2026-711');
+    check('entrega registra no trail_decisoes com ENTREGOU_CARGA e CARGA',
+      r1 && r1.ok === true && linhaTrail && linhaTrail.tipo_decisao === 'ENTREGOU_CARGA' && linhaTrail.entidade_tipo === 'CARGA' && /CRG-2026-711 marcada como ENTREGUE/i.test(linhaTrail.motivo),
+      JSON.stringify(linhaTrail));
+    check('entrega registra simultaneamente no logs_alteracoes com frase clara e status ENTREGUE',
+      linhaLog && linhaLog.entidade_tipo === 'CARGA' && linhaLog.tipo_alteracao === 'EDICAO' && linhaLog.detalhes && linhaLog.detalhes.acao_exibicao === 'ENTREGOU_CARGA' && /CRG-2026-711 marcada como ENTREGUE/i.test(linhaLog.detalhes.descricao),
+      JSON.stringify(linhaLog));
+    check('chamadas repetidas para a mesma carga entregue não duplicam registros',
+      r2 && r2.jaAuditada === true && (tabelas.trail_decisoes || []).filter((x) => x.entidade_id === 'CRG-2026-711').length === 1 && (tabelas.logs_alteracoes || []).filter((x) => x.entidade_id === 'CRG-2026-711').length === 1);
     w.close();
   }
 

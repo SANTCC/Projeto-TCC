@@ -179,6 +179,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (revisao !== indicadoresLeituraRevision) return;
+    window.__nexusCargasDashboard = Array.isArray(cargas) ? cargas : [];
+    if (window.__nexusCargasDashboard.some(c => c && String(c.status_fluxo || c.status || '').toUpperCase() === 'ENTREGUE' && (c.navio_nome_historico || c.navioNomeHistorico || c.container_identificacao_historico || c.containerIdentificacaoHistorico))) {
+      renderAuditLogTable();
+      renderTrailDecisoesTable();
+    }
     const totalCargas = cargas.length;
     const totalConts = containers.length;
     const naviosNoPorto = navios.filter(n => n.localizacao === 'DENTRO_DO_PORTO').length;
@@ -823,6 +828,51 @@ document.addEventListener('DOMContentLoaded', () => {
       logs = deduplicarListaLogs(localLogs);
     }
 
+    const cargasEntreguesPainel = [...(window.__nexusCargasDashboard || []), ...localCargas];
+    const codigosEntreguesVistosLog = new Set();
+    cargasEntreguesPainel.forEach(c => {
+      if (!c || String(c.status_fluxo || c.status || '').toUpperCase() !== 'ENTREGUE') return;
+      const navHist = String(c.navio_nome_historico || c.navioNomeHistorico || '').trim();
+      const contHist = String(c.container_identificacao_historico || c.containerIdentificacaoHistorico || '').trim();
+      if (!navHist && !contHist) return;
+      const cod = String(
+        c.codigo
+        || (!ehUuidLog(c.id) ? c.id : '')
+        || (c.qrCode ? String(c.qrCode).replace(/^QR-/i, '') : '')
+        || (c.qr_code_url ? String(c.qr_code_url).replace(/^QR-/i, '') : '')
+        || ''
+      ).trim();
+      if (!cod || ehUuidLog(cod) || codigosEntreguesVistosLog.has(cod.toUpperCase())) return;
+      codigosEntreguesVistosLog.add(cod.toUpperCase());
+      const jaTemLogEntrega = logs.some(l => {
+        const entTxt = String((l && (l.entidade_id || l.entidade)) || '').toUpperCase();
+        const descTxt = String((l && l.descricao) || (l && l.detalhes && l.detalhes.descricao) || '');
+        const acaoDet = l && l.detalhes && l.detalhes.acao_exibicao ? String(l.detalhes.acao_exibicao).toUpperCase() : '';
+        return entTxt.includes(cod.toUpperCase())
+          && (acaoDet === 'ENTREGOU_CARGA' || /marcada como ENTREGUE|entregue no porto de destino|ENTREGOU_CARGA/i.test(descTxt));
+      });
+      if (jaTemLogEntrega) return;
+      const partes = [];
+      const dest = String(c.destino || '').trim();
+      if (dest && !/^destino não informado/i.test(dest)) partes.push(`destino: ${dest}`);
+      if (navHist) partes.push(`navio: ${navHist}`);
+      if (contHist && !ehUuidLog(contHist)) partes.push(`contêiner: ${contHist}`);
+      const sufixo = partes.length > 0 ? ` (${partes.join(' · ')})` : '';
+      const fraseEntrega = `Carga ${cod} marcada como ENTREGUE no porto de destino${sufixo}`;
+      logs.push({
+        data_hora: c.updated_at || c.data_entrega || c.created_at || new Date().toISOString(),
+        nome_funcionario: (session && session.nome) || 'Operador Portuário',
+        cargo: (session && (session.cargo || session.cargo_nome)) || 'SUPERVISOR_GERENTE_OPERACOES',
+        codigo_usuario: (session && (session.codigo_individual || session.codigo)) || '--',
+        entidade: `CARGA ${cod}`,
+        entidade_tipo: 'CARGA',
+        entidade_id: cod,
+        tipo_alteracao: 'EDICAO',
+        descricao: fraseEntrega,
+        detalhes: { descricao: fraseEntrega, acao_exibicao: 'ENTREGOU_CARGA', status_fluxo: 'ENTREGUE' }
+      });
+    });
+
     if (revisao !== auditoriaLeituraRevision) return;
     // Ordena logs do mais recente para o mais antigo
     logs.sort((a, b) => new Date(b.data_hora || 0) - new Date(a.data_hora || 0));
@@ -1191,13 +1241,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const retificacaoTxt = t.retificacoes_trail && t.retificacoes_trail.length > 0 
               ? t.retificacoes_trail.map(r => r.retificacao).join(' | ') 
               : null;
+            const decisaoExibicao = (t.detalhes && t.detalhes.acao_exibicao)
+              || (/marcada como ENTREGUE|entregue no porto de destino/i.test(String(t.motivo || '')) ? 'ENTREGOU_CARGA' : t.tipo_decisao);
 
             return {
               id: `TRL-${t.id.substring(0, 8)}`,
               dbId: t.id,
               data_hora: t.data_hora,
               responsavel: `${respNome || 'Responsável'} (${respCargo || 'Supervisor'}) - ${t.codigo_individual}`,
-              decisao: t.tipo_decisao,
+              decisao: decisaoExibicao,
               entidade: resolverEntidadeTrail(t),
               motivo: resolverMotivoTrail(t.motivo),
               retificacao: retificacaoTxt,
@@ -1249,6 +1301,52 @@ document.addEventListener('DOMContentLoaded', () => {
     if (trail.length === 0) {
       trail = localTrail;
     }
+
+    const cargasEntreguesTrail = [...(window.__nexusCargasDashboard || []), ...localCargas];
+    const codigosEntreguesVistosTrail = new Set();
+    cargasEntreguesTrail.forEach(c => {
+      if (!c || String(c.status_fluxo || c.status || '').toUpperCase() !== 'ENTREGUE') return;
+      const navHist = String(c.navio_nome_historico || c.navioNomeHistorico || '').trim();
+      const contHist = String(c.container_identificacao_historico || c.containerIdentificacaoHistorico || '').trim();
+      if (!navHist && !contHist) return;
+      const cod = String(
+        c.codigo
+        || (!TRAIL_UUID_EXATO_RE.test(String(c.id || '')) ? c.id : '')
+        || (c.qrCode ? String(c.qrCode).replace(/^QR-/i, '') : '')
+        || (c.qr_code_url ? String(c.qr_code_url).replace(/^QR-/i, '') : '')
+        || ''
+      ).trim();
+      if (!cod || TRAIL_UUID_EXATO_RE.test(cod) || codigosEntreguesVistosTrail.has(cod.toUpperCase())) return;
+      codigosEntreguesVistosTrail.add(cod.toUpperCase());
+      const jaTemTrailEntrega = trail.some(t => {
+        const entTxt = String((t && (t.entidade || t.entidade_id)) || '').toUpperCase();
+        const decTxt = String((t && t.decisao) || '').toUpperCase();
+        const motTxt = String((t && t.motivo) || '');
+        return entTxt.includes(cod.toUpperCase())
+          && (decTxt === 'ENTREGOU_CARGA' || /marcada como ENTREGUE|entregue no porto de destino/i.test(motTxt));
+      });
+      if (jaTemTrailEntrega) return;
+      const partes = [];
+      const dest = String(c.destino || '').trim();
+      if (dest && !/^destino não informado/i.test(dest)) partes.push(`destino: ${dest}`);
+      if (navHist) partes.push(`navio: ${navHist}`);
+      if (contHist && !TRAIL_UUID_EXATO_RE.test(contHist)) partes.push(`contêiner: ${contHist}`);
+      const sufixo = partes.length > 0 ? ` (${partes.join(' · ')})` : '';
+      const fraseEntrega = `Carga ${cod} marcada como ENTREGUE no porto de destino${sufixo}`;
+      const idSufixo = String(c.rawDbId || c.id || cod).replace(/[^A-Za-z0-9]/g, '').substring(0, 8).toUpperCase();
+      trail.push({
+        id: `TRL-${idSufixo}`,
+        dbId: `entregue-${c.rawDbId || c.id || cod}`,
+        data_hora: c.updated_at || c.data_entrega || c.created_at || new Date().toISOString(),
+        responsavel: `${(session && session.nome) || 'Responsável'} (${(session && (session.cargo_nome || session.cargo)) || 'Supervisor'}) - ${(session && (session.codigo_individual || session.codigo)) || '--'}`,
+        decisao: 'ENTREGOU_CARGA',
+        entidade: `CARGA ${cod}`,
+        entidade_tipo: 'CARGA',
+        entidade_id: cod,
+        motivo: fraseEntrega,
+        retificacao: null
+      });
+    });
 
     if (revisao !== trailLeituraRevision) return;
     // Ordenar por data mais recente, sem recortar os dados usados por outras telas/WebMCP.

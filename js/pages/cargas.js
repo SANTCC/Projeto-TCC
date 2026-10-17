@@ -492,9 +492,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const promessasPorChave = new Map();
     const gruposNovos = new Map();
 
+    const registrarAuditoriaEntregaCargas = (cargaItem, navioItem, historicoItem) => {
+      if (!cargaItem) return;
+      if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) return;
+      if (typeof window.registrarEntregaCargaAuditoria === 'function') {
+        window.registrarEntregaCargaAuditoria(cargaItem, navioItem, historicoItem, { suprimirNotifyRepository: true });
+        return;
+      }
+      const cod = String(cargaItem.id || (cargaItem.qrCode ? String(cargaItem.qrCode).replace(/^QR-/i, '') : '') || '').trim();
+      if (!cod) return;
+      const nomeNav = String((historicoItem && historicoItem.navio_nome_historico) || (navioItem && navioItem.nome) || cargaItem.navioNomeHistorico || '').trim();
+      const identCont = String((historicoItem && historicoItem.container_identificacao_historico) || cargaItem.containerIdentificacaoHistorico || '').trim();
+      const dest = String(cargaItem.destino || (navioItem && navioItem.destino) || '').trim();
+      const partes = [];
+      if (dest && !/^destino não informado/i.test(dest)) partes.push(`destino: ${dest}`);
+      if (nomeNav) partes.push(`navio: ${nomeNav}`);
+      if (identCont) partes.push(`contêiner: ${identCont}`);
+      const frase = `Carga ${cod} marcada como ENTREGUE no porto de destino${partes.length ? ' (' + partes.join(' · ') + ')' : ''}`;
+      if (typeof window.registrarTrailDecisao === 'function') {
+        window.registrarTrailDecisao('ENTREGOU_CARGA', 'cargas', cod, frase);
+      } else if (typeof window.registrarLogAlteracao === 'function') {
+        window.registrarLogAlteracao('EDICAO', 'cargas', cod, frase);
+      }
+    };
+
     locais.forEach((t) => {
       t.carga.status = t.statusNovo;
-      if (t.statusNovo === 'ENTREGUE') finalizarEntregaLocal(t.carga, t.historicoEntrega);
+      if (t.statusNovo === 'ENTREGUE') {
+        finalizarEntregaLocal(t.carga, t.historicoEntrega);
+        registrarAuditoriaEntregaCargas(t.carga, t.navio, t.historicoEntrega);
+      }
     });
 
     remotas.forEach((t) => {
@@ -575,7 +602,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const resultado = resultadoPorPromessa.get(promessasPorChave.get(chave));
       if (resultado && resultado.atualizados && resultado.atualizados.has(id)) {
         t.carga.status = t.statusNovo;
-        if (t.statusNovo === 'ENTREGUE') finalizarEntregaLocal(t.carga, t.historicoEntrega);
+        if (t.statusNovo === 'ENTREGUE') {
+          finalizarEntregaLocal(t.carga, t.historicoEntrega);
+          registrarAuditoriaEntregaCargas(t.carga, t.navio, t.historicoEntrega);
+        }
         houveGravacaoRemota = true;
       }
     });
@@ -666,6 +696,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (requestRevision !== cargasLoadRevision) return;
     renderTable();
+    if (typeof window.sincronizarAuditoriaCargasEntregues === 'function') {
+      window.sincronizarAuditoriaCargasEntregues(cargasFluxoList, { suprimirNotifyRepository: true });
+    }
   }
 
   function agendarAtualizacaoCargas() {

@@ -767,8 +767,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const cargasFluxo = JSON.parse(cargasFluxoRaw);
     const atualizacoesRemotasEntregues = [];
     const atualizacoesRemotasDesvinculadas = [];
+    const entregasLocaisParaAuditar = [];
     let cargasAtualizadas = false;
     let containersAtualizadosNaEntrega = false;
+    const ehSomenteLeituraRender = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly());
+
+    const registrarAuditoriaEntregaEmbarcacoes = (cargaItem, navioItem, historicoItem) => {
+      if (ehSomenteLeituraRender || !cargaItem) return;
+      if (typeof window.registrarEntregaCargaAuditoria === 'function') {
+        window.registrarEntregaCargaAuditoria(cargaItem, navioItem, historicoItem);
+        return;
+      }
+      const cod = String(cargaItem.id || (cargaItem.qrCode ? String(cargaItem.qrCode).replace(/^QR-/i, '') : '') || '').trim();
+      if (!cod) return;
+      const nomeNav = String((historicoItem && historicoItem.navio_nome_historico) || (navioItem && navioItem.nome) || cargaItem.navioNomeHistorico || '').trim();
+      const identCont = String((historicoItem && historicoItem.container_identificacao_historico) || cargaItem.containerIdentificacaoHistorico || '').trim();
+      const dest = String(cargaItem.destino || (navioItem && navioItem.destino) || '').trim();
+      const partes = [];
+      if (dest) partes.push(`destino: ${dest}`);
+      if (nomeNav) partes.push(`navio: ${nomeNav}`);
+      if (identCont) partes.push(`contêiner: ${identCont}`);
+      const frase = `Carga ${cod} marcada como ENTREGUE no porto de destino${partes.length ? ' (' + partes.join(' · ') + ')' : ''}`;
+      if (typeof window.registrarTrailDecisao === 'function') {
+        window.registrarTrailDecisao('ENTREGOU_CARGA', 'cargas', cod, frase);
+      } else if (typeof window.registrarLogAlteracao === 'function') {
+        window.registrarLogAlteracao('EDICAO', 'cargas', cod, frase);
+      }
+    };
 
     cargasFluxo.forEach((c) => {
       if (!c) return;
@@ -785,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
           cargasAtualizadas = true;
           const idBanco = String(c.rawDbId || '');
           if (UUID_CARGA_RE.test(idBanco)) {
-            atualizacoesRemotasDesvinculadas.push({ id: idBanco, historico });
+            atualizacoesRemotasDesvinculadas.push({ id: idBanco, historico, carga: c, navio: navioLegado });
           }
         }
         return;
@@ -800,8 +825,10 @@ document.addEventListener('DOMContentLoaded', () => {
       finalizarEntregaLocal(c, historico);
       cargasAtualizadas = true;
       const idBanco = String(c.rawDbId || '');
-      if (UUID_CARGA_RE.test(idBanco)) {
-        atualizacoesRemotasEntregues.push({ id: idBanco, historico });
+      if (UUID_CARGA_RE.test(idBanco) && window.nexusSupabase) {
+        atualizacoesRemotasEntregues.push({ id: idBanco, historico, carga: c, navio });
+      } else {
+        entregasLocaisParaAuditar.push({ carga: c, navio, historico });
       }
     });
 
@@ -814,24 +841,27 @@ document.addEventListener('DOMContentLoaded', () => {
       if (novoCargasFluxoRaw !== cargasFluxoRaw) {
         localStorage.setItem('nexus_cargas_fluxo', novoCargasFluxoRaw);
       }
-      const ehSomenteLeituraRender = !!(window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly());
+      entregasLocaisParaAuditar.forEach(({ carga, navio, historico }) => {
+        registrarAuditoriaEntregaEmbarcacoes(carga, navio, historico);
+      });
       if (!ehSomenteLeituraRender && window.nexusSupabase) {
         // Agrupa por snapshot e aplica trava contra loop de 1s (L-01):
         // cada transição de carga só é enviada se não estiver em voo nem já sincronizada.
         const executarAtualizacoes = (atualizacoes, incluirStatus) => {
           const grupos = new Map();
-          atualizacoes.forEach(({ id, historico }) => {
+          atualizacoes.forEach(({ id, historico, carga, navio }) => {
             const chaveHistorico = JSON.stringify(historico || {});
             const chaveUnica = `${id}:${incluirStatus ? 'status' : 'desvinc'}:${chaveHistorico}`;
             if (entregasEmConfirmacao.has(chaveUnica) || entregasJaSincronizadas.has(chaveUnica)) return;
             entregasEmConfirmacao.add(chaveUnica);
             if (!grupos.has(chaveHistorico)) {
-              grupos.set(chaveHistorico, { historico: historico || {}, ids: [], chaves: [] });
+              grupos.set(chaveHistorico, { historico: historico || {}, ids: [], chaves: [], itens: [] });
             }
             grupos.get(chaveHistorico).ids.push(id);
             grupos.get(chaveHistorico).chaves.push(chaveUnica);
+            if (carga) grupos.get(chaveHistorico).itens.push({ carga, navio, historico });
           });
-          grupos.forEach(({ historico, ids, chaves }) => {
+          grupos.forEach(({ historico, ids, chaves, itens }) => {
             const payload = {
               navio_id: null,
               container_id: null,
@@ -847,7 +877,15 @@ document.addEventListener('DOMContentLoaded', () => {
                   entregasEmConfirmacao.delete(ch);
                   entregasJaSincronizadas.add(ch);
                 });
-                if (error) console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
+                if (error) {
+                  console.warn('[NexusPort] Erro ao atualizar cargas entregues no Supabase:', error);
+                  return;
+                }
+                if (incluirStatus && Array.isArray(itens)) {
+                  itens.forEach(({ carga, navio: navItem, historico: histItem }) => {
+                    registrarAuditoriaEntregaEmbarcacoes(carga, navItem, histItem);
+                  });
+                }
               })
               .catch(e => {
                 chaves.forEach((ch) => {
@@ -861,6 +899,8 @@ document.addEventListener('DOMContentLoaded', () => {
         executarAtualizacoes(atualizacoesRemotasEntregues, true);
         executarAtualizacoes(atualizacoesRemotasDesvinculadas, false);
       }
+    } else if (!ehSomenteLeituraRender && typeof window.sincronizarAuditoriaCargasEntregues === 'function') {
+      window.sincronizarAuditoriaCargasEntregues(cargasFluxo);
     }
 
     // Exibe todos os navios cadastrados no terminal (Tarefa 5.2 - RF 1.9, RF 2.1)

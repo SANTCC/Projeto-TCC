@@ -184,6 +184,10 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
       const detalhesPayload = Object.assign({}, typeof detalhes === 'object' ? detalhes : { descricao: detalhes }, { referencia_id: alvo.id });
       if (!detalhesPayload.descricao) detalhesPayload.descricao = descricaoLog;
       if (tipoExibicao === 'GERACAO_PDF') detalhesPayload.acao_exibicao = 'GERACAO_PDF';
+      if (String(tipoAlteracao || '').toUpperCase().includes('ENTREGOU_CARGA')) {
+        detalhesPayload.acao_exibicao = 'ENTREGOU_CARGA';
+        detalhesPayload.status_fluxo = 'ENTREGUE';
+      }
       const payload = {
         data_hora: nowIso,
         cargo: cargoEnum,
@@ -236,7 +240,8 @@ window.registrarLogAlteracao = async function(entidade, tipoAlteracao, detalhes 
   logs.unshift(newLog);
   localStorage.setItem('nexus_audit_logs', JSON.stringify(logs));
 
-  if (window.NexusRepository && window.NexusRepository.notifyChange) {
+  const suprimirNotify = !!(referencia && referencia.suprimirNotifyRepository);
+  if (!suprimirNotify && window.NexusRepository && window.NexusRepository.notifyChange) {
     window.NexusRepository.notifyChange('logs_alteracoes');
   } else {
     window.dispatchEvent(new CustomEvent('nexus_data_changed', { detail: { entity: 'logs_alteracoes' } }));
@@ -257,6 +262,7 @@ const TRAIL_TABELAS_LEGADAS = {
 const TRAIL_TIPOS_COMPATIVEIS = {
   APROVOU_CARGA: ['CARGA'],
   RECUSOU_CARGA: ['CARGA'],
+  ENTREGOU_CARGA: ['CARGA'],
   CANCELOU_ENTREGA: ['CARGA'],
   LIBEROU_NAVIO: ['NAVIO'],
   SOLICITOU_MANUTENCAO_NAVIO: ['NAVIO'],
@@ -301,7 +307,7 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', re
   }
 
   const validDecisoes = [
-    'APROVOU_CARGA', 'RECUSOU_CARGA', 'SOLICITOU_MANUTENCAO_NAVIO', 
+    'APROVOU_CARGA', 'RECUSOU_CARGA', 'ENTREGOU_CARGA', 'SOLICITOU_MANUTENCAO_NAVIO', 
     'SOLICITOU_MANUTENCAO_CONTAINER', 'LIBEROU_NAVIO', 'CANCELOU_ENTREGA', 
     'APROVOU_MANUTENCAO', 'RECUSOU_MANUTENCAO', 'DESIGNOU_SUBSTITUTO'
   ];
@@ -309,6 +315,8 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', re
   const decUpper = String(decisao || '').toUpperCase();
   if (validDecisoes.includes(decUpper)) {
     decisaoEnum = decUpper;
+  } else if (decUpper.includes('ENTREG') && !decUpper.includes('CANCEL')) {
+    decisaoEnum = 'ENTREGOU_CARGA';
   } else if (decUpper.includes('RECUS') && decUpper.includes('CARGA')) {
     decisaoEnum = 'RECUSOU_CARGA';
   } else if (decUpper.includes('CANCEL')) {
@@ -340,6 +348,12 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', re
   } else {
     const tiposDaDecisao = TRAIL_TIPOS_COMPATIVEIS[decisaoEnum] || [];
     entidadeTipo = tiposDaDecisao.length === 1 ? tiposDaDecisao[0] : resolverEntidadeAuditoria(entidadeId).tipo;
+  }
+  if (decisaoEnum === 'ENTREGOU_CARGA') {
+    detalhes = Object.assign({}, detalhes || {}, {
+      acao_exibicao: 'ENTREGOU_CARGA',
+      status_fluxo: 'ENTREGUE'
+    });
   }
 
   const validCargos = [
@@ -378,6 +392,16 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', re
         delete payload.funcionario_id;
         resposta = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
       }
+      // Se o banco ainda não tiver 'ENTREGOU_CARGA' em tipo_decisao_enum, grava como
+      // 'APROVOU_CARGA' preservando detalhes.acao_exibicao = 'ENTREGOU_CARGA'.
+      if (resposta && resposta.error && decisaoEnum === 'ENTREGOU_CARGA') {
+        payload.tipo_decisao = 'APROVOU_CARGA';
+        payload.detalhes = Object.assign({}, payload.detalhes || {}, {
+          acao_exibicao: 'ENTREGOU_CARGA',
+          status_fluxo: 'ENTREGUE'
+        });
+        resposta = await window.nexusSupabase.from('trail_decisoes').insert(payload).select().maybeSingle();
+      }
       const registroInserido = resposta && Array.isArray(resposta.data) ? resposta.data[0] : (resposta && resposta.data);
       if (!resposta.error && registroInserido && registroInserido.id) {
         insertedDbId = registroInserido.id;
@@ -410,7 +434,10 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', re
 
   if (window.registrarLogAlteracao) {
     await window.registrarLogAlteracao(entidadeId, `Decisão Crítica: ${decisaoEnum}`, motivo, {
-      tipo: entidadeTipo, codigo: entidadeId, id: referencia ? referencia.id : null
+      tipo: entidadeTipo,
+      codigo: entidadeId,
+      id: referencia ? referencia.id : null,
+      suprimirNotifyRepository: !!(referencia && referencia.suprimirNotifyRepository)
     });
   }
 
@@ -418,5 +445,171 @@ window.registrarTrailDecisao = async function(decisao, entidade, motivo = '', re
   return { ok: true, id: idReg, dbId: insertedDbId };
 };
 
+const entregasAuditadasMemoria = new Set();
+
+function extrairDadosEntregaCarga(carga, navio, historico) {
+  if (!carga) return null;
+  const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '').trim());
+  const candidatosCodigo = [
+    carga.codigo,
+    !ehUuid(carga.id) ? carga.id : '',
+    carga.qrCode ? String(carga.qrCode).replace(/^QR-/i, '') : '',
+    carga.qr_code_url ? String(carga.qr_code_url).replace(/^QR-/i, '') : ''
+  ];
+  const codigoCarga = String(candidatosCodigo.find((v) => v && String(v).trim() && !ehUuid(v)) || '').trim();
+  if (!codigoCarga) return null;
+  const idBanco = [carga.rawDbId, ehUuid(carga.id) ? carga.id : ''].find((v) => ehUuid(v)) || null;
+  const nomeNavio = String(
+    (historico && historico.navio_nome_historico)
+    || (navio && navio.nome)
+    || carga.navioNomeHistorico
+    || carga.navio_nome_historico
+    || (!ehUuid(carga.navio) && !/^Nenhum/i.test(String(carga.navio || '')) ? carga.navio : '')
+    || ''
+  ).trim();
+  const identContainer = String(
+    (historico && historico.container_identificacao_historico)
+    || carga.containerIdentificacaoHistorico
+    || carga.container_identificacao_historico
+    || (!ehUuid(carga.container) && !/^Nenhum/i.test(String(carga.container || '')) ? carga.container : '')
+    || ''
+  ).trim();
+  const destino = String(carga.destino || (navio && navio.destino) || '').trim();
+  const detalhesPartes = [];
+  if (destino && !/^destino não informado/i.test(destino)) detalhesPartes.push(`destino: ${destino}`);
+  if (nomeNavio) detalhesPartes.push(`navio: ${nomeNavio}`);
+  if (identContainer && !ehUuid(identContainer)) detalhesPartes.push(`contêiner: ${identContainer}`);
+  const sufixo = detalhesPartes.length > 0 ? ` (${detalhesPartes.join(' · ')})` : '';
+  const fraseEntrega = `Carga ${codigoCarga} marcada como ENTREGUE no porto de destino${sufixo}`;
+  return {
+    codigoCarga,
+    idBanco,
+    nomeNavio: nomeNavio || null,
+    identContainer: identContainer || null,
+    destino: destino || null,
+    fraseEntrega,
+    chaveCodigo: `${codigoCarga.toUpperCase()}:ENTREGUE`,
+    chaveId: idBanco ? `${String(idBanco).toLowerCase()}:ENTREGUE` : null
+  };
+}
+
+function entregaJaRegistradaLocalmente(dados) {
+  if (!dados) return true;
+  if (entregasAuditadasMemoria.has(dados.chaveCodigo) || (dados.chaveId && entregasAuditadasMemoria.has(dados.chaveId))) {
+    return true;
+  }
+  try {
+    const auditadas = JSON.parse(localStorage.getItem('nexus_entregas_auditadas') || '[]');
+    if (Array.isArray(auditadas) && (auditadas.includes(dados.chaveCodigo) || (dados.chaveId && auditadas.includes(dados.chaveId)))) {
+      entregasAuditadasMemoria.add(dados.chaveCodigo);
+      if (dados.chaveId) entregasAuditadasMemoria.add(dados.chaveId);
+      return true;
+    }
+    const trailLocal = JSON.parse(localStorage.getItem('nexus_trail_decisoes') || '[]');
+    if (Array.isArray(trailLocal) && trailLocal.some((t) => {
+      const ent = String((t && (t.entidade_id || t.entidade)) || '').toUpperCase();
+      const dec = String((t && t.decisao) || '').toUpperCase();
+      const mot = String((t && t.motivo) || '');
+      return ent.includes(dados.codigoCarga.toUpperCase())
+        && (dec === 'ENTREGOU_CARGA' || /marcada como ENTREGUE|entregue no porto de destino/i.test(mot));
+    })) {
+      marcarEntregaAuditadaLocal(dados);
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+function marcarEntregaAuditadaLocal(dados) {
+  if (!dados) return;
+  entregasAuditadasMemoria.add(dados.chaveCodigo);
+  if (dados.chaveId) entregasAuditadasMemoria.add(dados.chaveId);
+  try {
+    const atual = JSON.parse(localStorage.getItem('nexus_entregas_auditadas') || '[]');
+    const conjunto = new Set(Array.isArray(atual) ? atual : []);
+    conjunto.add(dados.chaveCodigo);
+    if (dados.chaveId) conjunto.add(dados.chaveId);
+    localStorage.setItem('nexus_entregas_auditadas', JSON.stringify([...conjunto]));
+  } catch (e) {}
+}
+
+window.registrarEntregaCargaAuditoria = async function(carga, navio = null, historico = null, opcoes = null) {
+  if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) {
+    return { ok: false, mensagem: 'Perfil Espectador (MAT-1111) possui acesso somente leitura.' };
+  }
+  const dados = extrairDadosEntregaCarga(carga, navio, historico);
+  if (!dados) return { ok: false };
+  if (entregaJaRegistradaLocalmente(dados)) {
+    return { ok: true, jaAuditada: true };
+  }
+
+  // Se o banco já possui o registro de entrega no trail_decisoes (ex.: gravado por trigger ou outra aba),
+  // marca como auditada sem duplicar linhas no Supabase.
+  if (window.nexusSupabase && !(opcoes && opcoes.ignorarConsultaPrevia)) {
+    try {
+      const consulta = window.nexusSupabase
+        .from('trail_decisoes')
+        .select('id, tipo_decisao, entidade_id, motivo, detalhes')
+        .eq('entidade_id', dados.codigoCarga);
+      const res = await consulta;
+      const linhas = res && Array.isArray(res.data) ? res.data : [];
+      const jaNoBanco = linhas.some((t) => {
+        const dec = String((t && t.tipo_decisao) || '').toUpperCase();
+        const acao = t && t.detalhes && t.detalhes.acao_exibicao ? String(t.detalhes.acao_exibicao).toUpperCase() : '';
+        const mot = String((t && t.motivo) || '');
+        return dec === 'ENTREGOU_CARGA' || acao === 'ENTREGOU_CARGA' || /marcada como ENTREGUE|entregue no porto de destino/i.test(mot);
+      });
+      if (jaNoBanco) {
+        marcarEntregaAuditadaLocal(dados);
+        return { ok: true, jaAuditada: true };
+      }
+    } catch (e) {}
+  }
+
+  marcarEntregaAuditadaLocal(dados);
+  return window.registrarTrailDecisao('ENTREGOU_CARGA', dados.codigoCarga, dados.fraseEntrega, {
+    tipo: 'CARGA',
+    id: dados.idBanco,
+    codigo: dados.codigoCarga,
+    rotulo: `Carga ${dados.codigoCarga}`,
+    legado: true,
+    suprimirNotifyRepository: !!(opcoes && opcoes.suprimirNotifyRepository)
+  });
+};
+
+window.sincronizarAuditoriaCargasEntregues = async function(listaCargas, opcoes = null) {
+  if (!Array.isArray(listaCargas) || listaCargas.length === 0) return [];
+  if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly()) return [];
+  const ehUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '').trim());
+  const candidatas = listaCargas.filter((c) => {
+    if (!c) return false;
+    const st = String(c.status || c.status_fluxo || '').toUpperCase();
+    if (st !== 'ENTREGUE') return false;
+    const temUuid = ehUuid(c.rawDbId || c.id);
+    const temHistorico = Boolean(
+      c.navioNomeHistorico
+      || c.navio_nome_historico
+      || c.containerIdentificacaoHistorico
+      || c.container_identificacao_historico
+    );
+    if (!temUuid || !temHistorico) return false;
+    const dados = extrairDadosEntregaCarga(c, null, null);
+    return dados && !entregaJaRegistradaLocalmente(dados);
+  });
+  if (candidatas.length === 0) return [];
+
+  const resultados = [];
+  for (const c of candidatas) {
+    const r = await window.registrarEntregaCargaAuditoria(c, null, null, opcoes);
+    resultados.push(r);
+  }
+  return resultados;
+};
+
+if (window.NexusAuditoria) {
+  window.NexusAuditoria.registrarEntregaCarga = window.registrarEntregaCargaAuditoria;
+  window.NexusAuditoria.sincronizarCargasEntregues = window.sincronizarAuditoriaCargasEntregues;
+  window.NexusAuditoria.extrairDadosEntregaCarga = extrairDadosEntregaCarga;
+}
 
 })(window);

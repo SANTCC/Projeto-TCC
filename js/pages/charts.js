@@ -148,6 +148,7 @@
   const ROTULOS_DECISAO = {
     APROVOU_CARGA: 'Aprovou Carga',
     RECUSOU_CARGA: 'Recusou Carga',
+    ENTREGOU_CARGA: 'Entregou Carga',
     LIBEROU_NAVIO: 'Liberou Navio',
     CANCELOU_ENTREGA: 'Cancelou Entrega',
     APROVOU_MANUTENCAO: 'Aprovou Manutenção',
@@ -729,8 +730,10 @@
   }
 
   function normalizarTrail(t) {
+    const acaoExib = (t && t.detalhes && t.detalhes.acao_exibicao)
+      || (/marcada como ENTREGUE|entregue no porto de destino/i.test(String((t && t.motivo) || '')) ? 'ENTREGOU_CARGA' : '');
     return {
-      decisao: String(t.tipo_decisao || t.decisao || 'DECISAO').toUpperCase(),
+      decisao: String(acaoExib || t.tipo_decisao || t.decisao || 'DECISAO').toUpperCase(),
       data: t.data_hora || t.created_at || t.data || null,
       entidade: String(t.entidade_tipo || '').toUpperCase()
     };
