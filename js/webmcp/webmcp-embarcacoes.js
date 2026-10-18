@@ -519,6 +519,18 @@
               };
             }
           }
+          if (typeof window.nexusEmbarcacoesTarefasContainerPendentesLiberacao === 'function') {
+            const tarefasCont = await window.nexusEmbarcacoesTarefasContainerPendentesLiberacao(navio.imo);
+            if (Array.isArray(tarefasCont) && tarefasCont.length > 0) {
+              const listaTarefas = tarefasCont
+                .map((t) => `${t.containerId || t.cargaId} (guindaste ${t.guindasteId || 'designado'})`)
+                .join(', ');
+              return {
+                codigo: 'MOVIMENTACAO_CONTAINER_PENDENTE',
+                mensagem: `O navio ${navio.nome} possui ${tarefasCont.length} tarefa(s) de movimentação de contêiner até o navio ainda não concluída(s): ${listaTarefas}. Conclua a tarefa de movimentação correspondente antes de liberar a saída.`
+              };
+            }
+          }
         } catch (e) {
           console.warn('[WebMCP Embarcações] Falha ao validar cargas para liberação de saída:', e);
         }

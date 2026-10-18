@@ -295,6 +295,115 @@ async function main() {
     } finally { w.close(); }
   }
 
+  // ---------------------------------------------------------------------
+  log('\n7. Tarefa 4 ("Últimas alterações") — tarefa automática de movimentação do contêiner até o navio, escolha de guindaste operante, bloqueio de liberação e regra de viagens');
+  {
+    const CARGA_PRONTA_ID = 'bbbb2222-2222-4222-8222-222222222222';
+    const banco = criarBancoFalso({
+      rotas_maritimas: [
+        { id: 'r-rot', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }
+      ],
+      navios: [
+        { id: NAV_DENTRO, nome: 'Navio Docked', numero_imo: IMO_DENTRO, localizacao: 'DENTRO_DO_PORTO', estado_operacional: 'OPERANTE', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' },
+        { id: NAV_DENTRO2, nome: 'Navio Docked 2', numero_imo: IMO_DENTRO2, localizacao: 'DENTRO_DO_PORTO', estado_operacional: 'OPERANTE', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' }
+      ],
+      containers: [
+        { id: CONT_HISTORICO, numero_identificacao: CONT_HISTORICO, estado: 'OPERANTE', navio_id: NAV_DENTRO },
+        { id: CONT_LIVRE, numero_identificacao: CONT_LIVRE, estado: 'OPERANTE', navio_id: null }
+      ],
+      guindastes: [
+        { id: 'g-man', numero_identificacao: 'GND-MAN-001', estado: 'EM_MANUTENCAO' },
+        { id: 'g-op', numero_identificacao: 'GND-OPE-002', estado: 'OPERANTE' }
+      ],
+      cargas: [
+        { id: 'CRG-HIST', qr_code_url: 'QR-CRG-HIST', status_fluxo: 'ENTREGUE', container_id: null, navio_id: null, container_identificacao_historico: CONT_HISTORICO, navio_nome_historico: 'Navio Docked', destino: 'Porto de Roterdã' },
+        { id: CARGA_PRONTA_ID, qr_code_url: 'QR-CRG-PRONTA', status_fluxo: 'PRONTA_PARA_ENTREGA', container_id: null, navio_id: NAV_DENTRO2, destino: 'Porto de Roterdã' }
+      ],
+      bercos: [], manutencoes: [], historico_manutencoes: []
+    });
+
+    const janela = criarJanela({
+      url: 'https://nexusport.test/embarcacoes.html',
+      html: htmlDaPagina('embarcacoes.html'),
+      session: sessao('SUPERVISOR_GERENTE_OPERACOES'),
+      storage: {
+        nexus_navios_list: [
+          { id: NAV_DENTRO, nome: 'Navio Docked', imo: IMO_DENTRO, localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã' },
+          { id: NAV_DENTRO2, nome: 'Navio Docked 2', imo: IMO_DENTRO2, localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã' }
+        ],
+        nexus_containers_list: [
+          { id: CONT_HISTORICO, rawDbId: CONT_HISTORICO, identificacao: CONT_HISTORICO, tipo: 'Dry 40', estado: 'OPERANTE', navio: 'Navio Docked', navio_id: NAV_DENTRO },
+          { id: CONT_LIVRE, rawDbId: CONT_LIVRE, identificacao: CONT_LIVRE, tipo: 'Dry 40', estado: 'OPERANTE', navio: '', navio_id: null }
+        ],
+        nexus_guindastes_list: [
+          { id: 'g-man', identificacao: 'GND-MAN-001', estado: 'EM_MANUTENCAO' },
+          { id: 'g-op', identificacao: 'GND-OPE-002', estado: 'OPERANTE' }
+        ],
+        nexus_cargas_fluxo: [
+          { id: 'CRG-HIST', status: 'ENTREGUE', container: '', navio: '', containerIdentificacaoHistorico: CONT_HISTORICO, navioNomeHistorico: 'Navio Docked', destino: 'Porto de Roterdã', peso: '5 t' },
+          { id: 'CRG-PRONTA', rawDbId: CARGA_PRONTA_ID, status: 'PRONTA_PARA_ENTREGA', container: '', navio: 'Navio Docked 2', navio_id: NAV_DENTRO2, destino: 'Porto de Roterdã', peso: '10 t' }
+        ],
+        nexus_guindaste_tarefas: []
+      },
+      scripts: [
+        'js/security.js', 'js/session-cookies.js', 'js/supabase-client.js', 'js/auth-guard.js',
+        SETUP(banco), 'js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js',
+        'js/pages/embarcacoes.js'
+      ]
+    });
+    const { w, erros } = janela;
+    try {
+      await prontoDom(w);
+      await aguardar(350);
+      w.__feedbacks = [];
+      w.mostrarFeedback = (tipo, titulo, msg) => { w.__feedbacks.push({ tipo, titulo, msg }); };
+
+      // 7a: Contêiner já vinculado com Navio Docked e com viagem realizada -> vincular com o MESMO navio NÃO gera tarefa
+      await w.vincularContainerANavio(CONT_HISTORICO, { navioImo: IMO_DENTRO, confirmado: true });
+      await aguardar(120);
+      let tarefas = JSON.parse(w.localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      check('7a: contêiner já vinculado ao mesmo navio e com viagem realizada NÃO gera tarefa de movimentação',
+        tarefas.length === 0, JSON.stringify(tarefas));
+
+      // 7b: Quando esse contêiner se vincula com OUTRO navio (Navio Docked 2), a tarefa DEVE ser gerada escolhendo o guindaste OPERANTE
+      await w.vincularContainerANavio(CONT_HISTORICO, { navioImo: IMO_DENTRO2, confirmado: true });
+      await aguardar(120);
+      tarefas = JSON.parse(w.localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      check('7b: ao vincular o contêiner com outro navio, tarefa de movimentação é gerada automaticamente',
+        tarefas.length === 1 && tarefas[0].containerId === CONT_HISTORICO && tarefas[0].destino === 'Navio Navio Docked 2',
+        JSON.stringify(tarefas));
+      check('7c: escolhe automaticamente o guindaste OPERANTE (GND-OPE-002) ignorando o EM_MANUTENCAO',
+        tarefas[0] && tarefas[0].guindasteId === 'GND-OPE-002',
+        tarefas[0] && tarefas[0].guindasteId);
+
+      // 7d: Tentar liberar a saída do Navio Docked 2 com a tarefa de movimentação do contêiner pendente -> BLOQUEADO
+      w.__feedbacks = [];
+      await w.liberarNavioPeloDiretor(IMO_DENTRO2, { confirmado: true });
+      await aguardar(150);
+      const navioBancoAntes = banco.tabelas.navios.find(n => n.id === NAV_DENTRO2) || {};
+      check('7d: navio NÃO pode ser liberado enquanto a tarefa de movimentação do contêiner estiver pendente',
+        navioBancoAntes.localizacao === 'DENTRO_DO_PORTO'
+        && Boolean(feedbackCom(w, 'Liberação Bloqueada: Movimentação de Contêiner Pendente').msg),
+        JSON.stringify(w.__feedbacks));
+
+      // 7e: Concluir a tarefa de movimentação do contêiner no guindaste -> libera a saída do navio
+      await w.concluirTarefaGuindaste(tarefas[0].id, { confirmado: true });
+      await aguardar(120);
+      tarefas = JSON.parse(w.localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      check('7e: tarefa de movimentação do contêiner concluída e removida da fila do guindaste',
+        tarefas.length === 0);
+
+      w.__feedbacks = [];
+      await w.liberarNavioPeloDiretor(IMO_DENTRO2, { confirmado: true });
+      await aguardar(200);
+      const navioBancoDepois = banco.tabelas.navios.find(n => n.id === NAV_DENTRO2) || {};
+      check('7f: após concluir a tarefa de movimentação do contêiner, o navio é liberado com sucesso (FORA_DO_PORTO)',
+        navioBancoDepois.localizacao === 'FORA_DO_PORTO' && Boolean(feedbackCom(w, 'Navio Liberado').msg),
+        JSON.stringify({ localizacao: navioBancoDepois.localizacao, feedbacks: w.__feedbacks }));
+      check('7g: sem erros de runtime', erros.length === 0, JSON.stringify(erros).slice(0, 200));
+    } finally { w.close(); }
+  }
+
   const r = resumo();
   log(`\nResultado: ${r.total - r.falhas}/${r.total} verificações aprovadas.`);
   if (r.falhas > 0) {

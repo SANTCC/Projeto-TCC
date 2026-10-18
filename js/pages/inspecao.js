@@ -71,11 +71,9 @@ document.addEventListener('DOMContentLoaded', () => {
       cargas = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
     }
 
-    // Cargas entregues, canceladas ou em trânsito não são inspecionáveis: não
-    // entram na lista. EM_TRANSITO = a carga já saiu do porto com o navio
-    // liberado; a inspeção formal pertence às etapas anteriores do fluxo
-    // (recebimento/inspeção e armazenagem — SPEC §6).
-    const cargasAtivas = cargas.filter(c => !['CANCELADA', 'ENTREGUE', 'EM_TRANSITO'].includes(c.status) && Boolean(c.id));
+    // Somente cargas em RECEBIMENTO_INSPECAO ou RECUSADA podem realizar o checklist de inspeção.
+    const STATUS_INSPECIONAVEIS = new Set(['RECEBIMENTO_INSPECAO', 'RECUSADA']);
+    const cargasAtivas = cargas.filter(c => c && STATUS_INSPECIONAVEIS.has(String(c.status || '').toUpperCase()) && Boolean(c.id));
 
     selectCarga.innerHTML = '<option value="">Selecione uma Carga para Vistoria...</option>';
     cargasAtivas.forEach(c => {
@@ -240,6 +238,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Somente cargas em RECEBIMENTO_INSPECAO ou RECUSADA podem fazer a inspeção.
+    if (!['RECEBIMENTO_INSPECAO', 'RECUSADA'].includes(String(cargaAtual.status || '').toUpperCase())) {
+      const idNaoInspecionavel = cargaAtual.id;
+      const statusNaoInspecionavel = cargaAtual.status;
+      cargaAtual = null;
+      if (formContainer) formContainer.classList.add('hidden');
+      avisoStatusNaoInspecionavel(idNaoInspecionavel, statusNaoInspecionavel);
+      return;
+    }
+
     if (cargaTag) cargaTag.textContent = `${cargaAtual.id} • ${cargaAtual.tipo} • Porto: ${cargaAtual.portoDescarga}`;
 
     const items = getChecklistTemplate(cargaAtual.tipo);
@@ -334,6 +342,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function avisoStatusNaoInspecionavel(idCarga, statusAtual) {
+    if (window.mostrarFeedback) {
+      window.mostrarFeedback('atencao', 'Inspeção Indisponível', `A carga ${idCarga} está no status ${statusAtual || 'atual'} e não pode ser inspecionada. Somente cargas em RECEBIMENTO_INSPECAO ou RECUSADA podem realizar o checklist de inspeção.`);
+    }
+  }
+
   // Conferência no banco no momento da gravação: o navio pode ter sido liberado
   // (carga → EM_TRANSITO) enquanto o checklist estava aberto nesta tela.
   // Retorna true somente quando o banco confirma o status EM_TRANSITO; falha de
@@ -365,6 +379,23 @@ document.addEventListener('DOMContentLoaded', () => {
       return !error && Boolean(data) && String(data.status_fluxo || '').toUpperCase() === 'CANCELADA';
     } catch (e) {
       return false;
+    }
+  }
+
+  async function statusNaoInspecionavelNoBanco() {
+    if (!window.nexusSupabase || !cargaAtual) return null;
+    try {
+      const targetDbId = cargaAtual.rawDbId || cargaAtual.id;
+      let consulta = window.nexusSupabase.from('cargas').select('id, status_fluxo');
+      consulta = isUUID(targetDbId)
+        ? consulta.eq('id', targetDbId)
+        : consulta.eq('qr_code_url', cargaAtual.qrCode || `QR-${cargaAtual.id}`);
+      const { data, error } = await consulta.maybeSingle();
+      const statusDb = !error && data && data.status_fluxo ? String(data.status_fluxo).toUpperCase() : '';
+      if (statusDb && !['RECEBIMENTO_INSPECAO', 'RECUSADA'].includes(statusDb)) return statusDb;
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -403,6 +434,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // liberação do navio enquanto o checklist estava aberto).
     if (cargaAtual.status === 'EM_TRANSITO' || await cargaEmTransitoNoBanco()) {
       avisoCargaEmTransito(cargaAtual.id);
+      return false;
+    }
+
+    if (!['RECEBIMENTO_INSPECAO', 'RECUSADA'].includes(String(cargaAtual.status || '').toUpperCase())) {
+      avisoStatusNaoInspecionavel(cargaAtual.id, cargaAtual.status);
+      return false;
+    }
+    const statusInvalidoBancoAprovar = await statusNaoInspecionavelNoBanco();
+    if (statusInvalidoBancoAprovar) {
+      avisoStatusNaoInspecionavel(cargaAtual.id, statusInvalidoBancoAprovar);
       return false;
     }
 
@@ -562,6 +603,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // (aprovação ou recusa) não pode mais ser registrada (estado local e banco).
     if (cargaAtual.status === 'EM_TRANSITO' || await cargaEmTransitoNoBanco()) {
       avisoCargaEmTransito(cargaAtual.id);
+      return false;
+    }
+
+    if (!['RECEBIMENTO_INSPECAO', 'RECUSADA'].includes(String(cargaAtual.status || '').toUpperCase())) {
+      avisoStatusNaoInspecionavel(cargaAtual.id, cargaAtual.status);
+      return false;
+    }
+    const statusInvalidoBancoRecusar = await statusNaoInspecionavelNoBanco();
+    if (statusInvalidoBancoRecusar) {
+      avisoStatusNaoInspecionavel(cargaAtual.id, statusInvalidoBancoRecusar);
       return false;
     }
 

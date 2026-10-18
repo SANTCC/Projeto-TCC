@@ -706,6 +706,12 @@ document.addEventListener('DOMContentLoaded', () => {
         ct.navio_nome = nomeNavio;
         alterou = true;
       }
+      if (!ct.fezViagemComNavio || (nomeNavio && ct.ultimoNavioViagem !== nomeNavio)) {
+        ct.fezViagemComNavio = true;
+        if (nomeNavio) ct.ultimoNavioViagem = nomeNavio;
+        if (idNavio) ct.ultimoNavioViagemId = idNavio;
+        alterou = true;
+      }
       if (!ehSomenteLeitura && window.nexusSupabase && idNavio && semNavioId) {
         const chaveSync = `${ct.rawDbId || ct.id || ct.identificacao}:${idNavio}`;
         if (!containersVinculoSincronizado.has(chaveSync)) {
@@ -1457,6 +1463,92 @@ document.addEventListener('DOMContentLoaded', () => {
     return prontas;
   };
 
+  /**
+   * Tarefa 4 ("Últimas alterações"): verifica se há tarefas de movimentação de
+   * contêiner para o navio ainda pendentes nos guindastes. O navio apenas pode
+   * ter a saída liberada caso a tarefa de movimentação correspondente tenha
+   * sido dada como concluída.
+   */
+  async function avaliarTarefasContainerParaLiberacao(navio) {
+    if (!navio) return [];
+    const nomeNavio = chaveVinculo(navio.nome);
+    const idNavio = navio.id ? String(navio.id).trim().toLowerCase() : '';
+    const imoNavio = navio.imo ? normalizarRefImo(navio.imo) : '';
+
+    const contsLocaisDoNavio = containersList.filter(ct => ct && (
+      (idNavio && (chaveVinculo(ct.navio_id) === idNavio || chaveVinculo(ct.navioId) === idNavio)) ||
+      (nomeNavio && chaveVinculo(ct.navio) === nomeNavio)
+    ));
+    const chavesConts = new Set();
+    contsLocaisDoNavio.forEach(ct => {
+      [ct.identificacao, ct.numero_identificacao, ct.id, ct.rawDbId]
+        .filter(Boolean)
+        .forEach(v => chavesConts.add(chaveVinculo(v)));
+    });
+
+    if (window.nexusSupabase && navio.id) {
+      try {
+        const { data: contsDb, error: errConts } = await window.nexusSupabase
+          .from('containers')
+          .select('id, numero_identificacao, navio_id')
+          .eq('navio_id', navio.id);
+        if (!errConts && Array.isArray(contsDb)) {
+          contsDb.forEach(ct => {
+            [ct && ct.id, ct && ct.numero_identificacao]
+              .filter(Boolean)
+              .forEach(v => chavesConts.add(chaveVinculo(v)));
+          });
+        }
+      } catch (e) { /* usa cache local */ }
+    }
+
+    const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+    const pendentes = [];
+    const vistos = new Set();
+
+    (Array.isArray(tarefasGnd) ? tarefasGnd : []).forEach(t => {
+      if (!t || (t.status && String(t.status).toUpperCase() !== 'PENDENTE')) return;
+      const ehTarefaContainerNavio = t.tipoTarefa === 'CONTAINER_NAVIO'
+        || Boolean(t.containerId)
+        || /^Navio\s+/i.test(String(t.destino || ''));
+      if (!ehTarefaContainerNavio) return;
+
+      const tNavioId = t.navioId ? chaveVinculo(t.navioId) : '';
+      const tNavioImo = t.navioImo ? normalizarRefImo(t.navioImo) : '';
+      const tNavioNome = t.navioNome ? chaveVinculo(t.navioNome) : '';
+      const tDestino = chaveVinculo(t.destino);
+
+      const bateNavioDireto = (idNavio && tNavioId && tNavioId === idNavio)
+        || (imoNavio && tNavioImo && tNavioImo === imoNavio)
+        || (nomeNavio && tNavioNome && tNavioNome === nomeNavio)
+        || (nomeNavio && tDestino && tDestino === chaveVinculo(`Navio ${navio.nome}`));
+
+      const refsContTarefa = [t.containerId, t.containerUuid, t.cargaId]
+        .filter(Boolean)
+        .map(chaveVinculo);
+      const bateContainerDoNavio = refsContTarefa.some(r => chavesConts.has(r))
+        && (!tNavioNome || !nomeNavio || tNavioNome === nomeNavio)
+        && (!tNavioId || !idNavio || tNavioId === idNavio);
+
+      if (bateNavioDireto || bateContainerDoNavio) {
+        const chaveUnica = String(t.id || t.containerId || t.cargaId || '').toLowerCase();
+        if (!vistos.has(chaveUnica)) {
+          vistos.add(chaveUnica);
+          pendentes.push(t);
+        }
+      }
+    });
+
+    return pendentes;
+  }
+
+  window.nexusEmbarcacoesTarefasContainerPendentesLiberacao = async function (imo) {
+    const alvo = String(imo || '').trim().toUpperCase().replace(/\s+/g, '');
+    const navio = naviosList.find(n => String(n.imo || '').trim().toUpperCase().replace(/\s+/g, '') === alvo);
+    if (!navio) return [];
+    return avaliarTarefasContainerParaLiberacao(navio);
+  };
+
   function bloquearAcaoSomenteLeitura() {
     if (window.NexusAuth && typeof window.NexusAuth.isReadOnly === 'function' && window.NexusAuth.isReadOnly(session)) {
       if (window.mostrarFeedback) {
@@ -1554,6 +1646,21 @@ document.addEventListener('DOMContentLoaded', () => {
         window.mostrarFeedback('alerta', 'Liberação Bloqueada: Navio Sem Cargas Vinculadas',
           `O navio ${navio.nome} não possui nenhuma carga vinculada pronta para entrega rumo a ${navio.destino}. ` +
           'Uma embarcação só pode ser liberada para o porto de destino quando estiver vinculada a pelo menos uma carga (apenas o retorno ao Porto de Santos é permitido sem cargas vinculadas).');
+      }
+      return;
+    }
+
+    // Tarefa 4 ("Últimas alterações"): o navio apenas pode ser liberado caso a
+    // tarefa de movimentação correspondente dos contêineres vinculados seja dada como concluída.
+    const tarefasContainerPendentes = await avaliarTarefasContainerParaLiberacao(navio);
+    if (tarefasContainerPendentes.length > 0) {
+      if (window.mostrarFeedback) {
+        const listaTarefas = tarefasContainerPendentes
+          .map(t => `${t.containerId || t.cargaId} (guindaste ${t.guindasteId || 'designado'})`)
+          .join(', ');
+        window.mostrarFeedback('alerta', 'Liberação Bloqueada: Movimentação de Contêiner Pendente',
+          `O navio ${navio.nome} possui ${tarefasContainerPendentes.length} tarefa(s) de movimentação de contêiner até o navio ainda não concluída(s): ${listaTarefas}. ` +
+          'O navio apenas pode ser liberado caso a tarefa de movimentação correspondente seja dada como concluída no painel de Guindastes.');
       }
       return;
     }
@@ -1666,10 +1773,20 @@ document.addEventListener('DOMContentLoaded', () => {
         (ct.navio && String(ct.navio).trim().toLowerCase() === String(navio.nome || '').trim().toLowerCase())
       ));
       const chavesContsSaida = new Set();
+      let containersSaidaAtualizados = false;
       contsDoNavioSaida.forEach(ct => {
         [ct.identificacao, ct.id, ct.rawDbId].filter(Boolean).forEach(v => chavesContsSaida.add(String(v).trim().toLowerCase()));
+        if (!ct.fezViagemComNavio || ct.ultimoNavioViagem !== navio.nome) {
+          ct.fezViagemComNavio = true;
+          ct.ultimoNavioViagem = navio.nome || '';
+          ct.ultimoNavioViagemId = navio.id || null;
+          ct.movimentacaoNavioPendente = false;
+          containersSaidaAtualizados = true;
+        }
       });
-      let containersSaidaAtualizados = false;
+      if (containersSaidaAtualizados) {
+        localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+      }
       cargasFluxo.forEach(c => {
         if (!c) return;
         // Tarefa 2 (Correções): no cache, EM_TRANSITO só vem de PRONTA_PARA_ENTREGA
@@ -2748,7 +2865,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 navio_id: c.navio_id || null,
                 navioId: c.navio_id || null,
                 navio: nomeResolvido,
-                estado: c.estado || 'OPERANTE'
+                estado: c.estado || 'OPERANTE',
+                movimentacaoNavioPendente: Boolean(localRef && localRef.movimentacaoNavioPendente),
+                tarefaMovimentacaoId: (localRef && localRef.tarefaMovimentacaoId) || null,
+                guindasteDesignado: (localRef && localRef.guindasteDesignado) || null,
+                fezViagemComNavio: Boolean(localRef && localRef.fezViagemComNavio),
+                ultimoNavioViagem: (localRef && localRef.ultimoNavioViagem) || null,
+                ultimoNavioViagemId: (localRef && localRef.ultimoNavioViagemId) || null,
+                navioPosicionamentoConcluido: (localRef && localRef.navioPosicionamentoConcluido) || null,
+                navioPosicionamentoConcluidoId: (localRef && localRef.navioPosicionamentoConcluidoId) || null,
+                viagens: (localRef && localRef.viagens) || 0
               };
             });
 
@@ -2988,6 +3114,170 @@ document.addEventListener('DOMContentLoaded', () => {
     return atualizadas + herdadasSomenteBanco;
   }
 
+  // Tarefa 4 ("Últimas alterações"): verifica se o contêiner já está vinculado
+  // com o mesmo navio alvo e já realizou viagens nesse navio (caso em que não
+  // deve ser gerada uma nova tarefa de movimentação até o navio).
+  async function containerJaVinculadoComViagemNoMesmoNavio(cont, navioAlvo) {
+    if (!cont || !navioAlvo) return false;
+    const refsNavioCont = refsNavioDoContainer(cont);
+    const refsAlvo = [navioAlvo.id, navioAlvo.nome, navioAlvo.imo]
+      .filter(Boolean)
+      .map(chaveVinculo);
+    const jaVinculadoAoMesmoNavio = refsNavioCont.some(r => refsAlvo.includes(r));
+    if (!jaVinculadoAoMesmoNavio) return false;
+
+    if (cont.fezViagemComNavio === true || Number(cont.viagens || cont.numero_viagens || cont.totalViagens || 0) > 0) {
+      return true;
+    }
+    if (cont.ultimoNavioViagem && refsAlvo.includes(chaveVinculo(cont.ultimoNavioViagem))) {
+      return true;
+    }
+    if (cont.ultimoNavioViagemId && refsAlvo.includes(chaveVinculo(cont.ultimoNavioViagemId))) {
+      return true;
+    }
+
+    const refsCont = new Set(
+      [cont.identificacao, cont.numero_identificacao, cont.id, cont.rawDbId]
+        .filter(Boolean)
+        .map(chaveVinculo)
+    );
+    const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+    const temViagemLocal = (Array.isArray(cargasFluxo) ? cargasFluxo : []).some(c => {
+      if (!c) return false;
+      const st = String(c.status || c.status_fluxo || '').trim().toUpperCase();
+      if (!['ENTREGUE', 'EM_TRANSITO'].includes(st) && !c.data_saida && !c.navio_nome_historico && !c.navioNomeHistorico) {
+        return false;
+      }
+      const cRefsCont = [
+        c.container, c.container_id, c.containerId,
+        c.containerIdentificacaoHistorico, c.container_identificacao_historico, c.containerHistorico
+      ].filter(Boolean).map(chaveVinculo);
+      if (!cRefsCont.some(r => refsCont.has(r))) return false;
+      const cRefsNavio = [
+        c.navio, c.navio_id, c.navioId,
+        c.navioNomeHistorico, c.navio_nome_historico, c.navioHistorico
+      ].filter(Boolean).map(chaveVinculo);
+      return cRefsNavio.length === 0 || cRefsNavio.some(r => refsAlvo.includes(r));
+    });
+    if (temViagemLocal) return true;
+
+    if (window.nexusSupabase) {
+      try {
+        const { data: cargasDb, error } = await window.nexusSupabase
+          .from('cargas')
+          .select('id, status_fluxo, container_id, navio_id, container_identificacao_historico, navio_nome_historico');
+        if (!error && Array.isArray(cargasDb)) {
+          const temViagemBanco = cargasDb.some(c => {
+            if (!c) return false;
+            const st = String(c.status_fluxo || '').trim().toUpperCase();
+            if (!['ENTREGUE', 'EM_TRANSITO'].includes(st)) return false;
+            const cRefsCont = [c.container_id, c.container_identificacao_historico]
+              .filter(Boolean)
+              .map(chaveVinculo);
+            if (!cRefsCont.some(r => refsCont.has(r))) return false;
+            const cRefsNavio = [c.navio_id, c.navio_nome_historico]
+              .filter(Boolean)
+              .map(chaveVinculo);
+            return cRefsNavio.length === 0 || cRefsNavio.some(r => refsAlvo.includes(r));
+          });
+          if (temViagemBanco) return true;
+        }
+      } catch (e) { /* segue com avaliação local */ }
+    }
+
+    return false;
+  }
+
+  async function escolherGuindasteOperanteParaContainer() {
+    let lista = Array.isArray(guindastesList) && guindastesList.length > 0
+      ? guindastesList.slice()
+      : JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
+    if (window.nexusSupabase) {
+      try {
+        const { data, error } = await window.nexusSupabase.from('guindastes').select('*');
+        if (!error && Array.isArray(data) && data.length > 0) {
+          lista = data.map(g => ({
+            id: g.id || g.numero_identificacao,
+            identificacao: g.numero_identificacao || g.id,
+            estado: g.estado || 'OPERANTE',
+            dataManut: g.data_ultima_manutencao || ''
+          }));
+          guindastesList = lista;
+          localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+        }
+      } catch (e) { /* usa cache local */ }
+    }
+    if (!Array.isArray(lista) || lista.length === 0) {
+      return {
+        ok: true,
+        guindaste: { id: 'GND-01-STS', identificacao: 'GND-01-STS', estado: 'OPERANTE' }
+      };
+    }
+    const operantes = lista.filter(g => g && (!g.estado || String(g.estado).trim().toUpperCase() === 'OPERANTE'));
+    if (operantes.length === 0) {
+      return {
+        ok: false,
+        motivo: 'Não há nenhum guindaste OPERANTE disponível no momento para movimentar o contêiner até o navio. Conclua a manutenção de um guindaste ou cadastre um equipamento operante.'
+      };
+    }
+    const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+    const contagemPorGnd = (ident) => (Array.isArray(tarefasGnd) ? tarefasGnd : [])
+      .filter(t => t && t.guindasteId === ident && (!t.status || String(t.status).toUpperCase() === 'PENDENTE'))
+      .length;
+    const ordenados = operantes.slice().sort((a, b) => contagemPorGnd(a.identificacao) - contagemPorGnd(b.identificacao));
+    return {
+      ok: true,
+      guindaste: ordenados[0]
+    };
+  }
+
+  function registrarTarefaMovimentacaoContainerParaNavio(cont, navioAlvo, guindaste) {
+    const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+    const chaveCont = NexusCodigos.chave(cont.identificacao);
+    const filtradas = (Array.isArray(tarefasGnd) ? tarefasGnd : []).filter(t => {
+      if (!t) return false;
+      const ehCont = t.tipoTarefa === 'CONTAINER_NAVIO' || Boolean(t.containerId);
+      if (!ehCont) return true;
+      return NexusCodigos.chave(t.containerId || t.cargaId || '') !== chaveCont;
+    });
+    const novaTarefa = {
+      id: `TRF-CONT-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      tipoTarefa: 'CONTAINER_NAVIO',
+      containerId: cont.identificacao,
+      containerUuid: cont.rawDbId || cont.id || null,
+      cargaId: cont.identificacao,
+      tipoCarga: cont.tipo || cont.material_carregado || 'Contêiner',
+      navioId: navioAlvo.id || null,
+      navioNome: navioAlvo.nome || '',
+      navioImo: navioAlvo.imo || '',
+      guindasteId: guindaste.identificacao,
+      origem: 'Pátio STS-01',
+      destino: `Navio ${navioAlvo.nome}`,
+      instrucoes: `Movimentar o contêiner ${cont.identificacao} (${cont.tipo || 'Padrão'}) do pátio até o navio ${navioAlvo.nome} (${navioAlvo.imo || 'atracado'}), utilizando o guindaste ${guindaste.identificacao}. O navio só poderá ter sua saída liberada após a conclusão desta tarefa.`,
+      status: 'PENDENTE',
+      dataCriacao: new Date().toLocaleString('pt-BR')
+    };
+    filtradas.unshift(novaTarefa);
+    localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(filtradas));
+
+    cont.movimentacaoNavioPendente = true;
+    cont.tarefaMovimentacaoId = novaTarefa.id;
+    cont.guindasteDesignado = guindaste.identificacao;
+    cont.navioPosicionamentoConcluido = null;
+    cont.navioPosicionamentoConcluidoId = null;
+    cont.fezViagemComNavio = false;
+    cont.ultimoNavioViagem = null;
+    cont.ultimoNavioViagemId = null;
+
+    if (typeof renderGuindastesTable === 'function') {
+      renderGuindastesTable();
+    }
+    if (window.NexusRepository && window.NexusRepository.notifyChange) {
+      window.NexusRepository.notifyChange('guindaste_tarefas');
+    }
+    return novaTarefa;
+  }
+
   // Vincular Contêiner a um Navio com Validação de Capacidade (15.000 t e ~300m) (Tarefa 8)
   window.vincularContainerANavio = async function(contIdentificacao, opcoes) {
     if (bloquearAcaoSomenteLeitura()) return;
@@ -3091,7 +3381,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Validação de Capacidade Rígida (OBS Tarefa 8): max 15.000 toneladas e ~300 metros de espaço
       // Calcula peso e quantidade de contêineres atualmente alocados ao navioAlvo
-      const contsDoNavio = containersList.filter(c => (c.navio || '').toLowerCase() === navioAlvo.nome.toLowerCase() || c.navio_id === navioAlvo.id);
+      const contsDoNavio = containersList.filter(c =>
+        NexusCodigos.chave(c.identificacao) !== NexusCodigos.chave(cont.identificacao) &&
+        ((c.navio || '').toLowerCase() === navioAlvo.nome.toLowerCase() || (navioAlvo.id && c.navio_id === navioAlvo.id))
+      );
 
       const cargasFluxo = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
       // Vincular o contêiner também vincula suas cargas: não contornar a regra de destinos.
@@ -3131,9 +3424,28 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Tarefa 4 ("Últimas alterações"): avalia ANTES de sobrescrever o vínculo
+      // se o contêiner já estava vinculado com este mesmo navio e já fez viagens.
+      const jaVinculadoComViagem = await containerJaVinculadoComViagemNoMesmoNavio(cont, navioAlvo);
+      let escolhaGuindaste = null;
+      if (!jaVinculadoComViagem) {
+        escolhaGuindaste = await escolherGuindasteOperanteParaContainer();
+        if (!escolhaGuindaste.ok) {
+          if (window.mostrarFeedback) {
+            window.mostrarFeedback('alerta', 'Guindaste Indisponível', escolhaGuindaste.motivo);
+          }
+          return;
+        }
+      }
+
       cont.navio = navioAlvo.nome;
       cont.navio_id = navioAlvo.id;
       cont.navio_nome = navioAlvo.nome;
+
+      let tarefaMovimentacaoCriada = null;
+      if (!jaVinculadoComViagem && escolhaGuindaste && escolhaGuindaste.guindaste) {
+        tarefaMovimentacaoCriada = registrarTarefaMovimentacaoContainerParaNavio(cont, navioAlvo, escolhaGuindaste.guindaste);
+      }
 
       localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
 
@@ -3151,7 +3463,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const cargasHerdadas = await propagarNavioParaCargasDoContainer(cont.identificacao, navioAlvo);
 
       if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} vinculado ao navio ${navioAlvo.nome}${cargasHerdadas > 0 ? `; ${cargasHerdadas} carga(s) herdaram o navio` : ''}`);
+        await window.registrarLogAlteracao('EDICAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} vinculado ao navio ${navioAlvo.nome}${cargasHerdadas > 0 ? `; ${cargasHerdadas} carga(s) herdaram o navio` : ''}${tarefaMovimentacaoCriada ? `; tarefa de movimentação atribuída ao guindaste ${tarefaMovimentacaoCriada.guindasteId}` : ''}`);
       }
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
@@ -3161,7 +3473,10 @@ document.addEventListener('DOMContentLoaded', () => {
       renderContainersTable();
       if (window.mostrarFeedback) {
         const msgHeranca = cargasHerdadas > 0 ? ` ${cargasHerdadas} carga(s) do contêiner herdaram o navio automaticamente.` : '';
-        window.mostrarFeedback('sucesso', 'Contêiner Vinculado', `Contêiner ${cont.identificacao} vinculado com sucesso ao navio ${navioAlvo.nome}!${msgHeranca}`);
+        const msgTarefa = tarefaMovimentacaoCriada
+          ? ` Tarefa de movimentação até o navio atribuída ao guindaste ${tarefaMovimentacaoCriada.guindasteId}.`
+          : '';
+        window.mostrarFeedback('sucesso', 'Contêiner Vinculado', `Contêiner ${cont.identificacao} vinculado com sucesso ao navio ${navioAlvo.nome}!${msgHeranca}${msgTarefa}`);
       }
     } else {
       if (window.mostrarFeedback) window.mostrarFeedback('erro', 'Opção Inválida', 'Seleção de navio inválida.');
@@ -3586,11 +3901,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     tarefasListEl.innerHTML = pendentes.map(t => {
-      const instrucoes = t.instrucoes || `Movimentar a carga ${t.cargaId} (${t.tipoCarga || 'Geral'}) para o setor "${t.destino || 'destino'}".`;
+      const ehTarefaContainer = t.tipoTarefa === 'CONTAINER_NAVIO' || Boolean(t.containerId);
+      const instrucoes = t.instrucoes || (ehTarefaContainer
+        ? `Movimentar o contêiner ${t.containerId || t.cargaId} para "${t.destino || 'navio'}".`
+        : `Movimentar a carga ${t.cargaId} (${t.tipoCarga || 'Geral'}) para o setor "${t.destino || 'destino'}".`);
       return `
         <div class="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 flex flex-col gap-2">
           <div class="flex items-center justify-between gap-2">
-            <span class="font-mono font-bold text-nexus-900 dark:text-white">Carga ${esc(t.cargaId || '?')} <span class="text-slate-600 font-normal">(${esc(t.tipoCarga || 'Geral')})</span></span>
+            <span class="font-mono font-bold text-nexus-900 dark:text-white">${esc(ehTarefaContainer ? 'Contêiner' : 'Carga')} ${esc(t.containerId || t.cargaId || '?')} <span class="text-slate-600 font-normal">(${esc(t.tipoCarga || 'Geral')})</span></span>
             <span class="px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-mono text-[10px] font-bold uppercase">Pendente</span>
           </div>
           <div class="text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -3624,8 +3942,8 @@ document.addEventListener('DOMContentLoaded', () => {
     tarefasModal.classList.remove('hidden');
   };
 
-  // Conclui a tarefa: atualiza o Setor do Pátio da carga (Cargas & Pátio) e
-  // remove a pendência do guindaste.
+  // Conclui a tarefa: atualiza o Setor do Pátio da carga (Cargas & Pátio) ou
+  // conclui o posicionamento do contêiner no navio e remove a pendência do guindaste.
   window.concluirTarefaGuindaste = async function(tarefaId, opcoes) {
     if (bloquearAcaoSomenteLeitura()) return;
     if (isPlanejador) return;
@@ -3635,27 +3953,51 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Tarefa Não Encontrada', 'Esta tarefa já foi concluída ou removida.');
       return;
     }
+    const ehTarefaContainer = tarefa.tipoTarefa === 'CONTAINER_NAVIO'
+      || Boolean(tarefa.containerId)
+      || /^Navio\s+/i.test(String(tarefa.destino || ''));
+
+    const textoConfirmacao = ehTarefaContainer
+      ? `Confirmar que o contêiner ${tarefa.containerId || tarefa.cargaId} foi movimentado até "${tarefa.destino}" pelo guindaste ${tarefa.guindasteId}?`
+      : `Confirmar que a carga ${tarefa.cargaId} foi posicionada no setor "${tarefa.destino}"? O Setor do Pátio será atualizado em Cargas & Pátio.`;
+
     const confirmou = (opcoes && opcoes.confirmado === true) ? true : window.nexusConfirm
-      ? await window.nexusConfirm('Concluir Movimentação', `Confirmar que a carga ${tarefa.cargaId} foi posicionada no setor "${tarefa.destino}"? O Setor do Pátio será atualizado em Cargas & Pátio.`)
+      ? await window.nexusConfirm('Concluir Movimentação', textoConfirmacao)
       : true;
     if (!confirmou) return;
 
-    // Atualiza o ponto de descarga (Setor do Pátio) da carga
-    const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
-    const carga = cargasLocais.find(c => c.id === tarefa.cargaId);
-    if (carga) {
-      carga.portoDescarga = tarefa.destino || carga.portoDescarga;
-      carga.movimentacaoPendente = null;
-      carga.guindasteDesignado = null;
-      localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
-      if (window.nexusSupabase && tarefa.destino) {
-        try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(carga.rawDbId || carga.id);
-          let q = window.nexusSupabase.from('cargas').update({ porto_descarga: tarefa.destino });
-          q = isUuid ? q.eq('id', carga.rawDbId || carga.id) : q.eq('qr_code_url', carga.qrCode || `QR-${carga.id}`);
-          await q;
-        } catch (e) {
-          console.warn('[NexusPort] Erro ao atualizar setor da carga no Supabase:', e);
+    if (ehTarefaContainer) {
+      const identCont = String(tarefa.containerId || tarefa.cargaId || '').trim();
+      const chaveCont = NexusCodigos.chave(identCont);
+      containersList.forEach(ct => {
+        if (!ct) return;
+        if (NexusCodigos.chave(ct.identificacao) === chaveCont || (tarefa.containerUuid && String(ct.id) === String(tarefa.containerUuid))) {
+          ct.movimentacaoNavioPendente = false;
+          ct.tarefaMovimentacaoId = null;
+          ct.guindasteDesignado = null;
+          ct.navioPosicionamentoConcluido = tarefa.navioNome || ct.navio || '';
+          ct.navioPosicionamentoConcluidoId = tarefa.navioId || ct.navio_id || null;
+        }
+      });
+      localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+    } else {
+      // Atualiza o ponto de descarga (Setor do Pátio) da carga
+      const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      const carga = cargasLocais.find(c => c.id === tarefa.cargaId);
+      if (carga) {
+        carga.portoDescarga = tarefa.destino || carga.portoDescarga;
+        carga.movimentacaoPendente = null;
+        carga.guindasteDesignado = null;
+        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
+        if (window.nexusSupabase && tarefa.destino) {
+          try {
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(carga.rawDbId || carga.id);
+            let q = window.nexusSupabase.from('cargas').update({ porto_descarga: tarefa.destino });
+            q = isUuid ? q.eq('id', carga.rawDbId || carga.id) : q.eq('qr_code_url', carga.qrCode || `QR-${carga.id}`);
+            await q;
+          } catch (e) {
+            console.warn('[NexusPort] Erro ao atualizar setor da carga no Supabase:', e);
+          }
         }
       }
     }
@@ -3664,17 +4006,31 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(restantes));
 
     if (window.registrarLogAlteracao) {
-      await window.registrarLogAlteracao(tarefa.cargaId || tarefaId, 'EDICAO', `Movimentação concluída pelo guindaste ${tarefa.guindasteId}: setor atualizado para "${tarefa.destino}"`);
+      await window.registrarLogAlteracao(
+        tarefa.containerId || tarefa.cargaId || tarefaId,
+        'EDICAO',
+        ehTarefaContainer
+          ? `Movimentação do contêiner ${tarefa.containerId || tarefa.cargaId} até "${tarefa.destino}" concluída pelo guindaste ${tarefa.guindasteId}`
+          : `Movimentação concluída pelo guindaste ${tarefa.guindasteId}: setor atualizado para "${tarefa.destino}"`
+      );
     }
     if (window.NexusRepository && window.NexusRepository.notifyChange) {
-      window.NexusRepository.notifyChange('cargas');
+      if (ehTarefaContainer) window.NexusRepository.notifyChange('containers');
+      else window.NexusRepository.notifyChange('cargas');
       window.NexusRepository.notifyChange('guindaste_tarefas');
     }
 
     renderGuindastesTable();
     renderTarefasModal();
+    if (ehTarefaContainer && typeof renderContainersTable === 'function') {
+      renderContainersTable();
+    }
     if (window.mostrarFeedback) {
-      window.mostrarFeedback('sucesso', 'Movimentação Concluída', `Carga ${tarefa.cargaId} posicionada em "${tarefa.destino}". O Setor do Pátio foi atualizado na tabela Cargas & Pátio.`);
+      if (ehTarefaContainer) {
+        window.mostrarFeedback('sucesso', 'Movimentação Concluída', `Contêiner ${tarefa.containerId || tarefa.cargaId} posicionado em "${tarefa.destino}" pelo guindaste ${tarefa.guindasteId}.`);
+      } else {
+        window.mostrarFeedback('sucesso', 'Movimentação Concluída', `Carga ${tarefa.cargaId} posicionada em "${tarefa.destino}". O Setor do Pátio foi atualizado na tabela Cargas & Pátio.`);
+      }
     }
   };
 
