@@ -861,7 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const fraseEntrega = `Carga ${cod} marcada como ENTREGUE no porto de destino${sufixo}`;
       logs.push({
         data_hora: c.updated_at || c.data_entrega || c.created_at || new Date().toISOString(),
-        nome_funcionario: (session && session.nome) || 'Operador Portuário',
+        nome_funcionario: 'Não identificado',
         cargo: (session && (session.cargo || session.cargo_nome)) || 'SUPERVISOR_GERENTE_OPERACOES',
         codigo_usuario: (session && (session.codigo_individual || session.codigo)) || '--',
         entidade: `CARGA ${cod}`,
@@ -946,7 +946,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function gerarPlanilhaDesempenhoEstilizada(dados, dataReferencia) {
     const agora = dataReferencia instanceof Date ? dataReferencia : new Date();
     const dataHoraFmt = agora.toLocaleString('pt-BR');
-    const operadorNome = (session && session.nome) || 'Operador Portuário';
+    const operadorNome = (session && session['nome']) || 'Operador Portuário';
     const operadorCargo = (session && (session.cargo_nome || session.cargo)) || 'Gestão Operacional';
 
     const somaVolume = dados.reduce((acc, i) => acc + (Number(i.volume) || 0), 0);
