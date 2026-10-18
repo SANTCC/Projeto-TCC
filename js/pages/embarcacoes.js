@@ -1502,6 +1502,10 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (e) { /* usa cache local */ }
     }
 
+    if (typeof sincronizarTarefasGuindasteSupabase === 'function') {
+      await sincronizarTarefasGuindasteSupabase();
+    }
+
     const tarefasGnd = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
     const pendentes = [];
     const vistos = new Set();
@@ -2880,6 +2884,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             containersList = supConts;
             await sincronizarVinculosContainersComNavios();
+            if (typeof sincronizarTarefasGuindasteSupabase === 'function') {
+              await sincronizarTarefasGuindasteSupabase();
+              if (typeof renderGuindastesTable === 'function') renderGuindastesTable();
+            }
             localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
             renderContainersTable();
             return;
@@ -2891,6 +2899,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     containersList = localConts;
     await sincronizarVinculosContainersComNavios();
+    if (typeof sincronizarTarefasGuindasteSupabase === 'function') {
+      await sincronizarTarefasGuindasteSupabase();
+      if (typeof renderGuindastesTable === 'function') renderGuindastesTable();
+    }
     renderContainersTable();
   }
 
@@ -3255,7 +3267,8 @@ document.addEventListener('DOMContentLoaded', () => {
       destino: `Navio ${navioAlvo.nome}`,
       instrucoes: `Movimentar o contêiner ${cont.identificacao} (${cont.tipo || 'Padrão'}) do pátio até o navio ${navioAlvo.nome} (${navioAlvo.imo || 'atracado'}), utilizando o guindaste ${guindaste.identificacao}. O navio só poderá ter sua saída liberada após a conclusão desta tarefa.`,
       status: 'PENDENTE',
-      dataCriacao: new Date().toLocaleString('pt-BR')
+      dataCriacao: new Date().toLocaleString('pt-BR'),
+      criadaEmMs: Date.now()
     };
     filtradas.unshift(novaTarefa);
     localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(filtradas));
@@ -3462,15 +3475,38 @@ document.addEventListener('DOMContentLoaded', () => {
       // As cargas do contêiner com herança ativa passam a exibir o navio
       const cargasHerdadas = await propagarNavioParaCargasDoContainer(cont.identificacao, navioAlvo);
 
+      const descricaoVinculo = `Contêiner ${cont.identificacao} vinculado ao navio ${navioAlvo.nome}${cargasHerdadas > 0 ? `; ${cargasHerdadas} carga(s) herdaram o navio` : ''}${tarefaMovimentacaoCriada ? `; tarefa de movimentação atribuída ao guindaste ${tarefaMovimentacaoCriada.guindasteId}` : ''}`;
+      const detalhesVinculo = {
+        descricao: descricaoVinculo,
+        identificacao: cont.identificacao,
+        navio: navioAlvo.nome,
+        navio_id: navioAlvo.id || null,
+        navio_imo: navioAlvo.imo || '',
+        cargas_herdadas: cargasHerdadas
+      };
+      if (tarefaMovimentacaoCriada) {
+        detalhesVinculo.acao_tarefa_guindaste = 'CRIADA';
+        detalhesVinculo.tarefa_id = tarefaMovimentacaoCriada.id;
+        detalhesVinculo.tarefa_guindaste = tarefaMovimentacaoCriada;
+      }
+
       if (window.registrarLogAlteracao) {
-        await window.registrarLogAlteracao('EDICAO', 'containers', cont.id || null, `Contêiner ${cont.identificacao} vinculado ao navio ${navioAlvo.nome}${cargasHerdadas > 0 ? `; ${cargasHerdadas} carga(s) herdaram o navio` : ''}${tarefaMovimentacaoCriada ? `; tarefa de movimentação atribuída ao guindaste ${tarefaMovimentacaoCriada.guindasteId}` : ''}`);
+        await window.registrarLogAlteracao('EDICAO', 'containers', cont.id || null, detalhesVinculo);
+      } else if (typeof persistirEventoTarefaGuindasteFallback === 'function') {
+        await persistirEventoTarefaGuindasteFallback('CONTAINER', cont.identificacao, detalhesVinculo);
       }
 
       if (window.NexusRepository && window.NexusRepository.notifyChange) {
         window.NexusRepository.notifyChange('containers');
+        if (tarefaMovimentacaoCriada) {
+          window.NexusRepository.notifyChange('guindaste_tarefas');
+        }
       }
 
       renderContainersTable();
+      if (typeof renderGuindastesTable === 'function') {
+        renderGuindastesTable();
+      }
       if (window.mostrarFeedback) {
         const msgHeranca = cargasHerdadas > 0 ? ` ${cargasHerdadas} carga(s) do contêiner herdaram o navio automaticamente.` : '';
         const msgTarefa = tarefaMovimentacaoCriada
@@ -3738,6 +3774,330 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let guindastesList = JSON.parse(localStorage.getItem('nexus_guindastes_list') || '[]');
 
+  function normalizarCodigoTarefa(valor) {
+    return String(valor || '').trim().toUpperCase().replace(/^QR-/i, '').replace(/[^A-Z0-9-]/g, '');
+  }
+
+  function chaveDaTarefaGuindaste(t) {
+    if (!t || typeof t !== 'object') return '';
+    const ehCont = t.tipoTarefa === 'CONTAINER_NAVIO'
+      || Boolean(t.containerId)
+      || /^Navio\s+/i.test(String(t.destino || ''));
+    const cod = normalizarCodigoTarefa(ehCont ? (t.containerId || t.cargaId) : t.cargaId);
+    if (!cod) return '';
+    return (ehCont ? 'CONT:' : 'CARGA:') + cod;
+  }
+
+  async function persistirEventoTarefaGuindasteFallback(entidadeTipo, entidadeId, detalhesObj) {
+    if (!window.nexusSupabase || typeof window.nexusSupabase.from !== 'function') return;
+    try {
+      const idLog = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+      await window.nexusSupabase.from('logs_alteracoes').insert({
+        id: idLog,
+        data_hora: new Date().toISOString(),
+        cargo: (session && session.cargo) || 'SUPERVISOR_GERENTE_OPERACOES',
+        codigo_individual: (session && (session.codigo_individual || session.codigo)) || 'SISTEMA',
+        entidade_tipo: entidadeTipo || 'CARGA',
+        entidade_id: String(entidadeId || 'N/A'),
+        tipo_alteracao: 'EDICAO',
+        detalhes: detalhesObj || {}
+      });
+    } catch (_) { /* mock sem logs_alteracoes */ }
+  }
+
+  async function sincronizarTarefasGuindasteSupabase() {
+    let tarefasLocais = [];
+    try {
+      const lidas = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      if (Array.isArray(lidas)) tarefasLocais = lidas;
+    } catch (_) { tarefasLocais = []; }
+
+    if (!window.nexusSupabase || typeof window.nexusSupabase.from !== 'function') {
+      return tarefasLocais;
+    }
+
+    try {
+      let query = window.nexusSupabase
+        .from('logs_alteracoes')
+        .select('id, data_hora, entidade_tipo, entidade_id, tipo_alteracao, detalhes');
+      if (query && typeof query.order === 'function') {
+        query = query.order('data_hora', { ascending: false });
+      }
+      if (query && typeof query.limit === 'function') {
+        query = query.limit(500);
+      }
+      const res = await query;
+      if (!res || res.error || !Array.isArray(res.data) || res.data.length === 0) {
+        return tarefasLocais;
+      }
+
+      const linhas = res.data.slice().sort((a, b) => {
+        const ta = Date.parse((a && (a.data_hora || a.created_at)) || '') || 0;
+        const tb = Date.parse((b && (b.data_hora || b.created_at)) || '') || 0;
+        return ta - tb;
+      });
+
+      const estadoPorChave = new Map();
+      const idsConcluidos = new Set();
+      const guindastesExcluidos = new Set();
+
+      linhas.forEach((row) => {
+        if (!row) return;
+        let det = row.detalhes;
+        if (typeof det === 'string') {
+          try {
+            const parsed = JSON.parse(det);
+            det = (parsed && typeof parsed === 'object') ? parsed : { descricao: det };
+          } catch (_) {
+            det = { descricao: det };
+          }
+        } else if (!det || typeof det !== 'object') {
+          det = {};
+        }
+
+        const desc = String(det.descricao || '').trim();
+        const ts = Date.parse(row.data_hora || row.created_at || '') || 0;
+        const dataCriacaoFmt = (row.data_hora || row.created_at)
+          ? new Date(row.data_hora || row.created_at).toLocaleString('pt-BR')
+          : '';
+
+        if (det.acao_tarefa_guindaste === 'CRIADA' && det.tarefa_guindaste && typeof det.tarefa_guindaste === 'object') {
+          const t = Object.assign({}, det.tarefa_guindaste, { status: 'PENDENTE' });
+          if (!t.dataCriacao && dataCriacaoFmt) t.dataCriacao = dataCriacaoFmt;
+          if (!t.criadaEmMs && ts) t.criadaEmMs = ts;
+          const chave = chaveDaTarefaGuindaste(t);
+          if (chave) {
+            estadoPorChave.set(chave, { status: 'PENDENTE', tarefa: t, ts });
+          }
+          return;
+        }
+
+        if (det.acao_tarefa_guindaste === 'CONCLUIDA' || det.acao_tarefa_guindaste === 'REMOVIDA') {
+          if (det.tarefa_id) idsConcluidos.add(String(det.tarefa_id));
+          const tRef = det.tarefa_guindaste || {
+            tipoTarefa: det.tipo_tarefa,
+            containerId: det.container_id,
+            cargaId: det.carga_id || row.entidade_id
+          };
+          const chave = chaveDaTarefaGuindaste(tRef);
+          if (chave) {
+            estadoPorChave.set(chave, { status: 'CONCLUIDA', tarefaId: det.tarefa_id || null, ts });
+          }
+          return;
+        }
+
+        const mCriadaCarga = desc.match(/Tarefa de movimentação criada:\s*(.+?)\s*➔\s*(.+?)\s*via Guindaste\s*([^\s(]+)\s*\(aguardando conclusão\)/i);
+        if (mCriadaCarga) {
+          const cargaId = String(det.codigo || row.entidade_id || '').trim().replace(/^QR-/i, '');
+          const origem = mCriadaCarga[1].trim();
+          const destino = mCriadaCarga[2].trim();
+          const guindasteId = mCriadaCarga[3].trim();
+          if (cargaId && guindasteId) {
+            const t = {
+              id: det.tarefa_id || `TRF-${cargaId}-${ts || row.id || 'LOG'}`,
+              tipoTarefa: 'CARGA_SETOR',
+              guindasteId,
+              cargaId,
+              cargaUuid: det.referencia_id || null,
+              tipoCarga: det.tipoCarga || 'Carga Geral',
+              origem,
+              destino,
+              instrucoes: `Movimentar a carga ${cargaId} do setor "${origem}" para "${destino}" utilizando o guindaste ${guindasteId}.`,
+              status: 'PENDENTE',
+              dataCriacao: dataCriacaoFmt,
+              criadaEmMs: ts || 0
+            };
+            estadoPorChave.set(chaveDaTarefaGuindaste(t), { status: 'PENDENTE', tarefa: t, ts });
+          }
+          return;
+        }
+
+        const mConcCarga = desc.match(/Movimentação concluída pelo guindaste\s+([^\s:]+):\s*setor atualizado para\s*"([^"]+)"/i);
+        if (mConcCarga) {
+          const cargaId = String(det.codigo || row.entidade_id || '').trim().replace(/^QR-/i, '');
+          if (cargaId) {
+            estadoPorChave.set('CARGA:' + normalizarCodigoTarefa(cargaId), { status: 'CONCLUIDA', ts });
+          }
+          return;
+        }
+
+        const mCriadaCont = desc.match(/Contêiner\s+(\S+)\s+vinculado ao navio\s+([^;]+?)(?:;\s*\d+\s*carga\(s\)\s+herdaram o navio)?;\s*tarefa de movimentação atribuída ao guindaste\s+(\S+)/i);
+        if (mCriadaCont) {
+          const containerId = mCriadaCont[1].trim();
+          const navioNome = mCriadaCont[2].trim();
+          const guindasteId = mCriadaCont[3].trim().replace(/[.!]$/, '');
+          if (containerId && guindasteId) {
+            const t = {
+              id: det.tarefa_id || `TRF-CONT-${containerId}-${ts || row.id || 'LOG'}`,
+              tipoTarefa: 'CONTAINER_NAVIO',
+              containerId,
+              containerUuid: det.referencia_id || null,
+              cargaId: containerId,
+              tipoCarga: det.tipoCarga || 'Contêiner',
+              navioId: det.navio_id || null,
+              navioNome,
+              navioImo: det.navio_imo || '',
+              guindasteId,
+              origem: 'Pátio STS-01',
+              destino: `Navio ${navioNome}`,
+              instrucoes: `Movimentar o contêiner ${containerId} do pátio até o navio ${navioNome}, utilizando o guindaste ${guindasteId}. O navio só poderá ter sua saída liberada após a conclusão desta tarefa.`,
+              status: 'PENDENTE',
+              dataCriacao: dataCriacaoFmt,
+              criadaEmMs: ts || 0
+            };
+            estadoPorChave.set(chaveDaTarefaGuindaste(t), { status: 'PENDENTE', tarefa: t, ts });
+          }
+          return;
+        }
+
+        const mConcCont = desc.match(/Movimentação do contêiner\s+(\S+)\s+até\s+"([^"]+)"\s+concluída pelo guindaste\s+(\S+)/i);
+        if (mConcCont) {
+          const containerId = mConcCont[1].trim();
+          if (containerId) {
+            estadoPorChave.set('CONT:' + normalizarCodigoTarefa(containerId), { status: 'CONCLUIDA', ts });
+          }
+          return;
+        }
+
+        if (det.acao_exibicao === 'ENTREGOU_CARGA' || det.status_fluxo === 'ENTREGUE' || /Cancelou a entrega|CANCELOU_ENTREGA|marcada como ENTREGUE/i.test(desc)) {
+          const cargaId = String(det.codigo || row.entidade_id || '').trim().replace(/^QR-/i, '');
+          if (cargaId) {
+            estadoPorChave.set('CARGA:' + normalizarCodigoTarefa(cargaId), { status: 'CONCLUIDA', ts });
+          }
+          return;
+        }
+
+        if (String(row.entidade_tipo || '').toUpperCase() === 'GUINDASTE' && String(row.tipo_alteracao || '').toUpperCase() === 'EXCLUSAO') {
+          const mGnd = desc.match(/Guindaste\s+(\S+)\s+excluído/i);
+          const gndId = (mGnd && mGnd[1]) || det.numero_identificacao || det.identificacao || row.entidade_id;
+          if (gndId) guindastesExcluidos.add(normalizarCodigoTarefa(gndId));
+        }
+      });
+
+      if (estadoPorChave.size === 0 && idsConcluidos.size === 0 && guindastesExcluidos.size === 0) {
+        return tarefasLocais;
+      }
+
+      const cargasLocais = JSON.parse(localStorage.getItem('nexus_cargas_fluxo') || '[]');
+      const mapaCargas = new Map();
+      (Array.isArray(cargasLocais) ? cargasLocais : []).forEach((c) => {
+        if (c && c.id) mapaCargas.set(normalizarCodigoTarefa(c.id), c);
+      });
+
+      const mapaContainers = new Map();
+      (Array.isArray(containersList) ? containersList : []).forEach((ct) => {
+        if (ct && ct.identificacao) mapaContainers.set(normalizarCodigoTarefa(ct.identificacao), ct);
+      });
+
+      const tarefaValidaParaEstadoAtual = (t) => {
+        if (!t) return false;
+        if (guindastesExcluidos.has(normalizarCodigoTarefa(t.guindasteId))) return false;
+        const ehCont = t.tipoTarefa === 'CONTAINER_NAVIO'
+          || Boolean(t.containerId)
+          || /^Navio\s+/i.test(String(t.destino || ''));
+        if (ehCont) {
+          const navioRef = (Array.isArray(naviosList) ? naviosList : []).find((n) => {
+            if (!n) return false;
+            return (t.navioId && String(n.id) === String(t.navioId))
+              || (t.navioImo && normalizarRefImo(n.imo) === normalizarRefImo(t.navioImo))
+              || (t.navioNome && chaveVinculo(n.nome) === chaveVinculo(t.navioNome));
+          });
+          if (navioRef && ['FORA_DO_PORTO', 'NO_PORTO_DE_DESTINO'].includes(String(navioRef.localizacao || '').toUpperCase())) {
+            return false;
+          }
+          return true;
+        }
+        const c = mapaCargas.get(normalizarCodigoTarefa(t.cargaId));
+        if (c) {
+          if (['ENTREGUE', 'CANCELADA', 'RECUSADA', 'EM_TRANSITO'].includes(String(c.status || '').toUpperCase())) {
+            return false;
+          }
+          if (t.destino && c.portoDescarga && String(c.portoDescarga).trim() === String(t.destino).trim()) {
+            return false;
+          }
+          if (!t.tipoCarga || t.tipoCarga === 'Carga Geral') {
+            t.tipoCarga = c.tipo || t.tipoCarga || 'Carga Geral';
+          }
+        }
+        return true;
+      };
+
+      const tarefasMescladas = [];
+      const chavesPresentes = new Set();
+
+      tarefasLocais.forEach((tLocal) => {
+        if (!tLocal) return;
+        if (idsConcluidos.has(String(tLocal.id))) return;
+        if (!tarefaValidaParaEstadoAtual(tLocal)) return;
+        const chave = chaveDaTarefaGuindaste(tLocal);
+        const remoto = chave ? estadoPorChave.get(chave) : null;
+        if (remoto && remoto.status === 'CONCLUIDA') {
+          const tsLocal = Number(tLocal.criadaEmMs) || 0;
+          if (!tsLocal || !remoto.ts || tsLocal <= remoto.ts + 2000) {
+            return;
+          }
+        }
+        if (remoto && remoto.status === 'PENDENTE' && remoto.tarefa) {
+          const tsLocal = Number(tLocal.criadaEmMs) || 0;
+          const mesclada = (tsLocal && remoto.ts && tsLocal > remoto.ts + 2000)
+            ? Object.assign({}, remoto.tarefa, tLocal, { status: 'PENDENTE' })
+            : Object.assign({}, tLocal, remoto.tarefa, { status: 'PENDENTE' });
+          tarefasMescladas.push(mesclada);
+          if (chave) chavesPresentes.add(chave);
+          return;
+        }
+        tarefasMescladas.push(tLocal);
+        if (chave) chavesPresentes.add(chave);
+      });
+
+      estadoPorChave.forEach((remoto, chave) => {
+        if (!remoto || remoto.status !== 'PENDENTE' || !remoto.tarefa) return;
+        if (chavesPresentes.has(chave)) return;
+        if (!tarefaValidaParaEstadoAtual(remoto.tarefa)) return;
+        tarefasMescladas.push(remoto.tarefa);
+        chavesPresentes.add(chave);
+      });
+
+      localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(tarefasMescladas));
+
+      if (Array.isArray(containersList) && containersList.length > 0) {
+        let alterouConts = false;
+        containersList.forEach((ct) => {
+          if (!ct || !ct.identificacao) return;
+          const chaveCt = 'CONT:' + normalizarCodigoTarefa(ct.identificacao);
+          const tarefaAtiva = tarefasMescladas.find((t) => chaveDaTarefaGuindaste(t) === chaveCt);
+          if (tarefaAtiva) {
+            if (!ct.movimentacaoNavioPendente || ct.guindasteDesignado !== tarefaAtiva.guindasteId) {
+              ct.movimentacaoNavioPendente = true;
+              ct.tarefaMovimentacaoId = tarefaAtiva.id;
+              ct.guindasteDesignado = tarefaAtiva.guindasteId;
+              alterouConts = true;
+            }
+          } else if (ct.movimentacaoNavioPendente) {
+            const remotoCt = estadoPorChave.get(chaveCt);
+            if (remotoCt && remotoCt.status === 'CONCLUIDA') {
+              ct.movimentacaoNavioPendente = false;
+              ct.tarefaMovimentacaoId = null;
+              ct.guindasteDesignado = null;
+              alterouConts = true;
+            }
+          }
+        });
+        if (alterouConts) {
+          localStorage.setItem('nexus_containers_list', JSON.stringify(containersList));
+        }
+      }
+
+      return tarefasMescladas;
+    } catch (_) {
+      return tarefasLocais;
+    }
+  }
+
   async function carregarGuindastesSupabase() {
     if (isPlanejador) return;
     if (window.nexusSupabase) {
@@ -3751,14 +4111,22 @@ document.addEventListener('DOMContentLoaded', () => {
             dataManut: g.data_ultima_manutencao || ''
           }));
           localStorage.setItem('nexus_guindastes_list', JSON.stringify(guindastesList));
+          await sincronizarTarefasGuindasteSupabase();
           renderGuindastesTable();
+          if (tarefasModal && !tarefasModal.classList.contains('hidden')) {
+            renderTarefasModal();
+          }
           return;
         }
       } catch (err) {
         console.warn('[NexusPort] Erro ao carregar guindastes do Supabase:', err);
       }
     }
+    await sincronizarTarefasGuindasteSupabase();
     renderGuindastesTable();
+    if (tarefasModal && !tarefasModal.classList.contains('hidden')) {
+      renderTarefasModal();
+    }
   }
 
   function renderGuindastesTable() {
@@ -3940,6 +4308,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     renderTarefasModal();
     tarefasModal.classList.remove('hidden');
+    await sincronizarTarefasGuindasteSupabase();
+    renderGuindastesTable();
+    renderTarefasModal();
   };
 
   // Conclui a tarefa: atualiza o Setor do Pátio da carga (Cargas & Pátio) ou
@@ -3989,15 +4360,17 @@ document.addEventListener('DOMContentLoaded', () => {
         carga.movimentacaoPendente = null;
         carga.guindasteDesignado = null;
         localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargasLocais));
-        if (window.nexusSupabase && tarefa.destino) {
-          try {
-            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(carga.rawDbId || carga.id);
-            let q = window.nexusSupabase.from('cargas').update({ porto_descarga: tarefa.destino });
-            q = isUuid ? q.eq('id', carga.rawDbId || carga.id) : q.eq('qr_code_url', carga.qrCode || `QR-${carga.id}`);
-            await q;
-          } catch (e) {
-            console.warn('[NexusPort] Erro ao atualizar setor da carga no Supabase:', e);
-          }
+      }
+      if (window.nexusSupabase && tarefa.destino) {
+        try {
+          const refCarga = (carga && (carga.rawDbId || carga.id)) || tarefa.cargaUuid || tarefa.cargaId;
+          const qrCarga = (carga && carga.qrCode) || tarefa.cargaQrCode || `QR-${String(tarefa.cargaId || '').replace(/^QR-/i, '')}`;
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(refCarga || ''));
+          let q = window.nexusSupabase.from('cargas').update({ porto_descarga: tarefa.destino });
+          q = isUuid ? q.eq('id', refCarga) : q.eq('qr_code_url', qrCarga);
+          await q;
+        } catch (e) {
+          console.warn('[NexusPort] Erro ao atualizar setor da carga no Supabase:', e);
         }
       }
     }
@@ -4005,13 +4378,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const restantes = tarefasGnd.filter(t => String(t.id) !== String(tarefaId));
     localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(restantes));
 
+    const descricaoConclusao = ehTarefaContainer
+      ? `Movimentação do contêiner ${tarefa.containerId || tarefa.cargaId} até "${tarefa.destino}" concluída pelo guindaste ${tarefa.guindasteId}`
+      : `Movimentação concluída pelo guindaste ${tarefa.guindasteId}: setor atualizado para "${tarefa.destino}"`;
+    const detalhesConclusao = {
+      descricao: descricaoConclusao,
+      acao_tarefa_guindaste: 'CONCLUIDA',
+      tarefa_id: tarefa.id,
+      tipo_tarefa: ehTarefaContainer ? 'CONTAINER_NAVIO' : 'CARGA_SETOR',
+      container_id: ehTarefaContainer ? (tarefa.containerId || tarefa.cargaId) : null,
+      carga_id: !ehTarefaContainer ? tarefa.cargaId : null,
+      guindaste_id: tarefa.guindasteId || null,
+      destino: tarefa.destino || null
+    };
+
     if (window.registrarLogAlteracao) {
       await window.registrarLogAlteracao(
         tarefa.containerId || tarefa.cargaId || tarefaId,
         'EDICAO',
-        ehTarefaContainer
-          ? `Movimentação do contêiner ${tarefa.containerId || tarefa.cargaId} até "${tarefa.destino}" concluída pelo guindaste ${tarefa.guindasteId}`
-          : `Movimentação concluída pelo guindaste ${tarefa.guindasteId}: setor atualizado para "${tarefa.destino}"`
+        detalhesConclusao
+      );
+    } else if (typeof persistirEventoTarefaGuindasteFallback === 'function') {
+      await persistirEventoTarefaGuindasteFallback(
+        ehTarefaContainer ? 'CONTAINER' : 'CARGA',
+        tarefa.containerId || tarefa.cargaId || tarefaId,
+        detalhesConclusao
       );
     }
     if (window.NexusRepository && window.NexusRepository.notifyChange) {
@@ -4118,6 +4509,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // página, evitando leituras em cascata após cada operação local.
   const ENTIDADES_QUE_AFETAM_EMBARCACOES = new Set([
     'navios', 'bercos', 'containers', 'guindastes', 'rotas_maritimas', 'cargas',
+    'logs_alteracoes', 'guindaste_tarefas', 'nexus_guindaste_tarefas',
     'nexus_navios_list', 'nexus_bercos_list', 'nexus_containers_list',
     'nexus_guindastes_list', 'nexus_cargas_fluxo',
     'periodic_sync', 'window_focus', 'visibility_sync'
@@ -4129,6 +4521,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const entity = event && event.detail ? event.detail.entity : null;
     if (entity && !ENTIDADES_QUE_AFETAM_EMBARCACOES.has(entity)) return;
     const geral = !entity || ENTIDADES_SYNC_GERAL_EMBARCACOES.has(entity);
+    if (entity === 'logs_alteracoes' || entity === 'guindaste_tarefas' || entity === 'nexus_guindaste_tarefas') {
+      sincronizarTarefasGuindasteSupabase().then(() => {
+        renderGuindastesTable();
+        if (tarefasModal && !tarefasModal.classList.contains('hidden')) {
+          renderTarefasModal();
+        }
+      });
+      return;
+    }
     if (geral || entity === 'bercos' || entity === 'nexus_bercos_list' || entity === 'navios' || entity === 'nexus_navios_list') {
       carregarBercosSupabase();
     }

@@ -229,14 +229,26 @@ async function testarTela() {
     w.close();
   }
 
-  log('\n[5] Tela: inspeção normal segue funcionando (aprovação grava ARMAZENAGEM)');
+  log('\n[5] Tela: inspeção normal segue funcionando (aprovação grava ARMAZENAGEM sem falso erro)');
   {
-    const { w, registro, feedbacks } = await abrirInspecao({ statusCargaNoBanco: 'RECEBIMENTO_INSPECAO' });
-    abrirChecklistPelaTela(w, 'CRG-REC');
+    const { w, registro, feedbacks } = await abrirInspecao({
+      query: '?carga=CRG-REC',
+      statusCargaNoBanco: 'RECEBIMENTO_INSPECAO'
+    });
+    w.NexusRepository = {
+      notifyChange(entity) {
+        w.dispatchEvent(new w.CustomEvent('nexus_data_changed', { detail: { entity } }));
+      }
+    };
     marcarTudoConforme(w);
     const gravou = await w.nexusInspecaoAprovar();
+    // Simula também evento assíncrono de Realtime do Supabase logo após a gravação
+    w.dispatchEvent(new w.CustomEvent('nexus_data_changed', { detail: { entity: 'cargas' } }));
+    await aguardar(80);
     check('aprovação normal retorna true', gravou === true, String(gravou));
     check('feedback de sucesso "Inspeção Concluída"', feedbacks.some((f) => f.tipo === 'sucesso' && f.titulo === 'Inspeção Concluída'), JSON.stringify(feedbacks));
+    check('nenhum falso aviso "Inspeção Indisponível" para ARMAZENAGEM após concluir o checklist',
+      !feedbacks.some((f) => f.titulo === 'Inspeção Indisponível'), JSON.stringify(feedbacks));
     check('banco recebe a atualização da carga para ARMAZENAGEM/APROVADA',
       registro.some((r) => r.tabela === 'cargas' && r.op === 'update' && r.payload && r.payload.status_fluxo === 'ARMAZENAGEM' && r.payload.resultado_inspecao === 'APROVADA'),
       JSON.stringify(registro.filter((r) => r.tabela === 'cargas')));

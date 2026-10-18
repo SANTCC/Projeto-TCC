@@ -404,6 +404,139 @@ async function main() {
     } finally { w.close(); }
   }
 
+  // ---------------------------------------------------------------------
+  log('\n8. Sincronização multi-dispositivo (Computador ➔ Celular ➔ Computador via Supabase)');
+  {
+    const CARGA_MULTI_ID = 'cccc3333-3333-4333-8333-333333333333';
+    const bancoMulti = criarBancoFalso({
+      rotas_maritimas: [
+        { id: 'r-rot', origem: 'Porto de Santos', destino: 'Porto de Roterdã', distancia_km: 10200 }
+      ],
+      navios: [
+        { id: NAV_DENTRO2, nome: 'Navio Docked 2', numero_imo: IMO_DENTRO2, localizacao: 'DENTRO_DO_PORTO', estado_operacional: 'OPERANTE', porto_origem: 'Porto de Santos', porto_destino: 'Porto de Roterdã' }
+      ],
+      containers: [
+        { id: CONT_LIVRE, numero_identificacao: CONT_LIVRE, estado: 'OPERANTE', navio_id: null }
+      ],
+      guindastes: [
+        { id: 'g-op', numero_identificacao: 'GND-OPE-002', estado: 'OPERANTE' }
+      ],
+      cargas: [
+        { id: CARGA_MULTI_ID, qr_code_url: 'QR-CRG-MULTI', status_fluxo: 'PRONTA_PARA_ENTREGA', container_id: null, navio_id: NAV_DENTRO2, destino: 'Porto de Roterdã', porto_descarga: 'Armazém A1' }
+      ],
+      logs_alteracoes: [
+        {
+          id: 'log-legado-carga',
+          data_hora: new Date(Date.now() - 10000).toISOString(),
+          entidade_tipo: 'CARGA',
+          entidade_id: 'CRG-MULTI',
+          tipo_alteracao: 'EDICAO',
+          detalhes: {
+            descricao: 'Tarefa de movimentação criada: Armazém A1 ➔ Setor B2 (Granel) via Guindaste GND-OPE-002 (aguardando conclusão)'
+          }
+        }
+      ],
+      bercos: [], manutencoes: [], historico_manutencoes: []
+    });
+
+    const pc = criarJanela({
+      url: 'https://nexusport.test/embarcacoes.html',
+      html: htmlDaPagina('embarcacoes.html'),
+      session: sessao('SUPERVISOR_GERENTE_OPERACOES'),
+      storage: {
+        nexus_navios_list: [
+          { id: NAV_DENTRO2, nome: 'Navio Docked 2', imo: IMO_DENTRO2, localizacao: 'DENTRO_DO_PORTO', origem: 'Porto de Santos', destino: 'Porto de Roterdã' }
+        ],
+        nexus_containers_list: [
+          { id: CONT_LIVRE, rawDbId: CONT_LIVRE, identificacao: CONT_LIVRE, tipo: 'Dry 40', estado: 'OPERANTE', navio: '', navio_id: null }
+        ],
+        nexus_guindastes_list: [
+          { id: 'g-op', identificacao: 'GND-OPE-002', estado: 'OPERANTE' }
+        ],
+        nexus_cargas_fluxo: [
+          { id: 'CRG-MULTI', rawDbId: CARGA_MULTI_ID, status: 'PRONTA_PARA_ENTREGA', navio: 'Navio Docked 2', navio_id: NAV_DENTRO2, destino: 'Porto de Roterdã', portoDescarga: 'Armazém A1', peso: '10 t' }
+        ],
+        nexus_guindaste_tarefas: []
+      },
+      scripts: [
+        'js/security.js', 'js/session-cookies.js', 'js/supabase-client.js', 'js/auth-guard.js',
+        SETUP(bancoMulti), 'js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js',
+        'js/pages/embarcacoes.js'
+      ]
+    });
+
+    const celular = criarJanela({
+      url: 'https://nexusport.test/embarcacoes.html',
+      html: htmlDaPagina('embarcacoes.html'),
+      session: sessao('ESTIVADOR'),
+      storage: {
+        // Celular começa com localStorage de tarefas e de cargas VAZIO
+        nexus_guindaste_tarefas: [],
+        nexus_cargas_fluxo: []
+      },
+      scripts: [
+        'js/security.js', 'js/session-cookies.js', 'js/supabase-client.js', 'js/auth-guard.js',
+        SETUP(bancoMulti), 'js/vision-layer.js', 'js/layout.js', 'js/padronizacao-codigos.js',
+        'js/pages/embarcacoes.js'
+      ]
+    });
+
+    try {
+      await prontoDom(pc.w);
+      await prontoDom(celular.w);
+      await aguardar(350);
+      pc.w.__feedbacks = [];
+      pc.w.mostrarFeedback = (tipo, titulo, msg) => { pc.w.__feedbacks.push({ tipo, titulo, msg }); };
+      celular.w.__feedbacks = [];
+      celular.w.mostrarFeedback = (tipo, titulo, msg) => { celular.w.__feedbacks.push({ tipo, titulo, msg }); };
+
+      // 8a: No computador, vincula o contêiner ao navio -> cria tarefa e grava em logs_alteracoes
+      await pc.w.vincularContainerANavio(CONT_LIVRE, { navioImo: IMO_DENTRO2, confirmado: true });
+      await aguardar(150);
+
+      // 8b: No celular (outro dispositivo, sem localStorage compartilhado), abre o modal de tarefas do guindaste
+      await celular.w.exibirTarefasGuindaste('GND-OPE-002');
+      await aguardar(150);
+      const tarefasNoCelular = JSON.parse(celular.w.localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      const tarefaContCelular = tarefasNoCelular.find(t => t.containerId === CONT_LIVRE);
+      const tarefaCargaCelular = tarefasNoCelular.find(t => t.cargaId === 'CRG-MULTI');
+
+      check('8a: celular (localStorage próprio vazio) recebe do Supabase a tarefa de movimentação do contêiner criada no computador',
+        Boolean(tarefaContCelular && tarefaContCelular.destino === 'Navio Navio Docked 2'),
+        JSON.stringify(tarefasNoCelular));
+      check('8b: celular também reconstrói tarefa de carga já registrada anteriormente em logs_alteracoes',
+        Boolean(tarefaCargaCelular && tarefaCargaCelular.destino === 'Setor B2 (Granel)'),
+        JSON.stringify(tarefasNoCelular));
+
+      // 8c: Concluir as duas tarefas pelo celular -> atualiza banco e grava conclusão em logs_alteracoes
+      await celular.w.concluirTarefaGuindaste(tarefaCargaCelular.id, { confirmado: true });
+      await aguardar(100);
+      const cargaBancoAtualizada = bancoMulti.tabelas.cargas.find(c => c.id === CARGA_MULTI_ID) || {};
+      check('8c: concluir tarefa de carga no celular (mesmo sem nexus_cargas_fluxo local) atualiza porto_descarga no Supabase',
+        cargaBancoAtualizada.porto_descarga === 'Setor B2 (Granel)',
+        JSON.stringify(cargaBancoAtualizada));
+
+      await celular.w.concluirTarefaGuindaste(tarefaContCelular.id, { confirmado: true });
+      await aguardar(100);
+
+      // 8d: De volta ao computador, ao liberar o navio (ou sincronizar), reconhece que a tarefa foi concluída no celular
+      pc.w.__feedbacks = [];
+      await pc.w.liberarNavioPeloDiretor(IMO_DENTRO2, { confirmado: true });
+      await aguardar(200);
+      const navioBancoFinal = bancoMulti.tabelas.navios.find(n => n.id === NAV_DENTRO2) || {};
+      const tarefasRestantesPc = JSON.parse(pc.w.localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+      check('8d: computador reconhece a conclusão feita no celular, remove a tarefa local e libera o navio',
+        navioBancoFinal.localizacao === 'FORA_DO_PORTO' && tarefasRestantesPc.length === 0,
+        JSON.stringify({ localizacao: navioBancoFinal.localizacao, tarefasRestantesPc, feedbacks: pc.w.__feedbacks }));
+      check('8e: sem erros de runtime no computador e no celular',
+        pc.erros.length === 0 && celular.erros.length === 0,
+        JSON.stringify({ pc: pc.erros, celular: celular.erros }).slice(0, 200));
+    } finally {
+      pc.w.close();
+      celular.w.close();
+    }
+  }
+
   const r = resumo();
   log(`\nResultado: ${r.total - r.falhas}/${r.total} verificações aprovadas.`);
   if (r.falhas > 0) {

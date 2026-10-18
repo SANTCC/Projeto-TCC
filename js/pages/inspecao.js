@@ -45,6 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let cargas = [];
   let cargaAtual = null;
   let itemsEstado = {};
+  let queryCargaInicialProcessada = false;
+  let inspecaoEmAndamento = false;
+  const cargasConcluidasNestaSessao = new Set();
 
   // Pontos de uso pelo agente WebMCP (mesma lógica da interface; não alteram a tela por si).
   window.nexusInspecaoModeloChecklist = getChecklistTemplate;
@@ -60,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Item 9: Popula seletor apenas com cargas cadastradas e ativas na tabela de cargas
   async function popularSeletor() {
     if (!selectCarga) return;
+    const valorSelecionadoAntes = selectCarga.value;
 
     if (window.NexusRepository) {
       try {
@@ -80,12 +84,19 @@ document.addEventListener('DOMContentLoaded', () => {
       selectCarga.innerHTML += `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.tipo)} (${esc(c.status)})</option>`;
     });
 
-    // Se a URL passar ?carga=CRG-2026-001, seleciona automaticamente
-    const params = new URLSearchParams(window.location.search);
-    const queryCarga = params.get('carga');
-    if (queryCarga) {
-      selectCarga.value = queryCarga;
-      carregarChecklistParaCarga(queryCarga);
+    if (valorSelecionadoAntes && cargasAtivas.some(c => String(c.id) === String(valorSelecionadoAntes))) {
+      selectCarga.value = valorSelecionadoAntes;
+    }
+
+    // Se a URL passar ?carga=CRG-2026-001, seleciona automaticamente apenas na abertura inicial
+    if (!queryCargaInicialProcessada) {
+      queryCargaInicialProcessada = true;
+      const params = new URLSearchParams(window.location.search);
+      const queryCarga = params.get('carga');
+      if (queryCarga) {
+        selectCarga.value = queryCarga;
+        carregarChecklistParaCarga(queryCarga);
+      }
     }
   }
 
@@ -239,6 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Somente cargas em RECEBIMENTO_INSPECAO ou RECUSADA podem fazer a inspeção.
+    // Se a carga acabou de ser aprovada nesta mesma sessão da tela, ignora silenciosamente
+    // qualquer recarregamento assíncrono até o redirecionamento para cargas.html.
+    if (cargasConcluidasNestaSessao.has(String(cargaAtual.id || '').toUpperCase())) {
+      return;
+    }
     if (!['RECEBIMENTO_INSPECAO', 'RECUSADA'].includes(String(cargaAtual.status || '').toUpperCase())) {
       const idNaoInspecionavel = cargaAtual.id;
       const statusNaoInspecionavel = cargaAtual.status;
@@ -418,11 +434,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       return false;
     }
+    if (inspecaoEmAndamento) return false;
     if (cargaAtual && cargaAtual.status === 'ENTREGUE') {
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', 'Cargas entregues não podem ter a inspeção alterada.');
       return;
     }
     if (!cargaAtual) return false;
+    const chaveCargaAtual = String(cargaAtual.id || '').toUpperCase();
+    if (chaveCargaAtual && cargasConcluidasNestaSessao.has(chaveCargaAtual)) {
+      return true;
+    }
 
     if (cargaAtual.status === 'CANCELADA' || await cargaCanceladaNoBanco()) {
       avisoCargaCancelada(cargaAtual.id);
@@ -447,6 +468,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return false;
     }
 
+    inspecaoEmAndamento = true;
+    const statusOriginal = cargaAtual.status;
+    const resultadoOriginal = cargaAtual.resultadoInspecao;
+    if (chaveCargaAtual) cargasConcluidasNestaSessao.add(chaveCargaAtual);
+    if (aprovarBtn) aprovarBtn.disabled = true;
+
+    try {
       cargaAtual.status = 'ARMAZENAGEM';
       cargaAtual.resultadoInspecao = 'APROVADA';
 
@@ -560,6 +588,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (pendencias.length > 0) {
         // Sem redirecionamento: o aviso precisa ser lido antes de sair da tela.
         // Retorna false: o banco não confirmou a gravação completa.
+        if (chaveCargaAtual) cargasConcluidasNestaSessao.delete(chaveCargaAtual);
+        cargaAtual.status = statusOriginal;
+        cargaAtual.resultadoInspecao = resultadoOriginal;
+        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
+        avaliarConformidadeCritica();
         console.warn('[NexusPort] Aprovação com pendências de gravação:', pendencias);
         if (window.mostrarFeedback) {
           window.mostrarFeedback('alerta', 'Gravação Incompleta', `Carga ${cargaAtual.id}: ${pendencias.join(' ')} Verifique com o supervisor antes de seguir.`);
@@ -573,6 +606,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.NexusAnalytics) window.NexusAnalytics.track('inspecao_aprovada');
       setTimeout(() => { window.location.href = 'cargas.html'; }, 1000);
       return true;
+    } finally {
+      inspecaoEmAndamento = false;
+    }
   }
 
   window.nexusInspecaoAprovar = aprovarCargaAtual;
@@ -588,6 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       return false;
     }
+    if (inspecaoEmAndamento) return false;
     if (cargaAtual && cargaAtual.status === 'ENTREGUE') {
       if (window.mostrarFeedback) window.mostrarFeedback('atencao', 'Carga Entregue', 'Cargas entregues não podem ter a inspeção alterada.');
       return;
@@ -631,6 +668,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      inspecaoEmAndamento = true;
+      const statusOriginal = cargaAtual.status;
+      const resultadoOriginal = cargaAtual.resultadoInspecao;
+      const motivoOriginal = cargaAtual.motivoRecusa;
+
+      try {
       cargaAtual.status = 'RECUSADA';
       cargaAtual.resultadoInspecao = 'RECUSADA';
       cargaAtual.motivoRecusa = motivo;
@@ -745,6 +788,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (pendencias.length > 0) {
         // Sem redirecionamento: o aviso precisa ser lido antes de sair da tela.
         // Retorna false: o banco não confirmou a gravação completa.
+        cargaAtual.status = statusOriginal;
+        cargaAtual.resultadoInspecao = resultadoOriginal;
+        cargaAtual.motivoRecusa = motivoOriginal;
+        cargaAtual.motivo_recusa = motivoOriginal;
+        localStorage.setItem('nexus_cargas_fluxo', JSON.stringify(cargas));
         console.warn('[NexusPort] Recusa com pendências de gravação:', pendencias);
         if (window.mostrarFeedback) {
           window.mostrarFeedback('alerta', 'Gravação Incompleta', `Carga ${cargaAtual.id}: ${pendencias.join(' ')} Verifique com o supervisor antes de seguir.`);
@@ -758,6 +806,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.NexusAnalytics) window.NexusAnalytics.track('inspecao_recusada');
       setTimeout(() => { window.location.href = 'cargas.html'; }, 1000);
       return true;
+      } finally {
+        inspecaoEmAndamento = false;
+      }
   }
 
   window.nexusInspecaoRecusar = recusarCargaAtual;
@@ -774,6 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('nexus_data_changed', (event) => {
     const entity = event && event.detail ? event.detail.entity : null;
     if (entity && !ENTIDADES_QUE_AFETAM_INSPECAO.has(entity)) return;
+    if (inspecaoEmAndamento) return;
     popularSeletor();
   });
 });
