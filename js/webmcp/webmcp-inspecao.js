@@ -21,6 +21,7 @@
   const CARGOS_CONSULTA = G.gestaoOperacional;
   const CARGOS_INSPECAO = G.inspecao;
   const STATUS_INSPECIONAVEL = 'RECEBIMENTO_INSPECAO';
+  const STATUS_PERMITIDOS_INSPECAO = new Set(['RECEBIMENTO_INSPECAO', 'RECUSADA']);
 
   function modeloChecklist(carga) {
     if (typeof window.nexusInspecaoModeloChecklist === 'function') {
@@ -148,10 +149,10 @@
       const carga = await cargaDoOperador(args.id);
       if (!carga) return { codigo: 'CARGA_NAO_ENCONTRADA', mensagem: `Carga ${args.id} não encontrada ou fora da sua visão.` };
       if (carga.status === 'EM_TRANSITO') {
-        return { codigo: 'CARGA_EM_TRANSITO', mensagem: `A carga ${carga.id} está EM_TRANSITO (já saiu do porto) e não pode ser inspecionada. A inspeção só é feita em ${STATUS_INSPECIONAVEL}, antes da liberação do navio.` };
+        return { codigo: 'CARGA_EM_TRANSITO', mensagem: `A carga ${carga.id} está EM_TRANSITO (já saiu do porto) e não pode ser inspecionada. A inspeção só é feita em RECEBIMENTO_INSPECAO ou RECUSADA, antes da liberação do navio.` };
       }
-      if (carga.status !== STATUS_INSPECIONAVEL) {
-        return { codigo: 'ESTADO_INVALIDO', mensagem: `A carga ${carga.id} está em ${carga.status}; a inspeção só é feita em ${STATUS_INSPECIONAVEL}.` };
+      if (!STATUS_PERMITIDOS_INSPECAO.has(carga.status)) {
+        return { codigo: 'ESTADO_INVALIDO', mensagem: `A carga ${carga.id} está em ${carga.status}; a inspeção só é feita em RECEBIMENTO_INSPECAO ou RECUSADA.` };
       }
       if (args.decisao !== undefined && args.respostas !== undefined) {
         const erro = analisarRespostas(carga, args.respostas, args.decisao, args.motivo);
@@ -178,7 +179,10 @@
       // Revalida na execução (a carga pode ter entrado em trânsito entre a
       // pré-condição e o operador confirmar): em trânsito, a inspeção é recusada.
       if (carga.status === 'EM_TRANSITO') {
-        return { ok: false, codigo: 'CARGA_EM_TRANSITO', mensagem: `A carga ${carga.id} está EM_TRANSITO (já saiu do porto) e não pode ser inspecionada. A inspeção só é feita em ${STATUS_INSPECIONAVEL}, antes da liberação do navio.` };
+        return { ok: false, codigo: 'CARGA_EM_TRANSITO', mensagem: `A carga ${carga.id} está EM_TRANSITO (já saiu do porto) e não pode ser inspecionada. A inspeção só é feita em RECEBIMENTO_INSPECAO ou RECUSADA, antes da liberação do navio.` };
+      }
+      if (!STATUS_PERMITIDOS_INSPECAO.has(carga.status)) {
+        return { ok: false, codigo: 'ESTADO_INVALIDO', mensagem: `A carga ${carga.id} está em ${carga.status}; a inspeção só é feita em RECEBIMENTO_INSPECAO ou RECUSADA.` };
       }
       const erro = analisarRespostas(carga, args.respostas, args.decisao, args.motivo);
       if (erro) return { ok: false, codigo: erro.codigo, mensagem: erro.mensagem };

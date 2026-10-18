@@ -42,7 +42,10 @@ function cargasTela() {
   return [
     { id: 'CRG-EMT', tipo: 'Carga Geral', status: 'EM_TRANSITO', portoDescarga: 'Porto de Roterdã', navio: 'MV Teste', container: 'CONT-1', qrCode: 'QR-CRG-EMT', rawDbId: UUID_EM_TRANSITO },
     { id: 'CRG-REC', tipo: 'Carga Geral', status: 'RECEBIMENTO_INSPECAO', portoDescarga: 'Setor A', qrCode: 'QR-CRG-REC', rawDbId: UUID_RECEBIMENTO },
+    { id: 'CRG-RCD', tipo: 'Carga Geral', status: 'RECUSADA', portoDescarga: 'Setor A', qrCode: 'QR-CRG-RCD' },
+    { id: 'CRG-AGD', tipo: 'Carga Geral', status: 'AGENDAMENTO', portoDescarga: 'Setor A', qrCode: 'QR-CRG-AGD' },
     { id: 'CRG-ARM', tipo: 'Carga Geral', status: 'ARMAZENAGEM', portoDescarga: 'Setor B', qrCode: 'QR-CRG-ARM' },
+    { id: 'CRG-PRT', tipo: 'Carga Geral', status: 'PRONTA_PARA_ENTREGA', portoDescarga: 'Setor B', qrCode: 'QR-CRG-PRT' },
     { id: 'CRG-ENT', tipo: 'Carga Geral', status: 'ENTREGUE', portoDescarga: 'Setor C', qrCode: 'QR-CRG-ENT' },
     { id: 'CRG-CAN', tipo: 'Carga Geral', status: 'CANCELADA', portoDescarga: 'Setor D', qrCode: 'QR-CRG-CAN' }
   ];
@@ -136,19 +139,21 @@ function cargaSalva(w, id) {
  * Parte 1 — Tela de Inspeção & Checklist
  * ------------------------------------------------------------------ */
 async function testarTela() {
-  log('\n[1] Tela: seletor não oferece carga EM_TRANSITO (nem ENTREGUE/CANCELADA)');
+  log('\n[1] Tela: seletor oferece somente RECEBIMENTO_INSPECAO e RECUSADA');
   {
     const { w, erros } = await abrirInspecao();
     const opcoes = Array.from(w.document.getElementById('inspecaoCargaSelect').options).map((opt) => opt.value);
     check('carga EM_TRANSITO não pode ser selecionada para inspeção', !opcoes.includes('CRG-EMT'), JSON.stringify(opcoes));
     check('carga RECEBIMENTO_INSPECAO continua disponível', opcoes.includes('CRG-REC'));
-    check('carga ARMAZENAGEM continua disponível', opcoes.includes('CRG-ARM'));
-    check('comportamento anterior preservado: ENTREGUE e CANCELADA seguem fora da lista', !opcoes.includes('CRG-ENT') && !opcoes.includes('CRG-CAN'));
+    check('carga RECUSADA continua disponível', opcoes.includes('CRG-RCD'));
+    check('demais status (AGENDAMENTO, ARMAZENAGEM, PRONTA_PARA_ENTREGA, ENTREGUE, CANCELADA) ficam fora da lista',
+      !opcoes.includes('CRG-AGD') && !opcoes.includes('CRG-ARM') && !opcoes.includes('CRG-PRT') && !opcoes.includes('CRG-ENT') && !opcoes.includes('CRG-CAN'),
+      JSON.stringify(opcoes));
     check('nenhum erro não capturado na página', erros.length === 0, JSON.stringify(erros));
     w.close();
   }
 
-  log('\n[2] Tela: abertura de checklist de carga EM_TRANSITO é recusada com mensagem clara');
+  log('\n[2] Tela: abertura de checklist de carga EM_TRANSITO ou status não inspecionável é recusada com mensagem clara');
   {
     // Mesma entrada usada pelo QR Code e pelo atalho ?carga= (scanner/URL).
     const { w, feedbacks, erros } = await abrirInspecao({ query: '?carga=CRG-EMT' });
@@ -163,13 +168,21 @@ async function testarTela() {
     check('nenhum erro não capturado na página', erros.length === 0, JSON.stringify(erros));
     w.close();
   }
-
-  log('\n[3] Tela: status permitidos continuam abrindo o checklist normalmente');
   {
-    const { w } = await abrirInspecao({ query: '?carga=CRG-ARM' });
-    check('carga ARMAZENAGEM abre o checklist', !w.document.getElementById('checklistFormContainer').classList.contains('hidden'));
+    const { w, feedbacks } = await abrirInspecao({ query: '?carga=CRG-ARM' });
+    const aviso = feedbacks.find((f) => f.titulo === 'Inspeção Indisponível');
+    check('abertura de carga em ARMAZENAGEM é bloqueada com aviso "Inspeção Indisponível"',
+      Boolean(aviso) && w.document.getElementById('checklistFormContainer').classList.contains('hidden') && w.nexusInspecaoEstado().cargaId === null,
+      JSON.stringify(feedbacks));
+    w.close();
+  }
+
+  log('\n[3] Tela: status permitidos (RECEBIMENTO_INSPECAO e RECUSADA) continuam abrindo o checklist normalmente');
+  {
+    const { w } = await abrirInspecao({ query: '?carga=CRG-RCD' });
+    check('carga RECUSADA abre o checklist', !w.document.getElementById('checklistFormContainer').classList.contains('hidden'));
     const estado = w.nexusInspecaoEstado();
-    check('estado da tela aponta a carga ARMAZENAGEM', estado.cargaId === 'CRG-ARM' && estado.carga_status === 'ARMAZENAGEM', JSON.stringify(estado));
+    check('estado da tela aponta a carga RECUSADA', estado.cargaId === 'CRG-RCD' && estado.carga_status === 'RECUSADA', JSON.stringify(estado));
     w.close();
   }
   {
@@ -259,7 +272,8 @@ function cargasWebMcp() {
   return [
     { id: 'CRG-W1', tipo: "Contêiner 20' Dry", peso: '12 t', volume: '20 m³', status: 'RECEBIMENTO_INSPECAO', portoDescarga: 'Pátio STS-01 (Setor B)', container: '', navio: '', qrCode: 'QR-CRG-W1', data_cadastro: agora },
     { id: 'CRG-W2', tipo: "Contêiner 20' Dry", peso: '6 t', volume: '12 m³', status: 'EM_TRANSITO', portoDescarga: 'Porto de Roterdã', container: 'MSCU1234567', navio: 'MV Santos Star', qrCode: 'QR-CRG-W2', data_cadastro: agora },
-    { id: 'CRG-W3', tipo: "Contêiner 20' Dry", peso: '10 t', volume: '25 m³', status: 'ARMAZENAGEM', portoDescarga: 'Pátio STS-01 (Setor C)', container: '', navio: '', qrCode: 'QR-CRG-W3', data_cadastro: agora }
+    { id: 'CRG-W3', tipo: "Contêiner 20' Dry", peso: '10 t', volume: '25 m³', status: 'RECUSADA', portoDescarga: 'Pátio STS-01 (Setor C)', container: '', navio: '', qrCode: 'QR-CRG-W3', data_cadastro: agora },
+    { id: 'CRG-W4', tipo: "Contêiner 20' Dry", peso: '10 t', volume: '25 m³', status: 'ARMAZENAGEM', portoDescarga: 'Pátio STS-01 (Setor C)', container: '', navio: '', qrCode: 'QR-CRG-W4', data_cadastro: agora }
   ];
 }
 
@@ -284,12 +298,15 @@ async function testarWebMcp() {
   const janela = await abrirPaginaWebMcp();
   const w = janela.w;
 
-  // O seletor da tela (que o WebMCP usa) também não lista a carga em trânsito.
+  // O seletor da tela (que o WebMCP usa) também lista apenas RECEBIMENTO_INSPECAO e RECUSADA.
   const opcoes = Array.from(w.document.getElementById('inspecaoCargaSelect').options).map((opt) => opt.value);
-  check('tela do WebMCP: carga EM_TRANSITO fora do seletor; demais statuses listados',
-    !opcoes.includes('CRG-W2') && opcoes.includes('CRG-W1') && opcoes.includes('CRG-W3'), JSON.stringify(opcoes));
+  check('tela do WebMCP: somente RECEBIMENTO_INSPECAO e RECUSADA no seletor; EM_TRANSITO e ARMAZENAGEM fora',
+    !opcoes.includes('CRG-W2') && !opcoes.includes('CRG-W4') && opcoes.includes('CRG-W1') && opcoes.includes('CRG-W3'), JSON.stringify(opcoes));
 
-  let r = await w.NexusWebMCP.executar('inspecionar_carga', { id: 'CRG-W2', decisao: 'APROVAR', respostas: RESPOSTAS_CONFORMES });
+  let r = await w.NexusWebMCP.executar('inspecionar_carga', { id: 'CRG-W4', decisao: 'APROVAR', respostas: RESPOSTAS_CONFORMES });
+  check('APROVAR carga ARMAZENAGEM: bloqueio ESTADO_INVALIDO', r.ok === false && r.codigo === 'ESTADO_INVALIDO', JSON.stringify(r).slice(0, 220));
+
+  r = await w.NexusWebMCP.executar('inspecionar_carga', { id: 'CRG-W2', decisao: 'APROVAR', respostas: RESPOSTAS_CONFORMES });
   check('APROVAR carga EM_TRANSITO: bloqueio CARGA_EM_TRANSITO', r.ok === false && r.codigo === 'CARGA_EM_TRANSITO', JSON.stringify(r).slice(0, 220));
   check('mensagem do bloqueio explica que a carga já saiu do porto',
     typeof r.mensagem === 'string' && r.mensagem.includes('EM_TRANSITO') && r.mensagem.includes('não pode ser inspecionada'), r.mensagem);

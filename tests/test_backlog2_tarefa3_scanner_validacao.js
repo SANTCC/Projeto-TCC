@@ -74,11 +74,28 @@ async function carregarPagina() {
     html: htmlDaPagina('scanner.html'),
     session: sessao('ESTIVADOR', { matricula: 'MAT-9101', nome: 'Estivador de Teste' }),
     storage: {
-      nexus_cargas_fluxo: [{
-        id: 'CRG-2026-777', qrCode: 'QR-CRG-2026-777', tipo: 'Carga Local', natureza: 'Geral',
-        peso: '8 t', volume: '10 m³', valor: 'R$ 900,00', portoDescarga: 'Pátio STS-01 (Setor C)',
-        destino: 'Roterdã', status: 'ARMAZENAGEM', container: '', navio: ''
-      }],
+      nexus_cargas_fluxo: [
+        {
+          id: 'CRG-2026-777', qrCode: 'QR-CRG-2026-777', tipo: 'Carga Local', natureza: 'Geral',
+          peso: '8 t', volume: '10 m³', valor: 'R$ 900,00', portoDescarga: 'Pátio STS-01 (Setor C)',
+          destino: 'Roterdã', status: 'ARMAZENAGEM', container: '', navio: ''
+        },
+        {
+          id: 'CRG-ENTREGUE-SCAN', qrCode: 'QR-CRG-ENTREGUE-SCAN', tipo: 'Carga Local', natureza: 'Geral',
+          peso: '8 t', volume: '10 m³', valor: 'R$ 900,00', portoDescarga: 'Pátio STS-01',
+          destino: 'Roterdã', status: 'ENTREGUE', container: '', navio: ''
+        },
+        {
+          id: 'CRG-CANCELADA-SCAN', qrCode: 'QR-CRG-CANCELADA-SCAN', tipo: 'Carga Local', natureza: 'Geral',
+          peso: '8 t', volume: '10 m³', valor: 'R$ 900,00', portoDescarga: 'Pátio STS-01',
+          destino: 'Roterdã', status: 'CANCELADA', container: '', navio: ''
+        },
+        {
+          id: 'CRG-RECUSADA-SCAN', qrCode: 'QR-CRG-RECUSADA-SCAN', tipo: 'Carga Local', natureza: 'Geral',
+          peso: '8 t', volume: '10 m³', valor: 'R$ 900,00', portoDescarga: 'Pátio STS-01',
+          destino: 'Roterdã', status: 'RECUSADA', container: '', navio: ''
+        }
+      ],
       nexus_audit_logs: [],
       nexus_func_list: []
     },
@@ -164,6 +181,52 @@ async function main() {
     await esperar(() => titulos(p.estado, 'Campo Obrigatório').length === 1);
     check('aviso de campo obrigatório (sem tratar como scan)', titulos(p.estado, 'Campo Obrigatório').length === 1, JSON.stringify(p.estado.feedbacks));
     check('nenhum registro gravado', totalInsercoes(p.estado) === 0);
+
+    log('\n7. Bloqueio de "Ir para Tela de Ação do Cargo" em cargas ENTREGUE, CANCELADA e RECUSADA');
+    const btnAcao = p.w.document.getElementById('executarAcaoScanBtn');
+    for (const [cod, st] of [['CRG-ENTREGUE-SCAN', 'ENTREGUE'], ['CRG-CANCELADA-SCAN', 'CANCELADA'], ['CRG-RECUSADA-SCAN', 'RECUSADA']]) {
+      const rScan = await p.w.nexusScannerProcessar(cod);
+      check(`${st}: botão Ir para Tela de Ação do Cargo fica oculto e desabilitado`,
+        btnAcao.classList.contains('hidden') && btnAcao.disabled === true,
+        `${st}: hidden=${btnAcao.classList.contains('hidden')}, disabled=${btnAcao.disabled}`);
+      check(`${st}: mensagem informa indisponibilidade da ação do cargo`,
+        rScan && /não é possível ir para a tela de ação do cargo/i.test(rScan.acao_sugerida || ''),
+        rScan && rScan.acao_sugerida);
+    }
+    await p.w.nexusScannerProcessar('CRG-2026-777');
+    check('ARMAZENAGEM (ativa): botão Ir para Tela de Ação do Cargo volta a ficar visível e habilitado',
+      !btnAcao.classList.contains('hidden') && btnAcao.disabled === false);
+
+    log('\n8. Botão para gerar o PDF de relatório da carga escaneada (#gerarPdfScanBtn)');
+    const btnPdf = p.w.document.getElementById('gerarPdfScanBtn');
+    check('botão #gerarPdfScanBtn existe na página de QR Code e está habilitado para a carga escaneada',
+      Boolean(btnPdf) && !btnPdf.classList.contains('hidden') && btnPdf.disabled === false);
+    const downloadsPdf = [];
+    p.w.URL.createObjectURL = (blob) => {
+      downloadsPdf.push({ blob });
+      return 'blob:nexus-scanner-pdf';
+    };
+    p.w.URL.revokeObjectURL = () => {};
+    p.w.HTMLAnchorElement.prototype.click = function () {
+      if (downloadsPdf.length > 0) {
+        downloadsPdf[downloadsPdf.length - 1].download = this.download;
+      }
+    };
+    btnPdf.click();
+    await esperar(() => downloadsPdf.length === 1 && titulos(p.estado, 'PDF Emitido').length === 1);
+    check('clique em #gerarPdfScanBtn dispara download do relatório PDF A4',
+      downloadsPdf.length === 1 && /^Relatorio_A4_.*\.pdf$/.test(downloadsPdf[0].download || ''),
+      downloadsPdf[0] && downloadsPdf[0].download);
+    const pdfBuffer = Buffer.from(await downloadsPdf[0].blob.arrayBuffer()).toString('latin1');
+    check('PDF gerado na página de QR Code é A4 válido (%PDF-1.4) com as 4 seções e dados da carga',
+      pdfBuffer.startsWith('%PDF-1.4')
+      && pdfBuffer.includes('1. Dados da carga')
+      && pdfBuffer.includes('2. Dados do navio')
+      && pdfBuffer.includes('3. Dados do cont')
+      && pdfBuffer.includes('4. Resumo do fluxo operacional')
+      && pdfBuffer.includes('CRG-2026-777'));
+    check('feedback de sucesso "PDF Emitido" exibido ao operador',
+      titulos(p.estado, 'PDF Emitido').length === 1);
   } catch (erro) {
     log(`\n❌ Erro inesperado: ${erro && erro.stack ? erro.stack : erro}`);
     process.exitCode = 1;

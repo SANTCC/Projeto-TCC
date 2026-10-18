@@ -2297,6 +2297,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const bate = [ct.id, ct.rawDbId, ct.identificacao, ct.numero_identificacao]
               .some((v) => v && (String(v) === String(contUuid) || String(v).toUpperCase() === String(contIdentificacao).toUpperCase()));
             if (!bate) return;
+            const navioAnteriorNome = String(ct.navio || ct.navio_nome || '').trim().toLowerCase();
+            const navioAnteriorId = String(ct.navio_id || ct.navioId || '').trim().toLowerCase();
+            const mesmoNavioAnterior = (navVal && navioAnteriorNome && navioAnteriorNome === String(navVal).trim().toLowerCase())
+              || (navUuid && navioAnteriorId && navioAnteriorId === String(navUuid).trim().toLowerCase());
             if (navVal) {
               ct.navio = navVal;
               ct.navio_nome = navVal;
@@ -2306,6 +2310,43 @@ document.addEventListener('DOMContentLoaded', () => {
               ct.navio_id = navUuid;
               ct.navioId = navUuid;
               alterouContLocal = true;
+            }
+            if (!mesmoNavioAnterior && navVal) {
+              const gndsAtuais = guindastesDisponiveis().filter(guindasteOperante);
+              const gndEscolhido = gndsAtuais[0] || { identificacao: 'GND-01-STS', estado: 'OPERANTE' };
+              const tarefasAtuais = JSON.parse(localStorage.getItem('nexus_guindaste_tarefas') || '[]');
+              const identCt = ct.identificacao || ct.numero_identificacao || contIdentificacao;
+              const filtradas = (Array.isArray(tarefasAtuais) ? tarefasAtuais : []).filter(t => {
+                if (!t) return false;
+                const ehCont = t.tipoTarefa === 'CONTAINER_NAVIO' || Boolean(t.containerId);
+                if (!ehCont) return true;
+                return String(t.containerId || t.cargaId || '').toUpperCase() !== String(identCt || '').toUpperCase();
+              });
+              const novaTarefaCont = {
+                id: `TRF-CONT-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+                tipoTarefa: 'CONTAINER_NAVIO',
+                containerId: identCt,
+                containerUuid: ct.rawDbId || ct.id || contUuid || null,
+                cargaId: identCt,
+                tipoCarga: ct.tipo || ct.material_carregado || 'Contêiner',
+                navioId: navUuid || null,
+                navioNome: navVal,
+                navioImo: (navioFinal && navioFinal.imo) || '',
+                guindasteId: gndEscolhido.identificacao,
+                origem: 'Pátio STS-01',
+                destino: `Navio ${navVal}`,
+                instrucoes: `Movimentar o contêiner ${identCt} (${ct.tipo || 'Padrão'}) do pátio até o navio ${navVal}, utilizando o guindaste ${gndEscolhido.identificacao}. O navio só poderá ter sua saída liberada após a conclusão desta tarefa.`,
+                status: 'PENDENTE',
+                dataCriacao: new Date().toLocaleString('pt-BR')
+              };
+              filtradas.unshift(novaTarefaCont);
+              localStorage.setItem('nexus_guindaste_tarefas', JSON.stringify(filtradas));
+              ct.movimentacaoNavioPendente = true;
+              ct.tarefaMovimentacaoId = novaTarefaCont.id;
+              ct.guindasteDesignado = gndEscolhido.identificacao;
+              ct.fezViagemComNavio = false;
+              ct.ultimoNavioViagem = null;
+              ct.ultimoNavioViagemId = null;
             }
           });
           if (alterouContLocal) {

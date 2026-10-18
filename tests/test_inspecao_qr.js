@@ -14,7 +14,7 @@
 const H = require('./webmcp-harness');
 const { log, check, resumo, aguardar, sessao, criarJanela, prontoDom, htmlDaPagina } = H;
 
-const CARGA = { id: 'CRG-2026-303', rawDbId: '00000000-0000-4000-8000-000000000001', navio: 'Jaguar', status: 'ARMAZENAGEM', natureza: 'Geral', qrCode: 'QR-CRG-2026-303' };
+const CARGA = { id: 'CRG-2026-303', rawDbId: '00000000-0000-4000-8000-000000000001', navio: 'Jaguar', status: 'RECEBIMENTO_INSPECAO', natureza: 'Geral', qrCode: 'QR-CRG-2026-303' };
 
 function criarMockLeitor(estado, opcoes) {
   return class HtmlQrMock {

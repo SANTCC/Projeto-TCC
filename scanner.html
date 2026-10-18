@@ -143,6 +143,10 @@
               <span class="material-symbols-outlined fa-solid fa-print text-[18px]" data-icon="print" aria-hidden="true"></span>
               <span>Imprimir Etiqueta</span>
             </button>
+            <button id="gerarPdfScanBtn" type="button" class="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 disabled:opacity-60 disabled:cursor-wait text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm" title="Gera e baixa o relatório PDF A4 da carga escaneada">
+              <span class="material-symbols-outlined fa-solid fa-download text-[18px]" data-icon="download" aria-hidden="true"></span>
+              <span>Gerar PDF de Relatório</span>
+            </button>
             <button id="irChecklistBtn" type="button" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm">
               <span class="material-symbols-outlined fa-solid fa-clipboard-check text-[18px]" data-icon="fact_check" aria-hidden="true"></span>
               <span>Ir para Checklist da Carga</span>
@@ -187,6 +191,7 @@
       #qrResultCard button,
       #qrResultCard #irChecklistBtn,
       #qrResultCard #executarAcaoScanBtn,
+      #qrResultCard #gerarPdfScanBtn,
       #qrResultCard #imprimirEtiquetaScanBtn { display: none !important; }
     }
   </style>
