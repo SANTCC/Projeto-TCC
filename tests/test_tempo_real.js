@@ -288,10 +288,10 @@ async function testarProdutividade() {
 
   const corpo = w.document.getElementById('produtividadeTableBody');
   const linhaDe = (nome) => Array.from((corpo && corpo.querySelectorAll('tr')) || [])
-    .find((tr) => (tr.querySelectorAll('td')[1] || {}).textContent === nome);
+    .find((tr) => (tr.querySelectorAll('td')[0] || {}).textContent === nome);
   const volumeDe = (nome) => {
     const tr = linhaDe(nome);
-    return tr ? (tr.querySelectorAll('td')[3] || {}).textContent.trim() : null;
+    return tr ? (tr.querySelectorAll('td')[2] || {}).textContent.trim() : null;
   };
   const pronto = await esperar(() => Boolean(linhaDe('Bruno Conferente')), 5000);
   check('tabela de produtividade mostra os três funcionários ativos', pronto && linhaDe('Ana Estivadora') && linhaDe('Carla Inspetora'));
