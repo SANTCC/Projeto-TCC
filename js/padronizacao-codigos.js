@@ -136,8 +136,17 @@
   function autoAtivarGlobal() {
     function escanear() {
       if (typeof document === 'undefined') return;
-      const inputs = document.querySelectorAll('input[type="text"], input[type="search"], input:not([type])');
+      // ⚡ Bolt Optimization: Target only un-scanned input elements using `:not([data-padronizado="1"])`.
+      // Mark all evaluated inputs as scanned (`dataset.padronizado = '1'`), avoiding repetitive
+      // querySelectorAll iterations, string concatenations, and rule checks on every DOM mutation.
+      const inputs = document.querySelectorAll(
+        'input[type="text"]:not([data-padronizado="1"]), input[type="search"]:not([data-padronizado="1"]), input:not([type]):not([data-padronizado="1"])'
+      );
+      if (!inputs.length) return;
+
       inputs.forEach(input => {
+        if (input.dataset.padronizado === '1') return;
+
         const str = `${input.id || ''} ${input.name || ''} ${input.placeholder || ''} ${input.className || ''}`.toLowerCase();
 
         if (str.includes('matricula') || str.includes('matr') || str.includes('mat_')) {
@@ -158,6 +167,9 @@
             if (/^[A-Z]{3}\d/i.test(up)) return formatarGuindaste(up);
             return up;
           });
+        } else {
+          // Input field scanned; no formatting rule matched. Mark so it is skipped on future DOM mutations.
+          input.dataset.padronizado = '1';
         }
       });
     }
